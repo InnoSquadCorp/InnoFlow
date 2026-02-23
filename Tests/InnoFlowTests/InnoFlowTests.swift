@@ -995,7 +995,6 @@ private var isHeavyStressEnabled: Bool {
 
 private struct TypecheckResult {
     let status: Int32
-    let stdout: String
     let stderr: String
 }
 
@@ -1102,13 +1101,10 @@ private func typecheckSource(
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
 
-    let stdoutBuffer = ThreadSafeDataBuffer()
     let stderrBuffer = ThreadSafeDataBuffer()
 
     stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-        let data = handle.availableData
-        guard !data.isEmpty else { return }
-        stdoutBuffer.append(data)
+        _ = handle.availableData
     }
 
     stderrPipe.fileHandleForReading.readabilityHandler = { handle in
@@ -1123,21 +1119,16 @@ private func typecheckSource(
     stdoutPipe.fileHandleForReading.readabilityHandler = nil
     stderrPipe.fileHandleForReading.readabilityHandler = nil
 
-    var stdoutData = stdoutBuffer.snapshot()
     var stderrData = stderrBuffer.snapshot()
 
-    let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+    _ = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
     let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-    if !stdoutTail.isEmpty {
-        stdoutData.append(stdoutTail)
-    }
     if !stderrTail.isEmpty {
         stderrData.append(stderrTail)
     }
 
     return TypecheckResult(
         status: process.terminationStatus,
-        stdout: String(data: stdoutData, encoding: .utf8) ?? "",
         stderr: String(data: stderrData, encoding: .utf8) ?? ""
     )
 }
