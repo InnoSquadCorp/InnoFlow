@@ -35,10 +35,11 @@
 /// }
 /// ```
 @attached(extension, conformances: Reducer)
-public macro InnoFlow() = #externalMacro(
+public macro InnoFlow() =
+  #externalMacro(
     module: "InnoFlowMacros",
     type: "InnoFlowMacro"
-)
+  )
 
 // MARK: - BindableField Macro
 
@@ -49,7 +50,8 @@ public macro InnoFlow() = #externalMacro(
 /// `store.binding(_:send:)`.
 @attached(accessor)
 @attached(peer, names: arbitrary)
-public macro BindableField() = #externalMacro(
+public macro BindableField() =
+  #externalMacro(
     module: "InnoFlowMacros",
     type: "BindableFieldMacro"
-)
+  )

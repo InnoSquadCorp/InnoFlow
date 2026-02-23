@@ -12,17 +12,17 @@ import Foundation
 /// Reducers synchronously mutate state and return asynchronous work as `EffectTask`.
 public protocol Reducer<State, Action>: Sendable {
 
-    /// The state managed by this reducer.
-    associatedtype State: Sendable
+  /// The state managed by this reducer.
+  associatedtype State: Sendable
 
-    /// The actions accepted by this reducer.
-    associatedtype Action: Sendable
+  /// The actions accepted by this reducer.
+  associatedtype Action: Sendable
 
-    /// Applies an action to state and returns follow-up effects.
-    ///
-    /// - Parameters:
-    ///   - state: Mutable state for synchronous transition.
-    ///   - action: Incoming action.
-    /// - Returns: The effect task describing async follow-up work.
-    func reduce(into state: inout State, action: Action) -> EffectTask<Action>
+  /// Applies an action to state and returns follow-up effects.
+  ///
+  /// - Parameters:
+  ///   - state: Mutable state for synchronous transition.
+  ///   - action: Incoming action.
+  /// - Returns: The effect task describing async follow-up work.
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action>
 }

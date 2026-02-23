@@ -5,52 +5,54 @@
 import Foundation
 import InnoFlow
 import SwiftUI
+
 #if canImport(Testing)
-import Testing
+  import Testing
 #elseif canImport(XCTest)
-import XCTest
+  import XCTest
 #endif
 
 private actor ActionQueue<Action: Sendable> {
-    private var buffer: [Action] = []
-    private var waiters: [UUID: CheckedContinuation<Action?, Never>] = [:]
+  private var buffer: [Action] = []
+  private var waiters: [UUID: CheckedContinuation<Action?, Never>] = [:]
 
-    func enqueue(_ action: Action) {
-        if let waiterID = waiters.keys.first,
-           let continuation = waiters.removeValue(forKey: waiterID) {
-            continuation.resume(returning: action)
-            return
-        }
-
-        buffer.append(action)
+  func enqueue(_ action: Action) {
+    if let waiterID = waiters.keys.first,
+      let continuation = waiters.removeValue(forKey: waiterID)
+    {
+      continuation.resume(returning: action)
+      return
     }
 
-    func next() async -> Action? {
-        if !buffer.isEmpty {
-            return buffer.removeFirst()
-        }
+    buffer.append(action)
+  }
 
-        let waiterID = UUID()
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                waiters[waiterID] = continuation
-            }
-        } onCancel: {
-            Task {
-                await self.cancelWaiter(waiterID)
-            }
-        }
+  func next() async -> Action? {
+    if !buffer.isEmpty {
+      return buffer.removeFirst()
     }
 
-    func popBuffered() -> Action? {
-        guard !buffer.isEmpty else { return nil }
-        return buffer.removeFirst()
+    let waiterID = UUID()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        waiters[waiterID] = continuation
+      }
+    } onCancel: {
+      Task {
+        await self.cancelWaiter(waiterID)
+      }
     }
+  }
 
-    private func cancelWaiter(_ waiterID: UUID) {
-        guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
-        continuation.resume(returning: nil)
-    }
+  func popBuffered() -> Action? {
+    guard !buffer.isEmpty else { return nil }
+    return buffer.removeFirst()
+  }
+
+  private func cancelWaiter(_ waiterID: UUID) {
+    guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
+    continuation.resume(returning: nil)
+  }
 }
 
 /// A deterministic test harness for InnoFlow v2 reducers.
@@ -61,652 +63,653 @@ private actor ActionQueue<Action: Sendable> {
 @MainActor
 public final class TestStore<R: Reducer> where R.State: Equatable {
 
-    // MARK: - Properties
+  // MARK: - Properties
 
-    public private(set) var state: R.State
+  public private(set) var state: R.State
 
-    private let reducer: R
-    private let effectTimeout: Duration
-    private let clock = ContinuousClock()
-    private let queue = ActionQueue<R.Action>()
+  private let reducer: R
+  private let effectTimeout: Duration
+  private let clock = ContinuousClock()
+  private let queue = ActionQueue<R.Action>()
 
-    private var runningTasks: [UUID: Task<Void, Never>] = [:]
-    private var taskIDsByEffectID: [EffectID: Set<UUID>] = [:]
-    private var debounceDelayTasksByID: [EffectID: Task<Void, Never>] = [:]
-    private var debounceGenerationByID: [EffectID: UUID] = [:]
-    private var throttleWindowEndByID: [EffectID: ContinuousClock.Instant] = [:]
-    private var throttlePendingTrailingByID: [EffectID: PendingTrailing<R.Action>] = [:]
-    private var throttleTrailingTaskByID: [EffectID: Task<Void, Never>] = [:]
-    private var throttleGenerationByID: [EffectID: UInt64] = [:]
+  private var runningTasks: [UUID: Task<Void, Never>] = [:]
+  private var taskIDsByEffectID: [EffectID: Set<UUID>] = [:]
+  private var debounceDelayTasksByID: [EffectID: Task<Void, Never>] = [:]
+  private var debounceGenerationByID: [EffectID: UUID] = [:]
+  private var throttleWindowEndByID: [EffectID: ContinuousClock.Instant] = [:]
+  private var throttlePendingTrailingByID: [EffectID: PendingTrailing<R.Action>] = [:]
+  private var throttleTrailingTaskByID: [EffectID: Task<Void, Never>] = [:]
+  private var throttleGenerationByID: [EffectID: UInt64] = [:]
 
-    // MARK: - Initialization
+  // MARK: - Initialization
 
-    public init(
-        reducer: R,
-        initialState: R.State,
-        effectTimeout: Duration = .seconds(1)
-    ) {
-        self.reducer = reducer
-        self.state = initialState
-        self.effectTimeout = effectTimeout
+  public init(
+    reducer: R,
+    initialState: R.State,
+    effectTimeout: Duration = .seconds(1)
+  ) {
+    self.reducer = reducer
+    self.state = initialState
+    self.effectTimeout = effectTimeout
+  }
+
+  public convenience init(
+    reducer: R,
+    initialState: R.State? = nil,
+    effectTimeout: Duration = .seconds(1)
+  ) where R.State: DefaultInitializable {
+    self.init(
+      reducer: reducer,
+      initialState: initialState ?? R.State(),
+      effectTimeout: effectTimeout
+    )
+  }
+
+  isolated deinit {
+    for task in runningTasks.values {
+      task.cancel()
+    }
+    for task in debounceDelayTasksByID.values {
+      task.cancel()
+    }
+    for task in throttleTrailingTaskByID.values {
+      task.cancel()
+    }
+  }
+
+  // MARK: - Public APIs
+
+  public func send(
+    _ action: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async {
+    var expectedState = state
+    updateExpectedState?(&expectedState)
+
+    let effect = reducer.reduce(into: &state, action: action)
+
+    if updateExpectedState != nil, state != expectedState {
+      testStoreAssertionFailure(
+        """
+        State mismatch after action.
+
+        Expected:
+        \(expectedState)
+
+        Actual:
+        \(state)
+        """,
+        file: file,
+        line: line
+      )
     }
 
-    public convenience init(
-        reducer: R,
-        initialState: R.State? = nil,
-        effectTimeout: Duration = .seconds(1)
-    ) where R.State: DefaultInitializable {
-        self.init(
-            reducer: reducer,
-            initialState: initialState ?? R.State(),
-            effectTimeout: effectTimeout
-        )
+    execute(effect)
+  }
+
+  public func receive(
+    _ expectedAction: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async where R.Action: Equatable {
+    guard let action = await nextActionWithinTimeout() else {
+      testStoreAssertionFailure(
+        """
+        Expected to receive action:
+        \(expectedAction)
+
+        But timed out after \(effectTimeout).
+        """,
+        file: file,
+        line: line
+      )
+      return
     }
 
-    isolated deinit {
-        for task in runningTasks.values {
-            task.cancel()
-        }
-        for task in debounceDelayTasksByID.values {
-            task.cancel()
-        }
-        for task in throttleTrailingTaskByID.values {
-            task.cancel()
-        }
+    if action != expectedAction {
+      testStoreAssertionFailure(
+        """
+        Received unexpected action.
+
+        Expected:
+        \(expectedAction)
+
+        Received:
+        \(action)
+        """,
+        file: file,
+        line: line
+      )
+      return
     }
 
-    // MARK: - Public APIs
+    var expectedState = state
+    updateExpectedState?(&expectedState)
 
-    public func send(
-        _ action: R.Action,
-        assert updateExpectedState: ((inout R.State) -> Void)? = nil,
-        file: StaticString = #file,
-        line: UInt = #line
-    ) async {
-        var expectedState = state
-        updateExpectedState?(&expectedState)
+    let effect = reducer.reduce(into: &state, action: action)
 
-        let effect = reducer.reduce(into: &state, action: action)
+    if updateExpectedState != nil, state != expectedState {
+      testStoreAssertionFailure(
+        """
+        State mismatch after receiving action.
 
-        if updateExpectedState != nil, state != expectedState {
-            testStoreAssertionFailure(
-                """
-                State mismatch after action.
+        Expected:
+        \(expectedState)
 
-                Expected:
-                \(expectedState)
-
-                Actual:
-                \(state)
-                """,
-                file: file,
-                line: line
-            )
-        }
-
-        execute(effect)
+        Actual:
+        \(state)
+        """,
+        file: file,
+        line: line
+      )
     }
 
-    public func receive(
-        _ expectedAction: R.Action,
-        assert updateExpectedState: ((inout R.State) -> Void)? = nil,
-        file: StaticString = #file,
-        line: UInt = #line
-    ) async where R.Action: Equatable {
-        guard let action = await nextActionWithinTimeout() else {
-            testStoreAssertionFailure(
-                """
-                Expected to receive action:
-                \(expectedAction)
+    execute(effect)
+  }
 
-                But timed out after \(effectTimeout).
-                """,
-                file: file,
-                line: line
-            )
-            return
-        }
+  public func assertNoMoreActions(
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async {
+    if let buffered = await queue.popBuffered() {
+      testStoreAssertionFailure(
+        """
+        Unhandled received action:
+        \(buffered)
 
-        if action != expectedAction {
-            testStoreAssertionFailure(
-                """
-                Received unexpected action.
-
-                Expected:
-                \(expectedAction)
-
-                Received:
-                \(action)
-                """,
-                file: file,
-                line: line
-            )
-            return
-        }
-
-        var expectedState = state
-        updateExpectedState?(&expectedState)
-
-        let effect = reducer.reduce(into: &state, action: action)
-
-        if updateExpectedState != nil, state != expectedState {
-            testStoreAssertionFailure(
-                """
-                State mismatch after receiving action.
-
-                Expected:
-                \(expectedState)
-
-                Actual:
-                \(state)
-                """,
-                file: file,
-                line: line
-            )
-        }
-
-        execute(effect)
+        All effect actions should be verified with `receive(_:assert:)`.
+        """,
+        file: file,
+        line: line
+      )
+      return
     }
 
-    public func assertNoMoreActions(
-        file: StaticString = #file,
-        line: UInt = #line
-    ) async {
-        if let buffered = await queue.popBuffered() {
-            testStoreAssertionFailure(
-                """
-                Unhandled received action:
-                \(buffered)
-
-                All effect actions should be verified with `receive(_:assert:)`.
-                """,
-                file: file,
-                line: line
-            )
-            return
-        }
-
-        let queue = self.queue
-        let leftover = await withTimeout(effectTimeout) {
-            await queue.next()
-        }
-
-        if let leftover {
-            testStoreAssertionFailure(
-                """
-                Unhandled received action:
-                \(leftover)
-
-                All effect actions should be verified with `receive(_:assert:)`.
-                """,
-                file: file,
-                line: line
-            )
-        }
+    let queue = self.queue
+    let leftover = await withTimeout(effectTimeout) {
+      await queue.next()
     }
 
-    public func cancelEffects(identifiedBy id: EffectID) async {
-        cancelEffectsSynchronously(identifiedBy: id)
+    if let leftover {
+      testStoreAssertionFailure(
+        """
+        Unhandled received action:
+        \(leftover)
+
+        All effect actions should be verified with `receive(_:assert:)`.
+        """,
+        file: file,
+        line: line
+      )
     }
+  }
 
-    public func cancelAllEffects() async {
-        cancelAllEffectsSynchronously()
-    }
+  public func cancelEffects(identifiedBy id: EffectID) async {
+    cancelEffectsSynchronously(identifiedBy: id)
+  }
 
-    // MARK: - Effect Execution
+  public func cancelAllEffects() async {
+    cancelAllEffectsSynchronously()
+  }
 
-    private struct ExecutionContext: Sendable {
-        let cancellationID: EffectID?
-        let animation: Animation?
-    }
+  // MARK: - Effect Execution
 
-    private struct PendingTrailing<Action: Sendable>: Sendable {
-        let effect: EffectTask<Action>
-        let context: ExecutionContext
-    }
+  private struct ExecutionContext: Sendable {
+    let cancellationID: EffectID?
+    let animation: Animation?
+  }
 
-    private func execute(
-        _ effect: EffectTask<R.Action>,
-        context: ExecutionContext? = nil
-    ) {
-        switch effect._testingOperation {
-        case .none:
-            return
+  private struct PendingTrailing<Action: Sendable>: Sendable {
+    let effect: EffectTask<Action>
+    let context: ExecutionContext
+  }
 
-        case .send(let action):
-            Task {
-                await queue.enqueue(action)
-            }
+  private func execute(
+    _ effect: EffectTask<R.Action>,
+    context: ExecutionContext? = nil
+  ) {
+    switch effect._testingOperation {
+    case .none:
+      return
 
-        case .run(let priority, let operation):
-            startRunTask(priority: priority, operation: operation, context: context)
+    case .send(let action):
+      Task {
+        await queue.enqueue(action)
+      }
 
-        case .merge(let effects):
-            for effect in effects {
-                execute(effect, context: context)
-            }
+    case .run(let priority, let operation):
+      startRunTask(priority: priority, operation: operation, context: context)
 
-        case .concatenate(let effects):
-            let token = UUID()
-            let cancellationID = context?.cancellationID
-            let task = Task { @MainActor [weak self] in
-                guard let self else { return }
-                defer {
-                    self.removeTrackedTask(token: token, cancellationID: cancellationID)
-                }
-                for effect in effects {
-                    guard !Task.isCancelled else { break }
-                    await self.executeAwaited(effect, context: context)
-                }
-            }
-            runningTasks[token] = task
-            if let id = cancellationID {
-                taskIDsByEffectID[id, default: []].insert(token)
-            }
+    case .merge(let effects):
+      for effect in effects {
+        execute(effect, context: context)
+      }
 
-        case .cancel(let id):
-            cancelEffectsSynchronously(identifiedBy: id)
-
-        case .cancellable(let nested, let id, let cancelInFlight):
-            if cancelInFlight {
-                cancelEffectsSynchronously(identifiedBy: id)
-            }
-            execute(nested, context: contextWithCancellation(id, on: context))
-
-        case .debounce(let nested, let id, let interval):
-            _ = scheduleDebounce(
-                nested,
-                id: id,
-                interval: interval,
-                context: context
-            )
-
-        case .throttle(let nested, let id, let interval, let leading, let trailing):
-            let now = clock.now
-            let throttleContext = contextWithCancellation(id, on: context)
-            if let windowEnd = throttleWindowEndByID[id], now < windowEnd {
-                if trailing {
-                    throttlePendingTrailingByID[id] = .init(
-                        effect: nested,
-                        context: throttleContext
-                    )
-                }
-                return
-            }
-            throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
-            throttleGenerationByID.removeValue(forKey: id)
-            throttlePendingTrailingByID.removeValue(forKey: id)
-            throttleWindowEndByID[id] = now.advanced(by: interval)
-
-            if trailing {
-                if !leading {
-                    throttlePendingTrailingByID[id] = .init(
-                        effect: nested,
-                        context: throttleContext
-                    )
-                }
-                scheduleThrottleTrailing(for: id, interval: interval)
-            }
-
-            if leading {
-                execute(
-                    nested,
-                    context: throttleContext
-                )
-            }
-
-        case .animation(let nested, let animation):
-            execute(
-                nested,
-                context: contextWithAnimation(animation, on: context)
-            )
-        }
-    }
-
-    private func executeAwaited(
-        _ effect: EffectTask<R.Action>,
-        context: ExecutionContext? = nil
-    ) async {
-        switch effect._testingOperation {
-        case .none:
-            return
-
-        case .send(let action):
-            await queue.enqueue(action)
-
-        case .run(let priority, let operation):
-            await withCheckedContinuation { continuation in
-                startRunTask(
-                    priority: priority,
-                    operation: operation,
-                    context: context,
-                    completion: {
-                        continuation.resume()
-                    }
-                )
-            }
-
-        case .merge(let effects):
-            await withTaskGroup(of: Void.self) { group in
-                for effect in effects {
-                    group.addTask { [weak self] in
-                        guard let self else { return }
-                        await self.executeAwaited(effect, context: context)
-                    }
-                }
-                await group.waitForAll()
-            }
-
-        case .concatenate(let effects):
-            for effect in effects {
-                await executeAwaited(effect, context: context)
-            }
-
-        case .cancel(let id):
-            cancelEffectsSynchronously(identifiedBy: id)
-
-        case .cancellable(let nested, let id, let cancelInFlight):
-            if cancelInFlight {
-                cancelEffectsSynchronously(identifiedBy: id)
-            }
-            await executeAwaited(
-                nested,
-                context: contextWithCancellation(id, on: context)
-            )
-
-        case .debounce(let nested, let id, let interval):
-            let task = scheduleDebounce(
-                nested,
-                id: id,
-                interval: interval,
-                context: context
-            )
-            _ = await task.result
-
-        case .throttle(let nested, let id, let interval, let leading, let trailing):
-            let now = clock.now
-            let throttleContext = contextWithCancellation(id, on: context)
-            if let windowEnd = throttleWindowEndByID[id], now < windowEnd {
-                if trailing {
-                    throttlePendingTrailingByID[id] = .init(
-                        effect: nested,
-                        context: throttleContext
-                    )
-                }
-                return
-            }
-            throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
-            throttleGenerationByID.removeValue(forKey: id)
-            throttlePendingTrailingByID.removeValue(forKey: id)
-            throttleWindowEndByID[id] = now.advanced(by: interval)
-
-            if trailing {
-                if !leading {
-                    throttlePendingTrailingByID[id] = .init(
-                        effect: nested,
-                        context: throttleContext
-                    )
-                }
-                scheduleThrottleTrailing(for: id, interval: interval)
-            }
-
-            if leading {
-                await executeAwaited(
-                    nested,
-                    context: throttleContext
-                )
-            }
-
-        case .animation(let nested, let animation):
-            await executeAwaited(
-                nested,
-                context: contextWithAnimation(animation, on: context)
-            )
-        }
-    }
-
-    private func startRunTask(
-        priority: TaskPriority?,
-        operation: @escaping @Sendable (Send<R.Action>) async -> Void,
-        context: ExecutionContext?,
-        completion: (() -> Void)? = nil
-    ) {
-        let token = UUID()
-        let queue = self.queue
-
-        let send = Send<R.Action> { action in
-            let isActive = await MainActor.run { [weak self] in
-                self?.runningTasks[token] != nil
-            }
-            guard isActive else { return }
-            await queue.enqueue(action)
-        }
-
-        let task = Task(priority: priority) { [weak self] in
-            await operation(send)
-
-            await MainActor.run {
-                guard let self else { return }
-                self.removeTrackedTask(token: token, cancellationID: context?.cancellationID)
-                completion?()
-            }
-        }
-
-        runningTasks[token] = task
-
-        if let id = context?.cancellationID {
-            taskIDsByEffectID[id, default: []].insert(token)
-        }
-    }
-
-    private func cancelEffectsSynchronously(identifiedBy id: EffectID) {
-        debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
-        debounceGenerationByID.removeValue(forKey: id)
-        clearThrottleState(for: id)
-        guard let ids = taskIDsByEffectID.removeValue(forKey: id) else { return }
-
-        for token in ids {
-            runningTasks.removeValue(forKey: token)?.cancel()
-        }
-    }
-
-    private func cancelAllEffectsSynchronously() {
-        for task in runningTasks.values {
-            task.cancel()
-        }
-        for task in debounceDelayTasksByID.values {
-            task.cancel()
-        }
-        clearAllThrottleState()
-        runningTasks.removeAll()
-        taskIDsByEffectID.removeAll()
-        debounceDelayTasksByID.removeAll()
-        debounceGenerationByID.removeAll()
-    }
-
-    private func removeTrackedTask(token: UUID, cancellationID: EffectID?) {
-        runningTasks.removeValue(forKey: token)
-
-        guard let id = cancellationID,
-              var tokens = taskIDsByEffectID[id] else { return }
-        tokens.remove(token)
-        if tokens.isEmpty {
-            taskIDsByEffectID.removeValue(forKey: id)
-        } else {
-            taskIDsByEffectID[id] = tokens
-        }
-    }
-
-    private func scheduleDebounce(
-        _ nested: EffectTask<R.Action>,
-        id: EffectID,
-        interval: Duration,
-        context: ExecutionContext?
-    ) -> Task<Void, Never> {
-        debounceDelayTasksByID[id]?.cancel()
-        cancelEffectsSynchronously(identifiedBy: id)
-
-        let generation = UUID()
-        debounceGenerationByID[id] = generation
-        let debounceContext = contextWithCancellation(id, on: context)
-
-        let task = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer {
-                if self.debounceGenerationByID[id] == generation {
-                    self.debounceDelayTasksByID.removeValue(forKey: id)
-                    self.debounceGenerationByID.removeValue(forKey: id)
-                }
-            }
-
-            do {
-                try await Task.sleep(for: interval)
-            } catch {
-                return
-            }
-
-            guard !Task.isCancelled else { return }
-            guard self.debounceGenerationByID[id] == generation else { return }
-            await self.executeAwaited(
-                nested,
-                context: debounceContext
-            )
-        }
-
-        debounceDelayTasksByID[id] = task
-        return task
-    }
-
-    private func contextWithCancellation(
-        _ id: EffectID,
-        on context: ExecutionContext?
-    ) -> ExecutionContext {
-        .init(
-            cancellationID: id,
-            animation: context?.animation
-        )
-    }
-
-    private func contextWithAnimation(
-        _ animation: Animation?,
-        on context: ExecutionContext?
-    ) -> ExecutionContext {
-        .init(
-            cancellationID: context?.cancellationID,
-            animation: animation
-        )
-    }
-
-    private func scheduleThrottleTrailing(for id: EffectID, interval: Duration) {
-        throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
-        let generation = (throttleGenerationByID[id] ?? 0) &+ 1
-        throttleGenerationByID[id] = generation
-        throttleTrailingTaskByID[id] = Task { [weak self] in
-            do {
-                try await Task.sleep(for: interval)
-            } catch {
-                return
-            }
-            await MainActor.run {
-                self?.drainThrottleTrailing(for: id, generation: generation)
-            }
-        }
-    }
-
-    private func drainThrottleTrailing(for id: EffectID, generation: UInt64) {
-        guard throttleGenerationByID[id] == generation else {
-            return
-        }
+    case .concatenate(let effects):
+      let token = UUID()
+      let cancellationID = context?.cancellationID
+      let task = Task { @MainActor [weak self] in
+        guard let self else { return }
         defer {
-            if throttleGenerationByID[id] == generation {
-                throttleTrailingTaskByID.removeValue(forKey: id)
-                throttlePendingTrailingByID.removeValue(forKey: id)
-                throttleWindowEndByID.removeValue(forKey: id)
-                throttleGenerationByID.removeValue(forKey: id)
-            }
+          self.removeTrackedTask(token: token, cancellationID: cancellationID)
         }
-        guard let pending = throttlePendingTrailingByID[id] else {
-            return
+        for effect in effects {
+          guard !Task.isCancelled else { break }
+          await self.executeAwaited(effect, context: context)
         }
-        execute(pending.effect, context: pending.context)
+      }
+      runningTasks[token] = task
+      if let id = cancellationID {
+        taskIDsByEffectID[id, default: []].insert(token)
+      }
+
+    case .cancel(let id):
+      cancelEffectsSynchronously(identifiedBy: id)
+
+    case .cancellable(let nested, let id, let cancelInFlight):
+      if cancelInFlight {
+        cancelEffectsSynchronously(identifiedBy: id)
+      }
+      execute(nested, context: contextWithCancellation(id, on: context))
+
+    case .debounce(let nested, let id, let interval):
+      _ = scheduleDebounce(
+        nested,
+        id: id,
+        interval: interval,
+        context: context
+      )
+
+    case .throttle(let nested, let id, let interval, let leading, let trailing):
+      let now = clock.now
+      let throttleContext = contextWithCancellation(id, on: context)
+      if let windowEnd = throttleWindowEndByID[id], now < windowEnd {
+        if trailing {
+          throttlePendingTrailingByID[id] = .init(
+            effect: nested,
+            context: throttleContext
+          )
+        }
+        return
+      }
+      throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+      throttleGenerationByID.removeValue(forKey: id)
+      throttlePendingTrailingByID.removeValue(forKey: id)
+      throttleWindowEndByID[id] = now.advanced(by: interval)
+
+      if trailing {
+        if !leading {
+          throttlePendingTrailingByID[id] = .init(
+            effect: nested,
+            context: throttleContext
+          )
+        }
+        scheduleThrottleTrailing(for: id, interval: interval)
+      }
+
+      if leading {
+        execute(
+          nested,
+          context: throttleContext
+        )
+      }
+
+    case .animation(let nested, let animation):
+      execute(
+        nested,
+        context: contextWithAnimation(animation, on: context)
+      )
+    }
+  }
+
+  private func executeAwaited(
+    _ effect: EffectTask<R.Action>,
+    context: ExecutionContext? = nil
+  ) async {
+    switch effect._testingOperation {
+    case .none:
+      return
+
+    case .send(let action):
+      await queue.enqueue(action)
+
+    case .run(let priority, let operation):
+      await withCheckedContinuation { continuation in
+        startRunTask(
+          priority: priority,
+          operation: operation,
+          context: context,
+          completion: {
+            continuation.resume()
+          }
+        )
+      }
+
+    case .merge(let effects):
+      await withTaskGroup(of: Void.self) { group in
+        for effect in effects {
+          group.addTask { [weak self] in
+            guard let self else { return }
+            await self.executeAwaited(effect, context: context)
+          }
+        }
+        await group.waitForAll()
+      }
+
+    case .concatenate(let effects):
+      for effect in effects {
+        await executeAwaited(effect, context: context)
+      }
+
+    case .cancel(let id):
+      cancelEffectsSynchronously(identifiedBy: id)
+
+    case .cancellable(let nested, let id, let cancelInFlight):
+      if cancelInFlight {
+        cancelEffectsSynchronously(identifiedBy: id)
+      }
+      await executeAwaited(
+        nested,
+        context: contextWithCancellation(id, on: context)
+      )
+
+    case .debounce(let nested, let id, let interval):
+      let task = scheduleDebounce(
+        nested,
+        id: id,
+        interval: interval,
+        context: context
+      )
+      _ = await task.result
+
+    case .throttle(let nested, let id, let interval, let leading, let trailing):
+      let now = clock.now
+      let throttleContext = contextWithCancellation(id, on: context)
+      if let windowEnd = throttleWindowEndByID[id], now < windowEnd {
+        if trailing {
+          throttlePendingTrailingByID[id] = .init(
+            effect: nested,
+            context: throttleContext
+          )
+        }
+        return
+      }
+      throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+      throttleGenerationByID.removeValue(forKey: id)
+      throttlePendingTrailingByID.removeValue(forKey: id)
+      throttleWindowEndByID[id] = now.advanced(by: interval)
+
+      if trailing {
+        if !leading {
+          throttlePendingTrailingByID[id] = .init(
+            effect: nested,
+            context: throttleContext
+          )
+        }
+        scheduleThrottleTrailing(for: id, interval: interval)
+      }
+
+      if leading {
+        await executeAwaited(
+          nested,
+          context: throttleContext
+        )
+      }
+
+    case .animation(let nested, let animation):
+      await executeAwaited(
+        nested,
+        context: contextWithAnimation(animation, on: context)
+      )
+    }
+  }
+
+  private func startRunTask(
+    priority: TaskPriority?,
+    operation: @escaping @Sendable (Send<R.Action>) async -> Void,
+    context: ExecutionContext?,
+    completion: (() -> Void)? = nil
+  ) {
+    let token = UUID()
+    let queue = self.queue
+
+    let send = Send<R.Action> { action in
+      let isActive = await MainActor.run { [weak self] in
+        self?.runningTasks[token] != nil
+      }
+      guard isActive else { return }
+      await queue.enqueue(action)
     }
 
-    private func clearThrottleState(for id: EffectID) {
-        throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+    let task = Task(priority: priority) { [weak self] in
+      await operation(send)
+
+      await MainActor.run {
+        guard let self else { return }
+        self.removeTrackedTask(token: token, cancellationID: context?.cancellationID)
+        completion?()
+      }
+    }
+
+    runningTasks[token] = task
+
+    if let id = context?.cancellationID {
+      taskIDsByEffectID[id, default: []].insert(token)
+    }
+  }
+
+  private func cancelEffectsSynchronously(identifiedBy id: EffectID) {
+    debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
+    debounceGenerationByID.removeValue(forKey: id)
+    clearThrottleState(for: id)
+    guard let ids = taskIDsByEffectID.removeValue(forKey: id) else { return }
+
+    for token in ids {
+      runningTasks.removeValue(forKey: token)?.cancel()
+    }
+  }
+
+  private func cancelAllEffectsSynchronously() {
+    for task in runningTasks.values {
+      task.cancel()
+    }
+    for task in debounceDelayTasksByID.values {
+      task.cancel()
+    }
+    clearAllThrottleState()
+    runningTasks.removeAll()
+    taskIDsByEffectID.removeAll()
+    debounceDelayTasksByID.removeAll()
+    debounceGenerationByID.removeAll()
+  }
+
+  private func removeTrackedTask(token: UUID, cancellationID: EffectID?) {
+    runningTasks.removeValue(forKey: token)
+
+    guard let id = cancellationID,
+      var tokens = taskIDsByEffectID[id]
+    else { return }
+    tokens.remove(token)
+    if tokens.isEmpty {
+      taskIDsByEffectID.removeValue(forKey: id)
+    } else {
+      taskIDsByEffectID[id] = tokens
+    }
+  }
+
+  private func scheduleDebounce(
+    _ nested: EffectTask<R.Action>,
+    id: EffectID,
+    interval: Duration,
+    context: ExecutionContext?
+  ) -> Task<Void, Never> {
+    debounceDelayTasksByID[id]?.cancel()
+    cancelEffectsSynchronously(identifiedBy: id)
+
+    let generation = UUID()
+    debounceGenerationByID[id] = generation
+    let debounceContext = contextWithCancellation(id, on: context)
+
+    let task = Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer {
+        if self.debounceGenerationByID[id] == generation {
+          self.debounceDelayTasksByID.removeValue(forKey: id)
+          self.debounceGenerationByID.removeValue(forKey: id)
+        }
+      }
+
+      do {
+        try await Task.sleep(for: interval)
+      } catch {
+        return
+      }
+
+      guard !Task.isCancelled else { return }
+      guard self.debounceGenerationByID[id] == generation else { return }
+      await self.executeAwaited(
+        nested,
+        context: debounceContext
+      )
+    }
+
+    debounceDelayTasksByID[id] = task
+    return task
+  }
+
+  private func contextWithCancellation(
+    _ id: EffectID,
+    on context: ExecutionContext?
+  ) -> ExecutionContext {
+    .init(
+      cancellationID: id,
+      animation: context?.animation
+    )
+  }
+
+  private func contextWithAnimation(
+    _ animation: Animation?,
+    on context: ExecutionContext?
+  ) -> ExecutionContext {
+    .init(
+      cancellationID: context?.cancellationID,
+      animation: animation
+    )
+  }
+
+  private func scheduleThrottleTrailing(for id: EffectID, interval: Duration) {
+    throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+    let generation = (throttleGenerationByID[id] ?? 0) &+ 1
+    throttleGenerationByID[id] = generation
+    throttleTrailingTaskByID[id] = Task { [weak self] in
+      do {
+        try await Task.sleep(for: interval)
+      } catch {
+        return
+      }
+      await MainActor.run {
+        self?.drainThrottleTrailing(for: id, generation: generation)
+      }
+    }
+  }
+
+  private func drainThrottleTrailing(for id: EffectID, generation: UInt64) {
+    guard throttleGenerationByID[id] == generation else {
+      return
+    }
+    defer {
+      if throttleGenerationByID[id] == generation {
+        throttleTrailingTaskByID.removeValue(forKey: id)
         throttlePendingTrailingByID.removeValue(forKey: id)
         throttleWindowEndByID.removeValue(forKey: id)
         throttleGenerationByID.removeValue(forKey: id)
+      }
     }
-
-    private func clearAllThrottleState() {
-        for task in throttleTrailingTaskByID.values {
-            task.cancel()
-        }
-        throttleTrailingTaskByID.removeAll()
-        throttlePendingTrailingByID.removeAll()
-        throttleWindowEndByID.removeAll()
-        throttleGenerationByID.removeAll()
+    guard let pending = throttlePendingTrailingByID[id] else {
+      return
     }
+    execute(pending.effect, context: pending.context)
+  }
 
-    // MARK: - Receiving
+  private func clearThrottleState(for id: EffectID) {
+    throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+    throttlePendingTrailingByID.removeValue(forKey: id)
+    throttleWindowEndByID.removeValue(forKey: id)
+    throttleGenerationByID.removeValue(forKey: id)
+  }
 
-    private func nextActionWithinTimeout() async -> R.Action? {
-        let queue = self.queue
-        return await withTimeout(effectTimeout) {
-            await queue.next()
-        }
+  private func clearAllThrottleState() {
+    for task in throttleTrailingTaskByID.values {
+      task.cancel()
     }
+    throttleTrailingTaskByID.removeAll()
+    throttlePendingTrailingByID.removeAll()
+    throttleWindowEndByID.removeAll()
+    throttleGenerationByID.removeAll()
+  }
 
-    private func withTimeout<T: Sendable>(
-        _ timeout: Duration,
-        operation: @escaping @Sendable () async -> T?
-    ) async -> T? {
-        await withTaskGroup(of: T?.self) { group in
-            group.addTask {
-                await operation()
-            }
+  // MARK: - Receiving
 
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                return nil
-            }
-
-            let result = await group.next() ?? nil
-            group.cancelAll()
-            return result
-        }
+  private func nextActionWithinTimeout() async -> R.Action? {
+    let queue = self.queue
+    return await withTimeout(effectTimeout) {
+      await queue.next()
     }
+  }
+
+  private func withTimeout<T: Sendable>(
+    _ timeout: Duration,
+    operation: @escaping @Sendable () async -> T?
+  ) async -> T? {
+    await withTaskGroup(of: T?.self) { group in
+      group.addTask {
+        await operation()
+      }
+
+      group.addTask {
+        try? await Task.sleep(for: timeout)
+        return nil
+      }
+
+      let result = await group.next() ?? nil
+      group.cancelAll()
+      return result
+    }
+  }
 }
 
 // MARK: - Assertion Helper
 
 private func testStoreAssertionFailure(
-    _ message: String,
-    file: StaticString,
-    line: UInt
+  _ message: String,
+  file: StaticString,
+  line: UInt
 ) {
-    #if DEBUG
+  #if DEBUG
     print("❌ TestStore Assertion Failed:")
     print(message)
     print("File: \(file), Line: \(line)")
-    #endif
+  #endif
 
-    #if canImport(Testing)
+  #if canImport(Testing)
     Issue.record(
-        TestStoreAssertionIssue(
-            message: "\(file):\(line): \(message)"
-        )
+      TestStoreAssertionIssue(
+        message: "\(file):\(line): \(message)"
+      )
     )
-    #elseif canImport(XCTest)
+  #elseif canImport(XCTest)
     XCTFail(message, file: file, line: line)
-    #else
+  #else
     Swift.assertionFailure(message, file: file, line: line)
-    #endif
+  #endif
 }
 
 #if canImport(Testing)
-private struct TestStoreAssertionIssue: Error, Sendable, CustomStringConvertible {
+  private struct TestStoreAssertionIssue: Error, Sendable, CustomStringConvertible {
     let message: String
     var description: String { message }
-}
+  }
 #endif
