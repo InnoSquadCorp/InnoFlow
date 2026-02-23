@@ -1,104 +1,79 @@
 # InnoFlow
 
-A lightweight, hybrid architecture framework for SwiftUI that combines the best of Elm Architecture with SwiftUI's native `@Observable` pattern.
+A lightweight, SwiftUI-native unidirectional architecture framework.
 
-[![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
-[![Platform](https://img.shields.io/badge/Platform-iOS%2018.0%2B%20%7C%20macOS%2015.0%2B%20%7C%20tvOS%2018.0%2B%20%7C%20watchOS%2011.0%2B-lightgrey.svg)](https://developer.apple.com/swift/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Xcode](https://img.shields.io/badge/Xcode-16.0%2B-blue.svg)](https://developer.apple.com/xcode/)
-[![Documentation](https://img.shields.io/badge/Documentation-DocC-blue.svg)](https://innosquad-mdd.github.io/InnoFlow/documentation/innoflow/)
+## Core Principles
 
-**By [Inno Squad](https://github.com/innosquad-mdd)**
+InnoFlow v2 focuses on:
 
----
+- **Single reducer contract**: `reduce(into:action:) -> EffectTask<Action>`
+- **Explicit async model**: one `EffectTask` DSL for run/merge/concatenate/cancel/combinators
+- **Cancellation completion contract**: store cancellation APIs are `async`
+- **SwiftUI-first runtime**: `@Observable` store + `@MainActor` state adapter
+- **Strict binding intent**: only `@BindableField` properties are bindable
+- **Deterministic testing**: `TestStore` with timeout/cancellation-oriented flow
 
-## 🎯 Philosophy
+**요약(KR)**: InnoFlow v2는 단일 reducer 계약, 명시적 effect DSL, async 취소 완료 보장, SwiftUI 친화 런타임을 핵심 원칙으로 둡니다.
 
-InnoFlow bridges the gap between SwiftUI's declarative simplicity and robust state management:
-
-- **SwiftUI-Native**: Built on `@Observable` for seamless integration
-- **Unidirectional Data Flow**: `Action → Reduce → Mutation → State → View`
-- **Testable**: First-class testing support with `TestStore`
-- **Lightweight**: Minimal boilerplate compared to other architectures
-- **Flexible DI**: Bring your own dependency injection strategy
-
-## 📦 Installation
+## Installation
 
 ### Swift Package Manager
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/innosquad-mdd/InnoFlow.git", from: "1.0.0")
+    .package(url: "https://github.com/InnoSquad-mdd/InnoFlow.git", branch: "main")
 ]
 ```
 
-### Navigation (with InnoRouter)
-
-If you use InnoRouter for navigation and want to keep navigation in InnoFlow `State` (state-driven `NavigationStack(path:)`), use the integration package:
-
-- `InnoRouterFlowBridge`: https://github.com/InnoSquad-mdd/InnoRouterFlowBridge
-
 ```swift
-// In your target
 .target(
     name: "YourApp",
     dependencies: ["InnoFlow"]
 )
 
-// For tests
 .testTarget(
     name: "YourAppTests",
     dependencies: ["InnoFlow", "InnoFlowTesting"]
 )
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Define Your Feature
+**요약(KR)**: `@InnoFlow` feature를 정의하고 `Store`를 SwiftUI `View`에 연결하면 기본 UDF 흐름을 바로 사용할 수 있습니다.
+
+### 1. Define a Feature
 
 ```swift
 import InnoFlow
 
 @InnoFlow
 struct CounterFeature {
-    // State: What data does this feature manage?
-    struct State: Equatable {
+    struct State: Equatable, Sendable, DefaultInitializable {
         var count = 0
-        @BindableField var step = 1  // Bindable property for two-way binding
+        @BindableField var step = 1
+
+        init() {}
     }
-    
-    // Action: What can happen?
-    enum Action {
+
+    enum Action: Sendable {
         case increment
         case decrement
         case setStep(Int)
     }
-    
-    // Mutation: How does state change?
-    enum Mutation {
-        case setCount(Int)
-        case setStep(Int)
-    }
-    
-    // Reduce: Action → Mutations + Effects
-    func reduce(state: State, action: Action) -> Reduce<Mutation, Never> {
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
         switch action {
         case .increment:
-            return .mutation(.setCount(state.count + state.step))
+            state.count += state.step
+            return .none
+
         case .decrement:
-            return .mutation(.setCount(state.count - state.step))
-        case .setStep(let step):
-            return .mutation(.setStep(step))
-        }
-    }
-    
-    // Mutate: Apply mutation to state
-    func mutate(state: inout State, mutation: Mutation) {
-        switch mutation {
-        case .setCount(let value):
-            state.count = value
+            state.count -= state.step
+            return .none
+
         case .setStep(let step):
             state.step = max(1, step)
+            return .none
         }
     }
 }
@@ -107,297 +82,217 @@ struct CounterFeature {
 ### 2. Use in SwiftUI
 
 ```swift
+import SwiftUI
+import InnoFlow
+
 struct CounterView: View {
-    @State private var store = Store(CounterFeature())
-    
+    @State private var store = Store(reducer: CounterFeature())
+
     var body: some View {
         VStack(spacing: 20) {
-            Text("Count: \(store.count)")  // Direct access via @dynamicMemberLookup
+            Text("Count: \(store.count)")
                 .font(.largeTitle)
-            
-            HStack(spacing: 40) {
+
+            HStack(spacing: 32) {
                 Button("−") { store.send(.decrement) }
                 Button("+") { store.send(.increment) }
             }
-            .font(.title)
-            
-            Stepper("Step: \(store.step)", value: store.binding(
-                \.step,
-                send: { .setStep($0) }
-            ))
+
+            Stepper(
+                "Step: \(store.step)",
+                value: store.binding(\.step, send: { .setStep($0) })
+            )
         }
     }
 }
 ```
 
-## 🔄 Handling Side Effects
-
-For async operations like API calls:
+## Side Effects with `EffectTask`
 
 ```swift
 @InnoFlow
 struct UserFeature {
-    struct State: Equatable {
+    struct State: Equatable, Sendable {
         var user: User?
         var isLoading = false
-        var error: String?
+        var errorMessage: String?
     }
-    
+
     enum Action: Sendable {
         case load
-        case refresh
-        case _loaded(Result<User, Error>)  // Internal action (prefix with _)
+        case _loaded(Result<User, Error>)
     }
-    
-    enum Mutation {
-        case setLoading(Bool)
-        case setUser(User?)
-        case setError(String?)
-    }
-    
-    enum Effect: Sendable {
-        case fetchUser
-    }
-    
-    // Dependency injection via init
+
     let userService: UserServiceProtocol
-    
-    init(userService: UserServiceProtocol = UserService.shared) {
-        self.userService = userService
-    }
-    
-    func reduce(state: State, action: Action) -> Reduce<Mutation, Effect> {
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
         switch action {
-        case .load, .refresh:
-            return Reduce(
-                mutations: [.setLoading(true), .setError(nil)],
-                effects: [.fetchUser]
-            )
-            
-        case ._loaded(.success(let user)):
-            return .mutations([.setUser(user), .setLoading(false)])
-            
-        case ._loaded(.failure(let error)):
-            return .mutations([
-                .setError(error.localizedDescription),
-                .setLoading(false)
-            ])
-        }
-    }
-    
-    func mutate(state: inout State, mutation: Mutation) {
-        switch mutation {
-        case .setLoading(let value): state.isLoading = value
-        case .setUser(let user): state.user = user
-        case .setError(let error): state.error = error
-        }
-    }
-    
-    func handle(effect: Effect) async -> EffectOutput<Action> {
-        switch effect {
-        case .fetchUser:
-            do {
-                let user = try await userService.fetchUser()
-                return .single(._loaded(.success(user)))
-            } catch {
-                return .single(._loaded(.failure(error)))
+        case .load:
+            state.isLoading = true
+            state.errorMessage = nil
+
+            return .run { send in
+                do {
+                    let user = try await userService.fetchUser()
+                    await send(._loaded(.success(user)))
+                } catch {
+                    await send(._loaded(.failure(error)))
+                }
             }
+            .cancellable("load-user", cancelInFlight: true)
+
+        case ._loaded(.success(let user)):
+            state.user = user
+            state.isLoading = false
+            return .none
+
+        case ._loaded(.failure(let error)):
+            state.errorMessage = error.localizedDescription
+            state.isLoading = false
+            return .none
         }
     }
 }
 ```
 
-## 📊 Effect Output Types
-
-InnoFlow supports multiple effect output types:
+### Effect DSL Summary
 
 ```swift
-func handle(effect: Effect) async -> EffectOutput<Action> {
-    switch effect {
-    
-    // No action (fire-and-forget)
-    case .logAnalytics:
-        analytics.log("event")
-        return .none
-    
-    // Single action
-    case .fetchData:
-        let data = try? await api.fetch()
-        return .single(._dataLoaded(data))
-    
-    // Multiple actions
-    case .multiStep:
-        return .actions(
-            ._step1Complete,
-            ._step2Complete,
-            ._allComplete
-        )
-    
-    // Streaming (WebSocket, progress, etc.)
-    case .subscribe:
-        return .stream { continuation in
-            webSocket.onMessage { msg in
-                continuation.yield(._messageReceived(msg))
-            }
-            webSocket.onClose {
-                continuation.finish()
-            }
-        }
-    }
+// fire-and-forget action emission
+EffectTask<Action>.send(.someAction)
+
+// async work
+EffectTask<Action>.run { send in
+    await send(.someAction)
+}
+
+// composition
+EffectTask<Action>.merge(effectA, effectB)
+EffectTask<Action>.concatenate(effectA, effectB)
+
+// cancellation
+EffectTask<Action>.cancel("task-id")
+effect.cancellable("task-id", cancelInFlight: true)
+
+// built-in combinators
+effect.debounce("search-query", for: .milliseconds(300))
+effect.throttle("scroll-event", for: .milliseconds(100))
+effect.throttle("search-query", for: .milliseconds(300), leading: false, trailing: true)
+
+// state-transition animation from effect-emitted actions
+effect.animation(.easeInOut)
+```
+
+Throttle semantics:
+
+- `leading: true, trailing: false`: leading-only (default)
+- `leading: false, trailing: true`: trailing-only
+- `leading: true, trailing: true`: leading + trailing (trailing fires only when there is an additional in-window event)
+- `leading: false, trailing: false`: invalid (`precondition` failure)
+
+`EffectID` is `StaticString`-based, so cancellation identifiers are compile-time literals by default.
+**요약(KR)**: 취소 ID는 동적 문자열이 아니라 코드 상수 리터럴을 사용합니다.
+
+### Store Cancellation APIs (async completion)
+
+```swift
+// cancellation bookkeeping is guaranteed when the await returns
+Task {
+    await store.cancelEffects(identifiedBy: "load-user")
+    await store.cancelAllEffects()
 }
 ```
 
-## 🧪 Testing
+Cancellation contract:
 
-InnoFlow provides `TestStore` for comprehensive testing:
+- When `await` returns, cancellation bookkeeping is complete.
+- Late actions from canceled effect tokens are dropped by runtime guards.
+
+**요약(KR)**: `await` 반환 시점에 취소 반영이 완료되며, 취소 후 늦게 도착한 액션은 무시됩니다.
+
+## Testing
+
+**요약(KR)**: `TestStore`는 상태 전이와 effect 액션을 결정적으로 검증하며 timeout/cancellation 시나리오를 안정적으로 테스트합니다.
 
 ```swift
 import Testing
-import InnoFlow
 import InnoFlowTesting
 
 @Test
-func testIncrement() async {
-    let store = TestStore(CounterFeature())
-    
-    await store.send(.increment) {
-        $0.count = 1
-    }
-    
-    await store.send(.increment) {
-        $0.count = 2
-    }
-}
+@MainActor
+func userLoadFlow() async {
+    let store = TestStore(
+        reducer: UserFeature(userService: MockUserService()),
+        initialState: .init()
+    )
 
-@Test
-func testAsyncLoad() async {
-    let mockService = MockUserService(user: User(name: "Test"))
-    let store = TestStore(UserFeature(userService: mockService))
-    
     await store.send(.load) {
         $0.isLoading = true
+        $0.errorMessage = nil
     }
-    
-    await store.receive(._loaded(.success(User(name: "Test")))) {
-        $0.user = User(name: "Test")
+
+    await store.receive(._loaded(.success(.fixture))) {
+        $0.user = .fixture
         $0.isLoading = false
     }
-    
+
     await store.assertNoMoreActions()
 }
 ```
 
-## 🔗 Bindings
+## Binding Contract (`@BindableField` only)
 
-Create bindings for two-way data flow using `@BindableField`:
-
-### Using @BindableField
-
-Mark state properties with `@BindableField` to enable type-safe bindings:
+`store.binding(_:send:)` only accepts:
 
 ```swift
-@InnoFlow
-struct FormFeature {
-    struct State: Equatable {
-        @BindableField var name = ""      // Automatically wrapped in BindableProperty
-        @BindableField var step = 1       // Automatically wrapped in BindableProperty
-        var isLoading = false             // Not bindable
-    }
-    
-    enum Action {
-        case nameChanged(String)
-        case setStep(Int)
-    }
-    
-    // ... reduce, mutate implementations ...
-}
-
-struct FormView: View {
-    @State private var store = Store(FormFeature())
-    
-    var body: some View {
-        Form {
-            TextField("Name", text: store.binding(
-                \.name,
-                send: { .nameChanged($0) }
-            ))
-            
-            Stepper("Step", value: store.binding(
-                \.step,
-                send: { .setStep($0) }
-            ))
-        }
-    }
-}
+KeyPath<State, BindableProperty<Value>>
 ```
 
-**Note:** Only properties marked with `@BindableField` can be used with `store.binding(_:send:)`. This ensures type safety and makes it explicit which fields support two-way binding.
+That means non-bindable state fields cannot be connected to two-way binding by mistake.
 
-## 🏗 Architecture Overview
+**요약(KR)**: `@BindableField`가 아닌 상태 필드는 양방향 바인딩에서 컴파일 단계에서 차단됩니다.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                        View                             │
-│                    (SwiftUI)                            │
-└─────────────────────┬───────────────────────────────────┘
-                      │ send(Action)
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│                       Store                             │
-│            (@Observable, @MainActor)                    │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│                      Reducer                            │
-│         reduce(state:action:) → Reduce                  │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-          ┌───────────┴───────────┐
-          ▼                       ▼
-┌─────────────────┐     ┌─────────────────┐
-│   [Mutation]    │     │    [Effect]     │
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         ▼                       ▼
-┌─────────────────┐     ┌─────────────────┐
-│     mutate()    │     │    handle()     │
-│  State update   │     │  Async work     │
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         ▼                       │
-┌─────────────────┐              │
-│      State      │◄─────────────┘
-│    (updated)    │      Action (from effect)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────┐
-│                     View Update                         │
-│              (Automatic via @Observable)                │
-└─────────────────────────────────────────────────────────┘
-```
+## Navigation with InnoRouter
 
-## 📋 Requirements
+If you keep navigation state inside InnoFlow `State` (state-driven `NavigationStack(path:)`), use:
 
-- iOS 18.0+ / macOS 15.0+ / tvOS 18.0+ / watchOS 11.0+
-- Swift 6.0+
-- Xcode 16.0+
+- `InnoRouterFlowBridge`: [GitHub](https://github.com/InnoSquad-mdd/InnoRouterFlowBridge)
+- `InnoRouterFlowBridge v2 placeholder`: [v2-preview](https://github.com/InnoSquad-mdd/InnoRouterFlowBridge/tree/v2-preview)
 
-## 🤝 Contributing
+Compatibility note:
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+- Architectural compatibility with InnoRouter is high.
+- During v2 migration, `InnoRouterFlowBridge` v1 contract is intentionally breakable and should be updated in a dedicated v2 bridge release.
 
-## 📄 License
+**요약(KR)**: 궁합은 높지만 v2 전환 중에는 Bridge v2 릴리스로 계약 정렬이 필요합니다.
 
-MIT License - See [LICENSE](LICENSE) for details.
+## API Design Evaluation (External Framework Comparison Included)
 
-## 📚 Additional Resources
+Evaluation was performed using `ios-native-skills`:
 
-- [📖 API Documentation](https://innosquad-mdd.github.io/InnoFlow/documentation/innoflow/) - Full API reference (DocC)
-- [Examples](Examples/) - Sample apps demonstrating InnoFlow usage
-- [Changelog](CHANGELOG.md) - Version history and changes
+- Comparison targets: `TCA`, `ReactorKit`, `ReSwift`, `SwiftRex`
+- Weighted axes: API 25 / Effect 25 / Concurrency 15 / Testing 20 / SwiftUI 15
+- Required gates: **SwiftUI philosophy**, **SOLID**
 
----
+Current conclusion:
 
-**Made with ❤️ by InnoSquad**
+- InnoFlow v2 is aligned with ideal API-first direction
+- SwiftUI/SOLID gates are conditionally passing
+- InnoRouter compatibility is high, but bridge v2 alignment is required
+
+**요약(KR)**: v2 방향은 유효하며, SwiftUI/SOLID는 조건부 통과 상태이고 Bridge v2 정렬이 후속 과제입니다.
+
+Detailed docs:
+
+- [API_DESIGN_EVALUATION.md](API_DESIGN_EVALUATION.md)
+- [RELEASE_NOTES.md](RELEASE_NOTES.md)
+
+## Documentation
+
+- [DocC API Documentation](https://innosquad-mdd.github.io/InnoFlow/documentation/innoflow/)
+- [Examples](Examples/)
+- [Contributing Guide](CONTRIBUTING.md)
+
+## License
+
+MIT License. See [LICENSE](LICENSE).

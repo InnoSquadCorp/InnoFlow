@@ -9,41 +9,8 @@ import SwiftSyntaxMacros
 
 // MARK: - InnoFlow Macro Implementation
 
-public struct InnoFlowMacro: ExtensionMacro, MemberMacro {
-    
-    // MARK: - Member Macro (adds Effect = Never if missing)
-    
-    public static func expansion(
-        of node: AttributeSyntax,
-        providingMembersOf declaration: some DeclGroupSyntax,
-        conformingTo protocols: [TypeSyntax],
-        in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
-        // Check if Effect is already defined
-        let hasEffect = declaration.memberBlock.members.contains { member in
-            if let enumDecl = member.decl.as(EnumDeclSyntax.self) {
-                return enumDecl.name.text == "Effect"
-            }
-            if let typeAlias = member.decl.as(TypeAliasDeclSyntax.self) {
-                return typeAlias.name.text == "Effect"
-            }
-            return false
-        }
-        
-        // If Effect is not defined, add it as Never
-        if !hasEffect {
-            return [
-                """
-                typealias Effect = Never
-                """
-            ]
-        }
-        
-        return []
-    }
-    
-    // MARK: - Extension Macro (adds Reducer conformance)
-    
+public struct InnoFlowMacro: ExtensionMacro {
+
     public static func expansion(
         of node: AttributeSyntax,
         attachedTo declaration: some DeclGroupSyntax,
@@ -51,59 +18,85 @@ public struct InnoFlowMacro: ExtensionMacro, MemberMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
-        // Get the type name
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
             throw MacroError.notAStruct
         }
-        
+
+        guard hasNestedType(named: "State", in: structDecl) else {
+            throw MacroError.missingState
+        }
+
+        guard hasNestedType(named: "Action", in: structDecl) else {
+            throw MacroError.missingAction
+        }
+
+        guard let reduceFunction = findReduceFunction(in: structDecl) else {
+            throw MacroError.missingReduceMethod
+        }
+
+        let signatureIssues = reducerSignatureIssues(reduceFunction)
+        guard signatureIssues.isEmpty else {
+            throw MacroError.invalidReduceSignature(details: signatureIssues)
+        }
+
         let typeName = structDecl.name.text
-        
-        // Check if Effect is defined (enum or typealias)
-        let hasEffect = structDecl.memberBlock.members.contains { member in
-            if let enumDecl = member.decl.as(EnumDeclSyntax.self) {
-                return enumDecl.name.text == "Effect"
-            }
-            if let typeAlias = member.decl.as(TypeAliasDeclSyntax.self) {
-                return typeAlias.name.text == "Effect"
-            }
-            return false
-        }
-        
-        // Check if handle(effect:) is already defined
-        let hasHandleMethod = structDecl.memberBlock.members.contains { member in
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                return funcDecl.name.text == "handle"
-            }
-            return false
-        }
-        
-        // Build extension
-        var extensionMembers: [String] = []
-        
-        // Add default handle(effect:) only if Effect is Never and handle isn't defined
-        if !hasEffect && !hasHandleMethod {
-            extensionMembers.append("""
-                func handle(effect: Effect) async -> EffectOutput<Action> {
-                    // Never type - unreachable
-                }
-            """)
-        }
-        
-        // Create the extension
-        let extensionDecl: ExtensionDeclSyntax
-        
-        if extensionMembers.isEmpty {
-            extensionDecl = try ExtensionDeclSyntax("extension \(raw: typeName): Reducer {}")
-        } else {
-            let membersString = extensionMembers.joined(separator: "\n\n")
-            extensionDecl = try ExtensionDeclSyntax("""
-                extension \(raw: typeName): Reducer {
-                    \(raw: membersString)
-                }
-                """)
-        }
-        
+        let extensionDecl = try ExtensionDeclSyntax("extension \(raw: typeName): Reducer {}")
         return [extensionDecl]
+    }
+
+    private static func hasNestedType(named typeName: String, in declaration: StructDeclSyntax) -> Bool {
+        declaration.memberBlock.members.contains { member in
+            if let enumDecl = member.decl.as(EnumDeclSyntax.self) {
+                return enumDecl.name.text == typeName
+            }
+            if let structDecl = member.decl.as(StructDeclSyntax.self) {
+                return structDecl.name.text == typeName
+            }
+            if let classDecl = member.decl.as(ClassDeclSyntax.self) {
+                return classDecl.name.text == typeName
+            }
+            if let typealiasDecl = member.decl.as(TypeAliasDeclSyntax.self) {
+                return typealiasDecl.name.text == typeName
+            }
+            return false
+        }
+    }
+
+    private static func findReduceFunction(in declaration: StructDeclSyntax) -> FunctionDeclSyntax? {
+        declaration.memberBlock.members
+            .compactMap { $0.decl.as(FunctionDeclSyntax.self) }
+            .first { $0.name.text == "reduce" }
+    }
+
+    private static func reducerSignatureIssues(_ function: FunctionDeclSyntax) -> [String] {
+        var issues: [String] = []
+        let parameters = function.signature.parameterClause.parameters
+        if parameters.count != 2 {
+            issues.append("parameter count is \(parameters.count), expected 2 parameters (`into`, `action`)")
+        }
+
+        if !parameters.isEmpty {
+            let first = parameters[parameters.startIndex]
+            if first.firstName.text != "into" {
+                issues.append("first parameter label is `\(first.firstName.text)`, expected `into`")
+            }
+            if !first.type.trimmedDescription.hasPrefix("inout ") {
+                issues.append("`into` parameter must be declared as `inout`")
+            }
+        } else {
+            issues.append("missing first parameter `into state: inout State`")
+        }
+
+        if parameters.count >= 2 {
+            let second = parameters[parameters.index(after: parameters.startIndex)]
+            if second.firstName.text != "action" {
+                issues.append("second parameter label is `\(second.firstName.text)`, expected `action`")
+            }
+        } else {
+            issues.append("missing second parameter `action: Action`")
+        }
+
+        return issues
     }
 }
 
@@ -113,7 +106,9 @@ enum MacroError: Error, CustomStringConvertible {
     case notAStruct
     case missingState
     case missingAction
-    
+    case missingReduceMethod
+    case invalidReduceSignature(details: [String])
+
     var description: String {
         switch self {
         case .notAStruct:
@@ -122,6 +117,17 @@ enum MacroError: Error, CustomStringConvertible {
             return "@InnoFlow requires a nested 'State' type"
         case .missingAction:
             return "@InnoFlow requires a nested 'Action' type"
+        case .missingReduceMethod:
+            return "@InnoFlow requires reduce(into:action:)"
+        case .invalidReduceSignature(let details):
+            let joinedDetails = details.joined(separator: "; ")
+            return """
+            Invalid reducer signature for @InnoFlow.
+            Expected:
+            func reduce(into state: inout State, action: Action) -> EffectTask<Action>
+            Detected issues: \(joinedDetails).
+            Remediation: use exactly two parameters labeled `into` and `action`, and mark the first parameter `inout`.
+            """
         }
     }
 }
@@ -136,117 +142,81 @@ struct InnoFlowMacrosPlugin: CompilerPlugin {
     ]
 }
 
-
 // MARK: - BindableField Macro Implementation
 
-/// A macro that automatically wraps state properties in `BindableProperty` for type-safe binding.
-///
-/// Properties marked with `@BindableField` are automatically transformed:
-/// - `@BindableField var step = 1` becomes a computed property backed by `BindableProperty<Int>`
-/// - Only these properties can be used with `store.binding(_:send:)`
-///
-/// ## Example
-/// ```swift
-/// struct State: Equatable {
-///     @BindableField var step = 1      // Automatically wrapped in BindableProperty
-///     var count = 0                     // Not bindable - cannot use store.binding
-/// }
-/// ```
+/// A macro that wraps state properties in `BindableProperty`.
 public struct BindableFieldMacro: PeerMacro, AccessorMacro {
-    
+
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // Get the variable declaration
         guard let varDecl = declaration.as(VariableDeclSyntax.self) else {
             return []
         }
-        
-        // Get the first binding
+
         guard let binding = varDecl.bindings.first,
               let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else {
             return []
         }
-        
-        // Get type annotation and initializer
+
         let typeAnnotation = binding.typeAnnotation?.type
         let initializer = binding.initializer?.value
-        
-        // Determine the value type
-        // We need either an explicit type annotation or an initializer to infer the type
+
         let valueType: String
         let initializerValue: String
-        
-        if let typeAnnotation = typeAnnotation {
-            // Use explicit type annotation
+
+        if let typeAnnotation {
             valueType = typeAnnotation.trimmedDescription
-            if let initializer = initializer {
+            if let initializer {
                 initializerValue = "BindableProperty(\(initializer.trimmedDescription))"
             } else {
-                // No initializer - try to use default initializer
                 initializerValue = "BindableProperty<\(valueType)>(wrappedValue: \(valueType)())"
             }
-        } else if let initializer = initializer {
-            // No explicit type, but we have an initializer
-            // We'll let Swift infer the type from the initializer
-            // The storage will be: var _step_storage = BindableProperty(1)
-            // And Swift will infer BindableProperty<Int>
+        } else if let initializer {
             initializerValue = "BindableProperty(\(initializer.trimmedDescription))"
-            // We'll create storage without explicit type and let Swift infer
-            // The accessor will also work without explicit type
-            valueType = "" // Empty means Swift will infer
+            valueType = ""
         } else {
-            // No type and no initializer - can't proceed
             return []
         }
-        
-        // Create storage variable name
+
         let storageName = "_\(identifier)_storage"
-        
-        // Use proper DeclSyntax construction to ensure macro coverage
+
         let finalDecl: DeclSyntax
         if !valueType.isEmpty {
-            // Explicit type - use it
             finalDecl = DeclSyntax(
                 """
                 private var \(raw: storageName): BindableProperty<\(raw: valueType)> = \(raw: initializerValue)
                 """
             )
         } else {
-            // Type will be inferred from initializer
             finalDecl = DeclSyntax(
                 """
                 private var \(raw: storageName) = \(raw: initializerValue)
                 """
             )
         }
-        
+
         return [finalDecl]
     }
-    
+
     public static func expansion(
         of node: AttributeSyntax,
         providingAccessorsOf declaration: some DeclSyntaxProtocol,
         in context: some MacroExpansionContext
     ) throws -> [AccessorDeclSyntax] {
-        // Get the variable declaration
         guard let varDecl = declaration.as(VariableDeclSyntax.self) else {
             return []
         }
-        
-        // Get the first binding
+
         guard let binding = varDecl.bindings.first,
               let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else {
             return []
         }
-        
-        // Storage variable name
+
         let storageName = "_\(identifier)_storage"
-        
-        // Create getter and setter
-        // The getter returns the unwrapped value
+
         let getter = AccessorDeclSyntax(
             """
             get {
@@ -254,20 +224,15 @@ public struct BindableFieldMacro: PeerMacro, AccessorMacro {
             }
             """
         )
-        
-        // The setter wraps the new value in BindableProperty
-        // Swift will infer the type from the storage variable
-        let setterBody = "\(storageName) = BindableProperty(newValue)"
-        
+
         let setter = AccessorDeclSyntax(
             """
             set {
-                \(raw: setterBody)
+                \(raw: storageName) = BindableProperty(newValue)
             }
             """
         )
-        
+
         return [getter, setter]
     }
 }
-
