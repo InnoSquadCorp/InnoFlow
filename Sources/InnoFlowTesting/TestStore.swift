@@ -5,6 +5,11 @@
 import Foundation
 import InnoFlow
 import SwiftUI
+#if canImport(XCTest)
+import XCTest
+#elseif canImport(Testing)
+import Testing
+#endif
 
 private actor ActionQueue<Action: Sendable> {
     private var buffer: [Action] = []
@@ -71,6 +76,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     private var throttleWindowEndByID: [EffectID: ContinuousClock.Instant] = [:]
     private var throttlePendingTrailingByID: [EffectID: PendingTrailing<R.Action>] = [:]
     private var throttleTrailingTaskByID: [EffectID: Task<Void, Never>] = [:]
+    private var throttleGenerationByID: [EffectID: UInt64] = [:]
 
     // MARK: - Initialization
 
@@ -328,7 +334,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
                 }
                 return
             }
-            throttleTrailingTaskByID[id]?.cancel()
+            throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+            throttleGenerationByID.removeValue(forKey: id)
             throttlePendingTrailingByID.removeValue(forKey: id)
             throttleWindowEndByID[id] = now.advanced(by: interval)
 
@@ -433,7 +440,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
                 }
                 return
             }
-            throttleTrailingTaskByID[id]?.cancel()
+            throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+            throttleGenerationByID.removeValue(forKey: id)
             throttlePendingTrailingByID.removeValue(forKey: id)
             throttleWindowEndByID[id] = now.advanced(by: interval)
 
@@ -551,6 +559,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     }
 
     private func scheduleThrottleTrailing(for id: EffectID, interval: Duration) {
+        throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+        let generation = (throttleGenerationByID[id] ?? 0) &+ 1
+        throttleGenerationByID[id] = generation
         throttleTrailingTaskByID[id] = Task { [weak self] in
             do {
                 try await Task.sleep(for: interval)
@@ -558,16 +569,22 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
                 return
             }
             await MainActor.run {
-                self?.drainThrottleTrailing(for: id)
+                self?.drainThrottleTrailing(for: id, generation: generation)
             }
         }
     }
 
-    private func drainThrottleTrailing(for id: EffectID) {
+    private func drainThrottleTrailing(for id: EffectID, generation: UInt64) {
+        guard throttleGenerationByID[id] == generation else {
+            return
+        }
         defer {
-            throttleTrailingTaskByID.removeValue(forKey: id)
-            throttlePendingTrailingByID.removeValue(forKey: id)
-            throttleWindowEndByID.removeValue(forKey: id)
+            if throttleGenerationByID[id] == generation {
+                throttleTrailingTaskByID.removeValue(forKey: id)
+                throttlePendingTrailingByID.removeValue(forKey: id)
+                throttleWindowEndByID.removeValue(forKey: id)
+                throttleGenerationByID.removeValue(forKey: id)
+            }
         }
         guard let pending = throttlePendingTrailingByID[id] else {
             return
@@ -579,6 +596,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
         throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
         throttlePendingTrailingByID.removeValue(forKey: id)
         throttleWindowEndByID.removeValue(forKey: id)
+        throttleGenerationByID.removeValue(forKey: id)
     }
 
     private func clearAllThrottleState() {
@@ -588,6 +606,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
         throttleTrailingTaskByID.removeAll()
         throttlePendingTrailingByID.removeAll()
         throttleWindowEndByID.removeAll()
+        throttleGenerationByID.removeAll()
     }
 
     // MARK: - Receiving
@@ -633,5 +652,11 @@ private func testStoreAssertionFailure(
     print("File: \(file), Line: \(line)")
     #endif
 
+    #if canImport(XCTest)
+    XCTFail(message, file: file, line: line)
+    #elseif canImport(Testing)
+    Issue.record(message)
+    #else
     Swift.assertionFailure(message, file: file, line: line)
+    #endif
 }

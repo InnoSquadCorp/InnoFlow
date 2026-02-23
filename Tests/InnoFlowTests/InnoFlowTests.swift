@@ -42,7 +42,6 @@ struct AsyncFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var value: String = ""
         var isLoading = false
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -68,7 +67,6 @@ struct AsyncFeature: Reducer {
 struct ImmediateSendFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var logs: [String] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -91,7 +89,6 @@ struct CancellableFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var completed: [Int] = []
         var requested = 0
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -123,7 +120,6 @@ struct CancellableFeature: Reducer {
 struct UncooperativeCancellableFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var completed: [String] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -152,7 +148,6 @@ struct UncooperativeCancellableFeature: Reducer {
 struct CompositeUncooperativeFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var completed: [Int] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -197,7 +192,6 @@ struct ScopedCounterFeature: Reducer {
             var count = 0
         }
         var child = Child()
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -216,7 +210,6 @@ struct ScopedCounterFeature: Reducer {
 struct BindingFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var step = BindableProperty(1)
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -235,7 +228,6 @@ struct BindingFeature: Reducer {
 struct DebounceFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var emitted: [Int] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -258,7 +250,6 @@ struct DebounceFeature: Reducer {
 struct ThrottleFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var emitted: [Int] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -281,7 +272,6 @@ struct ThrottleFeature: Reducer {
 struct ThrottleTrailingFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var emitted: [Int] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -304,7 +294,6 @@ struct ThrottleTrailingFeature: Reducer {
 struct ThrottleLeadingTrailingFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var emitted: [Int] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -327,7 +316,6 @@ struct ThrottleLeadingTrailingFeature: Reducer {
 struct AnimationFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var values: [Int] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -358,7 +346,6 @@ struct AnimationFeature: Reducer {
 struct ComposedAnimationFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var value = 0
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -383,7 +370,6 @@ struct CombinatorCompositionFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var debounced: [Int] = []
         var throttled: [Int] = []
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
@@ -432,7 +418,6 @@ actor DeinitCancellationProbe {
 struct DeinitCancellationFeature: Reducer {
     struct State: Equatable, Sendable, DefaultInitializable {
         var started = false
-        init() {}
     }
 
     enum Action: Equatable, Sendable {
