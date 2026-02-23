@@ -500,8 +500,8 @@ struct EffectTaskTests {
 
         #expect(result.status != 0)
         #expect(
-            result.stderr.contains("StaticString")
-                || result.stderr.contains("cannot convert value of type 'String'")
+            result.output.contains("StaticString")
+                || result.output.contains("cannot convert value of type 'String'")
         )
     }
 
@@ -545,8 +545,8 @@ struct EffectTaskTests {
 
         #expect(result.status != 0)
         #expect(
-            result.stderr.contains("BindableProperty")
-                || result.stderr.contains("KeyPath")
+            result.output.contains("BindableProperty")
+                || result.output.contains("KeyPath")
         )
     }
 
@@ -932,7 +932,11 @@ struct TestStoreTests {
 
     @Test("TestStore validates send + receive with deterministic flow")
     func testStoreReceive() async {
-        let store = TestStore(reducer: AsyncFeature(), initialState: .init())
+        let store = TestStore(
+            reducer: AsyncFeature(),
+            initialState: .init(),
+            effectTimeout: .seconds(3)
+        )
 
         await store.send(.load) {
             $0.isLoading = true
@@ -995,7 +999,7 @@ private var isHeavyStressEnabled: Bool {
 
 private struct TypecheckResult {
     let status: Int32
-    let stderr: String
+    let output: String
 }
 
 private final class ThreadSafeDataBuffer: @unchecked Sendable {
@@ -1101,10 +1105,13 @@ private func typecheckSource(
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
 
+    let stdoutBuffer = ThreadSafeDataBuffer()
     let stderrBuffer = ThreadSafeDataBuffer()
 
     stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-        _ = handle.availableData
+        let data = handle.availableData
+        guard !data.isEmpty else { return }
+        stdoutBuffer.append(data)
     }
 
     stderrPipe.fileHandleForReading.readabilityHandler = { handle in
@@ -1121,14 +1128,21 @@ private func typecheckSource(
 
     var stderrData = stderrBuffer.snapshot()
 
-    _ = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+    var stdoutData = stdoutBuffer.snapshot()
     let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+    let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+    if !stdoutTail.isEmpty {
+        stdoutData.append(stdoutTail)
+    }
     if !stderrTail.isEmpty {
         stderrData.append(stderrTail)
     }
 
+    let stdoutText = String(data: stdoutData, encoding: .utf8) ?? ""
+    let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
+
     return TypecheckResult(
         status: process.terminationStatus,
-        stderr: String(data: stderrData, encoding: .utf8) ?? ""
+        output: stdoutText + "\n" + stderrText
     )
 }
