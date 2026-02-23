@@ -73,6 +73,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     private var runningTasks: [UUID: Task<Void, Never>] = [:]
     private var taskIDsByEffectID: [EffectID: Set<UUID>] = [:]
     private var debounceDelayTasksByID: [EffectID: Task<Void, Never>] = [:]
+    private var debounceGenerationByID: [EffectID: UUID] = [:]
     private var throttleWindowEndByID: [EffectID: ContinuousClock.Instant] = [:]
     private var throttlePendingTrailingByID: [EffectID: PendingTrailing<R.Action>] = [:]
     private var throttleTrailingTaskByID: [EffectID: Task<Void, Never>] = [:]
@@ -102,7 +103,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
         )
     }
 
-    deinit {
+    isolated deinit {
         for task in runningTasks.values {
             task.cancel()
         }
@@ -286,11 +287,21 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
             }
 
         case .concatenate(let effects):
-            Task { [weak self] in
+            let token = UUID()
+            let cancellationID = context?.cancellationID
+            let task = Task { @MainActor [weak self] in
                 guard let self else { return }
+                defer {
+                    self.removeTrackedTask(token: token, cancellationID: cancellationID)
+                }
                 for effect in effects {
+                    guard !Task.isCancelled else { break }
                     await self.executeAwaited(effect, context: context)
                 }
+            }
+            runningTasks[token] = task
+            if let id = cancellationID {
+                taskIDsByEffectID[id, default: []].insert(token)
             }
 
         case .cancel(let id):
@@ -303,24 +314,12 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
             execute(nested, context: contextWithCancellation(id, on: context))
 
         case .debounce(let nested, let id, let interval):
-            debounceDelayTasksByID[id]?.cancel()
-            cancelEffectsSynchronously(identifiedBy: id)
-            let task = Task { [weak self] in
-                do {
-                    try await Task.sleep(for: interval)
-                } catch {
-                    return
-                }
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.debounceDelayTasksByID.removeValue(forKey: id)
-                }
-                await self?.executeAwaited(
-                    nested,
-                    context: self?.contextWithCancellation(id, on: context)
-                )
-            }
-            debounceDelayTasksByID[id] = task
+            _ = scheduleDebounce(
+                nested,
+                id: id,
+                interval: interval,
+                context: context
+            )
 
         case .throttle(let nested, let id, let interval, let leading, let trailing):
             let now = clock.now
@@ -416,17 +415,13 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
             )
 
         case .debounce(let nested, let id, let interval):
-            debounceDelayTasksByID[id]?.cancel()
-            cancelEffectsSynchronously(identifiedBy: id)
-            do {
-                try await Task.sleep(for: interval)
-            } catch {
-                return
-            }
-            await executeAwaited(
+            let task = scheduleDebounce(
                 nested,
-                context: contextWithCancellation(id, on: context)
+                id: id,
+                interval: interval,
+                context: context
             )
+            _ = await task.result
 
         case .throttle(let nested, let id, let interval, let leading, let trailing):
             let now = clock.now
@@ -492,18 +487,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
             await MainActor.run {
                 guard let self else { return }
-                self.runningTasks.removeValue(forKey: token)
-
-                if let id = context?.cancellationID,
-                   var tokens = self.taskIDsByEffectID[id] {
-                    tokens.remove(token)
-                    if tokens.isEmpty {
-                        self.taskIDsByEffectID.removeValue(forKey: id)
-                    } else {
-                        self.taskIDsByEffectID[id] = tokens
-                    }
-                }
-
+                self.removeTrackedTask(token: token, cancellationID: context?.cancellationID)
                 completion?()
             }
         }
@@ -517,6 +501,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
     private func cancelEffectsSynchronously(identifiedBy id: EffectID) {
         debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
+        debounceGenerationByID.removeValue(forKey: id)
         clearThrottleState(for: id)
         guard let ids = taskIDsByEffectID.removeValue(forKey: id) else { return }
 
@@ -536,6 +521,60 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
         runningTasks.removeAll()
         taskIDsByEffectID.removeAll()
         debounceDelayTasksByID.removeAll()
+        debounceGenerationByID.removeAll()
+    }
+
+    private func removeTrackedTask(token: UUID, cancellationID: EffectID?) {
+        runningTasks.removeValue(forKey: token)
+
+        guard let id = cancellationID,
+              var tokens = taskIDsByEffectID[id] else { return }
+        tokens.remove(token)
+        if tokens.isEmpty {
+            taskIDsByEffectID.removeValue(forKey: id)
+        } else {
+            taskIDsByEffectID[id] = tokens
+        }
+    }
+
+    private func scheduleDebounce(
+        _ nested: EffectTask<R.Action>,
+        id: EffectID,
+        interval: Duration,
+        context: ExecutionContext?
+    ) -> Task<Void, Never> {
+        debounceDelayTasksByID[id]?.cancel()
+        cancelEffectsSynchronously(identifiedBy: id)
+
+        let generation = UUID()
+        debounceGenerationByID[id] = generation
+        let debounceContext = contextWithCancellation(id, on: context)
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if self.debounceGenerationByID[id] == generation {
+                    self.debounceDelayTasksByID.removeValue(forKey: id)
+                    self.debounceGenerationByID.removeValue(forKey: id)
+                }
+            }
+
+            do {
+                try await Task.sleep(for: interval)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+            guard self.debounceGenerationByID[id] == generation else { return }
+            await self.executeAwaited(
+                nested,
+                context: debounceContext
+            )
+        }
+
+        debounceDelayTasksByID[id] = task
+        return task
     }
 
     private func contextWithCancellation(

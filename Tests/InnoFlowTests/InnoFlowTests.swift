@@ -749,11 +749,13 @@ struct StoreTests {
         store.send(.load)
         #expect(store.isLoading)
 
-        for _ in 0..<20 {
+        let timeoutClock = ContinuousClock()
+        let deadline = timeoutClock.now.advanced(by: .seconds(2))
+        while timeoutClock.now < deadline {
             if store.value == "Hello, InnoFlow v2" {
                 break
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
         }
 
         #expect(store.value == "Hello, InnoFlow v2")
@@ -920,7 +922,7 @@ struct StoreTests {
 
         store?.send(.start)
 
-        for _ in 0..<20 {
+        for _ in 0..<100 {
             if await probe.started == 1 {
                 break
             }
@@ -928,10 +930,19 @@ struct StoreTests {
         }
         store = nil
 
-        try? await Task.sleep(for: .milliseconds(500))
+        for _ in 0..<150 {
+            if await probe.cancelled == 1 {
+                break
+            }
+            if await probe.completed > 0 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
 
         #expect(await probe.started == 1)
         #expect(await probe.completed == 0)
+        #expect(await probe.cancelled == 1)
     }
 }
 

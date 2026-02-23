@@ -164,7 +164,10 @@ public final class Store<R: Reducer> {
         clearAllThrottleState()
     }
 
-    deinit {
+    isolated deinit {
+        for task in throttleTrailingTaskByID.values {
+            task.cancel()
+        }
         let runtime = self.runtime
         Task {
             await runtime.cancelAll()
@@ -373,8 +376,8 @@ public final class Store<R: Reducer> {
         let token = UUID()
         await runtime.prepare(token: token, id: context?.cancellationID)
 
+        let runtime = self.runtime
         let task = Task(priority: priority) { [weak self] in
-            guard let self else { return }
 
             let send = Send<R.Action> { [weak self] action in
                 guard let self else { return }
@@ -392,7 +395,7 @@ public final class Store<R: Reducer> {
                     )
                 }
                 guard let boundaries else { return }
-                let canEmit = await self.runtime.canEmit(
+                let canEmit = await runtime.canEmit(
                     token: token,
                     id: context?.cancellationID,
                     sequence: sequence,
@@ -410,7 +413,7 @@ public final class Store<R: Reducer> {
             }
 
             await operation(send)
-            await self.runtime.finish(token: token)
+            await runtime.finish(token: token)
         }
 
         await runtime.attach(task: task, token: token)
