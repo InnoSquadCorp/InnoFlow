@@ -5,10 +5,10 @@
 import Foundation
 import InnoFlow
 import SwiftUI
-#if canImport(XCTest)
-import XCTest
-#elseif canImport(Testing)
+#if canImport(Testing)
 import Testing
+#elseif canImport(XCTest)
+import XCTest
 #endif
 
 private actor ActionQueue<Action: Sendable> {
@@ -652,11 +652,22 @@ private func testStoreAssertionFailure(
     print("File: \(file), Line: \(line)")
     #endif
 
-    #if canImport(XCTest)
+    #if canImport(Testing)
+    Issue.record(
+        TestStoreAssertionIssue(
+            message: "\(file):\(line): \(message)"
+        )
+    )
+    #elseif canImport(XCTest)
     XCTFail(message, file: file, line: line)
-    #elseif canImport(Testing)
-    Issue.record(message)
     #else
     Swift.assertionFailure(message, file: file, line: line)
     #endif
 }
+
+#if canImport(Testing)
+private struct TestStoreAssertionIssue: Error, Sendable, CustomStringConvertible {
+    let message: String
+    var description: String { message }
+}
+#endif

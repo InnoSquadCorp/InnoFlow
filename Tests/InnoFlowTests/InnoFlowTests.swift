@@ -463,94 +463,6 @@ struct EffectTaskTests {
         #expect(String(describing: first.rawValue) == "load-user")
     }
 
-    @Test("EffectID rejects dynamic String construction at compile time")
-    func effectIDRejectsDynamicStringConstruction() throws {
-        let packageRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
-
-        let source = """
-        import InnoFlow
-
-        let dynamic = String("dynamic-id")
-        let _ = EffectID(dynamic)
-        """
-
-        let result = try typecheckSource(
-            source,
-            moduleDirectory: moduleDirectory
-        )
-
-        #expect(result.status != 0)
-        let diagnostics = result.normalizedOutput
-        #expect(!diagnostics.isEmpty)
-        #expect(
-            diagnostics.localizedCaseInsensitiveContains("error")
-                || diagnostics.localizedCaseInsensitiveContains("failed")
-        )
-        #expect(
-            diagnostics.contains("EffectID")
-                || diagnostics.contains("StaticString")
-                || diagnostics.contains("String")
-        )
-    }
-
-    @Test("Store.binding rejects non-bindable key paths at compile time")
-    func bindingRejectsNonBindableKeyPathAtCompileTime() throws {
-        let packageRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
-
-        let source = """
-        import InnoFlow
-
-        struct NonBindableFeature: Reducer {
-            struct State: Sendable, DefaultInitializable {
-                var count = 0
-                init() {}
-            }
-
-            enum Action: Sendable {
-                case setCount(Int)
-            }
-
-            func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-                .none
-            }
-        }
-
-        @MainActor
-        func compileContract() {
-            let store = Store(reducer: NonBindableFeature(), initialState: .init())
-            _ = store.binding(\\.count, send: { .setCount($0) })
-        }
-        """
-
-        let result = try typecheckSource(
-            source,
-            moduleDirectory: moduleDirectory
-        )
-
-        #expect(result.status != 0)
-        let diagnostics = result.normalizedOutput
-        #expect(!diagnostics.isEmpty)
-        #expect(
-            diagnostics.localizedCaseInsensitiveContains("error")
-                || diagnostics.localizedCaseInsensitiveContains("failed")
-        )
-        #expect(
-            diagnostics.localizedCaseInsensitiveContains("binding")
-                || diagnostics.contains("BindableProperty")
-                || diagnostics.contains("KeyPath")
-                || diagnostics.localizedCaseInsensitiveContains("cannot convert")
-                || diagnostics.localizedCaseInsensitiveContains("no exact matches")
-        )
-    }
-
     @Test("EffectTask.none does not emit follow-up actions")
     func effectNone() async {
         let store = TestStore(reducer: CounterFeature(), initialState: .init())
@@ -682,6 +594,98 @@ struct EffectTaskTests {
             $0.value = 1
         }
         await store.assertNoMoreActions()
+    }
+}
+
+@Suite("Compile Contract Tests")
+struct CompileContractTests {
+
+    @Test("EffectID rejects dynamic String construction at compile time")
+    func effectIDRejectsDynamicStringConstruction() throws {
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+        let source = """
+        import InnoFlow
+
+        let dynamic = String("dynamic-id")
+        let _ = EffectID(dynamic)
+        """
+
+        let result = try typecheckSource(
+            source,
+            moduleDirectory: moduleDirectory
+        )
+
+        #expect(result.status != 0)
+        let diagnostics = result.normalizedOutput
+        #expect(!diagnostics.isEmpty)
+        #expect(
+            diagnostics.localizedCaseInsensitiveContains("error")
+                || diagnostics.localizedCaseInsensitiveContains("failed")
+        )
+        #expect(
+            diagnostics.contains("EffectID")
+                || diagnostics.contains("StaticString")
+                || diagnostics.contains("String")
+        )
+    }
+
+    @Test("Store.binding rejects non-bindable key paths at compile time")
+    func bindingRejectsNonBindableKeyPathAtCompileTime() throws {
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+        let source = """
+        import InnoFlow
+
+        struct NonBindableFeature: Reducer {
+            struct State: Sendable, DefaultInitializable {
+                var count = 0
+                init() {}
+            }
+
+            enum Action: Sendable {
+                case setCount(Int)
+            }
+
+            func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                .none
+            }
+        }
+
+        @MainActor
+        func compileContract() {
+            let store = Store(reducer: NonBindableFeature(), initialState: .init())
+            _ = store.binding(\\.count, send: { .setCount($0) })
+        }
+        """
+
+        let result = try typecheckSource(
+            source,
+            moduleDirectory: moduleDirectory
+        )
+
+        #expect(result.status != 0)
+        let diagnostics = result.normalizedOutput
+        #expect(!diagnostics.isEmpty)
+        #expect(
+            diagnostics.localizedCaseInsensitiveContains("error")
+                || diagnostics.localizedCaseInsensitiveContains("failed")
+        )
+        #expect(
+            diagnostics.localizedCaseInsensitiveContains("binding")
+                || diagnostics.contains("BindableProperty")
+                || diagnostics.contains("KeyPath")
+                || diagnostics.localizedCaseInsensitiveContains("cannot convert")
+                || diagnostics.localizedCaseInsensitiveContains("no exact matches")
+        )
     }
 }
 
