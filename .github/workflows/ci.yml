@@ -14,15 +14,14 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: "6.2"
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_26.0.1.app
 
     - name: Lint (swift-format)
       run: |
         set -eo pipefail
         echo "🔍 Running style lint..."
+        xcrun swift --version
         swift format lint --recursive Sources Tests Examples
 
   test:
@@ -36,15 +35,11 @@ jobs:
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_26.0.1.app
 
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: "6.2"
-
     - name: Build
       run: |
         set -eo pipefail
         echo "🔨 Building InnoFlow..."
+        xcrun swift --version
         swift build
         echo "✅ Build completed successfully!"
 
@@ -83,11 +78,6 @@ jobs:
 
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_26.0.1.app
-
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: "6.2"
 
     - name: Install xcpretty
       run: |
