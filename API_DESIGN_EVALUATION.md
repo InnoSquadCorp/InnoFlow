@@ -31,19 +31,19 @@
 ### 2.3 Source of Truth
 
 1. InnoFlow core:
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoFlow/Sources/InnoFlow/InnoFlow.swift`
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoFlow/Sources/InnoFlow/Reducer.swift`
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoFlow/Sources/InnoFlow/EffectTask.swift`
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoFlow/Sources/InnoFlow/Store.swift`
+   - `Sources/InnoFlow/InnoFlow.swift`
+   - `Sources/InnoFlow/Reducer.swift`
+   - `Sources/InnoFlow/EffectTask.swift`
+   - `Sources/InnoFlow/Store.swift`
 2. Testing and diagnostics:
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoFlow/Sources/InnoFlowTesting/TestStore.swift`
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoFlow/Tests/InnoFlowTests/InnoFlowTests.swift`
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoFlow/Sources/InnoFlowMacros/InnoFlowMacro.swift`
+   - `Sources/InnoFlowTesting/TestStore.swift`
+   - `Tests/InnoFlowTests/InnoFlowTests.swift`
+   - `Sources/InnoFlowMacros/InnoFlowMacro.swift`
 3. InnoRouter compatibility references:
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoRouterFlowBridge/Sources/InnoRouterFlowBridge/InnoRouterFlowNavigator.swift`
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoRouterFlowBridge/Sources/InnoRouterFlowBridge/InnoRouterFlowNavigationHost.swift`
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoRouter/Sources/InnoRouterEffects/NavigationEffectHandler.swift`
-   - `/Users/changwoo.son/Developer/InnoSquad/InnoRouter/Sources/InnoRouterCore/NavCommand.swift`
+   - `../InnoRouterFlowBridge/Sources/InnoRouterFlowBridge/InnoRouterFlowNavigator.swift`
+   - `../InnoRouterFlowBridge/Sources/InnoRouterFlowBridge/InnoRouterFlowNavigationHost.swift`
+   - `../InnoRouter/Sources/InnoRouterEffects/NavigationEffectHandler.swift`
+   - `../InnoRouter/Sources/InnoRouterCore/NavCommand.swift`
 
 ## 3. InnoFlow v2.4 Scorecard
 
