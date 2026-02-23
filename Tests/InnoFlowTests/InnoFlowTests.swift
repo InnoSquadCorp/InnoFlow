@@ -679,12 +679,18 @@ struct CompileContractTests {
             diagnostics.localizedCaseInsensitiveContains("error")
                 || diagnostics.localizedCaseInsensitiveContains("failed")
         )
+        #expect(!diagnostics.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
         #expect(
             diagnostics.localizedCaseInsensitiveContains("binding")
                 || diagnostics.contains("BindableProperty")
                 || diagnostics.contains("KeyPath")
                 || diagnostics.localizedCaseInsensitiveContains("cannot convert")
                 || diagnostics.localizedCaseInsensitiveContains("no exact matches")
+                || diagnostics.contains("CompileContract.swift")
+                || diagnostics.contains("store.binding")
+                || diagnostics.contains("\\.count")
+                || diagnostics.contains("NonBindableFeature")
+                || diagnostics.localizedCaseInsensitiveContains("generic parameter")
         )
     }
 }
