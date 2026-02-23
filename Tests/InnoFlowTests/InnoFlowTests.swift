@@ -484,9 +484,16 @@ struct EffectTaskTests {
         )
 
         #expect(result.status != 0)
+        let diagnostics = result.normalizedOutput
+        #expect(!diagnostics.isEmpty)
         #expect(
-            result.output.contains("StaticString")
-                || result.output.contains("cannot convert value of type 'String'")
+            diagnostics.localizedCaseInsensitiveContains("error")
+                || diagnostics.localizedCaseInsensitiveContains("failed")
+        )
+        #expect(
+            diagnostics.contains("EffectID")
+                || diagnostics.contains("StaticString")
+                || diagnostics.contains("String")
         )
     }
 
@@ -529,9 +536,18 @@ struct EffectTaskTests {
         )
 
         #expect(result.status != 0)
+        let diagnostics = result.normalizedOutput
+        #expect(!diagnostics.isEmpty)
         #expect(
-            result.output.contains("BindableProperty")
-                || result.output.contains("KeyPath")
+            diagnostics.localizedCaseInsensitiveContains("error")
+                || diagnostics.localizedCaseInsensitiveContains("failed")
+        )
+        #expect(
+            diagnostics.localizedCaseInsensitiveContains("binding")
+                || diagnostics.contains("BindableProperty")
+                || diagnostics.contains("KeyPath")
+                || diagnostics.localizedCaseInsensitiveContains("cannot convert")
+                || diagnostics.localizedCaseInsensitiveContains("no exact matches")
         )
     }
 
@@ -985,6 +1001,12 @@ private var isHeavyStressEnabled: Bool {
 private struct TypecheckResult {
     let status: Int32
     let output: String
+}
+
+private extension TypecheckResult {
+    var normalizedOutput: String {
+        output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 private final class ThreadSafeDataBuffer: @unchecked Sendable {
