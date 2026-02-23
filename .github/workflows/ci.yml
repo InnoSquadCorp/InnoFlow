@@ -6,88 +6,105 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+env:
+  XCODE_PATH: /Applications/Xcode_26.0.1.app
+
 jobs:
-  test:
-    name: Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macos-latest]
-        swift-version: ["6.2"]
-    
+  lint:
+    name: Lint
+    runs-on: macos-latest
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode_26.0.1.app
-    
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: ${{ matrix.swift-version }}
-    
-    - name: Install xcpretty
+      run: sudo xcode-select -s "$XCODE_PATH"
+
+    - name: Lint (swift-format)
       run: |
-        echo "📦 Installing xcpretty..."
-        gem install xcpretty --no-document
-        echo "✅ xcpretty installed"
-    
+        set -eo pipefail
+        echo "🔍 Running style lint..."
+        xcrun swift --version
+        swift format lint --strict --recursive Sources Tests Examples
+
+  test:
+    name: Build and Test
+    runs-on: macos-latest
+    needs: lint
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s "$XCODE_PATH"
+
     - name: Build
       run: |
+        set -eo pipefail
         echo "🔨 Building InnoFlow..."
+        xcrun swift --version
         swift build
         echo "✅ Build completed successfully!"
-    
+
     - name: Test
       run: |
+        set -eo pipefail
         echo "🧪 Running tests..."
         echo ""
         swift test --enable-code-coverage --parallel
         echo ""
         echo "✅ All tests passed!"
-      
+
     - name: Test Summary
       if: always()
       run: |
-        echo "## 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "## 🧪 Build & Test Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- Job status: **${{ job.status }}**" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "✅ All tests completed successfully!" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "📊 Code coverage enabled" >> $GITHUB_STEP_SUMMARY
-    
-    - name: Build Examples
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "- ✅ Build and tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 Code coverage enabled" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ❌ Build or tests failed" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  build-examples:
+    name: Build Examples
+    runs-on: macos-latest
+    needs:
+    - lint
+    - test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s "$XCODE_PATH"
+
+    - name: Install xcpretty
       run: |
+        set -eo pipefail
+        echo "📦 Installing xcpretty..."
+        gem install xcpretty --no-document
+        echo "✅ xcpretty installed"
+
+    - name: Build example apps
+      run: |
+        set -eo pipefail
+        REPO_ROOT="${GITHUB_WORKSPACE}"
         echo "📱 Building example apps..."
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "🔨 Building CounterApp..."
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        cd Examples/CounterApp && xcodebuild -scheme CounterApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty || exit ${PIPESTATUS[0]}
+        cd "${REPO_ROOT}/Examples/CounterApp"
+        xcodebuild -workspace CounterApp.xcworkspace -scheme CounterApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "🔨 Building TodoApp..."
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        cd ../TodoApp && xcodebuild -scheme TodoApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty || exit ${PIPESTATUS[0]}
+        cd "${REPO_ROOT}/Examples/TodoApp"
+        xcodebuild -workspace TodoApp.xcworkspace -scheme TodoApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty
         echo ""
         echo "✅ All example apps built successfully!"
-
-  lint:
-    name: Lint
-    runs-on: macos-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode_26.0.1.app
-    
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: "6.2"
-    
-    - name: Build
-      run: swift build
-

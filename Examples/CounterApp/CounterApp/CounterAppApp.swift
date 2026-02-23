@@ -1,13 +1,13 @@
-import SwiftUI
 import CounterAppFeature
+import SwiftUI
 
 @main
 struct CounterAppApp: App {
-    var body: some Scene {
-        WindowGroup {
-            NavigationStack {
-                ContentView()
-            }
-        }
+  var body: some Scene {
+    WindowGroup {
+      NavigationStack {
+        ContentView()
+      }
     }
+  }
 }
