@@ -23,10 +23,6 @@ jobs:
     name: Build Documentation
     runs-on: macos-latest
 
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -68,13 +64,26 @@ jobs:
         echo "✅ Documentation built successfully!"
     
     - name: Setup Pages
+      if: ${{ github.event_name != 'pull_request' }}
       uses: actions/configure-pages@v4
 
     - name: Upload Documentation Artifact
+      if: ${{ github.event_name != 'pull_request' }}
       uses: actions/upload-pages-artifact@v3
       with:
         path: docs-build
-    
+
+  deploy-docs:
+    name: Deploy Documentation
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: build-docs
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@v4
