@@ -59,17 +59,20 @@ jobs:
     
     - name: Build Examples
       run: |
+        set -eo pipefail
         echo "📱 Building example apps..."
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "🔨 Building CounterApp..."
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        cd Examples/CounterApp && xcodebuild -scheme CounterApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty || exit ${PIPESTATUS[0]}
+        cd Examples/CounterApp
+        xcodebuild -workspace CounterApp.xcworkspace -scheme CounterApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "🔨 Building TodoApp..."
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        cd ../TodoApp && xcodebuild -scheme TodoApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty || exit ${PIPESTATUS[0]}
+        cd ../TodoApp
+        xcodebuild -workspace TodoApp.xcworkspace -scheme TodoApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty
         echo ""
         echo "✅ All example apps built successfully!"
 
@@ -90,4 +93,3 @@ jobs:
     
     - name: Build
       run: swift build
-

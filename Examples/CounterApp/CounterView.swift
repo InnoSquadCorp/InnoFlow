@@ -5,7 +5,7 @@ import SwiftUI
 import InnoFlow
 
 struct CounterView: View {
-    @State private var store = Store(CounterFeature())
+    @State private var store = Store(reducer: CounterFeature())
     
     var body: some View {
         VStack(spacing: 30) {
@@ -47,10 +47,7 @@ struct CounterView: View {
                 
                 Stepper(
                     "스텝",
-                    value: Binding(
-                        get: { store.step },
-                        set: { store.send(.setStep($0)) }
-                    ),
+                    value: store.binding(\.step, send: { .setStep($0) }),
                     in: 1...10
                 )
                 .labelsHidden()
@@ -70,6 +67,5 @@ struct CounterView: View {
         CounterView()
     }
 }
-
 
 

@@ -6,46 +6,35 @@ import InnoFlow
 @InnoFlow
 struct CounterFeature {
     
-    struct State: Equatable, DefaultInitializable {
+    struct State: Equatable, Sendable, DefaultInitializable {
         var count = 0
-        @BindableField var step = 1
+        var step = BindableProperty(1)
     }
     
-    enum Action: Sendable {
+    enum Action: Equatable, Sendable {
         case increment
         case decrement
         case reset
         case setStep(Int)
     }
     
-    enum Mutation {
-        case setCount(Int)
-        case setStep(Int)
-    }
-    
-    func reduce(state: State, action: Action) -> Reduce<Mutation, Never> {
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
         switch action {
         case .increment:
-            return .mutation(.setCount(state.count + state.step))
+            state.count += state.step.value
+            return .none
             
         case .decrement:
-            return .mutation(.setCount(state.count - state.step))
+            state.count -= state.step.value
+            return .none
             
         case .reset:
-            return .mutation(.setCount(0))
+            state.count = 0
+            return .none
             
         case .setStep(let step):
-            return .mutation(.setStep(step))
-        }
-    }
-    
-    func mutate(state: inout State, mutation: Mutation) {
-        switch mutation {
-        case .setCount(let count):
-            state.count = count
-            
-        case .setStep(let step):
-            state.step = max(1, step)
+            state.step.value = max(1, step)
+            return .none
         }
     }
 }
@@ -53,7 +42,7 @@ struct CounterFeature {
 // MARK: - CounterView
 
 public struct ContentView: View {
-    @State private var store = Store(CounterFeature())
+    @State private var store = Store(reducer: CounterFeature())
     
     public var body: some View {
         VStack(spacing: 30) {

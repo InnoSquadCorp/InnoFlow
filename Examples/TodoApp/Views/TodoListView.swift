@@ -5,7 +5,7 @@ import SwiftUI
 import InnoFlow
 
 struct TodoListView: View {
-    @State private var store = Store(TodoFeature())
+    @State private var store = Store(reducer: TodoFeature())
     @State private var newTodoTitle = ""
     @FocusState private var isTextFieldFocused: Bool
     
@@ -161,4 +161,3 @@ struct TodoListView: View {
         isTextFieldFocused = false
     }
 }
-

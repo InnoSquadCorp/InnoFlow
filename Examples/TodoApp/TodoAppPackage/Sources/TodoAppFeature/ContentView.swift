@@ -53,11 +53,11 @@ actor TodoService: TodoServiceProtocol {
 @InnoFlow
 struct TodoFeature {
     
-    struct State: Equatable, DefaultInitializable {
+    struct State: Equatable, Sendable, DefaultInitializable {
         var todos: [Todo] = []
         var isLoading = false
         var errorMessage: String?
-        @BindableField var filter = Filter.all
+        var filter = BindableProperty(Filter.all)
         
         enum Filter: String, CaseIterable, Equatable, Sendable {
             case all = "전체"
@@ -66,7 +66,7 @@ struct TodoFeature {
         }
         
         var filteredTodos: [Todo] {
-            switch filter {
+            switch filter.value {
             case .all:
                 return todos
             case .active:
@@ -98,140 +98,83 @@ struct TodoFeature {
         case _loadFailed(String)
     }
     
-    enum Mutation {
-        case setTodos([Todo])
-        case addTodo(Todo)
-        case toggleTodo(UUID)
-        case deleteTodo(UUID)
-        case deleteCompleted
-        case setFilter(State.Filter)
-        case editTodo(UUID, String)
-        case setLoading(Bool)
-        case setError(String?)
-    }
-    
-    enum Effect: Sendable {
-        case loadTodos
-        case saveTodos([Todo])
-    }
-    
     let todoService: TodoServiceProtocol
     
     init(todoService: TodoServiceProtocol = TodoService.shared) {
         self.todoService = todoService
     }
     
-    func reduce(state: State, action: Action) -> Reduce<Mutation, Effect> {
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
         switch action {
         case .loadTodos:
-            return Reduce(
-                mutations: [.setLoading(true), .setError(nil)],
-                effects: [.loadTodos]
-            )
+            state.isLoading = true
+            state.errorMessage = nil
+            let todoService = self.todoService
+            return .run { send in
+                do {
+                    let todos = try await todoService.loadTodos()
+                    await send(._todosLoaded(todos))
+                } catch {
+                    await send(._loadFailed(error.localizedDescription))
+                }
+            }
+            .cancellable("todo-load", cancelInFlight: true)
             
         case .addTodo(let title):
             guard !title.trimmingCharacters(in: .whitespaces).isEmpty else {
                 return .none
             }
             let newTodo = Todo(title: title)
-            return Reduce(
-                mutations: [.addTodo(newTodo)],
-                effects: [.saveTodos(state.todos + [newTodo])]
-            )
+            state.todos.append(newTodo)
+            return saveTodosEffect(state.todos)
             
-        case .toggleTodo(let id):
-            var updatedTodos = state.todos
-            if let index = updatedTodos.firstIndex(where: { $0.id == id }) {
-                updatedTodos[index].isCompleted.toggle()
-            }
-            return Reduce(
-                mutations: [.setTodos(updatedTodos)],
-                effects: [.saveTodos(updatedTodos)]
-            )
-            
-        case .deleteTodo(let id):
-            let updatedTodos = state.todos.filter { $0.id != id }
-            return Reduce(
-                mutations: [.setTodos(updatedTodos)],
-                effects: [.saveTodos(updatedTodos)]
-            )
-            
-        case .deleteCompleted:
-            let updatedTodos = state.todos.filter { !$0.isCompleted }
-            return Reduce(
-                mutations: [.setTodos(updatedTodos)],
-                effects: [.saveTodos(updatedTodos)]
-            )
-            
-        case .setFilter(let filter):
-            return .mutation(.setFilter(filter))
-            
-        case .editTodo(let id, let newTitle):
-            var updatedTodos = state.todos
-            if let index = updatedTodos.firstIndex(where: { $0.id == id }) {
-                updatedTodos[index].title = newTitle
-            }
-            return Reduce(
-                mutations: [.setTodos(updatedTodos)],
-                effects: [.saveTodos(updatedTodos)]
-            )
-            
-        case ._todosLoaded(let todos):
-            return .mutations([.setTodos(todos), .setLoading(false), .setError(nil)])
-            
-        case ._loadFailed(let error):
-            return .mutations([.setLoading(false), .setError(error)])
-            
-        case .dismissError:
-            return .mutation(.setError(nil))
-        }
-    }
-    
-    func mutate(state: inout State, mutation: Mutation) {
-        switch mutation {
-        case .setTodos(let todos):
-            state.todos = todos
-        case .addTodo(let todo):
-            state.todos.append(todo)
         case .toggleTodo(let id):
             if let index = state.todos.firstIndex(where: { $0.id == id }) {
                 state.todos[index].isCompleted.toggle()
             }
+            return saveTodosEffect(state.todos)
+            
         case .deleteTodo(let id):
             state.todos.removeAll { $0.id == id }
+            return saveTodosEffect(state.todos)
+            
         case .deleteCompleted:
             state.todos.removeAll { $0.isCompleted }
+            return saveTodosEffect(state.todos)
+            
         case .setFilter(let filter):
-            state.filter = filter
+            state.filter.value = filter
+            return .none
+            
         case .editTodo(let id, let newTitle):
             if let index = state.todos.firstIndex(where: { $0.id == id }) {
                 state.todos[index].title = newTitle
             }
-        case .setLoading(let isLoading):
-            state.isLoading = isLoading
-        case .setError(let error):
+            return saveTodosEffect(state.todos)
+            
+        case ._todosLoaded(let todos):
+            state.todos = todos
+            state.isLoading = false
+            state.errorMessage = nil
+            return .none
+            
+        case ._loadFailed(let error):
+            state.isLoading = false
             state.errorMessage = error
+            return .none
+            
+        case .dismissError:
+            state.errorMessage = nil
+            return .none
         }
     }
-    
-    func handle(effect: Effect) async -> EffectOutput<Action> {
-        switch effect {
-        case .loadTodos:
-            do {
-                let todos = try await todoService.loadTodos()
-                return .single(._todosLoaded(todos))
-            } catch {
-                return .single(._loadFailed(error.localizedDescription))
-            }
-            
-        case .saveTodos(let todos):
-            do {
-                try await todoService.saveTodos(todos)
-                return .none
-            } catch {
-                return .none
-            }
+
+    private func saveTodosEffect(_ todos: [Todo]) -> EffectTask<Action> {
+        let todoService = self.todoService
+        return .run { _ in
+            try? await todoService.saveTodos(todos)
         }
+        .cancellable("todo-save", cancelInFlight: true)
     }
 }
 
@@ -313,7 +256,7 @@ struct TodoRowView: View {
 // MARK: - TodoListView
 
 struct TodoListView: View {
-    @State private var store = Store(TodoFeature())
+    @State private var store = Store(reducer: TodoFeature())
     @State private var newTodoTitle = ""
     @FocusState private var isTextFieldFocused: Bool
     
