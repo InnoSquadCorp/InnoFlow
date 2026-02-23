@@ -112,6 +112,7 @@ public final class Store<R: Reducer> {
     private var throttleWindowEndByID: [EffectID: ContinuousClock.Instant] = [:]
     private var throttlePendingTrailingByID: [EffectID: PendingTrailing<R.Action>] = [:]
     private var throttleTrailingTaskByID: [EffectID: Task<Void, Never>] = [:]
+    private var throttleTrailingGenerationByID: [EffectID: UUID] = [:]
 
     // MARK: - Initialization
 
@@ -323,7 +324,8 @@ public final class Store<R: Reducer> {
                 return
             }
 
-            throttleTrailingTaskByID[id]?.cancel()
+            throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+            throttleTrailingGenerationByID.removeValue(forKey: id)
             throttlePendingTrailingByID.removeValue(forKey: id)
             throttleWindowEndByID[id] = now.advanced(by: interval)
 
@@ -472,21 +474,34 @@ public final class Store<R: Reducer> {
         interval: Duration,
         mode: ExecutionMode
     ) {
+        throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+        let generation = UUID()
+        throttleTrailingGenerationByID[id] = generation
         throttleTrailingTaskByID[id] = Task { [weak self] in
             do {
                 try await Task.sleep(for: interval)
             } catch {
                 return
             }
-            await self?.drainThrottleTrailing(for: id, mode: mode)
+            await self?.drainThrottleTrailing(for: id, generation: generation, mode: mode)
         }
     }
 
-    private func drainThrottleTrailing(for id: EffectID, mode: ExecutionMode) async {
+    private func drainThrottleTrailing(
+        for id: EffectID,
+        generation: UUID,
+        mode: ExecutionMode
+    ) async {
+        guard throttleTrailingGenerationByID[id] == generation else {
+            return
+        }
         defer {
-            throttleTrailingTaskByID.removeValue(forKey: id)
-            throttlePendingTrailingByID.removeValue(forKey: id)
-            throttleWindowEndByID.removeValue(forKey: id)
+            if throttleTrailingGenerationByID[id] == generation {
+                throttleTrailingTaskByID.removeValue(forKey: id)
+                throttleTrailingGenerationByID.removeValue(forKey: id)
+                throttlePendingTrailingByID.removeValue(forKey: id)
+                throttleWindowEndByID.removeValue(forKey: id)
+            }
         }
 
         guard let pending = throttlePendingTrailingByID[id] else {
@@ -508,6 +523,7 @@ public final class Store<R: Reducer> {
 
     private func clearThrottleState(for id: EffectID) {
         throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
+        throttleTrailingGenerationByID.removeValue(forKey: id)
         throttlePendingTrailingByID.removeValue(forKey: id)
         throttleWindowEndByID.removeValue(forKey: id)
     }
@@ -517,6 +533,7 @@ public final class Store<R: Reducer> {
             task.cancel()
         }
         throttleTrailingTaskByID.removeAll(keepingCapacity: true)
+        throttleTrailingGenerationByID.removeAll(keepingCapacity: true)
         throttlePendingTrailingByID.removeAll(keepingCapacity: true)
         throttleWindowEndByID.removeAll(keepingCapacity: true)
     }

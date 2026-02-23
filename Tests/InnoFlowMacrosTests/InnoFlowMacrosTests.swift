@@ -50,7 +50,8 @@ struct InnoFlowMacrosTests {
             macros: testMacros
         )
         #else
-        throw Issue("Macros are only supported when running tests for the host platform")
+        Issue.record("Macros are only supported when running tests for the host platform")
+        return
         #endif
     }
 
@@ -87,7 +88,8 @@ struct InnoFlowMacrosTests {
             macros: testMacros
         )
         #else
-        throw Issue("Macros are only supported when running tests for the host platform")
+        Issue.record("Macros are only supported when running tests for the host platform")
+        return
         #endif
     }
 
@@ -132,7 +134,8 @@ Remediation: use exactly two parameters labeled `into` and `action`, and mark th
             macros: testMacros
         )
         #else
-        throw Issue("Macros are only supported when running tests for the host platform")
+        Issue.record("Macros are only supported when running tests for the host platform")
+        return
         #endif
     }
 
@@ -177,7 +180,8 @@ Remediation: use exactly two parameters labeled `into` and `action`, and mark th
             macros: testMacros
         )
         #else
-        throw Issue("Macros are only supported when running tests for the host platform")
+        Issue.record("Macros are only supported when running tests for the host platform")
+        return
         #endif
     }
 
@@ -222,7 +226,8 @@ Remediation: use exactly two parameters labeled `into` and `action`, and mark th
             macros: testMacros
         )
         #else
-        throw Issue("Macros are only supported when running tests for the host platform")
+        Issue.record("Macros are only supported when running tests for the host platform")
+        return
         #endif
     }
 
@@ -267,7 +272,8 @@ Remediation: use exactly two parameters labeled `into` and `action`, and mark th
             macros: testMacros
         )
         #else
-        throw Issue("Macros are only supported when running tests for the host platform")
+        Issue.record("Macros are only supported when running tests for the host platform")
+        return
         #endif
     }
 }

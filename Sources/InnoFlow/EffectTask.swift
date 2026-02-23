@@ -42,7 +42,7 @@ public struct Send<Action: Sendable>: Sendable {
 
 /// A unified effect model for asynchronous work in InnoFlow v2.
 public struct EffectTask<Action: Sendable>: Sendable {
-    internal indirect enum Operation: Sendable {
+    package indirect enum Operation: Sendable {
         case none
         case send(Action)
         case run(priority: TaskPriority?, operation: @Sendable (Send<Action>) async -> Void)
@@ -72,11 +72,7 @@ public struct EffectTask<Action: Sendable>: Sendable {
         )
     }
 
-    internal let operation: Operation
-
-    init(operation: Operation) {
-        self.operation = operation
-    }
+    package let operation: Operation
 
     /// No effect.
     public static var none: Self {
@@ -163,67 +159,8 @@ public struct EffectTask<Action: Sendable>: Sendable {
     }
 }
 
-// MARK: - Package Introspection (Testing Targets)
-
-package indirect enum _EffectTaskOperation<Action: Sendable>: Sendable {
-    case none
-    case send(Action)
-    case run(priority: TaskPriority?, operation: @Sendable (Send<Action>) async -> Void)
-    case merge([EffectTask<Action>])
-    case concatenate([EffectTask<Action>])
-    case cancel(EffectID)
-    case cancellable(
-        effect: EffectTask<Action>,
-        id: EffectID,
-        cancelInFlight: Bool
-    )
-    case debounce(
-        effect: EffectTask<Action>,
-        id: EffectID,
-        interval: Duration
-    )
-    case throttle(
-        effect: EffectTask<Action>,
-        id: EffectID,
-        interval: Duration,
-        leading: Bool,
-        trailing: Bool
-    )
-    case animation(
-        effect: EffectTask<Action>,
-        animation: Animation?
-    )
-}
-
 extension EffectTask {
-    package var _testingOperation: _EffectTaskOperation<Action> {
-        switch operation {
-        case .none:
-            return .none
-        case .send(let action):
-            return .send(action)
-        case .run(let priority, let operation):
-            return .run(priority: priority, operation: operation)
-        case .merge(let effects):
-            return .merge(effects)
-        case .concatenate(let effects):
-            return .concatenate(effects)
-        case .cancel(let id):
-            return .cancel(id)
-        case .cancellable(let effect, let id, let cancelInFlight):
-            return .cancellable(effect: effect, id: id, cancelInFlight: cancelInFlight)
-        case .debounce(let effect, let id, let interval):
-            return .debounce(effect: effect, id: id, interval: interval)
-        case .throttle(let effect, let id, let interval, let leading, let trailing):
-            return .throttle(
-                effect: effect,
-                id: id,
-                interval: interval,
-                leading: leading,
-                trailing: trailing
-            )
-        case .animation(let effect, let animation):
-            return .animation(effect: effect, animation: animation)
-        }
+    package var _testingOperation: Operation {
+        operation
     }
 }

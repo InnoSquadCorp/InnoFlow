@@ -258,7 +258,10 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
         let context: ExecutionContext
     }
 
-    private func execute(_ effect: EffectTask<R.Action>) {
+    private func execute(
+        _ effect: EffectTask<R.Action>,
+        context: ExecutionContext? = nil
+    ) {
         switch effect._testingOperation {
         case .none:
             return
@@ -268,98 +271,6 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
                 await queue.enqueue(action)
             }
 
-        case .run(let priority, let operation):
-            startRunTask(
-                priority: priority,
-                operation: operation,
-                context: nil
-            )
-
-        case .merge(let effects):
-            for effect in effects {
-                execute(effect)
-            }
-
-        case .concatenate(let effects):
-            Task { [weak self] in
-                guard let self else { return }
-                for effect in effects {
-                    await self.executeAwaited(effect)
-                }
-            }
-
-        case .cancel(let id):
-            cancelEffectsSynchronously(identifiedBy: id)
-
-        case .cancellable(let nested, let id, let cancelInFlight):
-            if cancelInFlight {
-                cancelEffectsSynchronously(identifiedBy: id)
-            }
-            execute(nested, context: contextWithCancellation(id, on: nil))
-
-        case .debounce(let nested, let id, let interval):
-            debounceDelayTasksByID[id]?.cancel()
-            cancelEffectsSynchronously(identifiedBy: id)
-            let task = Task { [weak self] in
-                do {
-                    try await Task.sleep(for: interval)
-                } catch {
-                    return
-                }
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.debounceDelayTasksByID.removeValue(forKey: id)
-                }
-                await self?.executeAwaited(
-                    nested,
-                    context: self?.contextWithCancellation(id, on: nil)
-                )
-            }
-            debounceDelayTasksByID[id] = task
-
-        case .throttle(let nested, let id, let interval, let leading, let trailing):
-            let now = clock.now
-            let throttleContext = contextWithCancellation(id, on: nil)
-            if let windowEnd = throttleWindowEndByID[id], now < windowEnd {
-                if trailing {
-                    throttlePendingTrailingByID[id] = .init(
-                        effect: nested,
-                        context: throttleContext
-                    )
-                }
-                return
-            }
-            throttleTrailingTaskByID[id]?.cancel()
-            throttlePendingTrailingByID.removeValue(forKey: id)
-            throttleWindowEndByID[id] = now.advanced(by: interval)
-
-            if trailing {
-                if !leading {
-                    throttlePendingTrailingByID[id] = .init(
-                        effect: nested,
-                        context: throttleContext
-                    )
-                }
-                scheduleThrottleTrailing(for: id, interval: interval)
-            }
-
-            if leading {
-                execute(
-                    nested,
-                    context: throttleContext
-                )
-            }
-
-        case .animation(let nested, let animation):
-            execute(
-                nested,
-                context: contextWithAnimation(animation, on: nil)
-            )
-        }
-    }
-
-    private func execute(_ effect: EffectTask<R.Action>, context: ExecutionContext) {
-        switch effect._testingOperation {
         case .run(let priority, let operation):
             startRunTask(priority: priority, operation: operation, context: context)
 
@@ -375,6 +286,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
                     await self.executeAwaited(effect, context: context)
                 }
             }
+
+        case .cancel(let id):
+            cancelEffectsSynchronously(identifiedBy: id)
 
         case .cancellable(let nested, let id, let cancelInFlight):
             if cancelInFlight {
@@ -440,17 +354,6 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
                 nested,
                 context: contextWithAnimation(animation, on: context)
             )
-
-        case .send(let action):
-            Task {
-                await queue.enqueue(action)
-            }
-
-        case .cancel(let id):
-            cancelEffectsSynchronously(identifiedBy: id)
-
-        case .none:
-            return
         }
     }
 

@@ -40,10 +40,10 @@
    - `Tests/InnoFlowTests/InnoFlowTests.swift`
    - `Sources/InnoFlowMacros/InnoFlowMacro.swift`
 3. InnoRouter compatibility references:
-   - `../InnoRouterFlowBridge/Sources/InnoRouterFlowBridge/InnoRouterFlowNavigator.swift`
-   - `../InnoRouterFlowBridge/Sources/InnoRouterFlowBridge/InnoRouterFlowNavigationHost.swift`
-   - `../InnoRouter/Sources/InnoRouterEffects/NavigationEffectHandler.swift`
-   - `../InnoRouter/Sources/InnoRouterCore/NavCommand.swift`
+   - `InnoRouterFlowBridge/InnoRouterFlowNavigator.swift`
+   - `InnoRouterFlowBridge/InnoRouterFlowNavigationHost.swift`
+   - `InnoRouter/NavigationEffectHandler.swift`
+   - `InnoRouter/NavCommand.swift`
 
 ## 3. InnoFlow v2.4 Scorecard
 

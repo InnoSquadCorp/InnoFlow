@@ -80,7 +80,7 @@ public struct InnoFlowMacro: ExtensionMacro {
             if first.firstName.text != "into" {
                 issues.append("first parameter label is `\(first.firstName.text)`, expected `into`")
             }
-            if !first.type.trimmedDescription.hasPrefix("inout ") {
+            if !hasInoutSpecifier(in: first.type) {
                 issues.append("`into` parameter must be declared as `inout`")
             }
         } else {
@@ -97,6 +97,25 @@ public struct InnoFlowMacro: ExtensionMacro {
         }
 
         return issues
+    }
+
+    private static func hasInoutSpecifier(in parameterType: TypeSyntax) -> Bool {
+        guard let attributedType = parameterType.as(AttributedTypeSyntax.self) else {
+            return false
+        }
+
+        if attributedType.specifiers.contains(where: isInoutSpecifier) {
+            return true
+        }
+
+        return attributedType.lateSpecifiers.contains(where: isInoutSpecifier)
+    }
+
+    private static func isInoutSpecifier(_ element: TypeSpecifierListSyntax.Element) -> Bool {
+        guard let simpleSpecifier = element.as(SimpleTypeSpecifierSyntax.self) else {
+            return false
+        }
+        return simpleSpecifier.specifier.tokenKind == .keyword(.inout)
     }
 }
 

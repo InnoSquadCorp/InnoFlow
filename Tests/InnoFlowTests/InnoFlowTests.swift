@@ -618,7 +618,7 @@ struct EffectTaskTests {
         }
         await store.assertNoMoreActions()
 
-        try? await Task.sleep(for: .milliseconds(90))
+        try? await Task.sleep(for: .milliseconds(160))
         await store.send(.trigger(3))
         await store.receive(._emitted(3)) {
             $0.emitted = [1, 3]
@@ -999,25 +999,80 @@ private struct TypecheckResult {
     let stderr: String
 }
 
-private enum CompileContractError: Error {
-    case moduleNotFound
+private final class ThreadSafeDataBuffer: @unchecked Sendable {
+    private var data = Data()
+    private let lock = NSLock()
+
+    func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
+    }
+
+    func snapshot() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return data
+    }
+}
+
+private enum CompileContractError: Error, CustomStringConvertible {
+    case moduleNotFound(attemptedPaths: [String])
+
+    var description: String {
+        switch self {
+        case .moduleNotFound(let attemptedPaths):
+            let formattedPaths = attemptedPaths
+                .map { "- \($0)" }
+                .joined(separator: "\n")
+            return """
+            Failed to locate InnoFlow.swiftmodule.
+            Attempted search locations:
+            \(formattedPaths)
+            """
+        }
+    }
 }
 
 private func findBuiltInnoFlowModuleDirectory(in packageRoot: URL) throws -> URL {
+    let fileManager = FileManager.default
     let buildDirectory = packageRoot.appendingPathComponent(".build", isDirectory: true)
-    guard let enumerator = FileManager.default.enumerator(
+    var attemptedPaths: [String] = [
+        packageRoot.path,
+        buildDirectory.path,
+        buildDirectory.appendingPathComponent("debug", isDirectory: true).path,
+        buildDirectory.appendingPathComponent("release", isDirectory: true).path,
+        buildDirectory.appendingPathComponent("arm64-apple-macosx/debug", isDirectory: true).path,
+        buildDirectory.appendingPathComponent("x86_64-apple-macosx/debug", isDirectory: true).path,
+        buildDirectory.appendingPathComponent("arm64-apple-macosx/release", isDirectory: true).path,
+        buildDirectory.appendingPathComponent("x86_64-apple-macosx/release", isDirectory: true).path
+    ]
+    if let buildChildren = try? fileManager.contentsOfDirectory(
+        at: buildDirectory,
+        includingPropertiesForKeys: [.isDirectoryKey],
+        options: [.skipsHiddenFiles]
+    ) {
+        for child in buildChildren {
+            attemptedPaths.append(child.path)
+            attemptedPaths.append(child.appendingPathComponent("debug", isDirectory: true).path)
+            attemptedPaths.append(child.appendingPathComponent("release", isDirectory: true).path)
+        }
+    }
+    attemptedPaths = Array(Set(attemptedPaths)).sorted()
+
+    guard let enumerator = fileManager.enumerator(
         at: buildDirectory,
         includingPropertiesForKeys: [.isRegularFileKey],
         options: [.skipsHiddenFiles]
     ) else {
-        throw CompileContractError.moduleNotFound
+        throw CompileContractError.moduleNotFound(attemptedPaths: attemptedPaths)
     }
 
     for case let fileURL as URL in enumerator where fileURL.lastPathComponent == "InnoFlow.swiftmodule" {
         return fileURL.deletingLastPathComponent()
     }
 
-    throw CompileContractError.moduleNotFound
+    throw CompileContractError.moduleNotFound(attemptedPaths: attemptedPaths)
 }
 
 private func typecheckSource(
@@ -1047,11 +1102,38 @@ private func typecheckSource(
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
 
+    let stdoutBuffer = ThreadSafeDataBuffer()
+    let stderrBuffer = ThreadSafeDataBuffer()
+
+    stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+        let data = handle.availableData
+        guard !data.isEmpty else { return }
+        stdoutBuffer.append(data)
+    }
+
+    stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+        let data = handle.availableData
+        guard !data.isEmpty else { return }
+        stderrBuffer.append(data)
+    }
+
     try process.run()
     process.waitUntilExit()
 
-    let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-    let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+    stdoutPipe.fileHandleForReading.readabilityHandler = nil
+    stderrPipe.fileHandleForReading.readabilityHandler = nil
+
+    var stdoutData = stdoutBuffer.snapshot()
+    var stderrData = stderrBuffer.snapshot()
+
+    let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+    let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+    if !stdoutTail.isEmpty {
+        stdoutData.append(stdoutTail)
+    }
+    if !stderrTail.isEmpty {
+        stderrData.append(stderrTail)
+    }
 
     return TypecheckResult(
         status: process.terminationStatus,
