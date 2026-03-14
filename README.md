@@ -13,6 +13,19 @@ InnoFlow v2 focuses on:
 - **Strict binding intent**: only `@BindableField` properties are bindable
 - **Deterministic testing**: `TestStore` with timeout/cancellation-oriented flow
 
+## State Ownership
+
+InnoFlow is the preferred place to model **business and domain state transitions** across the
+InnoSquad framework family.
+
+- Use `InnoFlow` for feature lifecycle and orchestration.
+- Let `InnoRouter` own navigation transitions.
+- Let `InnoNetwork` own transport/session lifecycle transitions.
+- Let `InnoDI` remain a static dependency graph validator rather than a runtime state machine.
+
+This keeps one transition owned by one framework and avoids duplicating the same lifecycle in
+multiple layers.
+
 **요약(KR)**: InnoFlow v2는 단일 reducer 계약, 명시적 effect DSL, async 취소 완료 보장, SwiftUI 친화 런타임을 핵심 원칙으로 둡니다.
 
 ## Installation
@@ -192,6 +205,42 @@ Throttle semantics:
 
 `EffectID` is `StaticString`-based, so cancellation identifiers are compile-time literals by default.
 **요약(KR)**: 취소 ID는 동적 문자열이 아니라 코드 상수 리터럴을 사용합니다.
+
+## Optional Phase-Driven FSM Modeling
+
+InnoFlow does not ship a general automata runtime. Instead, complex features can model legal
+phase transitions explicitly while keeping the reducer contract unchanged.
+
+```swift
+enum LoadPhase: Hashable, Sendable {
+    case idle
+    case loading
+    case loaded
+    case failed
+}
+
+let phaseGraph = PhaseTransitionGraph<LoadPhase>([
+    .init(from: .idle, to: .loading),
+    .init(from: .loading, to: .loaded),
+    .init(from: .loading, to: .failed),
+])
+```
+
+In tests, `InnoFlowTesting` can validate that reducer actions follow the documented phase graph:
+
+```swift
+let store = TestStore(reducer: Feature())
+
+await store.send(.load, tracking: \.phase, through: phaseGraph) {
+    $0.phase = .loading
+}
+```
+
+Use this pattern for deterministic, feature-level FSMs. Do not treat `InnoFlow` as a generic
+NFA/PDA framework.
+
+For a fuller guide, see [PHASE_DRIVEN_MODELING.md](./PHASE_DRIVEN_MODELING.md) or the
+DocC article `Phase-Driven Modeling`.
 
 ### Store Cancellation APIs (async completion)
 

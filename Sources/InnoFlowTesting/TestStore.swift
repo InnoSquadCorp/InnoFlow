@@ -683,7 +683,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
 // MARK: - Assertion Helper
 
-private func testStoreAssertionFailure(
+func testStoreAssertionFailure(
   _ message: String,
   file: StaticString,
   line: UInt

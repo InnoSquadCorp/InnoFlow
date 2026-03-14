@@ -226,6 +226,49 @@ struct BindingFeature: Reducer {
   }
 }
 
+struct PhaseDrivenFeature: Reducer {
+  enum Phase: String, Equatable, Hashable, Sendable {
+    case idle
+    case loading
+    case loaded
+    case failed
+  }
+
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var phase: Phase = .idle
+    var value = ""
+    init() {}
+  }
+
+  enum Action: Equatable, Sendable {
+    case load
+    case _loaded(String)
+    case _failed
+  }
+
+  static let graph = PhaseTransitionGraph<Phase>([
+    .init(from: .idle, to: .loading),
+    .init(from: .loading, to: .loaded),
+    .init(from: .loading, to: .failed),
+    .init(from: .failed, to: .loading),
+  ])
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .load:
+      state.phase = .loading
+      return .send(._loaded("done"))
+    case ._loaded(let value):
+      state.phase = .loaded
+      state.value = value
+      return .none
+    case ._failed:
+      state.phase = .failed
+      return .none
+    }
+  }
+}
+
 struct DebounceFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var emitted: [Int] = []
@@ -595,6 +638,55 @@ struct EffectTaskTests {
     await store.receive(._result(1)) {
       $0.value = 1
     }
+    await store.assertNoMoreActions()
+  }
+}
+
+@Suite("Phase Transition Graph Tests")
+@MainActor
+struct PhaseTransitionGraphTests {
+  @Test("Graph exposes legal successors for a phase")
+  func successors() {
+    let graph = PhaseDrivenFeature.graph
+
+    #expect(graph.allows(from: .idle, to: .loading))
+    #expect(!graph.allows(from: .idle, to: .loaded))
+    #expect(graph.successors(from: .loading) == [.loaded, .failed])
+  }
+
+  @Test("Graph supports linear declaration for simple workflows")
+  func linearGraph() {
+    let graph = PhaseTransitionGraph<PhaseDrivenFeature.Phase>.linear(.idle, .loading, .loaded)
+
+    #expect(graph.allows(from: .idle, to: .loading))
+    #expect(graph.allows(from: .loading, to: .loaded))
+    #expect(!graph.allows(from: .loaded, to: .failed))
+  }
+
+  @Test("Graph supports dictionary literal declaration")
+  func dictionaryLiteralGraph() {
+    let graph: PhaseTransitionGraph<PhaseDrivenFeature.Phase> = [
+      .idle: [.loading],
+      .loading: [.loaded, .failed],
+    ]
+
+    #expect(graph.allows(from: .idle, to: .loading))
+    #expect(graph.successors(from: .loading) == [.loaded, .failed])
+  }
+
+  @Test("TestStore phase helper validates legal reducer transitions")
+  func testStorePhaseTracking() async {
+    let store = TestStore(reducer: PhaseDrivenFeature())
+
+    await store.send(.load, tracking: \.phase, through: PhaseDrivenFeature.graph) {
+      $0.phase = .loading
+    }
+
+    await store.receive(._loaded("done"), tracking: \.phase, through: PhaseDrivenFeature.graph) {
+      $0.phase = .loaded
+      $0.value = "done"
+    }
+
     await store.assertNoMoreActions()
   }
 }

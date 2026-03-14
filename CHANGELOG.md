@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `PhaseTransition` and `PhaseTransitionGraph` for opt-in phase-driven FSM modeling
+- `PhaseTransitionGraph.linear(...)` and dictionary-literal initialization for concise phase graph declarations
+- `InnoFlowTesting` helpers to validate reducer actions against documented phase transitions
+- `PHASE_DRIVEN_MODELING.md` as the official guide for feature-level FSM usage
+
 ## [1.0.0] - 2025-01-XX
 
 ### Added
@@ -48,4 +54,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic effect handling and action dispatching
 - Type-safe bindings with `@BindableField`
 - Minimal boilerplate with Swift macros
-
