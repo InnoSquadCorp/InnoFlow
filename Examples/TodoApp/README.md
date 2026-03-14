@@ -25,6 +25,57 @@ These rules files are **starting points** - feel free to:
 - **Testing First**: Promotes Swift Testing framework over XCTest
 - **Performance Focus**: Emphasizes @Observable over @Published for better performance
 
+## Example Focus
+
+This sample now demonstrates `InnoFlow`'s recommended **phase-driven FSM** pattern for
+domain state.
+
+- `TodoFeature.State.phase` models the high-level lifecycle (`idle`, `loading`, `loaded`, `failed`).
+- `TodoFeature.phaseGraph` documents the legal transitions.
+- `TodoAppFeatureTests` verifies reducer actions against the graph with `TestStore`.
+
+The sample intentionally keeps navigation and transport lifecycle concerns outside this phase
+graph so `TodoFeature` remains a business-state example rather than a generic automata demo.
+
+### Phase Graph
+
+`TodoFeature` exposes a small, explicit graph for its business lifecycle:
+
+```swift
+static let phaseGraph: PhaseTransitionGraph<State.Phase> = [
+    .idle: [.loading],
+    .loading: [.loaded, .failed],
+    .loaded: [.loading],
+    .failed: [.idle, .loading],
+]
+```
+
+This keeps the reducer contract unchanged while making legal transitions visible to readers and
+tests.
+
+### Test Pattern
+
+The package test target validates reducer actions against the documented phase graph:
+
+```swift
+let store = TestStore(
+    reducer: TodoFeature(todoService: MockTodoService(todos: [todo]))
+)
+
+await store.send(.loadTodos, tracking: \.phase, through: TodoFeature.phaseGraph) {
+    $0.phase = .loading
+    $0.errorMessage = nil
+}
+
+await store.receive(._todosLoaded([todo]), tracking: \.phase, through: TodoFeature.phaseGraph) {
+    $0.phase = .loaded
+    $0.todos = [todo]
+}
+```
+
+If a reducer path introduces an illegal transition, the `TestStore` helper fails immediately with
+the offending `from -> to` phase change.
+
 **Note for AI assistants**: You MUST read the relevant rules files before making changes to ensure consistency with project standards.
 
 ## Project Architecture
@@ -50,6 +101,7 @@ TodoApp/
 - **App Shell**: `TodoApp/` contains minimal app lifecycle code
 - **Feature Code**: `TodoAppPackage/Sources/TodoAppFeature/` is where most development happens
 - **Separation**: Business logic lives in the SPM package, app target just imports and displays it
+- **Canonical Source**: The package target is the single source of truth for `TodoFeature` and `TodoListView`
 
 ### Buildable Folders (Xcode 16)
 - Files added to the filesystem automatically appear in Xcode
@@ -123,4 +175,3 @@ To include assets in your feature package:
 
 ### Generated with XcodeBuildMCP
 This project was scaffolded using [XcodeBuildMCP](https://github.com/cameroncooke/XcodeBuildMCP), which provides tools for AI-assisted iOS development workflows.
-

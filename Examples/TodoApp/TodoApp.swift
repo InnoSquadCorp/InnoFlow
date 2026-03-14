@@ -1,9 +1,8 @@
 // MARK: - TodoApp.swift
-// InnoFlow 샘플 앱 - Todo 관리 애플리케이션
-// Copyright © 2025 InnoSquad. All rights reserved.
+// Compatibility launcher that mirrors the package-backed sample app shell.
 
-import InnoFlow
 import SwiftUI
+import TodoAppFeature
 
 @main
 struct TodoApp: App {

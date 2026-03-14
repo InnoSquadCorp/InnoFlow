@@ -5,7 +5,12 @@ import PackageDescription
 
 let package = Package(
   name: "TodoAppFeature",
-  platforms: [.iOS(.v18)],
+  platforms: [
+    .iOS(.v18),
+    .macOS(.v15),
+    .tvOS(.v18),
+    .watchOS(.v11),
+  ],
   products: [
     // Products define the executables and libraries a package produces, making them visible to other packages.
     .library(
@@ -28,7 +33,8 @@ let package = Package(
     .testTarget(
       name: "TodoAppFeatureTests",
       dependencies: [
-        "TodoAppFeature"
+        "TodoAppFeature",
+        .product(name: "InnoFlowTesting", package: "InnoFlow")
       ]
     ),
   ]

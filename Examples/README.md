@@ -23,16 +23,19 @@ Real-world example applications using InnoFlow.
 
 ### 2. TodoApp
 
-**Real-world Example** - Todo management app with async Effects
+**Real-world Example** - Todo management app with async Effects and phase-driven FSM
 
 - Todo CRUD (Create/Read/Update/Delete)
 - Toggle completion status
 - Filtering (All/Active/Completed)
 - Data persistence (UserDefaults)
 - Async data loading
+- Explicit business lifecycle (`idle`, `loading`, `loaded`, `failed`)
 
 **Learning Points**:
 - Handling async Effects
+- Modeling legal business transitions with `phaseGraph`
+- Validating transitions with `TestStore`
 - Dependency injection pattern
 - Protocol-based service design
 - Applying SOLID principles
@@ -48,6 +51,7 @@ Real-world example applications using InnoFlow.
 Complexity: ⭐
 Effect Usage: ❌
 Dependency Injection: ❌
+Phase-Driven FSM: ❌
 ```
 
 ### TodoApp
@@ -55,7 +59,21 @@ Dependency Injection: ❌
 Complexity: ⭐⭐⭐
 Effect Usage: ✅
 Dependency Injection: ✅
+Phase-Driven FSM: ✅
 ```
+
+---
+
+## Official Modeling Pattern
+
+For complex business workflows, the recommended next step after these samples is the
+phase-driven FSM pattern documented in [PHASE_DRIVEN_MODELING.md](../PHASE_DRIVEN_MODELING.md).
+
+Use it when a feature has explicit domain phases such as:
+- `idle -> loading -> loaded`
+- `draft -> validating -> submitting -> submitted`
+
+Do not force it into simple examples like `CounterApp`.
 
 ---
 

@@ -54,8 +54,15 @@ actor TodoService: TodoServiceProtocol {
 struct TodoFeature {
 
   struct State: Equatable, Sendable, DefaultInitializable {
+    enum Phase: String, Equatable, Hashable, Sendable {
+      case idle
+      case loading
+      case loaded
+      case failed
+    }
+
+    var phase: Phase = .idle
     var todos: [Todo] = []
-    var isLoading = false
     var errorMessage: String?
     var filter = BindableProperty(Filter.all)
 
@@ -83,9 +90,13 @@ struct TodoFeature {
     var activeCount: Int {
       todos.filter { !$0.isCompleted }.count
     }
+
+    var isLoading: Bool {
+      phase == .loading
+    }
   }
 
-  enum Action: Sendable {
+  enum Action: Equatable, Sendable {
     case loadTodos
     case addTodo(String)
     case toggleTodo(UUID)
@@ -104,10 +115,17 @@ struct TodoFeature {
     self.todoService = todoService
   }
 
+  static let phaseGraph: PhaseTransitionGraph<State.Phase> = [
+    .idle: [.loading],
+    .loading: [.loaded, .failed],
+    .loaded: [.loading],
+    .failed: [.idle, .loading],
+  ]
+
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     switch action {
     case .loadTodos:
-      state.isLoading = true
+      state.phase = .loading
       state.errorMessage = nil
       let todoService = self.todoService
       return .run { send in
@@ -154,16 +172,19 @@ struct TodoFeature {
 
     case ._todosLoaded(let todos):
       state.todos = todos
-      state.isLoading = false
+      state.phase = .loaded
       state.errorMessage = nil
       return .none
 
     case ._loadFailed(let error):
-      state.isLoading = false
+      state.phase = .failed
       state.errorMessage = error
       return .none
 
     case .dismissError:
+      if state.phase == .failed {
+        state.phase = state.todos.isEmpty ? .idle : .loaded
+      }
       state.errorMessage = nil
       return .none
     }
@@ -277,17 +298,10 @@ struct TodoListView: View {
       inputView
     }
     .navigationTitle("할 일")
-    .navigationBarTitleDisplayMode(.large)
-    .toolbar {
-      ToolbarItem(placement: .navigationBarTrailing) {
-        if store.completedCount > 0 {
-          Button("완료 삭제") {
-            store.send(.deleteCompleted)
-          }
-          .foregroundColor(.red)
-        }
-      }
-    }
+    .todoNavigationChrome(
+      completedCount: store.completedCount,
+      onDeleteCompleted: { store.send(.deleteCompleted) }
+    )
     .task {
       store.send(.loadTodos)
     }
@@ -322,11 +336,11 @@ struct TodoListView: View {
         Text("미완료: \(store.activeCount)")
           .font(.caption)
           .foregroundColor(.orange)
-      }
-      .padding(.horizontal)
+    }
+    .padding(.horizontal)
       .padding(.vertical, 8)
     }
-    .background(Color(.systemGray6))
+    .background(Color.todoGroupedBackground)
   }
 
   private var filterView: some View {
@@ -384,7 +398,7 @@ struct TodoListView: View {
       .disabled(newTodoTitle.isEmpty)
     }
     .padding()
-    .background(Color(.systemBackground))
+    .background(Color.todoSurfaceBackground)
   }
 
   private func addTodo() {
@@ -405,4 +419,53 @@ public struct ContentView: View {
   }
 
   public init() {}
+}
+
+private extension View {
+  @ViewBuilder
+  func todoNavigationChrome(
+    completedCount: Int,
+    onDeleteCompleted: @escaping () -> Void
+  ) -> some View {
+    #if os(iOS) || os(tvOS) || os(visionOS)
+      self
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+          ToolbarItem(placement: .navigationBarTrailing) {
+            if completedCount > 0 {
+              Button("완료 삭제", action: onDeleteCompleted)
+                .foregroundColor(.red)
+            }
+          }
+        }
+    #else
+      self
+        .toolbar {
+          ToolbarItem {
+            if completedCount > 0 {
+              Button("완료 삭제", action: onDeleteCompleted)
+                .foregroundColor(.red)
+            }
+          }
+        }
+    #endif
+  }
+}
+
+private extension Color {
+  static var todoGroupedBackground: Color {
+    #if os(macOS)
+      return Color(nsColor: .controlBackgroundColor)
+    #else
+      return Color(.systemGray6)
+    #endif
+  }
+
+  static var todoSurfaceBackground: Color {
+    #if os(macOS)
+      return Color(nsColor: .windowBackgroundColor)
+    #else
+      return Color(.systemBackground)
+    #endif
+  }
 }
