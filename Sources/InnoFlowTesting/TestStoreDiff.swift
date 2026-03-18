@@ -23,6 +23,7 @@ func renderStateDiff(
   actual: Any,
   lineLimit: Int = defaultStateDiffLineLimit
 ) -> String? {
+  guard lineLimit > 0 else { return nil }
   let lines = diffLines(expected: expected, actual: actual, path: "")
   guard !lines.isEmpty else { return nil }
   return lines.prefix(lineLimit).joined(separator: "\n")
@@ -65,7 +66,16 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
     }
     return lines.isEmpty ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
 
-  case .collection, .set:
+  case .set:
+    return [
+      formatDiff(
+        path: path,
+        expected: stableSetDescription(expectedMirror),
+        actual: stableSetDescription(actualMirror)
+      )
+    ]
+
+  case .collection:
     let expectedChildren = Array(expectedMirror.children)
     let actualChildren = Array(actualMirror.children)
     guard expectedChildren.count == actualChildren.count else {
@@ -127,4 +137,11 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
 private func formatDiff(path: String, expected: String, actual: String) -> String {
   let renderedPath = path.isEmpty ? "state" : path
   return "\(renderedPath): expected \(expected), actual \(actual)"
+}
+
+private func stableSetDescription(_ mirror: Mirror) -> String {
+  let elements = mirror.children
+    .map { String(reflecting: $0.value) }
+    .sorted()
+  return "Set([\(elements.joined(separator: ", "))])"
 }

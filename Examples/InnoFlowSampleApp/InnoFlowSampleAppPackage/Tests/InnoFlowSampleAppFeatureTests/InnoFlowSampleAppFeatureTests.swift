@@ -214,12 +214,15 @@ struct InnoFlowSampleAppFeatureTests {
 
     let deadline = ContinuousClock().now.advanced(by: .seconds(2))
     let clock = ContinuousClock()
+    var authenticated = false
     while clock.now < deadline {
       if coordinator.loginStore.authVersion == 1 {
+        authenticated = true
         break
       }
       try? await Task.sleep(for: .milliseconds(20))
     }
+    #expect(authenticated, "Expected router login to complete before timing out")
 
     coordinator.syncNavigationWithDomainState()
 

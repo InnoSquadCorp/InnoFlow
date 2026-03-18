@@ -75,10 +75,8 @@ final class RouterCompositionCoordinator {
   private(set) var pendingRoute: RouterDemoRoute?
   private var lastHandledAuthVersion = 0
 
-  init() {
-    if let pendingDetailID = ProcessInfo.processInfo.environment["INNOFLOW_ROUTER_PENDING_DETAIL_ID"] {
-      pendingRoute = .detail(id: pendingDetailID)
-    }
+  init(pendingRoute: RouterDemoRoute? = nil) {
+    self.pendingRoute = pendingRoute
   }
 
   func queueProtectedDetail() {
@@ -122,7 +120,11 @@ final class RouterCompositionCoordinator {
 }
 
 struct RouterCompositionDemoView: View {
-  @State private var coordinator = RouterCompositionCoordinator()
+  @State private var coordinator: RouterCompositionCoordinator
+
+  init(pendingRoute: RouterDemoRoute? = Self.pendingRouteFromEnvironment()) {
+    _coordinator = State(initialValue: RouterCompositionCoordinator(pendingRoute: pendingRoute))
+  }
 
   var body: some View {
     NavigationStack(path: $coordinator.path) {
@@ -140,6 +142,13 @@ struct RouterCompositionDemoView: View {
       coordinator.syncNavigationWithDomainState()
     }
     .navigationTitle("App-Boundary Navigation")
+  }
+
+  private static func pendingRouteFromEnvironment() -> RouterDemoRoute? {
+    guard let pendingDetailID = ProcessInfo.processInfo.environment["INNOFLOW_ROUTER_PENDING_DETAIL_ID"] else {
+      return nil
+    }
+    return .detail(id: pendingDetailID)
   }
 }
 

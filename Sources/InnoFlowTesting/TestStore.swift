@@ -105,6 +105,26 @@ private actor TestStoreRunBridge<Action: Sendable> {
   }
 }
 
+private actor TestStoreRunStartGate {
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func wait() async {
+    guard isOpen == false else { return }
+    await withCheckedContinuation { continuation in
+      waiters.append(continuation)
+    }
+  }
+
+  func open() {
+    guard isOpen == false else { return }
+    isOpen = true
+    let continuations = waiters
+    waiters.removeAll()
+    continuations.forEach { $0.resume() }
+  }
+}
+
 /// A deterministic test harness for InnoFlow v2 reducers.
 ///
 /// `TestStore` asserts state transitions and captures effect-emitted actions.
@@ -453,6 +473,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     context: EffectExecutionContext?
   ) -> Task<Void, Never> {
     let token = UUID()
+    let startGate = TestStoreRunStartGate()
     let endpoint = TestStoreRunEndpoint<R.Action>(
       isTaskActive: { [weak self] token in
         self?.isRunTaskActive(token: token) ?? false
@@ -471,6 +492,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     let wallClock = self.wallClock
 
     let task = Task(priority: priority) {
+      await startGate.wait()
+
       let send = Send<R.Action> { action in
         await runBridge.emit(action)
       }
@@ -510,6 +533,10 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
     if let id = context?.cancellationID {
       taskIDsByEffectID[id, default: []].insert(token)
+    }
+
+    Task {
+      await startGate.open()
     }
 
     return task

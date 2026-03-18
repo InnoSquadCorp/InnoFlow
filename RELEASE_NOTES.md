@@ -22,8 +22,8 @@
 
 ## 3.0.0 Release
 
-This patch does not add new PhaseMap surface area. It tightens the semantics around the new
-phase-ownership model and makes the breaking migration points explicit.
+This patch tightens the semantics around the new phase-ownership model, adds opt-in
+`PhaseMap` validation coverage, and makes the breaking migration points explicit.
 
 ### Added
 

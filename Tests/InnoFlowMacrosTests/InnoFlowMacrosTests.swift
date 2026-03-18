@@ -13,6 +13,7 @@ import Testing
 
   let testMacros: [String: Macro.Type] = [
     "InnoFlow": InnoFlowMacro.self,
+    "_InnoFlowActionPaths": InnoFlowActionPathsMacro.self,
   ]
 #endif
 

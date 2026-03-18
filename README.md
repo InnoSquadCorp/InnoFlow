@@ -28,7 +28,7 @@ For stable framework guarantees that should not drift with scorecards or line co
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquad-mdd/InnoFlow.git", from: "3.0.0")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.0")
 ]
 ```
 
@@ -605,7 +605,7 @@ await child.receive(.finished) {
 
 That projection assumes `ParentFeature.Action.childCasePath`, which `@InnoFlow` now synthesizes for matching single-payload child action cases.
 Collection-scoped projections keep per-element `ScopedStore` identity stable by `id`, and row observers only invalidate when their own element snapshot changes.
-If an element is removed, discard any old row-scoped handle and recreate projections from the parent store; direct access to a stale collection-scoped store is treated as programmer error and traps in debug builds.
+If an element is removed, discard any old row-scoped handle and recreate projections from the parent store; direct access to a stale collection-scoped store is treated as programmer error and traps via `preconditionFailure`.
 
 For store-level debounce and throttle tests, inject a `StoreClock`:
 

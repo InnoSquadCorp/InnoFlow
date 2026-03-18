@@ -8,9 +8,13 @@ import Foundation
 public struct StoreClock: Sendable {
   public typealias Instant = ContinuousClock.Instant
 
+  /// Returns the current instant according to the store's scheduling clock.
   public let now: @Sendable () async -> Instant
+
+  /// Suspends for the requested duration according to the store's scheduling clock.
   public let sleep: @Sendable (Duration) async throws -> Void
 
+  /// Creates a store clock from async `now` and `sleep` hooks.
   public init(
     now: @escaping @Sendable () async -> Instant,
     sleep: @escaping @Sendable (Duration) async throws -> Void
@@ -19,6 +23,7 @@ public struct StoreClock: Sendable {
     self.sleep = sleep
   }
 
+  /// The default wall-clock implementation backed by `ContinuousClock`.
   public static let continuous = Self(
     now: { ContinuousClock().now },
     sleep: { duration in

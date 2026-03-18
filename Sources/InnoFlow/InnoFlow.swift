@@ -53,6 +53,11 @@ public macro InnoFlow() =
     type: "InnoFlowMacro"
   )
 
+/// Synthesizes case-path members for nested `Action` enums.
+///
+/// This macro remains public so generated members can be emitted across module
+/// boundaries, but external projects should treat it as an implementation hook.
+/// Use `@InnoFlow` instead of invoking `_InnoFlowActionPaths` directly.
 @attached(member, names: arbitrary)
 public macro _InnoFlowActionPaths() =
   #externalMacro(

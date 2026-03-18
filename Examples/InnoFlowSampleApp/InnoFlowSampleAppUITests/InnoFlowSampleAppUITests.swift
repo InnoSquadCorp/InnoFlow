@@ -45,10 +45,10 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   func testDemoHubShowsCanonicalSamples() throws {
     let app = launchApp()
 
-    XCTAssertTrue(app.staticTexts["Basics"].waitForExistence(timeout: 2))
-    XCTAssertTrue(app.staticTexts["Orchestration"].exists)
-    XCTAssertTrue(app.staticTexts["Phase-Driven FSM"].exists)
-    XCTAssertTrue(app.staticTexts["App-Boundary Navigation"].exists)
+    XCTAssertTrue(app.buttons["sample.basics"].waitForExistence(timeout: 2))
+    XCTAssertTrue(app.buttons["sample.orchestration"].exists)
+    XCTAssertTrue(app.buttons["sample.phase-driven-fsm"].exists)
+    XCTAssertTrue(app.buttons["sample.router-composition"].exists)
   }
 
   @MainActor

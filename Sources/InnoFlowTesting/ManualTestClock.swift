@@ -11,11 +11,13 @@ public actor ManualTestClock {
 
   private struct SleepRequest {
     let deadline: Instant
+    let insertionOrder: UInt64
     let continuation: CheckedContinuation<Void, Error>
   }
 
   private var current: Instant
   private var sleepers: [UUID: SleepRequest] = [:]
+  private var nextInsertionOrder: UInt64 = 0
 
   public init(now: Instant = ContinuousClock().now) {
     self.current = now
@@ -45,7 +47,13 @@ public actor ManualTestClock {
     let sleeperID = UUID()
     try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
-        sleepers[sleeperID] = .init(deadline: deadline, continuation: continuation)
+        let insertionOrder = nextInsertionOrder
+        nextInsertionOrder += 1
+        sleepers[sleeperID] = .init(
+          deadline: deadline,
+          insertionOrder: insertionOrder,
+          continuation: continuation
+        )
       }
     } onCancel: {
       Task {
@@ -55,9 +63,14 @@ public actor ManualTestClock {
   }
 
   private func resumeReadySleepers() {
-    let ready = sleepers.filter { _, request in
-      request.deadline <= current
-    }
+    let ready = sleepers
+      .filter { _, request in request.deadline <= current }
+      .sorted { lhs, rhs in
+        if lhs.value.deadline == rhs.value.deadline {
+          return lhs.value.insertionOrder < rhs.value.insertionOrder
+        }
+        return lhs.value.deadline < rhs.value.deadline
+      }
 
     for (id, request) in ready {
       sleepers.removeValue(forKey: id)

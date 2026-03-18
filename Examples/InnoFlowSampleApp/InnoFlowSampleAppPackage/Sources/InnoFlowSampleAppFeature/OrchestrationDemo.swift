@@ -1,7 +1,8 @@
 import InnoFlow
 import SwiftUI
 
-struct ReadinessChildFeature: Reducer {
+@InnoFlow
+struct ReadinessChildFeature {
   struct State: Equatable, Sendable {
     let name: String
     var isReady = false
@@ -13,17 +14,19 @@ struct ReadinessChildFeature: Reducer {
     case reset
   }
 
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    switch action {
-    case .markReady:
-      state.isReady = true
-      state.log.append("\(state.name) ready")
-      return .none
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .markReady:
+        state.isReady = true
+        state.log.append("\(state.name) ready")
+        return .none
 
-    case .reset:
-      state.isReady = false
-      state.log = []
-      return .none
+      case .reset:
+        state.isReady = false
+        state.log = []
+        return .none
+      }
     }
   }
 }
@@ -57,6 +60,12 @@ struct OrchestrationFeature {
     case _syncFinished
   }
 
+  private static let bootstrapSteps: [(name: String, delay: Duration)] = [
+    ("profile", .milliseconds(50)),
+    ("permissions", .milliseconds(90)),
+    ("analytics", .milliseconds(130)),
+  ]
+
   var body: some Reducer<State, Action> {
     CombineReducers {
       Reduce { state, action in
@@ -82,9 +91,9 @@ struct OrchestrationFeature {
           state.bootstrapReady = []
           state.bootstrapLog = ["bootstrap started"]
           return .merge(
-            bootstrapTask("profile", delay: .milliseconds(50)),
-            bootstrapTask("permissions", delay: .milliseconds(90)),
-            bootstrapTask("analytics", delay: .milliseconds(130))
+            Self.bootstrapSteps.map { step in
+              bootstrapTask(step.name, delay: step.delay)
+            }
           )
           .cancellable("bootstrap", cancelInFlight: true)
 
@@ -96,7 +105,7 @@ struct OrchestrationFeature {
         case ._bootstrapCompleted(let name):
           state.bootstrapReady.insert(name)
           state.bootstrapLog.append("\(name) ready")
-          if state.bootstrapReady.count == 3 {
+          if state.bootstrapReady.count == Self.bootstrapSteps.count {
             state.isBootstrapping = false
             state.bootstrapLog.append("bootstrap finished")
           }

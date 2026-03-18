@@ -19,7 +19,7 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(path: "../../../../InnoFlow"),
+    .package(path: "../../../"),
   ],
   targets: [
     .target(

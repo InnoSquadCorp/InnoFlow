@@ -141,6 +141,18 @@ actor LateSendGate {
   }
 }
 
+actor OrderedIntProbe {
+  private var values: [Int] = []
+
+  func append(_ value: Int) {
+    values.append(value)
+  }
+
+  func snapshot() -> [Int] {
+    values
+  }
+}
+
 struct CancellationCheckFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {}
 
@@ -4539,6 +4551,34 @@ struct StoreTests {
     #expect(store.emitted == [2])
   }
 
+  @Test("ManualTestClock resumes same-deadline sleepers in insertion order")
+  func manualTestClockResumesSameDeadlineSleepersInInsertionOrder() async {
+    let clock = ManualTestClock()
+    let probe = OrderedIntProbe()
+
+    Task {
+      try? await clock.sleep(for: .milliseconds(50))
+      await probe.append(1)
+    }
+    await Task.yield()
+
+    Task {
+      try? await clock.sleep(for: .milliseconds(50))
+      await probe.append(2)
+    }
+    await Task.yield()
+
+    await clock.advance(by: .milliseconds(50))
+    for _ in 0..<10 {
+      if await probe.snapshot() == [1, 2] {
+        break
+      }
+      await Task.yield()
+    }
+
+    #expect(await probe.snapshot() == [1, 2])
+  }
+
   @Test("StoreClock deterministically drives trailing throttle effects")
   func storeClockControlsThrottleTrailing() async {
     let clock = ManualTestClock()
@@ -4818,6 +4858,28 @@ struct TestStoreTests {
     await store.assertNoMoreActions()
   }
 
+  @Test("TestStore run effects deliver their first emission deterministically")
+  func testStoreRunEffectsDeliverFirstEmissionDeterministically() async {
+    for _ in 0..<40 {
+      let store = TestStore(
+        reducer: AsyncFeature(),
+        initialState: .init(),
+        effectTimeout: .seconds(3)
+      )
+
+      await store.send(.load) {
+        $0.isLoading = true
+      }
+
+      await store.receive(._loaded("Hello, InnoFlow v2")) {
+        $0.value = "Hello, InnoFlow v2"
+        $0.isLoading = false
+      }
+
+      await store.assertNoMoreActions()
+    }
+  }
+
   @Test("TestStore async cancellation API prevents pending effect emission")
   func testStoreCancelEffects() async {
     let store = TestStore(reducer: CancellableFeature(), initialState: .init())
@@ -4886,6 +4948,27 @@ struct TestStoreTests {
     )
 
     #expect(diff?.split(separator: "\n").count == 12)
+  }
+
+  @Test("TestStore diff renderer returns nil when lineLimit is non-positive")
+  func stateDiffRendererNilForNonPositiveLineLimit() {
+    let diff = renderStateDiff(
+      expected: [1, 2, 3],
+      actual: [4, 5, 6],
+      lineLimit: 0
+    )
+
+    #expect(diff == nil)
+  }
+
+  @Test("TestStore diff renderer uses stable summary output for sets")
+  func stateDiffRendererUsesStableSetSummary() {
+    let diff = renderStateDiff(
+      expected: Set(["beta", "alpha"]),
+      actual: Set(["gamma", "alpha"])
+    )
+
+    #expect(diff == #"state: expected Set(["alpha", "beta"]), actual Set(["alpha", "gamma"])"#)
   }
 
   @Test("TestStore diff line limit resolves env and explicit overrides")

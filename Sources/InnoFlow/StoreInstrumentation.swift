@@ -162,14 +162,14 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       case .actionEmitted(let actionEvent):
         let actionDescription = includeActions ? String(describing: actionEvent.action) : "<redacted>"
         logger.debug(
-          "InnoFlow emitted action=\(actionDescription, privacy: .public) cancellationID=\(String(describing: actionEvent.cancellationID), privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
+          "InnoFlow emitted action=\(actionDescription, privacy: .private) cancellationID=\(String(describing: actionEvent.cancellationID), privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
         )
 
       case .actionDropped(let dropEvent):
         let actionDescription = dropEvent.action.map(String.init(describing:)) ?? "<none>"
         let renderedAction = includeActions ? actionDescription : "<redacted>"
         logger.debug(
-          "InnoFlow dropped action=\(renderedAction, privacy: .public) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(String(describing: dropEvent.cancellationID), privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
+          "InnoFlow dropped action=\(renderedAction, privacy: .private) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(String(describing: dropEvent.cancellationID), privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
         )
 
       case .effectsCancelled(let cancellationEvent):
