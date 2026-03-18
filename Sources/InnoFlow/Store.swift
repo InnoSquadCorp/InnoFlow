@@ -50,7 +50,8 @@ public final class Store<R: Reducer> {
     clock: StoreClock = .continuous,
     instrumentation: StoreInstrumentation<R.Action> = .disabled
   ) where R.State: DefaultInitializable {
-    self.init(reducer: reducer, initialState: R.State(), clock: clock, instrumentation: instrumentation)
+    self.init(
+      reducer: reducer, initialState: R.State(), clock: clock, instrumentation: instrumentation)
   }
 
   /// Direct access to state properties (e.g. `store.count`).
@@ -203,7 +204,9 @@ public final class Store<R: Reducer> {
     instrumentation.didCancelEffects(.init(id: id, sequence: sequence))
   }
 
-  package func makeRunEvent(token: UUID, context: EffectExecutionContext?) -> StoreInstrumentation<R.Action>.RunEvent {
+  package func makeRunEvent(token: UUID, context: EffectExecutionContext?)
+    -> StoreInstrumentation<R.Action>.RunEvent
+  {
     .init(
       token: token,
       cancellationID: context?.cancellationID,

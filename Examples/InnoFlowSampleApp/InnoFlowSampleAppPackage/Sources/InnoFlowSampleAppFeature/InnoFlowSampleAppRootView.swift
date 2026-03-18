@@ -1,7 +1,8 @@
 import SwiftUI
 
 public struct InnoFlowSampleAppRootView: View {
-  private let launchDemo = ProcessInfo.processInfo.environment["INNOFLOW_SAMPLE_DEMO"].flatMap(SampleDemo.init(launchToken:))
+  private let launchDemo = ProcessInfo.processInfo.environment["INNOFLOW_SAMPLE_DEMO"].flatMap(
+    SampleDemo.init(launchToken:))
   @State private var presentedModalDemo: SampleDemo?
 
   public init() {}
@@ -100,9 +101,9 @@ public struct InnoFlowSampleAppRootView: View {
   }
 }
 
-private extension View {
+extension View {
   @ViewBuilder
-  func modalPresentation<Item: Identifiable, Content: View>(
+  fileprivate func modalPresentation<Item: Identifiable, Content: View>(
     item: Binding<Item?>,
     @ViewBuilder content: @escaping (Item) -> Content
   ) -> some View {

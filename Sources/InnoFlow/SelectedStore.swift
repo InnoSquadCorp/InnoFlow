@@ -85,7 +85,9 @@ extension Store {
     line: UInt = #line
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -133,7 +135,9 @@ extension Store {
     _ transform: @escaping @Sendable (Dependency) -> Value
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -189,7 +193,9 @@ extension Store {
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency) = dependencies
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -224,12 +230,16 @@ extension Store {
     registerProjectionObserver(
       selectedStore,
       registration: .dependencies([
-        .init(.keyPath(firstDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
-        }),
-        .init(.keyPath(secondDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
-        }),
+        .init(
+          .keyPath(firstDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
+          }),
+        .init(
+          .keyPath(secondDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
+          }),
       ])
     )
     return selectedStore
@@ -252,7 +262,9 @@ extension Store {
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency) = dependencies
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -292,15 +304,21 @@ extension Store {
     registerProjectionObserver(
       selectedStore,
       registration: .dependencies([
-        .init(.keyPath(firstDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
-        }),
-        .init(.keyPath(secondDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
-        }),
-        .init(.keyPath(thirdDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: thirdDependency] != nextState[keyPath: thirdDependency]
-        }),
+        .init(
+          .keyPath(firstDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
+          }),
+        .init(
+          .keyPath(secondDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
+          }),
+        .init(
+          .keyPath(thirdDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: thirdDependency] != nextState[keyPath: thirdDependency]
+          }),
       ])
     )
     return selectedStore
@@ -312,7 +330,9 @@ extension Store {
     _ selector: @escaping @Sendable (R.State) -> Value
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -359,7 +379,9 @@ extension ScopedStore {
     line: UInt = #line
   ) -> SelectedStore<Value> {
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -417,7 +439,9 @@ extension ScopedStore {
     _ transform: @escaping @Sendable (Dependency) -> Value
   ) -> SelectedStore<Value> {
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -483,7 +507,9 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency) = dependencies
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -528,12 +554,16 @@ extension ScopedStore {
     observerRegistry.register(
       selectedStore,
       registration: .dependencies([
-        .init(.keyPath(firstDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
-        }),
-        .init(.keyPath(secondDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
-        }),
+        .init(
+          .keyPath(firstDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
+          }),
+        .init(
+          .keyPath(secondDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
+          }),
       ])
     )
     return selectedStore
@@ -556,7 +586,9 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency) = dependencies
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 
@@ -606,15 +638,21 @@ extension ScopedStore {
     observerRegistry.register(
       selectedStore,
       registration: .dependencies([
-        .init(.keyPath(firstDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
-        }),
-        .init(.keyPath(secondDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
-        }),
-        .init(.keyPath(thirdDependency as AnyKeyPath), hasChanged: { previousState, nextState in
-          previousState[keyPath: thirdDependency] != nextState[keyPath: thirdDependency]
-        }),
+        .init(
+          .keyPath(firstDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
+          }),
+        .init(
+          .keyPath(secondDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
+          }),
+        .init(
+          .keyPath(thirdDependency as AnyKeyPath),
+          hasChanged: { previousState, nextState in
+            previousState[keyPath: thirdDependency] != nextState[keyPath: thirdDependency]
+          }),
       ])
     )
     return selectedStore
@@ -626,7 +664,9 @@ extension ScopedStore {
     _ selector: @escaping @Sendable (ChildState) -> Value
   ) -> SelectedStore<Value> {
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(for: callsite, valueType: Value.self) {
+    if let cached: SelectedStore<Value> = selectionCache.cached(
+      for: callsite, valueType: Value.self)
+    {
       return cached
     }
 

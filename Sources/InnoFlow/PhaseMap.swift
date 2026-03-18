@@ -69,8 +69,8 @@ public struct PhaseMapExpectedTrigger<Action: Sendable>: Sendable {
   }
 }
 
-public extension PhaseMapExpectedTrigger where Action: Equatable {
-  static func action(
+extension PhaseMapExpectedTrigger where Action: Equatable {
+  public static func action(
     _ action: Action,
     label: String? = nil
   ) -> Self {
@@ -78,8 +78,8 @@ public extension PhaseMapExpectedTrigger where Action: Equatable {
   }
 }
 
-public extension PhaseMapExpectedTrigger {
-  static func casePath<Value: Sendable>(
+extension PhaseMapExpectedTrigger {
+  public static func casePath<Value: Sendable>(
     _ path: CasePath<Action, Value>,
     label: String,
     sample payload: Value
@@ -87,7 +87,7 @@ public extension PhaseMapExpectedTrigger {
     .init(label, sampleAction: path.embed(payload))
   }
 
-  static func predicate(
+  public static func predicate(
     _ label: String,
     sampleAction: Action
   ) -> Self {
@@ -122,7 +122,9 @@ public struct From<State: Sendable, Action: Sendable, Phase: Hashable & Sendable
 
   public init(
     _ sourcePhase: Phase,
-    @PhaseTransitionRuleBuilder<State, Action, Phase> _ transitions: () -> [AnyPhaseTransition<State, Action, Phase>]
+    @PhaseTransitionRuleBuilder<State, Action, Phase> _ transitions: () -> [AnyPhaseTransition<
+      State, Action, Phase
+    >]
   ) {
     self.rule = .init(sourcePhase: sourcePhase, transitions: transitions())
   }
@@ -147,15 +149,15 @@ public struct On<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>:
   }
 }
 
-public extension On where Action: Equatable {
-  init(_ action: Action, to target: Phase) {
+extension On where Action: Equatable {
+  public init(_ action: Action, to target: Phase) {
     self.init(
       matcher: .action(action),
       declaredTargets: [target]
     ) { _, _ in target }
   }
 
-  init(
+  public init(
     _ action: Action,
     targets: Set<Phase>,
     resolve: @escaping @Sendable (State) -> Phase?
@@ -167,15 +169,15 @@ public extension On where Action: Equatable {
   }
 }
 
-public extension On {
-  init<Value: Sendable>(_ path: CasePath<Action, Value>, to target: Phase) {
+extension On {
+  public init<Value: Sendable>(_ path: CasePath<Action, Value>, to target: Phase) {
     self.init(
       matcher: .casePath(path),
       declaredTargets: [target]
     ) { _, _ in target }
   }
 
-  init<Value: Sendable>(
+  public init<Value: Sendable>(
     _ path: CasePath<Action, Value>,
     targets: Set<Phase>,
     resolve: @escaping @Sendable (State, Value) -> Phase?
@@ -187,7 +189,7 @@ public extension On {
     )
   }
 
-  init(
+  public init(
     where predicate: @escaping @Sendable (Action) -> Bool,
     to target: Phase
   ) {
@@ -199,7 +201,7 @@ public extension On {
     ) { _, _ in target }
   }
 
-  init(
+  public init(
     where predicate: @escaping @Sendable (Action) -> Bool,
     targets: Set<Phase>,
     resolve: @escaping @Sendable (State, Action) -> Phase?
@@ -254,7 +256,9 @@ public enum PhaseRuleBuilder<State: Sendable, Action: Sendable, Phase: Hashable 
 }
 
 @resultBuilder
-public enum PhaseTransitionRuleBuilder<State: Sendable, Action: Sendable, Phase: Hashable & Sendable> {
+public enum PhaseTransitionRuleBuilder<
+  State: Sendable, Action: Sendable, Phase: Hashable & Sendable
+> {
   public static func buildBlock(
     _ components: [AnyPhaseTransition<State, Action, Phase>]...
   ) -> [AnyPhaseTransition<State, Action, Phase>] {
@@ -297,7 +301,9 @@ public struct PhaseRule<State: Sendable, Action: Sendable, Phase: Hashable & Sen
   package let transitions: [AnyPhaseTransition<State, Action, Phase>]
 }
 
-public struct AnyPhaseTransition<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>: Sendable {
+public struct AnyPhaseTransition<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>:
+  Sendable
+{
   package let matches: @Sendable (Action) -> Bool
   package let resolve: @Sendable (State, Action) -> Phase?
   package let declaredTargets: Set<Phase>
@@ -362,8 +368,8 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
   }
 }
 
-public extension Reducer {
-  func phaseMap<Phase: Hashable & Sendable>(
+extension Reducer {
+  public func phaseMap<Phase: Hashable & Sendable>(
     _ map: PhaseMap<State, Action, Phase>
   ) -> some Reducer<State, Action> {
     PhaseMappedReducer(base: self, phaseMap: map)

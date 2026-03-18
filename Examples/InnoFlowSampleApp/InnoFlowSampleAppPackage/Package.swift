@@ -19,13 +19,13 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(path: "../../../"),
+    .package(path: "../../../")
   ],
   targets: [
     .target(
       name: "InnoFlowSampleAppFeature",
       dependencies: [
-        .product(name: "InnoFlow", package: "InnoFlow"),
+        .product(name: "InnoFlow", package: "InnoFlow")
       ]
     ),
     .testTarget(

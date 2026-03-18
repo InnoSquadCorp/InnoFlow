@@ -229,7 +229,8 @@ struct PhaseDrivenFSMDemoView: View {
               }
               .buttonStyle(.bordered)
               .accessibilityIdentifier("phase.dismiss-error")
-              .accessibilityHint("Clears the failure message and returns the demo to an interactive state")
+              .accessibilityHint(
+                "Clears the failure message and returns the demo to an interactive state")
             }
           }
         }

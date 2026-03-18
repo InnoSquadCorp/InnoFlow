@@ -160,7 +160,8 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
         )
 
       case .actionEmitted(let actionEvent):
-        let actionDescription = includeActions ? String(describing: actionEvent.action) : "<redacted>"
+        let actionDescription =
+          includeActions ? String(describing: actionEvent.action) : "<redacted>"
         logger.debug(
           "InnoFlow emitted action=\(actionDescription, privacy: .private) cancellationID=\(String(describing: actionEvent.cancellationID), privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
         )

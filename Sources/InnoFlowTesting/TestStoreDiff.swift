@@ -4,15 +4,24 @@ let defaultStateDiffLineLimit = 12
 let testStoreDiffLineLimitEnvironmentKey = "INNOFLOW_TESTSTORE_DIFF_LINE_LIMIT"
 
 func resolveDiffLineLimit(explicit: Int?, environment: [String: String]) -> Int {
-  if let explicit, explicit > 0 {
-    return explicit
+  if let explicit {
+    if explicit == 0 {
+      return 0
+    }
+    if explicit > 0 {
+      return explicit
+    }
   }
 
   if let rawValue = environment[testStoreDiffLineLimitEnvironmentKey],
-    let parsed = Int(rawValue),
-    parsed > 0
+    let parsed = Int(rawValue)
   {
-    return parsed
+    if parsed == 0 {
+      return 0
+    }
+    if parsed > 0 {
+      return parsed
+    }
   }
 
   return defaultStateDiffLineLimit
@@ -64,7 +73,8 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
         path: childPath
       )
     }
-    return lines.isEmpty ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
+    return lines.isEmpty
+      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
 
   case .set:
     return [
@@ -91,7 +101,8 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
         path: childPath
       )
     }
-    return lines.isEmpty ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
+    return lines.isEmpty
+      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
 
   case .optional:
     let expectedChildren = Array(expectedMirror.children)
@@ -99,7 +110,7 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
     switch (expectedChildren.first, actualChildren.first) {
     case (nil, nil):
       return []
-    case let (lhs?, rhs?):
+    case (let lhs?, let rhs?):
       return diffLines(expected: lhs.value, actual: rhs.value, path: path)
     default:
       return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
@@ -116,7 +127,8 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
 
     var lines: [String] = []
     for index in expectedChildren.indices {
-      let label = expectedChildren[index].label ?? actualChildren[index].label ?? "associatedValue\(index)"
+      let label =
+        expectedChildren[index].label ?? actualChildren[index].label ?? "associatedValue\(index)"
       let childPath = path.isEmpty ? label : "\(path).\(label)"
       lines += diffLines(
         expected: expectedChildren[index].value,
@@ -124,7 +136,8 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
         path: childPath
       )
     }
-    return lines.isEmpty ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
+    return lines.isEmpty
+      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
 
   case .dictionary:
     return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]

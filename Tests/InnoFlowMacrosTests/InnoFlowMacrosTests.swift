@@ -408,7 +408,8 @@ struct InnoFlowMacrosTests {
           """,
         diagnostics: [
           DiagnosticSpec(
-            message: "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case",
+            message:
+              "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case",
             line: 6,
             column: 10
           )
@@ -480,7 +481,8 @@ struct InnoFlowMacrosTests {
           """,
         diagnostics: [
           DiagnosticSpec(
-            message: "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead",
+            message:
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead",
             line: 1,
             column: 1,
             fixIts: [
@@ -726,7 +728,8 @@ struct InnoFlowMacrosTests {
           """,
         diagnostics: [
           DiagnosticSpec(
-            message: "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead",
+            message:
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead",
             line: 1,
             column: 1
           )

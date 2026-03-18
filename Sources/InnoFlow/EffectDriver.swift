@@ -127,9 +127,10 @@ package protocol EffectDriver<Action>: AnyObject {
     interval: Duration,
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async
 
   // MARK: - Throttle State
@@ -141,9 +142,10 @@ package protocol EffectDriver<Action>: AnyObject {
   func scheduleTrailingDrain(
     for id: EffectID,
     interval: Duration,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   )
 
   /// Current clock instant for throttle window comparison.
@@ -156,9 +158,10 @@ package protocol EffectDriver<Action>: AnyObject {
     _ children: [EffectTask<Action>],
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async
 
   /// Run children sequentially (concatenate).
@@ -166,8 +169,9 @@ package protocol EffectDriver<Action>: AnyObject {
     _ children: [EffectTask<Action>],
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async
 }

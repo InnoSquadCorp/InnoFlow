@@ -1,8 +1,8 @@
 import Foundation
 import InnoFlow
 
-public extension TestStore {
-  func send<Phase: Hashable & Sendable>(
+extension TestStore {
+  public func send<Phase: Hashable & Sendable>(
     _ action: R.Action,
     through phaseMap: PhaseMap<R.State, R.Action, Phase>,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
@@ -19,7 +19,7 @@ public extension TestStore {
     )
   }
 
-  func receive<Phase: Hashable & Sendable>(
+  public func receive<Phase: Hashable & Sendable>(
     _ expectedAction: R.Action,
     through phaseMap: PhaseMap<R.State, R.Action, Phase>,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,

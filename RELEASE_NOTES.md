@@ -22,7 +22,7 @@
 
 ## 3.0.0 Release
 
-This patch tightens the semantics around the new phase-ownership model, adds opt-in
+This release tightens the semantics around the new phase-ownership model, adds opt-in
 `PhaseMap` validation coverage, and makes the breaking migration points explicit.
 
 ### Added
@@ -56,7 +56,7 @@ This patch tightens the semantics around the new phase-ownership model, adds opt
 
 ## 2.5.0 Patch (Queued Dispatch + Ordering Contract)
 
-This patch clarifies runtime semantics by moving `Store` dispatch onto a single FIFO queue while
+This release clarifies runtime semantics by moving `Store` dispatch onto a single FIFO queue while
 preserving cancellation, debounce, throttle, and animation contracts.
 
 ### Added
@@ -82,7 +82,7 @@ preserving cancellation, debounce, throttle, and animation contracts.
 
 ## 2.4.0 Patch (Throttle Full Control + Animation Modifier)
 
-This patch extends effect orchestration while preserving cancellation guarantees and existing store APIs.
+This release extends effect orchestration while preserving cancellation guarantees and existing store APIs.
 
 ### Added
 
@@ -108,7 +108,7 @@ This patch extends effect orchestration while preserving cancellation guarantees
 
 ## 2.3.0 Patch (Coverage + Combinators + Diagnostics)
 
-This patch focuses on runtime ergonomics and quality gates without changing `Store` public method signatures.
+This release focuses on runtime ergonomics and quality gates without changing `Store` public method signatures.
 
 ### Added
 

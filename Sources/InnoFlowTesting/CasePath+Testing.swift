@@ -9,15 +9,15 @@ func casePathExtractionFailureMessage<Root>(
 ) -> String {
   let renderedCaseName = caseName.map { "\nExpected case: \($0)" } ?? ""
   return """
-    expected case path did not match
+      expected case path did not match
 
-    Root type:
-    \(String(reflecting: Root.self))
-    \(renderedCaseName)
+      Root type:
+      \(String(reflecting: Root.self))
+      \(renderedCaseName)
 
-    Root value:
-  \(String(reflecting: root))
-  """
+      Root value:
+    \(String(reflecting: root))
+    """
 }
 
 /// Asserts that a case path extracts a value from the provided root enum.
@@ -26,7 +26,8 @@ func casePathExtractionFailureMessage<Root>(
 ///   - root: The enum value to inspect.
 ///   - path: The case path expected to match.
 ///   - caseName: Optional case label used to make failures easier to read.
-/// - Returns: The extracted value when the case path matches.
+/// - Returns: The extracted value when the case path matches, otherwise `nil`
+///   after recording a test failure.
 @discardableResult
 public func assertCasePathExtracts<Root, Value>(
   _ root: Root,
@@ -34,7 +35,7 @@ public func assertCasePathExtracts<Root, Value>(
   caseName: String? = nil,
   fileID: StaticString = #fileID,
   line: UInt = #line
-) -> Value {
+) -> Value? {
   if let value = path.extract(root) {
     return value
   }
@@ -44,6 +45,5 @@ public func assertCasePathExtracts<Root, Value>(
     file: fileID,
     line: line
   )
-
-  fatalError("assertCasePathExtracts must not continue after recording a failure")
+  return nil
 }

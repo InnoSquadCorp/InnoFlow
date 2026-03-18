@@ -72,7 +72,8 @@ extension Store: EffectDriver {
             return
           }
 
-          let enqueued = self.effectBridge.enqueueRunActionIfAllowed(action, context: context) { [weak self] action, animation in
+          let enqueued = self.effectBridge.enqueueRunActionIfAllowed(action, context: context) {
+            [weak self] action, animation in
             self?.enqueue(action, animation: animation)
           }
           if enqueued {
@@ -144,9 +145,10 @@ extension Store: EffectDriver {
     interval: Duration,
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<R.Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<R.Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async {
     await cancelInFlightEffects(id: id, context: context)
 
@@ -168,9 +170,10 @@ extension Store: EffectDriver {
   package func scheduleTrailingDrain(
     for id: EffectID,
     interval: Duration,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<R.Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<R.Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) {
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
@@ -210,9 +213,10 @@ extension Store: EffectDriver {
     _ children: [EffectTask<R.Action>],
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<R.Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<R.Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async {
     if awaited {
       await withTaskGroup(of: Void.self) { group in
@@ -237,9 +241,10 @@ extension Store: EffectDriver {
     _ children: [EffectTask<R.Action>],
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<R.Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<R.Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async {
     if awaited {
       for child in children {

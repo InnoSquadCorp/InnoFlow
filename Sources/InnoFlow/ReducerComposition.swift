@@ -143,7 +143,9 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
     )
   }
 
-  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<ParentAction> {
+  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
+    ParentAction
+  > {
     guard let childAction = extractAction(action) else {
       return .none
     }
@@ -188,7 +190,9 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
     )
   }
 
-  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<ParentAction> {
+  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
+    ParentAction
+  > {
     guard let childAction = extractAction(action) else {
       return .none
     }
@@ -238,12 +242,15 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
     )
   }
 
-  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<ParentAction> {
+  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
+    ParentAction
+  > {
     guard let childAction = extractAction(action) else {
       return .none
     }
     guard var childState = self.state.extract(state) else {
-      assertionFailure("IfCaseLet received a child action while parent state was in a different case.")
+      assertionFailure(
+        "IfCaseLet received a child action while parent state was in a different case.")
       return .none
     }
 
@@ -283,7 +290,9 @@ where
     self.reducer = reducer
   }
 
-  public func reduce(into state: inout ParentState, action parentAction: ParentAction) -> EffectTask<ParentAction> {
+  public func reduce(into state: inout ParentState, action parentAction: ParentAction)
+    -> EffectTask<ParentAction>
+  {
     guard let (id, childAction) = action.extract(parentAction) else {
       return .none
     }

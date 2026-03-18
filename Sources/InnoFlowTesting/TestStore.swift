@@ -121,7 +121,9 @@ private actor TestStoreRunStartGate {
     isOpen = true
     let continuations = waiters
     waiters.removeAll()
-    continuations.forEach { $0.resume() }
+    for continuation in continuations {
+      continuation.resume()
+    }
   }
 }
 
@@ -214,13 +216,14 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     let effect = reducer.reduce(into: &state, action: action)
 
     if updateExpectedState != nil, state != expectedState {
-      let diffSection = renderStateDiff(
-        expected: expectedState,
-        actual: state,
-        lineLimit: diffLineLimit
-      ).map {
-        "Diff:\n\($0)\n\n"
-      } ?? ""
+      let diffSection =
+        renderStateDiff(
+          expected: expectedState,
+          actual: state,
+          lineLimit: diffLineLimit
+        ).map {
+          "Diff:\n\($0)\n\n"
+        } ?? ""
       testStoreAssertionFailure(
         """
         State mismatch after action.
@@ -282,13 +285,14 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     let effect = reducer.reduce(into: &state, action: action)
 
     if updateExpectedState != nil, state != expectedState {
-      let diffSection = renderStateDiff(
-        expected: expectedState,
-        actual: state,
-        lineLimit: diffLineLimit
-      ).map {
-        "Diff:\n\($0)\n\n"
-      } ?? ""
+      let diffSection =
+        renderStateDiff(
+          expected: expectedState,
+          actual: state,
+          lineLimit: diffLineLimit
+        ).map {
+          "Diff:\n\($0)\n\n"
+        } ?? ""
       testStoreAssertionFailure(
         """
         State mismatch after receiving action.
@@ -673,9 +677,10 @@ extension TestStore: EffectDriver {
     interval: Duration,
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<R.Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<R.Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async {
     debounceDelayTasksByID[id]?.cancel()
     cancelEffectsSynchronously(identifiedBy: id)
@@ -713,9 +718,10 @@ extension TestStore: EffectDriver {
   package func scheduleTrailingDrain(
     for id: EffectID,
     interval: Duration,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<R.Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<R.Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) {
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
@@ -751,9 +757,10 @@ extension TestStore: EffectDriver {
     _ children: [EffectTask<R.Action>],
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<R.Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<R.Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async {
     if awaited {
       await withTaskGroup(of: Void.self) { group in
@@ -778,9 +785,10 @@ extension TestStore: EffectDriver {
     _ children: [EffectTask<R.Action>],
     context: EffectExecutionContext?,
     awaited: Bool,
-    recurse: @escaping @MainActor @Sendable (
-      EffectTask<R.Action>, EffectExecutionContext?, Bool
-    ) async -> Void
+    recurse:
+      @escaping @MainActor @Sendable (
+        EffectTask<R.Action>, EffectExecutionContext?, Bool
+      ) async -> Void
   ) async {
     if awaited {
       for child in children {
@@ -789,7 +797,9 @@ extension TestStore: EffectDriver {
     } else {
       let token = UUID()
       let cancellationID = context?.cancellationID
+      let startGate = TestStoreRunStartGate()
       let task = Task { @MainActor [weak self] in
+        await startGate.wait()
         guard let self else { return }
         defer {
           self.removeTrackedTask(token: token, cancellationID: cancellationID)
@@ -802,6 +812,9 @@ extension TestStore: EffectDriver {
       runningTasks[token] = task
       if let id = cancellationID {
         taskIDsByEffectID[id, default: []].insert(token)
+      }
+      Task {
+        await startGate.open()
       }
     }
   }
@@ -828,7 +841,8 @@ where Root.State: Equatable {
     state[keyPath: keyPath]
   }
 
-  public subscript<Value>(dynamicMember keyPath: KeyPath<ChildState, BindableProperty<Value>>) -> Value
+  public subscript<Value>(dynamicMember keyPath: KeyPath<ChildState, BindableProperty<Value>>)
+    -> Value
   where Value: Equatable & Sendable {
     state[keyPath: keyPath].value
   }
@@ -886,11 +900,11 @@ where Root.State: Equatable {
       testStoreAssertionFailure(
         decorateFailure(
           """
-        Expected to receive child action:
-        \(expectedAction)
+          Expected to receive child action:
+          \(expectedAction)
 
-        But timed out after \(parent.scopedEffectTimeout).
-        """
+          But timed out after \(parent.scopedEffectTimeout).
+          """
         ),
         file: file,
         line: line
@@ -902,14 +916,14 @@ where Root.State: Equatable {
       testStoreAssertionFailure(
         decorateFailure(
           """
-        Received unexpected parent action for scoped test store.
+          Received unexpected parent action for scoped test store.
 
-        Expected child action:
-        \(expectedAction)
+          Expected child action:
+          \(expectedAction)
 
-        Received parent action:
-        \(rootAction)
-        """
+          Received parent action:
+          \(rootAction)
+          """
         ),
         file: file,
         line: line
@@ -921,14 +935,14 @@ where Root.State: Equatable {
       testStoreAssertionFailure(
         decorateFailure(
           """
-        Received unexpected child action.
+          Received unexpected child action.
 
-        Expected:
-        \(expectedAction)
+          Expected:
+          \(expectedAction)
 
-        Received:
-        \(childAction)
-        """
+          Received:
+          \(childAction)
+          """
         ),
         file: file,
         line: line
@@ -998,13 +1012,14 @@ where Root.State: Equatable {
     file: StaticString,
     line: UInt
   ) {
-    let diffSection = renderStateDiff(
-      expected: expected,
-      actual: actual,
-      lineLimit: diffLineLimit
-    ).map {
-      "Diff:\n\($0)\n\n"
-    } ?? ""
+    let diffSection =
+      renderStateDiff(
+        expected: expected,
+        actual: actual,
+        lineLimit: diffLineLimit
+      ).map {
+        "Diff:\n\($0)\n\n"
+      } ?? ""
 
     testStoreAssertionFailure(
       decorateFailure(

@@ -163,7 +163,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     let existingNames = Set<String>(
       actionEnum.memberBlock.members.compactMap { member in
         if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
-          guard variableDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) }) else {
+          guard variableDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) })
+          else {
             return nil
           }
           return variableDecl.bindings.first?
@@ -174,7 +175,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
         }
 
         if let functionDecl = member.decl.as(FunctionDeclSyntax.self) {
-          guard functionDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) }) else {
+          guard functionDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) })
+          else {
             return nil
           }
           return functionDecl.name.text
@@ -187,14 +189,18 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     var seenGeneratedNames: Set<String> = []
     var declarations: [DeclSyntax] = []
 
-    for enumCaseDecl in actionEnum.memberBlock.members.compactMap({ $0.decl.as(EnumCaseDeclSyntax.self) }) {
+    for enumCaseDecl in actionEnum.memberBlock.members.compactMap({
+      $0.decl.as(EnumCaseDeclSyntax.self)
+    }) {
       for element in enumCaseDecl.elements {
-        guard let member = synthesizedActionPathMember(
-          for: element,
-          existingNames: existingNames,
-          seenGeneratedNames: &seenGeneratedNames,
-          context: context
-        ) else {
+        guard
+          let member = synthesizedActionPathMember(
+            for: element,
+            existingNames: existingNames,
+            seenGeneratedNames: &seenGeneratedNames,
+            context: context
+          )
+        else {
           continue
         }
         declarations.append(DeclSyntax(stringLiteral: member.declaration))
@@ -219,16 +225,18 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     if parameters.count == 1,
       let parameter = parameters.first,
       parameter.secondName == nil,
-      (parameter.firstName == nil || parameter.firstName?.text == "_")
+      parameter.firstName == nil || parameter.firstName?.text == "_"
     {
       let memberName = "\(generatedActionPathBaseName(from: caseName))CasePath"
-      guard diagnoseGeneratedActionPathCollisionIfNeeded(
-        memberName: memberName,
-        element: element,
-        existingNames: existingNames,
-        seenGeneratedNames: &seenGeneratedNames,
-        context: context
-      ) == false else {
+      guard
+        diagnoseGeneratedActionPathCollisionIfNeeded(
+          memberName: memberName,
+          element: element,
+          existingNames: existingNames,
+          seenGeneratedNames: &seenGeneratedNames,
+          context: context
+        ) == false
+      else {
         return nil
       }
 
@@ -256,13 +264,15 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       isCollectionActionLikeType(actionParameter.type.trimmedDescription)
     {
       let memberName = "\(generatedActionPathBaseName(from: caseName))ActionPath"
-      guard diagnoseGeneratedActionPathCollisionIfNeeded(
-        memberName: memberName,
-        element: element,
-        existingNames: existingNames,
-        seenGeneratedNames: &seenGeneratedNames,
-        context: context
-      ) == false else {
+      guard
+        diagnoseGeneratedActionPathCollisionIfNeeded(
+          memberName: memberName,
+          element: element,
+          existingNames: existingNames,
+          seenGeneratedNames: &seenGeneratedNames,
+          context: context
+        ) == false
+      else {
         return nil
       }
 
@@ -475,7 +485,9 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     let type = typeAnnotation.type
 
     guard let someOrAny = type.as(SomeOrAnyTypeSyntax.self) else {
-      issues.append("`body` type `\(type.trimmedDescription)` must be an opaque type (`some Reducer<State, Action>`)")
+      issues.append(
+        "`body` type `\(type.trimmedDescription)` must be an opaque type (`some Reducer<State, Action>`)"
+      )
       return issues
     }
 
@@ -485,7 +497,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     }
 
     guard let identifierType = someOrAny.constraint.as(IdentifierTypeSyntax.self) else {
-      issues.append("`body` constraint `\(someOrAny.constraint.trimmedDescription)` is not a recognized type")
+      issues.append(
+        "`body` constraint `\(someOrAny.constraint.trimmedDescription)` is not a recognized type")
       return issues
     }
 
@@ -501,7 +514,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
 
     let args = Array(genericArgs.arguments)
     guard args.count == 2 else {
-      issues.append("`body` must have exactly 2 generic parameters (State, Action), found \(args.count)")
+      issues.append(
+        "`body` must have exactly 2 generic parameters (State, Action), found \(args.count)")
       return issues
     }
 
@@ -590,7 +604,8 @@ enum MacroError: Error, CustomStringConvertible {
     case .missingBodyProperty:
       return "@InnoFlow requires `var body: some Reducer<State, Action>`"
     case .explicitReduceUnsupported:
-      return "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead"
+      return
+        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead"
     case .invalidBodySignature(let details):
       let joinedDetails = details.joined(separator: "; ")
       return """
@@ -610,7 +625,8 @@ private enum InnoFlowMacroMessage: DiagnosticMessage {
   var message: String {
     switch self {
     case .explicitReduceUnsupported:
-      return "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead"
+      return
+        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead"
     }
   }
 
@@ -632,7 +648,8 @@ private enum InnoFlowActionPathsMessage: DiagnosticMessage {
   var message: String {
     switch self {
     case .leadingUnderscoreCollision:
-      return "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case"
+      return
+        "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case"
     }
   }
 

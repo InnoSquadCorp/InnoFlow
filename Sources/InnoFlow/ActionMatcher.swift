@@ -13,16 +13,16 @@ public struct ActionMatcher<Action: Sendable, Payload: Sendable>: Sendable {
   }
 }
 
-public extension ActionMatcher where Action: Equatable, Payload == Void {
-  static func action(_ action: Action) -> Self {
+extension ActionMatcher where Action: Equatable, Payload == Void {
+  public static func action(_ action: Action) -> Self {
     .init { candidate in
       candidate == action ? () : nil
     }
   }
 }
 
-public extension ActionMatcher {
-  static func casePath<Value: Sendable>(
+extension ActionMatcher {
+  public static func casePath<Value: Sendable>(
     _ path: CasePath<Action, Value>
   ) -> ActionMatcher<Action, Value> {
     .init(path.extract)

@@ -17,7 +17,8 @@ package func scopedStoreFailureMessage(
   stableID: AnyHashable?,
   kind: ScopedStoreFailureKind
 ) -> String {
-  let scopedType = "ScopedStore<\(String(reflecting: parentType)), \(String(reflecting: childType))>"
+  let scopedType =
+    "ScopedStore<\(String(reflecting: parentType)), \(String(reflecting: childType))>"
   let idSection = stableID.map { "\nElement ID: \($0)" } ?? ""
 
   switch kind {
@@ -120,12 +121,16 @@ extension Store {
       let elementID = AnyHashable(scopedElementID)
       liveIDs.insert(elementID)
 
-      let offsetBox = bucket.offsetsByID[elementID] ?? CollectionScopeOffsetBox(offset: offset, revision: bucket.revision)
+      let offsetBox =
+        bucket.offsetsByID[elementID]
+        ?? CollectionScopeOffsetBox(offset: offset, revision: bucket.revision)
       offsetBox.offset = offset
       offsetBox.revision = bucket.revision
       bucket.offsetsByID[elementID] = offsetBox
 
-      if let cached = bucket.storesByID[elementID] as? ScopedStore<R, CollectionState.Element, ChildAction> {
+      if let cached = bucket.storesByID[elementID]
+        as? ScopedStore<R, CollectionState.Element, ChildAction>
+      {
         stores.append(cached)
         continue
       }
@@ -215,7 +220,9 @@ extension Store {
   ) -> CollectionState.Element?
   where CollectionState: RandomAccessCollection {
     guard offset >= 0 else { return nil }
-    guard let index = collection.index(collection.startIndex, offsetBy: offset, limitedBy: collection.endIndex),
+    guard
+      let index = collection.index(
+        collection.startIndex, offsetBy: offset, limitedBy: collection.endIndex),
       index != collection.endIndex
     else {
       return nil
@@ -347,7 +354,8 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     state[keyPath: keyPath]
   }
 
-  public subscript<Value>(dynamicMember keyPath: KeyPath<ChildState, BindableProperty<Value>>) -> Value
+  public subscript<Value>(dynamicMember keyPath: KeyPath<ChildState, BindableProperty<Value>>)
+    -> Value
   where Value: Equatable & Sendable {
     state[keyPath: keyPath].value
   }

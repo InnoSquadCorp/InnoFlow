@@ -46,9 +46,9 @@ private struct PhaseValidatedReducer<Base: Reducer, Phase: Hashable & Sendable>:
   }
 }
 
-public extension Reducer {
+extension Reducer {
   /// Validates legal phase changes in debug builds while keeping the reducer contract unchanged.
-  func validatePhaseTransitions<Phase: Hashable & Sendable>(
+  public func validatePhaseTransitions<Phase: Hashable & Sendable>(
     tracking phase: KeyPath<State, Phase>,
     through graph: PhaseTransitionGraph<Phase>
   ) -> some Reducer<State, Action> {

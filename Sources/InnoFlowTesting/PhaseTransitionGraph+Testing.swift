@@ -42,10 +42,10 @@ public func assertValidGraph<Phase: Hashable & Sendable>(
   }
 }
 
-public extension TestStore {
+extension TestStore {
   /// Sends an action and verifies that the observed phase transition is allowed
   /// by the provided graph.
-  func send<Phase: Hashable & Sendable>(
+  public func send<Phase: Hashable & Sendable>(
     _ action: R.Action,
     tracking phase: KeyPath<R.State, Phase>,
     through graph: PhaseTransitionGraph<Phase>,
@@ -84,7 +84,7 @@ public extension TestStore {
   }
 
   /// Receives an action from an effect and verifies the phase transition.
-  func receive<Phase: Hashable & Sendable>(
+  public func receive<Phase: Hashable & Sendable>(
     _ expectedAction: R.Action,
     tracking phase: KeyPath<R.State, Phase>,
     through graph: PhaseTransitionGraph<Phase>,

@@ -19,14 +19,17 @@ public actor ManualTestClock {
   private var sleepers: [UUID: SleepRequest] = [:]
   private var nextInsertionOrder: UInt64 = 0
 
+  /// Creates a deterministic test clock starting from the supplied instant.
   public init(now: Instant = ContinuousClock().now) {
     self.current = now
   }
 
+  /// Returns the current instant tracked by this manual clock.
   public var now: Instant {
     current
   }
 
+  /// Advances the clock and resumes any sleepers whose deadlines have passed.
   public func advance(by duration: Duration) async {
     await Task.yield()
     current = current.advanced(by: duration)
@@ -34,6 +37,7 @@ public actor ManualTestClock {
     await Task.yield()
   }
 
+  /// Suspends until the clock has been advanced by at least `duration`.
   public func sleep(for duration: Duration) async throws {
     guard duration > .zero else {
       return
@@ -45,15 +49,17 @@ public actor ManualTestClock {
     }
 
     let sleeperID = UUID()
+    try Task.checkCancellation()
     try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
-        let insertionOrder = nextInsertionOrder
-        nextInsertionOrder += 1
-        sleepers[sleeperID] = .init(
-          deadline: deadline,
-          insertionOrder: insertionOrder,
-          continuation: continuation
-        )
+        guard registerSleep(id: sleeperID, deadline: deadline, continuation: continuation) else {
+          continuation.resume(throwing: CancellationError())
+          return
+        }
+
+        if Task.isCancelled, let request = sleepers.removeValue(forKey: sleeperID) {
+          request.continuation.resume(throwing: CancellationError())
+        }
       }
     } onCancel: {
       Task {
@@ -63,7 +69,8 @@ public actor ManualTestClock {
   }
 
   private func resumeReadySleepers() {
-    let ready = sleepers
+    let ready =
+      sleepers
       .filter { _, request in request.deadline <= current }
       .sorted { lhs, rhs in
         if lhs.value.deadline == rhs.value.deadline {
@@ -78,6 +85,22 @@ public actor ManualTestClock {
     }
   }
 
+  private func registerSleep(
+    id: UUID,
+    deadline: Instant,
+    continuation: CheckedContinuation<Void, Error>
+  ) -> Bool {
+    guard Task.isCancelled == false else { return false }
+    let insertionOrder = nextInsertionOrder
+    nextInsertionOrder += 1
+    sleepers[id] = .init(
+      deadline: deadline,
+      insertionOrder: insertionOrder,
+      continuation: continuation
+    )
+    return true
+  }
+
   private func cancelSleep(id: UUID) {
     guard let request = sleepers.removeValue(forKey: id) else {
       return
@@ -86,8 +109,9 @@ public actor ManualTestClock {
   }
 }
 
-public extension StoreClock {
-  static func manual(_ clock: ManualTestClock) -> Self {
+extension StoreClock {
+  /// Creates a `StoreClock` backed by a `ManualTestClock`.
+  public static func manual(_ clock: ManualTestClock) -> Self {
     .init(
       now: {
         await clock.now

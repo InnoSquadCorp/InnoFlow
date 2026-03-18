@@ -3,9 +3,9 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import os
 import SwiftUI
 import Testing
+import os
 
 @testable import InnoFlow
 @testable import InnoFlowTesting
@@ -1320,6 +1320,38 @@ struct ThrottleLeadingTrailingFeature: Reducer {
   }
 }
 
+struct SequentialMergeFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var received: [String] = []
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _first
+    case _second
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      return .merge(
+        .concatenate(
+          .run { send, _ in
+            await send(._first)
+          },
+          .send(._second)
+        )
+      )
+    case ._first:
+      state.received.append("first")
+      return .none
+    case ._second:
+      state.received.append("second")
+      return .none
+    }
+  }
+}
+
 struct AnimationFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var values: [Int] = []
@@ -2026,7 +2058,8 @@ struct EffectTaskTests {
   @Test("EffectTask.throttle leading+trailing executes both when window has extra event")
   func effectThrottleLeadingAndTrailing() async {
     let clock = ManualTestClock()
-    let store = TestStore(reducer: ThrottleLeadingTrailingFeature(), initialState: .init(), clock: clock)
+    let store = TestStore(
+      reducer: ThrottleLeadingTrailingFeature(), initialState: .init(), clock: clock)
 
     await store.send(.trigger(1))
     await store.send(.trigger(2))
@@ -2603,7 +2636,9 @@ struct CompileContractTests {
       moduleDirectory: moduleDirectory
     )
 
-    #expect(result.status == 0, "expected @BindableField projected key path to typecheck, got: \(result.normalizedOutput)")
+    #expect(
+      result.status == 0,
+      "expected @BindableField projected key path to typecheck, got: \(result.normalizedOutput)")
   }
 
   @Test("Scope/IfLet/IfCaseLet reject public closure-based action lifting at compile time")
@@ -2899,7 +2934,8 @@ struct StoreTests {
   @Test("Store scope(state:action:) accepts CasePath overload")
   func scopeStateCasePathOverload() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
 
     #expect(scoped.step == 1)
     scoped.send(.setStep(6))
@@ -2909,14 +2945,17 @@ struct StoreTests {
   @Test("ScopedStore ignores unrelated parent mutations when observing child state")
   func scopedStoreIgnoresUnrelatedParentMutations() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = scoped.step
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = scoped.step
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.setUnrelated(1))
     try? await Task.sleep(for: .milliseconds(20))
@@ -2928,14 +2967,17 @@ struct StoreTests {
   @Test("ScopedStore ignores repeated unrelated parent mutations when observing child state")
   func scopedStoreIgnoresRepeatedUnrelatedParentMutations() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = scoped.step
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = scoped.step
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.setUnrelated(1))
     store.send(.setUnrelated(2))
@@ -2949,14 +2991,17 @@ struct StoreTests {
   @Test("ScopedStore invalidates when child snapshot changes")
   func scopedStoreInvalidatesOnChildMutation() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = scoped.step
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = scoped.step
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.child(.setStep(7)))
     try? await Task.sleep(for: .milliseconds(20))
@@ -2980,10 +3025,12 @@ struct StoreTests {
   func selectedStoreDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
-    let first = store.select(dependingOn: \.child.title, fileID: #fileID, line: callsiteLine) { title in
+    let first = store.select(dependingOn: \.child.title, fileID: #fileID, line: callsiteLine) {
+      title in
       title.uppercased()
     }
-    let second = store.select(dependingOn: \.child.title, fileID: #fileID, line: callsiteLine) { title in
+    let second = store.select(dependingOn: \.child.title, fileID: #fileID, line: callsiteLine) {
+      title in
       title.uppercased()
     }
 
@@ -2991,7 +3038,8 @@ struct StoreTests {
     #expect(first.value == "CHILD")
   }
 
-  @Test("Store.select(dependingOn:(..., ...)) preserves SelectedStore identity across repeated calls")
+  @Test(
+    "Store.select(dependingOn:(..., ...)) preserves SelectedStore identity across repeated calls")
   func selectedStoreTwoFieldDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
@@ -3054,11 +3102,13 @@ struct StoreTests {
     }
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.value
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.child(.setNote("Still ignored")))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3077,11 +3127,13 @@ struct StoreTests {
     let selected = store.select(\.child)
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.step
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.step
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.setUnrelated(1))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3096,11 +3148,13 @@ struct StoreTests {
     let selected = store.select(\.child)
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.step
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.step
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.child(.setStep(9)))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3117,11 +3171,13 @@ struct StoreTests {
     }
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.value
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.setUnrelated(1))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3140,11 +3196,13 @@ struct StoreTests {
     }
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.value
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.child(.setTitle("Updated")))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3156,7 +3214,8 @@ struct StoreTests {
   @Test("ScopedStore.select preserves SelectedStore identity across repeated calls")
   func scopedSelectedStoreCachingPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
     let first = scoped.select(\.title, fileID: #fileID, line: callsiteLine)
     let second = scoped.select(\.title, fileID: #fileID, line: callsiteLine)
@@ -3168,7 +3227,8 @@ struct StoreTests {
   @Test("ScopedStore.select(dependingOn:) preserves SelectedStore identity across repeated calls")
   func scopedSelectedStoreDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
     let first = scoped.select(dependingOn: \.title, fileID: #fileID, line: callsiteLine) { title in
       title.uppercased()
@@ -3181,10 +3241,13 @@ struct StoreTests {
     #expect(first.value == "CHILD")
   }
 
-  @Test("ScopedStore.select(dependingOn:(..., ...)) preserves SelectedStore identity across repeated calls")
+  @Test(
+    "ScopedStore.select(dependingOn:(..., ...)) preserves SelectedStore identity across repeated calls"
+  )
   func scopedSelectedStoreTwoFieldDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
     let first = scoped.select(
       dependingOn: (\.step, \.title),
@@ -3208,15 +3271,18 @@ struct StoreTests {
   @Test("ScopedStore.select ignores child mutations when the derived value is unchanged")
   func scopedSelectedStoreIgnoresUnchangedDerivedValue() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let selected = scoped.select(\.title)
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.value
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.child(.setStep(6)))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3228,17 +3294,20 @@ struct StoreTests {
   @Test("ScopedStore.select(dependingOn:) ignores mutations outside the dependency slice")
   func scopedSelectedStoreDependingOnIgnoresMutationsOutsideDependency() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let selected = scoped.select(dependingOn: \.title) { title in
       title.uppercased()
     }
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.value
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.setUnrelated(1))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3252,17 +3321,20 @@ struct StoreTests {
   @Test("ScopedStore.select(dependingOn:) invalidates when the dependency slice changes")
   func scopedSelectedStoreDependingOnInvalidatesOnDependencyMutation() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let selected = scoped.select(dependingOn: \.title) { title in
       title.uppercased()
     }
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.value
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.child(.setTitle("Ready")))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3274,17 +3346,20 @@ struct StoreTests {
   @Test("ScopedStore.select(dependingOn:(..., ..., ...)) tracks three explicit dependency slices")
   func scopedSelectedStoreThreeFieldDependingOnTracksExplicitSlices() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let selected = scoped.select(dependingOn: (\.step, \.title, \.note)) { step, title, note in
       "\(title)-\(step)-\(note)"
     }
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = selected.value
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.setUnrelated(1))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3441,11 +3516,13 @@ struct StoreTests {
     )
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = scopedTodos[0].isDone
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = scopedTodos[0].isDone
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.todo(id: scopedTodos[1].id, action: .setDone(true)))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3467,11 +3544,13 @@ struct StoreTests {
     )
     let probe = ObservationProbe()
 
-    withObservationTracking({
-      _ = scopedTodos[0].isDone
-    }, onChange: {
-      probe.recordChange()
-    })
+    withObservationTracking(
+      {
+        _ = scopedTodos[0].isDone
+      },
+      onChange: {
+        probe.recordChange()
+      })
 
     store.send(.todo(id: scopedTodos[0].id, action: .setDone(true)))
     try? await Task.sleep(for: .milliseconds(20))
@@ -3524,8 +3603,11 @@ struct StoreTests {
 
     let failureContext = scopedTestStoreFailureContext(stableID: stableID)
     #expect(failureContext?.contains(String(describing: stableID)) == true)
-    #expect(scopedTestStoreStateMismatchLabel(stableID: stableID).contains("state mismatch") != true)
-    #expect(scopedTestStoreStateMismatchLabel(stableID: stableID).contains(String(describing: stableID)) == true)
+    #expect(
+      scopedTestStoreStateMismatchLabel(stableID: stableID).contains("state mismatch") != true)
+    #expect(
+      scopedTestStoreStateMismatchLabel(stableID: stableID).contains(String(describing: stableID))
+        == true)
   }
 
   @Test("ScopedStore debugDescription reports lifecycle and stable id context")
@@ -3715,8 +3797,12 @@ struct StoreTests {
     #expect(probe.events.contains("cancel:instrumented-throttle"))
     #expect(
       probe.events.contains(where: {
-        $0.contains("drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):cancellationBoundary")
-          || $0.contains("drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):inactiveToken")
+        $0.contains(
+          "drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):cancellationBoundary"
+        )
+          || $0.contains(
+            "drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):inactiveToken"
+          )
       })
     )
     #expect(
@@ -3764,7 +3850,9 @@ struct StoreTests {
 
     #expect(
       probe.events.contains(where: {
-        $0.contains("drop:Optional(InnoFlowTests.StoreReleaseDropFeature.Action._completed(\"late-value\")):storeReleased")
+        $0.contains(
+          "drop:Optional(InnoFlowTests.StoreReleaseDropFeature.Action._completed(\"late-value\")):storeReleased"
+        )
       })
     )
     #expect(
@@ -3835,7 +3923,9 @@ struct StoreTests {
     #expect(store.completed == 1)
   }
 
-  @Test("Projection observer stats track selective refresh for key-path, dependency, and closure selections")
+  @Test(
+    "Projection observer stats track selective refresh for key-path, dependency, and closure selections"
+  )
   func projectionObserverStatsTrackSelectiveRefresh() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     _ = store.select(\.child)
@@ -3864,7 +3954,9 @@ struct StoreTests {
     #expect(afterTitleMutation.refreshedObservers == afterChildMutation.refreshedObservers + 3)
   }
 
-  @Test("Projection observer stats dedupe multi-field selections when multiple dependencies change in one action")
+  @Test(
+    "Projection observer stats dedupe multi-field selections when multiple dependencies change in one action"
+  )
   func projectionObserverStatsDedupeMultiFieldSelections() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     _ = store.select(dependingOn: (\.child.step, \.child.title)) { step, title in
@@ -3885,7 +3977,8 @@ struct StoreTests {
   @Test("Scoped projection stats track dependency-annotated and fallback selections")
   func scopedProjectionObserverStatsSelectiveRefresh() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let scoped = store.scope(state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     _ = scoped.select(\.step)
     _ = scoped.select(dependingOn: \.title) { $0.uppercased() }
     _ = scoped.select { $0.title }
@@ -3911,7 +4004,8 @@ struct StoreTests {
     #expect(afterTitleMutation.refreshedObservers == afterChildMutation.refreshedObservers + 2)
   }
 
-  @Test("Projection observer registry compacts untouched dependency buckets on periodic maintenance")
+  @Test(
+    "Projection observer registry compacts untouched dependency buckets on periodic maintenance")
   func projectionObserverRegistryPeriodicCompaction() {
     let registry = ProjectionObserverRegistry<ProjectionObserverSnapshot>(
       compactionDeadObserverThreshold: 99,
@@ -4254,7 +4348,8 @@ struct StoreTests {
     guard isHeavyStressEnabled else { return }
 
     let store = Store(
-      reducer: DeepLazyMapStressFeature(chainDepth: 128, cancellationID: "deep-lazy-map-repeat", includesAsyncTail: false),
+      reducer: DeepLazyMapStressFeature(
+        chainDepth: 128, cancellationID: "deep-lazy-map-repeat", includesAsyncTail: false),
       initialState: .init()
     )
 
@@ -4410,7 +4505,8 @@ struct StoreTests {
 
   @Test("Empty CombineReducers behaves like .none")
   func emptyCombineReducers() {
-    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action> {
+    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action>
+    {
     }
     var state = BuilderCompositionFeature.State()
 
@@ -4579,6 +4675,37 @@ struct StoreTests {
     #expect(await probe.snapshot() == [1, 2])
   }
 
+  @Test("ManualTestClock cancels pending sleepers without late resume")
+  func manualTestClockCancelsPendingSleepersWithoutLateResume() async {
+    let clock = ManualTestClock()
+    let probe = OrderedIntProbe()
+
+    let task = Task {
+      do {
+        try await clock.sleep(for: .milliseconds(50))
+        await probe.append(1)
+      } catch is CancellationError {
+        await probe.append(-1)
+      } catch {
+        Issue.record("Expected CancellationError, got \(error)")
+      }
+    }
+
+    await Task.yield()
+    task.cancel()
+    _ = await task.result
+
+    await clock.advance(by: .milliseconds(50))
+    for _ in 0..<10 {
+      if await probe.snapshot() == [-1] {
+        break
+      }
+      await Task.yield()
+    }
+
+    #expect(await probe.snapshot() == [-1])
+  }
+
   @Test("StoreClock deterministically drives trailing throttle effects")
   func storeClockControlsThrottleTrailing() async {
     let clock = ManualTestClock()
@@ -4718,6 +4845,21 @@ struct StoreTests {
     }
 
     #expect(await probe.cancelled == 1)
+  }
+
+  @Test("TestStore preserves first emission from merge-wrapped sequential effects")
+  @MainActor
+  func testStorePreservesMergeWrappedSequentialEffects() async {
+    let store = TestStore(reducer: SequentialMergeFeature())
+
+    await store.send(.start)
+    await store.receive(._first) {
+      $0.received = ["first"]
+    }
+    await store.receive(._second) {
+      $0.received = ["first", "second"]
+    }
+    await store.assertNoMoreActions()
   }
 
   @Test("Store throttle leading+trailing skips trailing when no extra event")
@@ -4987,9 +5129,15 @@ struct TestStoreTests {
     )
     #expect(
       resolveDiffLineLimit(
+        explicit: 0,
+        environment: [testStoreDiffLineLimitEnvironmentKey: "18"]
+      ) == 0
+    )
+    #expect(
+      resolveDiffLineLimit(
         explicit: nil,
         environment: [testStoreDiffLineLimitEnvironmentKey: "0"]
-      ) == defaultStateDiffLineLimit
+      ) == 0
     )
     #expect(
       resolveDiffLineLimit(
@@ -5033,7 +5181,8 @@ struct TestStoreTests {
 
   @Test("PhaseMap applies basic and payload-aware transitions through the testing helper")
   func phaseMapBasicAndPayloadAwareTransitions() async {
-    let map: PhaseMap<PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase> = PhaseMapHarness.phaseMap
+    let map: PhaseMap<PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase> =
+      PhaseMapHarness.phaseMap
     let store = TestStore(reducer: PhaseMapHarness(), initialState: .init())
 
     await store.send(.load, through: map) {
@@ -5050,7 +5199,8 @@ struct TestStoreTests {
 
   @Test("PhaseMap ignores unmatched actions and source phases")
   func phaseMapIgnoresUnmatchedTransitions() async {
-    let map: PhaseMap<PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase> = PhaseMapHarness.phaseMap
+    let map: PhaseMap<PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase> =
+      PhaseMapHarness.phaseMap
     let store = TestStore(reducer: PhaseMapHarness(), initialState: .init())
 
     await store.send(.noop, through: map)
@@ -5065,7 +5215,8 @@ struct TestStoreTests {
 
   @Test("PhaseMap guard uses post-reduce state for conditional targets")
   func phaseMapGuardUsesPostReduceState() async {
-    let map: PhaseMap<PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase> = PhaseMapHarness.phaseMap
+    let map: PhaseMap<PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase> =
+      PhaseMapHarness.phaseMap
     let store = TestStore(
       reducer: PhaseMapHarness(),
       initialState: .init(phase: .failed, values: [], errorMessage: "boom")
@@ -5080,7 +5231,8 @@ struct TestStoreTests {
 
   @Test("PhaseMap treats nil or same-phase guard results as no-op transitions")
   func phaseMapGuardNoOps() async {
-    let map: PhaseMap<PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase> = PhaseMapHarness.phaseMap
+    let map: PhaseMap<PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase> =
+      PhaseMapHarness.phaseMap
     let store = TestStore(
       reducer: PhaseMapHarness(),
       initialState: .init(phase: .failed, values: [1], errorMessage: "boom")
@@ -5098,7 +5250,11 @@ struct TestStoreTests {
 
   @Test("PhaseMap uses declared ordering when multiple transitions match")
   func phaseMapFirstMatchWins() async {
-    let map: PhaseMap<PhaseMapOrderingHarness.State, PhaseMapOrderingHarness.Action, PhaseMapOrderingHarness.State.Phase> = PhaseMapOrderingHarness.phaseMap
+    let map:
+      PhaseMap<
+        PhaseMapOrderingHarness.State, PhaseMapOrderingHarness.Action,
+        PhaseMapOrderingHarness.State.Phase
+      > = PhaseMapOrderingHarness.phaseMap
     let store = TestStore(reducer: PhaseMapOrderingHarness(), initialState: .init())
 
     await store.send(.advance, through: map) {
@@ -5126,12 +5282,13 @@ struct TestStoreTests {
         ],
         .loading: [
           .casePath(PhaseMapHarness.loadedCasePath, label: "loaded", sample: [1, 2, 3]),
-          .casePath(PhaseMapHarness.failedCasePath, label: "failed", sample: "boom")
+          .casePath(PhaseMapHarness.failedCasePath, label: "failed", sample: "boom"),
         ],
         .failed: [
-          .casePath(PhaseMapHarness.replaceAndDismissCasePath, label: "replaceAndDismiss", sample: [7]),
-          .casePath(PhaseMapHarness.maybeRecoverCasePath, label: "maybeRecover", sample: true)
-        ]
+          .casePath(
+            PhaseMapHarness.replaceAndDismissCasePath, label: "replaceAndDismiss", sample: [7]),
+          .casePath(PhaseMapHarness.maybeRecoverCasePath, label: "maybeRecover", sample: true),
+        ],
       ]
     )
 
@@ -5139,7 +5296,9 @@ struct TestStoreTests {
     #expect(report.missingTriggers.isEmpty)
   }
 
-  @Test("PhaseMap opt-in validation reports missing triggers while runtime semantics stay partial-by-default")
+  @Test(
+    "PhaseMap opt-in validation reports missing triggers while runtime semantics stay partial-by-default"
+  )
   func phaseMapValidationReportMissingTriggers() async {
     let report = PhaseMapHarness.phaseMap.validationReport(
       expectedTriggersByPhase: [
@@ -5148,16 +5307,17 @@ struct TestStoreTests {
         ],
         .failed: [
           .action(.load, label: "retry load")
-        ]
+        ],
       ]
     )
 
     #expect(report.isEmpty == false)
     #expect(
-      Set(report.missingTriggers) == Set([
-        .init(sourcePhase: .idle, trigger: "noop"),
-        .init(sourcePhase: .failed, trigger: "retry load")
-      ])
+      Set(report.missingTriggers)
+        == Set([
+          .init(sourcePhase: .idle, trigger: "noop"),
+          .init(sourcePhase: .failed, trigger: "retry load"),
+        ])
     )
 
     let store = TestStore(reducer: PhaseMapHarness(), initialState: .init())
@@ -5167,11 +5327,12 @@ struct TestStoreTests {
 
   @Test("PhaseMap supports predicate-based fixed-target, nil-guard, and same-phase guard paths")
   func phaseMapPredicatePaths() async {
-    let map: PhaseMap<
-      PhaseMapPredicateHarness.State,
-      PhaseMapPredicateHarness.Action,
-      PhaseMapPredicateHarness.State.Phase
-    > = PhaseMapPredicateHarness.phaseMap
+    let map:
+      PhaseMap<
+        PhaseMapPredicateHarness.State,
+        PhaseMapPredicateHarness.Action,
+        PhaseMapPredicateHarness.State.Phase
+      > = PhaseMapPredicateHarness.phaseMap
     let store = TestStore(reducer: PhaseMapPredicateHarness(), initialState: .init())
 
     await store.send(.start, through: map) {
@@ -5204,12 +5365,14 @@ struct TestStoreTests {
   }
 
   @Test("assertCasePathExtracts returns the matched case payload")
-  func assertCasePathExtractsSuccess() {
+  func assertCasePathExtractsSuccess() throws {
     let rootAction = ScopedTestHarnessFeature.Action.child(.finished)
-    let extracted = assertCasePathExtracts(
-      rootAction,
-      via: ScopedTestHarnessFeature.Action.childCasePath,
-      caseName: "child"
+    let extracted = try #require(
+      assertCasePathExtracts(
+        rootAction,
+        via: ScopedTestHarnessFeature.Action.childCasePath,
+        caseName: "child"
+      )
     )
 
     #expect(extracted == .finished)
@@ -5435,10 +5598,12 @@ struct TestStoreTests {
   func effectMapCompositionLaw() {
     let source: EffectTask<Int> = .merge(
       .send(1).cancellable("map-composition-cancellable", cancelInFlight: true),
-      .send(2).throttle("map-composition-throttle", for: .seconds(1), leading: false, trailing: true)
+      .send(2).throttle(
+        "map-composition-throttle", for: .seconds(1), leading: false, trailing: true)
     )
 
-    let lhs = source
+    let lhs =
+      source
       .map { "value-\($0)" }
       .map { $0.uppercased() }
     let rhs = source.map { value in
@@ -5597,7 +5762,8 @@ struct StaleScopeCrashContractTests {
     let result = try runStaleScopedStoreHarness(scenario: .parentReleased)
 
     #expect(result.status != 0)
-    #expect(result.normalizedOutput.contains("regenerate the scoped store from parent state") == true)
+    #expect(
+      result.normalizedOutput.contains("regenerate the scoped store from parent state") == true)
     #expect(result.normalizedOutput.contains("ParentReleasedFeature") == true)
   }
 
@@ -5627,7 +5793,9 @@ struct PhaseMapCrashContractTests {
     let result = try runPhaseMapCrashHarness(scenario: .directMutationCrash)
 
     #expect(result.status != 0)
-    #expect(result.normalizedOutput.contains("Base reducer must not mutate phase directly when PhaseMap is active.") == true)
+    #expect(
+      result.normalizedOutput.contains(
+        "Base reducer must not mutate phase directly when PhaseMap is active.") == true)
     #expect(result.normalizedOutput.contains("action:") == true)
     #expect(result.normalizedOutput.contains("previousPhase:") == true)
     #expect(result.normalizedOutput.contains("postReducePhase:") == true)
@@ -5639,14 +5807,18 @@ struct PhaseMapCrashContractTests {
     let result = try runPhaseMapCrashHarness(scenario: .undeclaredTargetCrash)
 
     #expect(result.status != 0)
-    #expect(result.normalizedOutput.contains("PhaseMap resolved a target outside the declared targets.") == true)
+    #expect(
+      result.normalizedOutput.contains("PhaseMap resolved a target outside the declared targets.")
+        == true)
     #expect(result.normalizedOutput.contains("action:") == true)
     #expect(result.normalizedOutput.contains("sourcePhase:") == true)
     #expect(result.normalizedOutput.contains("target:") == true)
     #expect(result.normalizedOutput.contains("declaredTargets:") == true)
   }
 
-  @Test("PhaseMap restores the previous phase before applying declared transitions in release-like execution")
+  @Test(
+    "PhaseMap restores the previous phase before applying declared transitions in release-like execution"
+  )
   func phaseMapRestoresDirectMutationInReleaseLikeExecution() throws {
     let result = try runPhaseMapReleaseHarness(scenario: .directMutationRestore)
 
@@ -5654,7 +5826,9 @@ struct PhaseMapCrashContractTests {
     #expect(result.normalizedOutput.contains("ok") == true)
   }
 
-  @Test("PhaseMap ignores undeclared dynamic targets while preserving non-phase reducer work in release-like execution")
+  @Test(
+    "PhaseMap ignores undeclared dynamic targets while preserving non-phase reducer work in release-like execution"
+  )
   func phaseMapRejectsUndeclaredDynamicTargetsInReleaseLikeExecution() throws {
     let result = try runPhaseMapReleaseHarness(scenario: .undeclaredTargetNoOp)
 
@@ -5705,13 +5879,16 @@ private func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Act
     return "cancel(\(id.rawValue.description))"
 
   case .cancellable(let nested, let id, let cancelInFlight):
-    return "cancellable(id:\(id.rawValue.description),cancelInFlight:\(cancelInFlight),nested:\(effectOperationSignature(nested)))"
+    return
+      "cancellable(id:\(id.rawValue.description),cancelInFlight:\(cancelInFlight),nested:\(effectOperationSignature(nested)))"
 
   case .debounce(let nested, let id, let interval):
-    return "debounce(id:\(id.rawValue.description),interval:\(interval),nested:\(effectOperationSignature(nested)))"
+    return
+      "debounce(id:\(id.rawValue.description),interval:\(interval),nested:\(effectOperationSignature(nested)))"
 
   case .throttle(let nested, let id, let interval, let leading, let trailing):
-    return "throttle(id:\(id.rawValue.description),interval:\(interval),leading:\(leading),trailing:\(trailing),nested:\(effectOperationSignature(nested)))"
+    return
+      "throttle(id:\(id.rawValue.description),interval:\(interval),leading:\(leading),trailing:\(trailing),nested:\(effectOperationSignature(nested)))"
 
   case .animation(let nested, let animation):
     return "animation(\(String(describing: animation)),nested:\(effectOperationSignature(nested)))"
@@ -5721,10 +5898,13 @@ private func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Act
   }
 }
 
-private func normalizedConcatenateSignature<Action: Sendable>(_ effect: EffectTask<Action>) -> String {
+private func normalizedConcatenateSignature<Action: Sendable>(_ effect: EffectTask<Action>)
+  -> String
+{
   switch effect.operation {
   case .concatenate(let children):
-    return children
+    return
+      children
       .flatMap(flattenConcatenateChildren)
       .map(effectOperationSignature)
       .joined(separator: " -> ")
@@ -5734,7 +5914,9 @@ private func normalizedConcatenateSignature<Action: Sendable>(_ effect: EffectTa
   }
 }
 
-private func flattenConcatenateChildren<Action: Sendable>(_ effect: EffectTask<Action>) -> [EffectTask<Action>] {
+private func flattenConcatenateChildren<Action: Sendable>(_ effect: EffectTask<Action>)
+  -> [EffectTask<Action>]
+{
   switch effect.operation {
   case .concatenate(let children):
     return children.flatMap(flattenConcatenateChildren)
@@ -5942,7 +6124,7 @@ private struct SeededGenerator {
   }
 
   mutating func next() -> UInt64 {
-    state = 2862933555777941757 &* state &+ 3037000493
+    state = 2_862_933_555_777_941_757 &* state &+ 3_037_000_493
     return state
   }
 
@@ -6267,8 +6449,7 @@ private func runProcess(
 
   return ProcessResult(
     status: process.terminationStatus,
-    output:
-      (String(data: stdoutData, encoding: .utf8) ?? "")
+    output: (String(data: stdoutData, encoding: .utf8) ?? "")
       + "\n"
       + (String(data: stderrData, encoding: .utf8) ?? "")
   )
@@ -6291,8 +6472,7 @@ private func runStaleScopedStoreHarness(
 
   let compileResult = try runProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments:
-      ["swiftc", "-parse-as-library", sourceFile.path, "-I", moduleDirectory.path]
+    arguments: ["swiftc", "-parse-as-library", sourceFile.path, "-I", moduleDirectory.path]
       + objectFiles.map(\.path)
       + ["-o", executableURL.path]
   )
@@ -6356,7 +6536,8 @@ private func runConditionalReducerReleaseHarness(
 
   let sourceFile = temporaryDirectory.appendingPathComponent("ConditionalReducerProbe.swift")
   let executableURL = temporaryDirectory.appendingPathComponent("ConditionalReducerProbe")
-  try conditionalReducerReleaseHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
+  try conditionalReducerReleaseHarnessSource.write(
+    to: sourceFile, atomically: true, encoding: .utf8)
 
   let coreSources = [
     "BindableField.swift",
@@ -6437,8 +6618,7 @@ private func runPhaseMapCrashHarness(
 
   let compileResult = try runProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments:
-      ["swiftc", "-parse-as-library", sourceFile.path, "-I", moduleDirectory.path]
+    arguments: ["swiftc", "-parse-as-library", sourceFile.path, "-I", moduleDirectory.path]
       + objectFiles.map(\.path)
       + ["-o", executableURL.path]
   )
@@ -6494,536 +6674,536 @@ private func runPhaseMapReleaseHarness(
 }
 
 private let conditionalReducerReleaseHarnessSource = #"""
-import Foundation
+  import Foundation
 
-struct ReleaseIfLetFeature: Reducer {
-  struct ChildState: Equatable, Sendable {
-    var count = 0
+  struct ReleaseIfLetFeature: Reducer {
+    struct ChildState: Equatable, Sendable {
+      var count = 0
+    }
+
+    struct State: Equatable, Sendable {
+      var child: ChildState?
+      var untouched = 7
+    }
+
+    enum Action: Equatable, Sendable {
+      case child(ChildAction)
+
+      static let childCasePath = CasePath<Self, ChildAction>(
+        embed: Action.child,
+        extract: { action in
+          guard case .child(let childAction) = action else { return nil }
+          return childAction
+        }
+      )
+    }
+
+    enum ChildAction: Equatable, Sendable {
+      case increment
+    }
+
+    struct ChildReducer: Reducer {
+      func reduce(into state: inout ChildState, action: ChildAction) -> EffectTask<ChildAction> {
+        switch action {
+        case .increment:
+          state.count += 1
+          return .none
+        }
+      }
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      CombineReducers<State, Action> {
+        Reduce { _, _ in .none }
+        IfLet(
+          state: \.child,
+          action: Action.childCasePath,
+          reducer: ChildReducer()
+        )
+      }
+      .reduce(into: &state, action: action)
+    }
   }
 
-  struct State: Equatable, Sendable {
-    var child: ChildState?
-    var untouched = 7
-  }
+  struct ReleaseIfCaseLetFeature: Reducer {
+    struct ChildState: Equatable, Sendable {
+      var count = 0
+    }
 
-  enum Action: Equatable, Sendable {
-    case child(ChildAction)
+    enum State: Equatable, Sendable {
+      case idle
+      case child(ChildState)
+    }
 
-    static let childCasePath = CasePath<Self, ChildAction>(
-      embed: Action.child,
-      extract: { action in
-        guard case .child(let childAction) = action else { return nil }
-        return childAction
+    enum Action: Equatable, Sendable {
+      case child(ChildAction)
+
+      static let childCasePath = CasePath<Self, ChildAction>(
+        embed: Action.child,
+        extract: { action in
+          guard case .child(let childAction) = action else { return nil }
+          return childAction
+        }
+      )
+    }
+
+    enum ChildAction: Equatable, Sendable {
+      case increment
+    }
+
+    static let childStateCasePath = CasePath<State, ChildState>(
+      embed: State.child,
+      extract: { state in
+        guard case .child(let childState) = state else { return nil }
+        return childState
       }
     )
+
+    struct ChildReducer: Reducer {
+      func reduce(into state: inout ChildState, action: ChildAction) -> EffectTask<ChildAction> {
+        switch action {
+        case .increment:
+          state.count += 1
+          return .none
+        }
+      }
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      CombineReducers<State, Action> {
+        Reduce { _, _ in .none }
+        IfCaseLet(
+          state: Self.childStateCasePath,
+          action: Action.childCasePath,
+          reducer: ChildReducer()
+        )
+      }
+      .reduce(into: &state, action: action)
+    }
   }
 
-  enum ChildAction: Equatable, Sendable {
-    case increment
-  }
+  @main
+  struct ConditionalReducerProbe {
+    @MainActor
+    static func main() {
+      switch ProcessInfo.processInfo.environment["INNOFLOW_CONDITIONAL_REDUCER_SCENARIO"] {
+      case "iflet-absent-state":
+        let store = Store(
+          reducer: ReleaseIfLetFeature(),
+          initialState: .init(child: nil, untouched: 7)
+        )
+        store.send(.child(.increment))
+        guard store.state == .init(child: nil, untouched: 7) else {
+          fputs("IfLet mutated state unexpectedly\n", stderr)
+          Foundation.exit(1)
+        }
+        print("ok")
 
-  struct ChildReducer: Reducer {
-    func reduce(into state: inout ChildState, action: ChildAction) -> EffectTask<ChildAction> {
-      switch action {
-      case .increment:
-        state.count += 1
-        return .none
+      case "ifcase-mismatched-state":
+        let store = Store(
+          reducer: ReleaseIfCaseLetFeature(),
+          initialState: .idle
+        )
+        store.send(.child(.increment))
+        guard store.state == .idle else {
+          fputs("IfCaseLet mutated state unexpectedly\n", stderr)
+          Foundation.exit(1)
+        }
+        print("ok")
+
+      default:
+        fputs("Unknown conditional reducer scenario\n", stderr)
+        Foundation.exit(2)
       }
     }
   }
-
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    CombineReducers<State, Action> {
-      Reduce { _, _ in .none }
-      IfLet(
-        state: \.child,
-        action: Action.childCasePath,
-        reducer: ChildReducer()
-      )
-    }
-    .reduce(into: &state, action: action)
-  }
-}
-
-struct ReleaseIfCaseLetFeature: Reducer {
-  struct ChildState: Equatable, Sendable {
-    var count = 0
-  }
-
-  enum State: Equatable, Sendable {
-    case idle
-    case child(ChildState)
-  }
-
-  enum Action: Equatable, Sendable {
-    case child(ChildAction)
-
-    static let childCasePath = CasePath<Self, ChildAction>(
-      embed: Action.child,
-      extract: { action in
-        guard case .child(let childAction) = action else { return nil }
-        return childAction
-      }
-    )
-  }
-
-  enum ChildAction: Equatable, Sendable {
-    case increment
-  }
-
-  static let childStateCasePath = CasePath<State, ChildState>(
-    embed: State.child,
-    extract: { state in
-      guard case .child(let childState) = state else { return nil }
-      return childState
-    }
-  )
-
-  struct ChildReducer: Reducer {
-    func reduce(into state: inout ChildState, action: ChildAction) -> EffectTask<ChildAction> {
-      switch action {
-      case .increment:
-        state.count += 1
-        return .none
-      }
-    }
-  }
-
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    CombineReducers<State, Action> {
-      Reduce { _, _ in .none }
-      IfCaseLet(
-        state: Self.childStateCasePath,
-        action: Action.childCasePath,
-        reducer: ChildReducer()
-      )
-    }
-    .reduce(into: &state, action: action)
-  }
-}
-
-@main
-struct ConditionalReducerProbe {
-  @MainActor
-  static func main() {
-    switch ProcessInfo.processInfo.environment["INNOFLOW_CONDITIONAL_REDUCER_SCENARIO"] {
-    case "iflet-absent-state":
-      let store = Store(
-        reducer: ReleaseIfLetFeature(),
-        initialState: .init(child: nil, untouched: 7)
-      )
-      store.send(.child(.increment))
-      guard store.state == .init(child: nil, untouched: 7) else {
-        fputs("IfLet mutated state unexpectedly\n", stderr)
-        Foundation.exit(1)
-      }
-      print("ok")
-
-    case "ifcase-mismatched-state":
-      let store = Store(
-        reducer: ReleaseIfCaseLetFeature(),
-        initialState: .idle
-      )
-      store.send(.child(.increment))
-      guard store.state == .idle else {
-        fputs("IfCaseLet mutated state unexpectedly\n", stderr)
-        Foundation.exit(1)
-      }
-      print("ok")
-
-    default:
-      fputs("Unknown conditional reducer scenario\n", stderr)
-      Foundation.exit(2)
-    }
-  }
-}
-"""#
+  """#
 
 private let staleScopedStoreHarnessSource = #"""
-import Foundation
-import InnoFlow
+  import Foundation
+  import InnoFlow
 
-struct ParentReleasedFeature: Reducer {
-  struct Child: Equatable, Sendable {
-    var value = 1
+  struct ParentReleasedFeature: Reducer {
+    struct Child: Equatable, Sendable {
+      var value = 1
+    }
+
+    struct State: Equatable, Sendable {
+      var child = Child()
+    }
+
+    enum Action: Equatable, Sendable {
+      case child(ChildAction)
+
+      static let childCasePath = CasePath<Self, ChildAction>(
+        embed: Action.child,
+        extract: { action in
+          guard case .child(let childAction) = action else { return nil }
+          return childAction
+        }
+      )
+    }
+
+    enum ChildAction: Equatable, Sendable {
+      case noop
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      .none
+    }
   }
 
-  struct State: Equatable, Sendable {
-    var child = Child()
-  }
+  struct CollectionRemovedFeature: Reducer {
+    struct Todo: Identifiable, Equatable, Sendable {
+      let id: UUID
+      var title: String
+    }
 
-  enum Action: Equatable, Sendable {
-    case child(ChildAction)
+    struct State: Equatable, Sendable {
+      var todos: [Todo] = [
+        Todo(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, title: "One")
+      ]
+    }
 
-    static let childCasePath = CasePath<Self, ChildAction>(
-      embed: Action.child,
-      extract: { action in
-        guard case .child(let childAction) = action else { return nil }
-        return childAction
-      }
-    )
-  }
+    enum Action: Equatable, Sendable {
+      case todo(id: UUID, action: TodoAction)
+      case remove(id: UUID)
 
-  enum ChildAction: Equatable, Sendable {
-    case noop
-  }
+      static let todoActionPath = CollectionActionPath<Self, UUID, TodoAction>(
+        embed: Action.todo(id:action:),
+        extract: { action in
+          guard case let .todo(id, childAction) = action else { return nil }
+          return (id, childAction)
+        }
+      )
+    }
 
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    .none
-  }
-}
+    enum TodoAction: Equatable, Sendable {
+      case rename(String)
+    }
 
-struct CollectionRemovedFeature: Reducer {
-  struct Todo: Identifiable, Equatable, Sendable {
-    let id: UUID
-    var title: String
-  }
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      switch action {
+      case .todo(let id, .rename(let title)):
+        guard let index = state.todos.firstIndex(where: { $0.id == id }) else {
+          return .none
+        }
+        state.todos[index].title = title
+        return .none
 
-  struct State: Equatable, Sendable {
-    var todos: [Todo] = [
-      Todo(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, title: "One")
-    ]
-  }
-
-  enum Action: Equatable, Sendable {
-    case todo(id: UUID, action: TodoAction)
-    case remove(id: UUID)
-
-    static let todoActionPath = CollectionActionPath<Self, UUID, TodoAction>(
-      embed: Action.todo(id:action:),
-      extract: { action in
-        guard case let .todo(id, childAction) = action else { return nil }
-        return (id, childAction)
-      }
-    )
-  }
-
-  enum TodoAction: Equatable, Sendable {
-    case rename(String)
-  }
-
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    switch action {
-    case .todo(let id, .rename(let title)):
-      guard let index = state.todos.firstIndex(where: { $0.id == id }) else {
+      case .remove(let id):
+        state.todos.removeAll { $0.id == id }
         return .none
       }
-      state.todos[index].title = title
-      return .none
-
-    case .remove(let id):
-      state.todos.removeAll { $0.id == id }
-      return .none
     }
   }
-}
 
-@main
-struct StaleScopeProbe {
-  @MainActor
-  static func main() {
-    switch ProcessInfo.processInfo.environment["INNOFLOW_STALE_SCOPE_SCENARIO"] {
-    case "parent-released":
-      let scoped:
-        ScopedStore<ParentReleasedFeature, ParentReleasedFeature.Child, ParentReleasedFeature.ChildAction> =
-          {
-            let store = Store(reducer: ParentReleasedFeature(), initialState: .init())
-            return store.scope(state: \.child, action: ParentReleasedFeature.Action.childCasePath)
-          }()
-      _ = scoped.state.value
+  @main
+  struct StaleScopeProbe {
+    @MainActor
+    static func main() {
+      switch ProcessInfo.processInfo.environment["INNOFLOW_STALE_SCOPE_SCENARIO"] {
+      case "parent-released":
+        let scoped:
+          ScopedStore<ParentReleasedFeature, ParentReleasedFeature.Child, ParentReleasedFeature.ChildAction> =
+            {
+              let store = Store(reducer: ParentReleasedFeature(), initialState: .init())
+              return store.scope(state: \.child, action: ParentReleasedFeature.Action.childCasePath)
+            }()
+        _ = scoped.state.value
 
-    case "collection-entry-removed":
-      let store = Store(reducer: CollectionRemovedFeature(), initialState: .init())
-      let targetID = store.state.todos[0].id
-      let row = store.scope(
-        collection: \.todos,
-        action: CollectionRemovedFeature.Action.todoActionPath
-      )[0]
-      store.send(.remove(id: targetID))
-      row.send(.rename("Updated"))
+      case "collection-entry-removed":
+        let store = Store(reducer: CollectionRemovedFeature(), initialState: .init())
+        let targetID = store.state.todos[0].id
+        let row = store.scope(
+          collection: \.todos,
+          action: CollectionRemovedFeature.Action.todoActionPath
+        )[0]
+        store.send(.remove(id: targetID))
+        row.send(.rename("Updated"))
 
-    case "selected-parent-released":
-      let selected: SelectedStore<Int> = {
-        let store = Store(reducer: ParentReleasedFeature(), initialState: .init())
-        return store.select(\.child.value)
-      }()
-      _ = selected.value
+      case "selected-parent-released":
+        let selected: SelectedStore<Int> = {
+          let store = Store(reducer: ParentReleasedFeature(), initialState: .init())
+          return store.select(\.child.value)
+        }()
+        _ = selected.value
 
-    default:
-      fatalError("Unknown stale scope scenario")
+      default:
+        fatalError("Unknown stale scope scenario")
+      }
     }
   }
-}
-"""#
+  """#
 
 private let phaseMapCrashHarnessSource = #"""
-import Foundation
-import InnoFlow
+  import Foundation
+  import InnoFlow
 
-struct CrashPhaseMutationFeature: Reducer {
-  struct State: Equatable, Sendable {
-    enum Phase: Hashable, Sendable {
-      case idle
-      case loading
-      case loaded
+  struct CrashPhaseMutationFeature: Reducer {
+    struct State: Equatable, Sendable {
+      enum Phase: Hashable, Sendable {
+        case idle
+        case loading
+        case loaded
+      }
+
+      var phase: Phase = .idle
+      var values: [Int] = []
     }
 
-    var phase: Phase = .idle
-    var values: [Int] = []
-  }
-
-  enum Action: Equatable, Sendable {
-    case load
-    case loaded([Int])
-  }
-
-  static let loadedCasePath = CasePath<Action, [Int]>(
-    embed: Action.loaded,
-    extract: { action in
-      guard case .loaded(let payload) = action else { return nil }
-      return payload
+    enum Action: Equatable, Sendable {
+      case load
+      case loaded([Int])
     }
-  )
 
-  static let phaseMap = PhaseMap(\State.phase) {
-    From(.idle) {
-      On(Action.load, to: .loading)
-    }
-    From(.loading) {
-      On(Self.loadedCasePath, to: .loaded)
-    }
-  }
+    static let loadedCasePath = CasePath<Action, [Int]>(
+      embed: Action.loaded,
+      extract: { action in
+        guard case .loaded(let payload) = action else { return nil }
+        return payload
+      }
+    )
 
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
-
-    return Reduce<State, Action> { state, action in
-      switch action {
-      case .load:
-        state.phase = .loaded
-        return .none
-      case .loaded(let values):
-        state.values = values
-        return .none
+    static let phaseMap = PhaseMap(\State.phase) {
+      From(.idle) {
+        On(Action.load, to: .loading)
+      }
+      From(.loading) {
+        On(Self.loadedCasePath, to: .loaded)
       }
     }
-    .phaseMap(map)
-    .reduce(into: &state, action: action)
-  }
-}
 
-struct CrashInvalidTargetFeature: Reducer {
-  struct State: Equatable, Sendable {
-    enum Phase: Hashable, Sendable {
-      case failed
-      case idle
-      case loaded
-      case unexpected
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
+
+      return Reduce<State, Action> { state, action in
+        switch action {
+        case .load:
+          state.phase = .loaded
+          return .none
+        case .loaded(let values):
+          state.values = values
+          return .none
+        }
+      }
+      .phaseMap(map)
+      .reduce(into: &state, action: action)
+    }
+  }
+
+  struct CrashInvalidTargetFeature: Reducer {
+    struct State: Equatable, Sendable {
+      enum Phase: Hashable, Sendable {
+        case failed
+        case idle
+        case loaded
+        case unexpected
+      }
+
+      var phase: Phase = .failed
+      var log: [String] = []
     }
 
-    var phase: Phase = .failed
-    var log: [String] = []
-  }
-
-  enum Action: Equatable, Sendable {
-    case attemptRecover(Bool)
-  }
-
-  static let attemptRecoverCasePath = CasePath<Action, Bool>(
-    embed: Action.attemptRecover,
-    extract: { action in
-      guard case .attemptRecover(let payload) = action else { return nil }
-      return payload
+    enum Action: Equatable, Sendable {
+      case attemptRecover(Bool)
     }
-  )
 
-  static let phaseMap = PhaseMap(\State.phase) {
-    From(.failed) {
-      On(Self.attemptRecoverCasePath, targets: [.idle, .loaded]) { _, shouldRecover in
-        shouldRecover ? .unexpected : nil
+    static let attemptRecoverCasePath = CasePath<Action, Bool>(
+      embed: Action.attemptRecover,
+      extract: { action in
+        guard case .attemptRecover(let payload) = action else { return nil }
+        return payload
+      }
+    )
+
+    static let phaseMap = PhaseMap(\State.phase) {
+      From(.failed) {
+        On(Self.attemptRecoverCasePath, targets: [.idle, .loaded]) { _, shouldRecover in
+          shouldRecover ? .unexpected : nil
+        }
+      }
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
+
+      return Reduce<State, Action> { state, action in
+        switch action {
+        case .attemptRecover(let shouldRecover):
+          state.log.append(shouldRecover ? "recover" : "skip")
+          return .none
+        }
+      }
+      .phaseMap(map)
+      .reduce(into: &state, action: action)
+    }
+  }
+
+  @main
+  struct PhaseMapCrashProbe {
+    @MainActor
+    static func main() {
+      switch ProcessInfo.processInfo.environment["INNOFLOW_PHASEMAP_CRASH_SCENARIO"] {
+      case "direct-mutation-crash":
+        let store = Store(reducer: CrashPhaseMutationFeature(), initialState: .init())
+        store.send(.load)
+
+      case "undeclared-target-crash":
+        let store = Store(reducer: CrashInvalidTargetFeature(), initialState: .init())
+        store.send(.attemptRecover(true))
+
+      default:
+        fputs("Unknown PhaseMap crash scenario\n", stderr)
+        Foundation.exit(2)
       }
     }
   }
-
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
-
-    return Reduce<State, Action> { state, action in
-      switch action {
-      case .attemptRecover(let shouldRecover):
-        state.log.append(shouldRecover ? "recover" : "skip")
-        return .none
-      }
-    }
-    .phaseMap(map)
-    .reduce(into: &state, action: action)
-  }
-}
-
-@main
-struct PhaseMapCrashProbe {
-  @MainActor
-  static func main() {
-    switch ProcessInfo.processInfo.environment["INNOFLOW_PHASEMAP_CRASH_SCENARIO"] {
-    case "direct-mutation-crash":
-      let store = Store(reducer: CrashPhaseMutationFeature(), initialState: .init())
-      store.send(.load)
-
-    case "undeclared-target-crash":
-      let store = Store(reducer: CrashInvalidTargetFeature(), initialState: .init())
-      store.send(.attemptRecover(true))
-
-    default:
-      fputs("Unknown PhaseMap crash scenario\n", stderr)
-      Foundation.exit(2)
-    }
-  }
-}
-"""#
+  """#
 
 private let phaseMapReleaseHarnessSource = #"""
-import Foundation
+  import Foundation
 
-struct ReleasePhaseMutationFeature: Reducer {
-  struct State: Equatable, Sendable {
-    enum Phase: Hashable, Sendable {
-      case idle
-      case loading
-      case loaded
-    }
-
-    var phase: Phase = .idle
-    var values: [Int] = []
-  }
-
-  enum Action: Equatable, Sendable {
-    case load
-    case loaded([Int])
-  }
-
-  static let loadedCasePath = CasePath<Action, [Int]>(
-    embed: Action.loaded,
-    extract: { action in
-      guard case .loaded(let payload) = action else { return nil }
-      return payload
-    }
-  )
-
-  static let phaseMap = PhaseMap(\State.phase) {
-    From(.idle) {
-      On(Action.load, to: .loading)
-    }
-    From(.loading) {
-      On(Self.loadedCasePath, to: .loaded)
-    }
-  }
-
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
-
-    return Reduce<State, Action> { state, action in
-      switch action {
-      case .load:
-        state.phase = .loaded
-        return .none
-      case .loaded(let values):
-        state.phase = .idle
-        state.values = values
-        return .none
-      }
-    }
-    .phaseMap(map)
-    .reduce(into: &state, action: action)
-  }
-}
-
-struct ReleaseInvalidTargetFeature: Reducer {
-  struct State: Equatable, Sendable {
-    enum Phase: Hashable, Sendable {
-      case failed
-      case idle
-      case loaded
-      case unexpected
-    }
-
-    var phase: Phase = .failed
-    var log: [String] = []
-  }
-
-  enum Action: Equatable, Sendable {
-    case attemptRecover(Bool)
-  }
-
-  static let attemptRecoverCasePath = CasePath<Action, Bool>(
-    embed: Action.attemptRecover,
-    extract: { action in
-      guard case .attemptRecover(let payload) = action else { return nil }
-      return payload
-    }
-  )
-
-  static let phaseMap = PhaseMap(\State.phase) {
-    From(.failed) {
-      On(Self.attemptRecoverCasePath, targets: [.idle, .loaded]) { _, shouldRecover in
-        shouldRecover ? .unexpected : nil
-      }
-    }
-  }
-
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
-
-    return Reduce<State, Action> { state, action in
-      switch action {
-      case .attemptRecover(let shouldRecover):
-        state.log.append(shouldRecover ? "recover" : "skip")
-        return .none
-      }
-    }
-    .phaseMap(map)
-    .reduce(into: &state, action: action)
-  }
-}
-
-@main
-struct PhaseMapReleaseProbe {
-  @MainActor
-  static func main() {
-    switch ProcessInfo.processInfo.environment["INNOFLOW_PHASEMAP_RELEASE_SCENARIO"] {
-    case "direct-mutation-restore":
-      let store = Store(reducer: ReleasePhaseMutationFeature(), initialState: .init())
-      store.send(.load)
-      guard store.state.phase == .loading else {
-        fputs("Expected load to restore the previous phase and apply the declared loading transition\n", stderr)
-        Foundation.exit(1)
+  struct ReleasePhaseMutationFeature: Reducer {
+    struct State: Equatable, Sendable {
+      enum Phase: Hashable, Sendable {
+        case idle
+        case loading
+        case loaded
       }
 
-      store.send(.loaded([1, 2, 3]))
-      guard store.state.phase == .loaded, store.state.values == [1, 2, 3] else {
-        fputs("Expected loaded payload to preserve reducer work and then transition to .loaded\n", stderr)
-        Foundation.exit(1)
-      }
-      print("ok")
+      var phase: Phase = .idle
+      var values: [Int] = []
+    }
 
-    case "undeclared-target-noop":
-      let store = Store(reducer: ReleaseInvalidTargetFeature(), initialState: .init())
-      store.send(.attemptRecover(true))
-      guard store.state.phase == .failed, store.state.log == ["recover"] else {
-        fputs("Expected undeclared dynamic target to keep the previous phase while preserving reducer work\n", stderr)
-        Foundation.exit(1)
-      }
+    enum Action: Equatable, Sendable {
+      case load
+      case loaded([Int])
+    }
 
-      store.send(.attemptRecover(false))
-      guard store.state.phase == .failed, store.state.log == ["recover", "skip"] else {
-        fputs("Expected nil guard result to keep the previous phase and append reducer work\n", stderr)
-        Foundation.exit(1)
+    static let loadedCasePath = CasePath<Action, [Int]>(
+      embed: Action.loaded,
+      extract: { action in
+        guard case .loaded(let payload) = action else { return nil }
+        return payload
       }
-      print("ok")
+    )
 
-    default:
-      fputs("Unknown PhaseMap release scenario\n", stderr)
-      Foundation.exit(2)
+    static let phaseMap = PhaseMap(\State.phase) {
+      From(.idle) {
+        On(Action.load, to: .loading)
+      }
+      From(.loading) {
+        On(Self.loadedCasePath, to: .loaded)
+      }
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
+
+      return Reduce<State, Action> { state, action in
+        switch action {
+        case .load:
+          state.phase = .loaded
+          return .none
+        case .loaded(let values):
+          state.phase = .idle
+          state.values = values
+          return .none
+        }
+      }
+      .phaseMap(map)
+      .reduce(into: &state, action: action)
     }
   }
-}
-"""#
+
+  struct ReleaseInvalidTargetFeature: Reducer {
+    struct State: Equatable, Sendable {
+      enum Phase: Hashable, Sendable {
+        case failed
+        case idle
+        case loaded
+        case unexpected
+      }
+
+      var phase: Phase = .failed
+      var log: [String] = []
+    }
+
+    enum Action: Equatable, Sendable {
+      case attemptRecover(Bool)
+    }
+
+    static let attemptRecoverCasePath = CasePath<Action, Bool>(
+      embed: Action.attemptRecover,
+      extract: { action in
+        guard case .attemptRecover(let payload) = action else { return nil }
+        return payload
+      }
+    )
+
+    static let phaseMap = PhaseMap(\State.phase) {
+      From(.failed) {
+        On(Self.attemptRecoverCasePath, targets: [.idle, .loaded]) { _, shouldRecover in
+          shouldRecover ? .unexpected : nil
+        }
+      }
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
+
+      return Reduce<State, Action> { state, action in
+        switch action {
+        case .attemptRecover(let shouldRecover):
+          state.log.append(shouldRecover ? "recover" : "skip")
+          return .none
+        }
+      }
+      .phaseMap(map)
+      .reduce(into: &state, action: action)
+    }
+  }
+
+  @main
+  struct PhaseMapReleaseProbe {
+    @MainActor
+    static func main() {
+      switch ProcessInfo.processInfo.environment["INNOFLOW_PHASEMAP_RELEASE_SCENARIO"] {
+      case "direct-mutation-restore":
+        let store = Store(reducer: ReleasePhaseMutationFeature(), initialState: .init())
+        store.send(.load)
+        guard store.state.phase == .loading else {
+          fputs("Expected load to restore the previous phase and apply the declared loading transition\n", stderr)
+          Foundation.exit(1)
+        }
+
+        store.send(.loaded([1, 2, 3]))
+        guard store.state.phase == .loaded, store.state.values == [1, 2, 3] else {
+          fputs("Expected loaded payload to preserve reducer work and then transition to .loaded\n", stderr)
+          Foundation.exit(1)
+        }
+        print("ok")
+
+      case "undeclared-target-noop":
+        let store = Store(reducer: ReleaseInvalidTargetFeature(), initialState: .init())
+        store.send(.attemptRecover(true))
+        guard store.state.phase == .failed, store.state.log == ["recover"] else {
+          fputs("Expected undeclared dynamic target to keep the previous phase while preserving reducer work\n", stderr)
+          Foundation.exit(1)
+        }
+
+        store.send(.attemptRecover(false))
+        guard store.state.phase == .failed, store.state.log == ["recover", "skip"] else {
+          fputs("Expected nil guard result to keep the previous phase and append reducer work\n", stderr)
+          Foundation.exit(1)
+        }
+        print("ok")
+
+      default:
+        fputs("Unknown PhaseMap release scenario\n", stderr)
+        Foundation.exit(2)
+      }
+    }
+  }
+  """#

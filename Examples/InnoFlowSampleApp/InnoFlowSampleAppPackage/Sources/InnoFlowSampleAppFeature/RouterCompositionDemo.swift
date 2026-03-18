@@ -60,7 +60,7 @@ struct RouterLoginFeature {
         state.isSubmitting = false
         state.isAuthenticated = false
         state.log.append("logout")
-        return .none
+        return .cancel("router-login")
       }
     }
   }
@@ -72,15 +72,20 @@ final class RouterCompositionCoordinator {
   let loginStore = Store(reducer: RouterLoginFeature())
   var path: [RouterDemoRoute] = []
 
+  private let protectedDetailID: String
   private(set) var pendingRoute: RouterDemoRoute?
   private var lastHandledAuthVersion = 0
 
-  init(pendingRoute: RouterDemoRoute? = nil) {
+  init(
+    pendingRoute: RouterDemoRoute? = nil,
+    protectedDetailID: String = "invoice-42"
+  ) {
     self.pendingRoute = pendingRoute
+    self.protectedDetailID = protectedDetailID
   }
 
   func queueProtectedDetail() {
-    pendingRoute = .detail(id: "invoice-42")
+    pendingRoute = .detail(id: protectedDetailID)
   }
 
   func submitLogin() {
@@ -92,7 +97,7 @@ final class RouterCompositionCoordinator {
       if path.first != .dashboard {
         path = [.dashboard]
       }
-      path.append(.detail(id: "invoice-42"))
+      path.append(.detail(id: protectedDetailID))
     } else {
       queueProtectedDetail()
     }
@@ -145,7 +150,9 @@ struct RouterCompositionDemoView: View {
   }
 
   private static func pendingRouteFromEnvironment() -> RouterDemoRoute? {
-    guard let pendingDetailID = ProcessInfo.processInfo.environment["INNOFLOW_ROUTER_PENDING_DETAIL_ID"] else {
+    guard
+      let pendingDetailID = ProcessInfo.processInfo.environment["INNOFLOW_ROUTER_PENDING_DETAIL_ID"]
+    else {
       return nil
     }
     return .detail(id: pendingDetailID)
@@ -181,14 +188,17 @@ private struct RouterLoginRootView: View {
           .disabled(coordinator.loginStore.isSubmitting)
           .accessibilityIdentifier("router.sign-in")
           .accessibilityLabel(coordinator.loginStore.isSubmitting ? "Signing in" : "Sign in")
-          .accessibilityHint("Authenticates the reducer-owned login state before the coordinator replays pending routes")
+          .accessibilityHint(
+            "Authenticates the reducer-owned login state before the coordinator replays pending routes"
+          )
 
           Button("Queue Protected Detail While Logged Out") {
             coordinator.queueProtectedDetail()
           }
           .buttonStyle(.bordered)
           .accessibilityIdentifier("router.queue-protected-detail")
-          .accessibilityHint("Queues a protected destination that will open after authentication succeeds")
+          .accessibilityHint(
+            "Queues a protected destination that will open after authentication succeeds")
 
           if let pendingRoute = coordinator.pendingRoute {
             Text("Pending route: \(describe(route: pendingRoute))")

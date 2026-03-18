@@ -113,7 +113,8 @@ public struct EffectTask<Action: Sendable>: Sendable {
   package indirect enum Operation: Sendable {
     case none
     case send(Action)
-    case run(priority: TaskPriority?, operation: @Sendable (Send<Action>, EffectContext) async -> Void)
+    case run(
+      priority: TaskPriority?, operation: @Sendable (Send<Action>, EffectContext) async -> Void)
     case merge([EffectTask<Action>])
     case concatenate([EffectTask<Action>])
     case cancel(EffectID)
@@ -333,7 +334,8 @@ public struct EffectTask<Action: Sendable>: Sendable {
       return effect.eagerMap(transform).applyingAnimation(animation)
 
     case .lazyMap:
-      preconditionFailure("lazyMap layers must be flattened before eagerMap switches on the concrete operation")
+      preconditionFailure(
+        "lazyMap layers must be flattened before eagerMap switches on the concrete operation")
     }
   }
 }

@@ -48,7 +48,8 @@ package struct EffectExecutionContext: Sendable {
     _ animation: EffectAnimation,
     on existing: Self?
   ) -> Self {
-    .init(cancellationID: existing?.cancellationID, animation: animation, sequence: existing?.sequence)
+    .init(
+      cancellationID: existing?.cancellationID, animation: animation, sequence: existing?.sequence)
   }
 }
 

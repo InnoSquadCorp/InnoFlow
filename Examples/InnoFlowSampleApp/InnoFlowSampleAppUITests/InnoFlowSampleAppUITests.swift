@@ -15,7 +15,9 @@ final class InnoFlowSampleAppUITests: XCTestCase {
 
   @MainActor
   private func openDemoFromHub(_ identifier: String, in app: XCUIApplication) {
-    tapButton(identifier, in: app, failureMessage: "Expected sample hub item \(identifier) to become visible")
+    tapButton(
+      identifier, in: app,
+      failureMessage: "Expected sample hub item \(identifier) to become visible")
   }
 
   @MainActor
@@ -46,9 +48,9 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     let app = launchApp()
 
     XCTAssertTrue(app.buttons["sample.basics"].waitForExistence(timeout: 2))
-    XCTAssertTrue(app.buttons["sample.orchestration"].exists)
-    XCTAssertTrue(app.buttons["sample.phase-driven-fsm"].exists)
-    XCTAssertTrue(app.buttons["sample.router-composition"].exists)
+    XCTAssertTrue(app.buttons["sample.orchestration"].waitForExistence(timeout: 2))
+    XCTAssertTrue(app.buttons["sample.phase-driven-fsm"].waitForExistence(timeout: 2))
+    XCTAssertTrue(app.buttons["sample.router-composition"].waitForExistence(timeout: 2))
   }
 
   @MainActor
@@ -56,7 +58,9 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     let app = launchApp(environment: ["INNOFLOW_ROUTER_PENDING_DETAIL_ID": "invoice-42"])
 
     openDemoFromHub("sample.router-composition", in: app)
-    tapButton("router.sign-in", in: app, failureMessage: "Expected router sign-in button after hub navigation")
+    tapButton(
+      "router.sign-in", in: app,
+      failureMessage: "Expected router sign-in button after hub navigation")
 
     XCTAssertTrue(app.staticTexts["router.detail-title"].waitForExistence(timeout: 4))
     XCTAssertEqual(app.staticTexts["router.detail-title"].label, "Protected detail for invoice-42")

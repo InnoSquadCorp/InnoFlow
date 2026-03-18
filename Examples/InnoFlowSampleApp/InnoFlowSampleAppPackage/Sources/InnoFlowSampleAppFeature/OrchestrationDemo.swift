@@ -218,7 +218,9 @@ struct OrchestrationDemoView: View {
           .accessibilityHint("Resets both child features and queues their ready actions")
 
           HStack {
-            Label(store.profile.isReady ? "Profile ready" : "Profile pending", systemImage: "person.crop.circle")
+            Label(
+              store.profile.isReady ? "Profile ready" : "Profile pending",
+              systemImage: "person.crop.circle")
             Spacer()
             Label(
               store.permissions.isReady ? "Permissions ready" : "Permissions pending",

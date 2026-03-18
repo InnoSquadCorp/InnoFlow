@@ -167,14 +167,14 @@ extension PhaseTransitionGraph: ExpressibleByDictionaryLiteral {
   }
 }
 
-public extension PhaseTransitionGraph {
+extension PhaseTransitionGraph {
   /// Creates a simple linear phase graph where each phase points to the next.
   ///
   /// Example:
   /// ```swift
   /// let graph = PhaseTransitionGraph.linear(.idle, .loading, .loaded)
   /// ```
-  static func linear(_ phases: Phase...) -> Self {
+  public static func linear(_ phases: Phase...) -> Self {
     guard phases.count > 1 else { return .init([:]) }
 
     var adjacency: [Phase: Set<Phase>] = [:]
@@ -185,7 +185,7 @@ public extension PhaseTransitionGraph {
   }
 
   /// Validates a graph using the root inferred by `linear(_:)`.
-  func validate(
+  public func validate(
     allPhases: Set<Phase>,
     terminalPhases: Set<Phase> = []
   ) -> [ValidationIssue] {
@@ -194,7 +194,7 @@ public extension PhaseTransitionGraph {
   }
 
   /// Returns a detailed validation report using the root inferred by `linear(_:)`.
-  func validationReport(
+  public func validationReport(
     allPhases: Set<Phase>,
     terminalPhases: Set<Phase> = []
   ) -> ValidationReport {
@@ -215,8 +215,8 @@ public extension PhaseTransitionGraph {
   }
 }
 
-private extension PhaseTransitionGraph {
-  init(_ adjacency: [Phase: Set<Phase>], suggestedRoot: Phase?) {
+extension PhaseTransitionGraph {
+  fileprivate init(_ adjacency: [Phase: Set<Phase>], suggestedRoot: Phase?) {
     self.adjacency = adjacency
     self.suggestedRoot = suggestedRoot
   }

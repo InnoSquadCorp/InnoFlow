@@ -1,12 +1,30 @@
 import Foundation
-import Testing
 import InnoFlow
 import InnoFlowTesting
+import Testing
 
 @testable import InnoFlowSampleAppFeature
 
 @Suite("InnoFlowSampleAppFeature tests")
 struct InnoFlowSampleAppFeatureTests {
+  @MainActor
+  private func waitForAuthVersion(
+    _ target: Int,
+    in coordinator: RouterCompositionCoordinator,
+    timeout: Duration = .seconds(2)
+  ) async -> Bool {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while clock.now < deadline {
+      if coordinator.loginStore.authVersion == target {
+        return true
+      }
+      await Task.yield()
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+    return false
+  }
+
   @Test("Basics demo records queued follow-up increment")
   @MainActor
   func basicsQueuedFollowUp() async {
@@ -83,14 +101,20 @@ struct InnoFlowSampleAppFeatureTests {
     }
     await store.receive(._syncFinished) {
       $0.isSyncing = false
-      $0.syncLog = ["sync started", "progress 10%", "progress 55%", "progress 100%", "sync finished"]
+      $0.syncLog = [
+        "sync started", "progress 10%", "progress 55%", "progress 100%", "sync finished",
+      ]
     }
   }
 
   @Test("Phase-driven sample follows the documented graph on success")
   @MainActor
   func phaseDrivenSuccess() async {
-    let map: PhaseMap<PhaseDrivenTodoFeature.State, PhaseDrivenTodoFeature.Action, PhaseDrivenTodoFeature.State.Phase> = PhaseDrivenTodoFeature.phaseMap
+    let map:
+      PhaseMap<
+        PhaseDrivenTodoFeature.State, PhaseDrivenTodoFeature.Action,
+        PhaseDrivenTodoFeature.State.Phase
+      > = PhaseDrivenTodoFeature.phaseMap
     assertValidGraph(
       PhaseDrivenTodoFeature.phaseGraph,
       allPhases: [.idle, .loading, .loaded, .failed],
@@ -118,7 +142,11 @@ struct InnoFlowSampleAppFeatureTests {
   @Test("Phase-driven sample fails and recovers to idle when dismissing the error")
   @MainActor
   func phaseDrivenFailureRecovery() async {
-    let map: PhaseMap<PhaseDrivenTodoFeature.State, PhaseDrivenTodoFeature.Action, PhaseDrivenTodoFeature.State.Phase> = PhaseDrivenTodoFeature.phaseMap
+    let map:
+      PhaseMap<
+        PhaseDrivenTodoFeature.State, PhaseDrivenTodoFeature.Action,
+        PhaseDrivenTodoFeature.State.Phase
+      > = PhaseDrivenTodoFeature.phaseMap
     let store = TestStore(
       reducer: PhaseDrivenTodoFeature(
         todoService: MockTodoService(shouldAlwaysFail: true)
@@ -205,6 +233,32 @@ struct InnoFlowSampleAppFeatureTests {
     #expect(store.state.todos[2].isDone == true)
   }
 
+  @Test("Router login cancels in-flight submit on logout")
+  @MainActor
+  func routerLoginLogoutCancelsInFlightSubmit() async {
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: RouterLoginFeature(),
+      clock: clock
+    )
+
+    await store.send(.submit) {
+      $0.isSubmitting = true
+      $0.log = ["submit login"]
+    }
+
+    await store.send(.logout) {
+      $0.isSubmitting = false
+      $0.isAuthenticated = false
+      $0.log = ["submit login", "logout"]
+    }
+
+    await clock.advance(by: .milliseconds(200))
+    await store.assertNoMoreActions()
+    #expect(store.state.authVersion == 0)
+    #expect(store.state.isAuthenticated == false)
+  }
+
   @Test("Router composition replays pending detail when view syncs after auth version changes")
   @MainActor
   func routerCompositionReplaysPendingRoute() async {
@@ -212,16 +266,7 @@ struct InnoFlowSampleAppFeatureTests {
     coordinator.queueProtectedDetail()
     coordinator.submitLogin()
 
-    let deadline = ContinuousClock().now.advanced(by: .seconds(2))
-    let clock = ContinuousClock()
-    var authenticated = false
-    while clock.now < deadline {
-      if coordinator.loginStore.authVersion == 1 {
-        authenticated = true
-        break
-      }
-      try? await Task.sleep(for: .milliseconds(20))
-    }
+    let authenticated = await waitForAuthVersion(1, in: coordinator)
     #expect(authenticated, "Expected router login to complete before timing out")
 
     coordinator.syncNavigationWithDomainState()
