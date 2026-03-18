@@ -6,12 +6,20 @@
 
 // MARK: - InnoFlow Macro
 
-/// Generates `Reducer` conformance boilerplate and validates v2 reducer contract.
+/// Generates `Reducer` conformance boilerplate, validates the official
+/// body-based InnoFlow authoring contract, and synthesizes reusable action paths
+/// for scoping helpers on nested `Action` enums.
 ///
 /// `@InnoFlow` requires:
 /// 1. Nested `State` type
 /// 2. Nested `Action` type
-/// 3. `reduce(into:action:) -> EffectTask<Action>`
+/// 3. `var body: some Reducer<State, Action>`
+///
+/// When the nested `Action` enum exposes:
+/// - `case child(ChildAction)` the macro synthesizes `Action.childCasePath`
+/// - `case todo(id: ID, action: ChildAction)` the macro synthesizes `Action.todoActionPath`
+///
+/// Existing manual definitions with the same names are preserved.
 ///
 /// ## Example
 /// ```swift
@@ -25,33 +33,37 @@
 ///         case increment
 ///     }
 ///
-///     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-///         switch action {
-///         case .increment:
-///             state.count += 1
-///             return .none
+///     var body: some Reducer<State, Action> {
+///         Reduce { state, action in
+///             switch action {
+///             case .increment:
+///                 state.count += 1
+///                 return .none
+///             }
 ///         }
 ///     }
 /// }
 /// ```
-@attached(extension, conformances: Reducer)
+@attached(member, names: named(reduce), arbitrary)
+@attached(memberAttribute)
+@attached(extension, conformances: Reducer, names: arbitrary)
 public macro InnoFlow() =
   #externalMacro(
     module: "InnoFlowMacros",
     type: "InnoFlowMacro"
   )
 
-// MARK: - BindableField Macro
+@attached(member, names: arbitrary)
+public macro _InnoFlowActionPaths() =
+  #externalMacro(
+    module: "InnoFlowMacros",
+    type: "InnoFlowActionPathsMacro"
+  )
+
+// MARK: - BindableField
 
 /// Marks a `State` property as intentionally bindable from SwiftUI.
 ///
-/// Properties marked with `@BindableField` are transformed into
-/// `BindableProperty<Value>`-backed storage and can be used with
+/// Properties marked with `@BindableField` remain reducer-friendly value fields,
+/// while exposing a projected ``BindableProperty`` via `\.$field` for
 /// `store.binding(_:send:)`.
-@attached(accessor)
-@attached(peer, names: arbitrary)
-public macro BindableField() =
-  #externalMacro(
-    module: "InnoFlowMacros",
-    type: "BindableFieldMacro"
-  )

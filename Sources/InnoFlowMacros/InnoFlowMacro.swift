@@ -2,14 +2,58 @@
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
+import Foundation
 import SwiftCompilerPlugin
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
 // MARK: - InnoFlow Macro Implementation
 
-public struct InnoFlowMacro: ExtensionMacro {
+public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
+
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingMembersOf declaration: some DeclGroupSyntax,
+    conformingTo protocols: [TypeSyntax],
+    in context: some MacroExpansionContext
+  ) throws -> [DeclSyntax] {
+    try expansion(of: node, providingMembersOf: declaration, in: context)
+  }
+
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingMembersOf declaration: some DeclGroupSyntax,
+    in context: some MacroExpansionContext
+  ) throws -> [DeclSyntax] {
+    guard let structDecl = declaration.as(StructDeclSyntax.self) else {
+      return []
+    }
+
+    guard hasNestedType(named: "State", in: structDecl),
+      hasNestedType(named: "Action", in: structDecl)
+    else {
+      return []
+    }
+
+    guard findReduceFunction(in: structDecl) == nil,
+      let bodyProperty = findBodyProperty(in: structDecl),
+      bodySignatureIssues(bodyProperty).isEmpty
+    else {
+      return []
+    }
+
+    return [
+      DeclSyntax(
+        """
+        func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+          body.reduce(into: &state, action: action)
+        }
+        """
+      )
+    ]
+  }
 
   public static func expansion(
     of node: AttributeSyntax,
@@ -30,18 +74,42 @@ public struct InnoFlowMacro: ExtensionMacro {
       throw MacroError.missingAction
     }
 
-    guard let reduceFunction = findReduceFunction(in: structDecl) else {
-      throw MacroError.missingReduceMethod
+    if diagnoseExplicitReduceIfNeeded(
+      in: structDecl,
+      anchoredAt: node,
+      context: context
+    ) {
+      return []
     }
 
-    let signatureIssues = reducerSignatureIssues(reduceFunction)
+    guard let bodyProperty = findBodyProperty(in: structDecl) else {
+      throw MacroError.missingBodyProperty
+    }
+
+    let signatureIssues = bodySignatureIssues(bodyProperty)
     guard signatureIssues.isEmpty else {
-      throw MacroError.invalidReduceSignature(details: signatureIssues)
+      throw MacroError.invalidBodySignature(details: signatureIssues)
     }
 
     let typeName = structDecl.name.text
     let extensionDecl = try ExtensionDeclSyntax("extension \(raw: typeName): Reducer {}")
     return [extensionDecl]
+  }
+
+  public static func expansion(
+    of node: AttributeSyntax,
+    attachedTo declaration: some DeclGroupSyntax,
+    providingAttributesFor member: some DeclSyntaxProtocol,
+    in context: some MacroExpansionContext
+  ) throws -> [AttributeSyntax] {
+    guard declaration.as(StructDeclSyntax.self) != nil,
+      let actionEnum = member.as(EnumDeclSyntax.self),
+      actionEnum.name.text == "Action"
+    else {
+      return []
+    }
+
+    return ["@_InnoFlowActionPaths"]
   }
 
   private static func hasNestedType(named typeName: String, in declaration: StructDeclSyntax)
@@ -64,61 +132,440 @@ public struct InnoFlowMacro: ExtensionMacro {
     }
   }
 
+  private static func findNestedEnum(named typeName: String, in declaration: StructDeclSyntax)
+    -> EnumDeclSyntax?
+  {
+    declaration.memberBlock.members
+      .compactMap { $0.decl.as(EnumDeclSyntax.self) }
+      .first(where: { $0.name.text == typeName })
+  }
+
   private static func findReduceFunction(in declaration: StructDeclSyntax) -> FunctionDeclSyntax? {
     declaration.memberBlock.members
       .compactMap { $0.decl.as(FunctionDeclSyntax.self) }
       .first { $0.name.text == "reduce" }
   }
 
-  private static func reducerSignatureIssues(_ function: FunctionDeclSyntax) -> [String] {
-    var issues: [String] = []
-    let parameters = function.signature.parameterClause.parameters
-    if parameters.count != 2 {
-      issues.append(
-        "parameter count is \(parameters.count), expected 2 parameters (`into`, `action`)")
-    }
-
-    if !parameters.isEmpty {
-      let first = parameters[parameters.startIndex]
-      if first.firstName.text != "into" {
-        issues.append("first parameter label is `\(first.firstName.text)`, expected `into`")
+  private static func findBodyProperty(in declaration: StructDeclSyntax) -> VariableDeclSyntax? {
+    declaration.memberBlock.members
+      .compactMap { $0.decl.as(VariableDeclSyntax.self) }
+      .first { variable in
+        variable.bindings.contains { binding in
+          binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "body"
+        }
       }
-      if !hasInoutSpecifier(in: first.type) {
-        issues.append("`into` parameter must be declared as `inout`")
-      }
-    } else {
-      issues.append("missing first parameter `into state: inout State`")
-    }
-
-    if parameters.count >= 2 {
-      let second = parameters[parameters.index(after: parameters.startIndex)]
-      if second.firstName.text != "action" {
-        issues.append("second parameter label is `\(second.firstName.text)`, expected `action`")
-      }
-    } else {
-      issues.append("missing second parameter `action: Action`")
-    }
-
-    return issues
   }
 
-  private static func hasInoutSpecifier(in parameterType: TypeSyntax) -> Bool {
-    guard let attributedType = parameterType.as(AttributedTypeSyntax.self) else {
-      return false
+  fileprivate static func synthesizedActionPathDeclarations(
+    in actionEnum: EnumDeclSyntax,
+    context: some MacroExpansionContext
+  ) -> [DeclSyntax] {
+    let existingNames = Set<String>(
+      actionEnum.memberBlock.members.compactMap { member in
+        if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
+          guard variableDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) }) else {
+            return nil
+          }
+          return variableDecl.bindings.first?
+            .pattern
+            .as(IdentifierPatternSyntax.self)?
+            .identifier
+            .text
+        }
+
+        if let functionDecl = member.decl.as(FunctionDeclSyntax.self) {
+          guard functionDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) }) else {
+            return nil
+          }
+          return functionDecl.name.text
+        }
+
+        return nil
+      }
+    )
+
+    var seenGeneratedNames: Set<String> = []
+    var declarations: [DeclSyntax] = []
+
+    for enumCaseDecl in actionEnum.memberBlock.members.compactMap({ $0.decl.as(EnumCaseDeclSyntax.self) }) {
+      for element in enumCaseDecl.elements {
+        guard let member = synthesizedActionPathMember(
+          for: element,
+          existingNames: existingNames,
+          seenGeneratedNames: &seenGeneratedNames,
+          context: context
+        ) else {
+          continue
+        }
+        declarations.append(DeclSyntax(stringLiteral: member.declaration))
+      }
     }
 
-    if attributedType.specifiers.contains(where: isInoutSpecifier) {
+    return declarations
+  }
+
+  private static func synthesizedActionPathMember(
+    for element: EnumCaseElementSyntax,
+    existingNames: Set<String>,
+    seenGeneratedNames: inout Set<String>,
+    context: some MacroExpansionContext
+  ) -> SynthesizedActionPathMember? {
+    guard let parameters = element.parameterClause?.parameters else {
+      return nil
+    }
+
+    let caseName = element.name.text
+
+    if parameters.count == 1,
+      let parameter = parameters.first,
+      parameter.secondName == nil,
+      (parameter.firstName == nil || parameter.firstName?.text == "_")
+    {
+      let memberName = "\(generatedActionPathBaseName(from: caseName))CasePath"
+      guard diagnoseGeneratedActionPathCollisionIfNeeded(
+        memberName: memberName,
+        element: element,
+        existingNames: existingNames,
+        seenGeneratedNames: &seenGeneratedNames,
+        context: context
+      ) == false else {
+        return nil
+      }
+
+      let childActionType = parameter.type.trimmedDescription
+      return .init(
+        declaration: """
+          static let \(memberName) = CasePath<Self, \(childActionType)>(
+            embed: { childAction in
+              .\(caseName)(childAction)
+            },
+            extract: { action in
+              guard case .\(caseName)(let childAction) = action else { return nil }
+              return childAction
+            }
+          )
+          """
+      )
+    }
+
+    if parameters.count == 2,
+      let idParameter = parameters.first,
+      let actionParameter = parameters.last,
+      idParameter.firstName?.text == "id",
+      actionParameter.firstName?.text == "action",
+      isCollectionActionLikeType(actionParameter.type.trimmedDescription)
+    {
+      let memberName = "\(generatedActionPathBaseName(from: caseName))ActionPath"
+      guard diagnoseGeneratedActionPathCollisionIfNeeded(
+        memberName: memberName,
+        element: element,
+        existingNames: existingNames,
+        seenGeneratedNames: &seenGeneratedNames,
+        context: context
+      ) == false else {
+        return nil
+      }
+
+      let idType = idParameter.type.trimmedDescription
+      let childActionType = actionParameter.type.trimmedDescription
+      return .init(
+        declaration: """
+          static let \(memberName) = CollectionActionPath<Self, \(idType), \(childActionType)>(
+            embed: { id, action in
+              .\(caseName)(id: id, action: action)
+            },
+            extract: { action in
+              guard case let .\(caseName)(id, childAction) = action else { return nil }
+              return (id, childAction)
+            }
+          )
+          """
+      )
+    }
+
+    return nil
+  }
+
+  private static func generatedActionPathBaseName(from caseName: String) -> String {
+    if caseName.hasPrefix("_"), caseName.count > 1 {
+      return String(caseName.dropFirst())
+    }
+    return caseName
+  }
+
+  private static func diagnoseGeneratedActionPathCollisionIfNeeded(
+    memberName: String,
+    element: EnumCaseElementSyntax,
+    existingNames: Set<String>,
+    seenGeneratedNames: inout Set<String>,
+    context: some MacroExpansionContext
+  ) -> Bool {
+    let collides = existingNames.contains(memberName) || seenGeneratedNames.contains(memberName)
+    if collides {
+      context.diagnose(
+        Diagnostic(
+          node: Syntax(element.name),
+          message: InnoFlowActionPathsMessage.leadingUnderscoreCollision
+        )
+      )
       return true
     }
 
-    return attributedType.lateSpecifiers.contains(where: isInoutSpecifier)
+    seenGeneratedNames.insert(memberName)
+    return false
   }
 
-  private static func isInoutSpecifier(_ element: TypeSpecifierListSyntax.Element) -> Bool {
-    guard let simpleSpecifier = element.as(SimpleTypeSpecifierSyntax.self) else {
+  private static func diagnoseExplicitReduceIfNeeded(
+    in declaration: StructDeclSyntax,
+    anchoredAt anchor: some SyntaxProtocol,
+    context: some MacroExpansionContext
+  ) -> Bool {
+    guard let reduceFunction = findReduceFunction(in: declaration) else {
       return false
     }
-    return simpleSpecifier.specifier.tokenKind == .keyword(.inout)
+
+    let diagnostic = explicitReduceDiagnostic(
+      anchoredAt: anchor,
+      reduceFunction: reduceFunction,
+      hasBodyProperty: findBodyProperty(in: declaration) != nil
+    )
+    context.diagnose(diagnostic)
+    return true
+  }
+
+  private static func explicitReduceDiagnostic(
+    anchoredAt anchor: some SyntaxProtocol,
+    reduceFunction: FunctionDeclSyntax,
+    hasBodyProperty: Bool
+  ) -> Diagnostic {
+    let message = InnoFlowMacroMessage.explicitReduceUnsupported
+
+    guard !hasBodyProperty,
+      isCanonicalReduceFunction(reduceFunction),
+      let replacement = bodyReplacement(for: reduceFunction)
+    else {
+      return Diagnostic(node: anchor, message: message)
+    }
+
+    return Diagnostic(
+      node: anchor,
+      message: message,
+      fixIt: .replace(
+        message: InnoFlowMacroFixIt.replaceExplicitReduce,
+        oldNode: reduceFunction,
+        newNode: replacement
+      )
+    )
+  }
+
+  private static func isCanonicalReduceFunction(_ function: FunctionDeclSyntax) -> Bool {
+    guard function.name.text == "reduce",
+      function.signature.effectSpecifiers == nil,
+      let body = function.body,
+      !body.statements.isEmpty
+    else {
+      return false
+    }
+
+    let parameters = Array(function.signature.parameterClause.parameters)
+    guard parameters.count == 2 else { return false }
+    guard isCanonicalIntoParameter(parameters[0]),
+      isCanonicalActionParameter(parameters[1]),
+      isCanonicalEffectTaskReturn(function.signature.returnClause?.type)
+    else {
+      return false
+    }
+
+    return true
+  }
+
+  private static func isCanonicalIntoParameter(_ parameter: FunctionParameterSyntax) -> Bool {
+    guard parameter.firstName.text == "into",
+      parameter.secondName?.text == "state"
+    else {
+      return false
+    }
+
+    return parameter.type.trimmedDescription == "inout State"
+  }
+
+  private static func isCanonicalActionParameter(_ parameter: FunctionParameterSyntax) -> Bool {
+    guard parameter.firstName.text == "action",
+      parameter.secondName == nil,
+      let identifier = parameter.type.as(IdentifierTypeSyntax.self)
+    else {
+      return false
+    }
+
+    return identifier.name.text == "Action"
+  }
+
+  private static func isCanonicalEffectTaskReturn(_ type: TypeSyntax?) -> Bool {
+    guard let identifier = type?.as(IdentifierTypeSyntax.self),
+      identifier.name.text == "EffectTask",
+      let genericArguments = identifier.genericArgumentClause
+    else {
+      return false
+    }
+
+    let arguments = Array(genericArguments.arguments)
+    guard arguments.count == 1,
+      let actionType = arguments[0].argument.as(IdentifierTypeSyntax.self)
+    else {
+      return false
+    }
+
+    return actionType.name.text == "Action"
+  }
+
+  private static func bodyReplacement(for function: FunctionDeclSyntax) -> VariableDeclSyntax? {
+    guard let body = function.body else { return nil }
+
+    let renderedStatements = indentCodeBlockItems(body.statements, spaces: 8)
+    return try? VariableDeclSyntax(
+      """
+      var body: some Reducer<State, Action> {
+          Reduce { state, action in
+      \(raw: renderedStatements)
+          }
+      }
+      """
+    )
+  }
+
+  private static func indentCodeBlockItems(
+    _ items: CodeBlockItemListSyntax,
+    spaces: Int
+  ) -> String {
+    let prefix = String(repeating: " ", count: spaces)
+
+    return items.map { item in
+      item.description
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .split(separator: "\n", omittingEmptySubsequences: false)
+        .map { line in
+          if line.isEmpty {
+            return prefix.trimmingCharacters(in: .whitespaces)
+          }
+          return prefix + line
+        }
+        .joined(separator: "\n")
+    }
+    .joined(separator: "\n")
+  }
+
+  private static func isCollectionActionLikeType(_ typeName: String) -> Bool {
+    typeName == "Action"
+      || typeName.hasSuffix(".Action")
+      || typeName.hasSuffix("Action")
+  }
+
+  private static func bodySignatureIssues(_ variable: VariableDeclSyntax) -> [String] {
+    var issues: [String] = []
+    guard let binding = variable.bindings.first else {
+      issues.append("missing `body` binding")
+      return issues
+    }
+
+    guard let typeAnnotation = binding.typeAnnotation else {
+      issues.append("`body` must declare an explicit `some Reducer<State, Action>` type")
+      return issues
+    }
+
+    let type = typeAnnotation.type
+
+    guard let someOrAny = type.as(SomeOrAnyTypeSyntax.self) else {
+      issues.append("`body` type `\(type.trimmedDescription)` must be an opaque type (`some Reducer<State, Action>`)")
+      return issues
+    }
+
+    guard someOrAny.someOrAnySpecifier.tokenKind == .keyword(.some) else {
+      issues.append("`body` must use `some` (not `\(someOrAny.someOrAnySpecifier.text)`)")
+      return issues
+    }
+
+    guard let identifierType = someOrAny.constraint.as(IdentifierTypeSyntax.self) else {
+      issues.append("`body` constraint `\(someOrAny.constraint.trimmedDescription)` is not a recognized type")
+      return issues
+    }
+
+    guard identifierType.name.text == "Reducer" else {
+      issues.append("`body` type must constrain to `Reducer`, found `\(identifierType.name.text)`")
+      return issues
+    }
+
+    guard let genericArgs = identifierType.genericArgumentClause else {
+      issues.append("`body` type must specify `Reducer<State, Action>`")
+      return issues
+    }
+
+    let args = Array(genericArgs.arguments)
+    guard args.count == 2 else {
+      issues.append("`body` must have exactly 2 generic parameters (State, Action), found \(args.count)")
+      return issues
+    }
+
+    if let first = args[0].argument.as(IdentifierTypeSyntax.self) {
+      if first.name.text != "State" {
+        issues.append("first generic parameter must be `State`, found `\(first.name.text)`")
+      }
+    } else {
+      issues.append("first generic parameter must be `State`")
+    }
+
+    if let second = args[1].argument.as(IdentifierTypeSyntax.self) {
+      if second.name.text != "Action" {
+        issues.append("second generic parameter must be `Action`, found `\(second.name.text)`")
+      }
+    } else {
+      issues.append("second generic parameter must be `Action`")
+    }
+
+    guard let accessorBlock = binding.accessorBlock else {
+      issues.append("`body` must be a computed property returning reducer composition")
+      return issues
+    }
+
+    switch accessorBlock.accessors {
+    case .getter:
+      return issues
+
+    case .accessors(let accessors):
+      let hasGetter = accessors.contains { accessor in
+        accessor.accessorSpecifier.tokenKind == .keyword(.get)
+      }
+      if !hasGetter {
+        issues.append("`body` must provide a getter returning reducer composition")
+      }
+      return issues
+    }
+  }
+}
+
+private struct SynthesizedActionPathMember {
+  let declaration: String
+}
+
+public struct InnoFlowActionPathsMacro: MemberMacro {
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingMembersOf declaration: some DeclGroupSyntax,
+    conformingTo protocols: [TypeSyntax],
+    in context: some MacroExpansionContext
+  ) throws -> [DeclSyntax] {
+    try expansion(of: node, providingMembersOf: declaration, in: context)
+  }
+
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingMembersOf declaration: some DeclGroupSyntax,
+    in context: some MacroExpansionContext
+  ) throws -> [DeclSyntax] {
+    guard let actionEnum = declaration.as(EnumDeclSyntax.self) else {
+      return []
+    }
+
+    return InnoFlowMacro.synthesizedActionPathDeclarations(in: actionEnum, context: context)
   }
 }
 
@@ -128,8 +575,9 @@ enum MacroError: Error, CustomStringConvertible {
   case notAStruct
   case missingState
   case missingAction
-  case missingReduceMethod
-  case invalidReduceSignature(details: [String])
+  case missingBodyProperty
+  case explicitReduceUnsupported
+  case invalidBodySignature(details: [String])
 
   var description: String {
     switch self {
@@ -139,17 +587,81 @@ enum MacroError: Error, CustomStringConvertible {
       return "@InnoFlow requires a nested 'State' type"
     case .missingAction:
       return "@InnoFlow requires a nested 'Action' type"
-    case .missingReduceMethod:
-      return "@InnoFlow requires reduce(into:action:)"
-    case .invalidReduceSignature(let details):
+    case .missingBodyProperty:
+      return "@InnoFlow requires `var body: some Reducer<State, Action>`"
+    case .explicitReduceUnsupported:
+      return "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead"
+    case .invalidBodySignature(let details):
       let joinedDetails = details.joined(separator: "; ")
       return """
-        Invalid reducer signature for @InnoFlow.
+        Invalid body signature for @InnoFlow.
         Expected:
-        func reduce(into state: inout State, action: Action) -> EffectTask<Action>
+        var body: some Reducer<State, Action>
         Detected issues: \(joinedDetails).
-        Remediation: use exactly two parameters labeled `into` and `action`, and mark the first parameter `inout`.
+        Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
         """
+    }
+  }
+}
+
+private enum InnoFlowMacroMessage: DiagnosticMessage {
+  case explicitReduceUnsupported
+
+  var message: String {
+    switch self {
+    case .explicitReduceUnsupported:
+      return "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead"
+    }
+  }
+
+  var diagnosticID: MessageID {
+    switch self {
+    case .explicitReduceUnsupported:
+      return .init(domain: "InnoFlowMacro", id: "ExplicitReduceUnsupported")
+    }
+  }
+
+  var severity: DiagnosticSeverity {
+    .error
+  }
+}
+
+private enum InnoFlowActionPathsMessage: DiagnosticMessage {
+  case leadingUnderscoreCollision
+
+  var message: String {
+    switch self {
+    case .leadingUnderscoreCollision:
+      return "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case"
+    }
+  }
+
+  var diagnosticID: MessageID {
+    switch self {
+    case .leadingUnderscoreCollision:
+      return .init(domain: "InnoFlowMacro", id: "LeadingUnderscoreCollision")
+    }
+  }
+
+  var severity: DiagnosticSeverity {
+    .error
+  }
+}
+
+private enum InnoFlowMacroFixIt: FixItMessage {
+  case replaceExplicitReduce
+
+  var message: String {
+    switch self {
+    case .replaceExplicitReduce:
+      return "replace explicit reduce with body-based reducer composition"
+    }
+  }
+
+  var fixItID: MessageID {
+    switch self {
+    case .replaceExplicitReduce:
+      return .init(domain: "InnoFlowMacro", id: "ReplaceExplicitReduce")
     }
   }
 }
@@ -160,103 +672,6 @@ enum MacroError: Error, CustomStringConvertible {
 struct InnoFlowMacrosPlugin: CompilerPlugin {
   let providingMacros: [Macro.Type] = [
     InnoFlowMacro.self,
-    BindableFieldMacro.self,
+    InnoFlowActionPathsMacro.self,
   ]
-}
-
-// MARK: - BindableField Macro Implementation
-
-/// A macro that wraps state properties in `BindableProperty`.
-public struct BindableFieldMacro: PeerMacro, AccessorMacro {
-
-  public static func expansion(
-    of node: AttributeSyntax,
-    providingPeersOf declaration: some DeclSyntaxProtocol,
-    in context: some MacroExpansionContext
-  ) throws -> [DeclSyntax] {
-    guard let varDecl = declaration.as(VariableDeclSyntax.self) else {
-      return []
-    }
-
-    guard let binding = varDecl.bindings.first,
-      let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text
-    else {
-      return []
-    }
-
-    let typeAnnotation = binding.typeAnnotation?.type
-    let initializer = binding.initializer?.value
-
-    let valueType: String
-    let initializerValue: String
-
-    if let typeAnnotation {
-      valueType = typeAnnotation.trimmedDescription
-      if let initializer {
-        initializerValue = "BindableProperty(\(initializer.trimmedDescription))"
-      } else {
-        initializerValue = "BindableProperty<\(valueType)>(wrappedValue: \(valueType)())"
-      }
-    } else if let initializer {
-      initializerValue = "BindableProperty(\(initializer.trimmedDescription))"
-      valueType = ""
-    } else {
-      return []
-    }
-
-    let storageName = "_\(identifier)_storage"
-
-    let finalDecl: DeclSyntax
-    if !valueType.isEmpty {
-      finalDecl = DeclSyntax(
-        """
-        private var \(raw: storageName): BindableProperty<\(raw: valueType)> = \(raw: initializerValue)
-        """
-      )
-    } else {
-      finalDecl = DeclSyntax(
-        """
-        private var \(raw: storageName) = \(raw: initializerValue)
-        """
-      )
-    }
-
-    return [finalDecl]
-  }
-
-  public static func expansion(
-    of node: AttributeSyntax,
-    providingAccessorsOf declaration: some DeclSyntaxProtocol,
-    in context: some MacroExpansionContext
-  ) throws -> [AccessorDeclSyntax] {
-    guard let varDecl = declaration.as(VariableDeclSyntax.self) else {
-      return []
-    }
-
-    guard let binding = varDecl.bindings.first,
-      let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text
-    else {
-      return []
-    }
-
-    let storageName = "_\(identifier)_storage"
-
-    let getter = AccessorDeclSyntax(
-      """
-      get {
-          \(raw: storageName).value
-      }
-      """
-    )
-
-    let setter = AccessorDeclSyntax(
-      """
-      set {
-          \(raw: storageName) = BindableProperty(newValue)
-      }
-      """
-    )
-
-    return [getter, setter]
-  }
 }

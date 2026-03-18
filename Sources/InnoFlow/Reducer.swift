@@ -6,11 +6,15 @@ import Foundation
 
 /// A protocol that defines a feature's state transition logic.
 ///
-/// InnoFlow v2 uses a single reducer entry point:
+/// InnoFlow uses a single reducer entry point:
 /// `Action -> reduce(into:action:) -> EffectTask<Action>`
 ///
 /// Reducers synchronously mutate state and return asynchronous work as `EffectTask`.
-public protocol Reducer<State, Action>: Sendable {
+///
+/// Reducers are not required to be `Sendable`. Composition-oriented reducers such as
+/// `Scope` and phase validators naturally capture key paths, and reducer instances
+/// themselves are never sent across actor boundaries by the runtime.
+public protocol Reducer<State, Action> {
 
   /// The state managed by this reducer.
   associatedtype State: Sendable

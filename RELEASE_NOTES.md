@@ -1,5 +1,85 @@
 # InnoFlow Release Notes
 
+## Migration Note
+
+### What changed
+
+- `PhaseMap` is the canonical runtime phase-transition layer for phase-heavy features.
+- Once `.phaseMap(...)` is active, the base reducer must stop mutating the owned phase directly.
+- Generated action path names now strip one leading underscore.
+
+### What you may need to update
+
+- Features that still assign `state.phase = ...` inside a reducer branch after adopting `PhaseMap`.
+- Sample or app code that still references underscored generated path members.
+- Feature guides that present `On(where:)` as the default matching path instead of `CasePath` or equatable actions.
+
+### Recommended search/replace
+
+- `Action._loadedCasePath` → `Action.loadedCasePath`
+- `Action._failedCasePath` → `Action.failedCasePath`
+- `state.phase =` inside a `.phaseMap(...)` feature → move the transition into `PhaseMap`
+
+## 3.0.0 Release
+
+This patch does not add new PhaseMap surface area. It tightens the semantics around the new
+phase-ownership model and makes the breaking migration points explicit.
+
+### Added
+
+1. Additional `PhaseMap` coverage:
+   - base reducer direct phase mutation restore semantics
+   - undeclared dynamic target rejection while preserving non-phase reducer work
+   - `On(where:)` fixed-target / nil-guard / same-phase guard paths
+2. Opt-in phase trigger coverage validation:
+   - `phaseMap.validationReport(expectedTriggersByPhase: ...)`
+   - keeps `PhaseMap` partial-by-default at runtime while allowing stricter test-time contracts
+3. Stronger assertion context in `PhaseMap` diagnostics:
+   - current action
+   - previous phase
+   - post-reduce phase
+   - declared targets
+
+### Changed
+
+1. `PhaseMap` is the canonical runtime phase-transition layer for phase-heavy features.
+2. When `.phaseMap(...)` is active, base reducers must stop mutating the owned phase directly.
+3. Generated action path names strip one leading underscore:
+   - `Action._loadedCasePath` → `Action.loadedCasePath`
+   - `Action._failedCasePath` → `Action.failedCasePath`
+4. `PhaseMap` remains partial by default. Unmatched phase/action pairs stay legal no-ops unless
+   tests opt into stricter validation.
+5. `validatePhaseTransitions(...)` remains available for backwards compatibility, but new runtime
+   phase ownership should prefer `PhaseMap`.
+
+**요약(KR)**: 이번 패치는 `PhaseMap`의 의미론을 더 단단히 고정하고, underscore-stripped action path naming과 phase ownership 계약을 migration note로 명확히 정리한 릴리스입니다.
+
+## 2.5.0 Patch (Queued Dispatch + Ordering Contract)
+
+This patch clarifies runtime semantics by moving `Store` dispatch onto a single FIFO queue while
+preserving cancellation, debounce, throttle, and animation contracts.
+
+### Added
+
+1. Ordering contract coverage:
+   - `EffectTask.send` emits immediate follow-up actions through the queue
+   - `EffectTask.run` re-enters the same queue after the async boundary
+   - `EffectTask.concatenate` preserves declaration order
+   - `EffectTask.merge` emits in child completion order
+2. Additional `Store` runtime tests:
+   - queue-based follow-up dispatch
+   - reducer reentrancy prevention for immediate sends
+   - async emission re-entry through the same queue
+3. Documentation examples for direct `InnoFlow` + `InnoRouter` composition at the app/coordinator boundary
+
+### Changed
+
+1. `Store.send(_:)` no longer processes `.send` follow-up actions through reducer re-entry.
+2. Effect-emitted actions now flow through the same FIFO dispatch queue as external store actions.
+3. README and DocC now document queue-based action ordering and navigation ownership boundaries.
+
+**요약(KR)**: v2.5는 `Store`를 queue 기반 dispatch로 정리하고, effect 실행 순서 계약과 InnoRouter 직접 조합 가이드를 공식화한 릴리스입니다.
+
 ## 2.4.0 Patch (Throttle Full Control + Animation Modifier)
 
 This patch extends effect orchestration while preserving cancellation guarantees and existing store APIs.
@@ -84,7 +164,7 @@ v2 prioritizes ideal API design over backward compatibility, and allows breaking
 
 | Gate | Status | Notes |
 |---|---|---|
-| SwiftUI philosophy alignment | Conditional Pass | Single state path and explicit binding are satisfied; bridge alignment is still pending |
+| SwiftUI philosophy alignment | Conditional Pass | Single state path and explicit binding are satisfied; app-level navigation composition still requires discipline |
 | SOLID alignment | Conditional Pass | Reducer/runtime/store boundaries are strong; DIP still depends on app-level conventions |
 
 ### Dependency Impact
@@ -93,16 +173,15 @@ v2 prioritizes ideal API design over backward compatibility, and allows breaking
 |---|---|---|
 | InnoFlow | High | Migrate all features to `EffectTask`-based reducer |
 | InnoFlowTesting | High | Replace sleep-oriented async testing patterns with deterministic timeout/cancellation model |
-| InnoRouterFlowBridge | High | Release **v2** aligned with new reducer/effect contracts |
 | InnoRouterEffects | Medium | Update InnoFlow integration examples to v2 effect syntax |
 | App Integrators | High | Run migration checklist and update feature templates/macros |
 
 ### InnoRouter Compatibility Note
 
-InnoFlow and InnoRouter are highly compatible from a `NavStack<Route>` state-driven navigation perspective.
-However, v2 migration requires a synchronized update of **InnoRouterFlowBridge** and effect-integration examples.
+InnoFlow and InnoRouter are highly compatible from a state-driven navigation perspective.
+The supported v2 direction is direct composition at the app/coordinator boundary plus updated effect-integration examples.
 
-**요약(KR)**: 상태 기반 네비게이션 궁합은 높지만, 브리지와 예제 코드는 v2로 함께 정렬해야 합니다.
+**요약(KR)**: 상태 기반 네비게이션 궁합은 높고, v2에서는 브리지 없이 앱/Coordinator 경계에서 직접 조합하는 방향을 사용합니다.
 
 ### Migration Planning
 

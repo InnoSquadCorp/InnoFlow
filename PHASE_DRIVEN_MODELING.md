@@ -1,98 +1,128 @@
 # Phase-Driven Modeling in InnoFlow
 
-`InnoFlow`에서 상태머신을 도입할 때의 권장 방식은 **범용 오토마타 런타임**이 아니라
-**feature-level phase graph** 입니다.
+`PhaseMap` is the recommended way to declare domain phase transitions in InnoFlow.
+It computes phase changes after the base reducer runs and still exposes `derivedGraph` so the same
+contract can be validated as a `PhaseTransitionGraph`.
 
-핵심 원칙:
-- 비즈니스/도메인 전이는 `InnoFlow`가 소유한다.
-- 네비게이션 전이는 `InnoRouter`가 소유한다.
-- transport/session lifecycle은 `InnoNetwork`가 소유한다.
-- DI lifecycle은 `InnoDI`의 정적 스코프/그래프 검증으로 유지한다.
+It is intentionally narrow:
 
-## 언제 쓰는가
+- InnoFlow owns business/domain transitions.
+- InnoRouter owns navigation transitions.
+- InnoNetwork owns transport/session lifecycle.
+- InnoDI owns construction-time lifecycle.
+- `PhaseMap` remains partial by default; unmatched phase/action pairs are legal no-ops unless tests opt into stricter validation.
 
-다음처럼 feature 상태가 명확한 단계로 나뉠 때 적합합니다.
-- `idle -> loading -> loaded`
-- `draft -> validating -> submitting -> submitted`
-- `unauthenticated -> authenticating -> authenticated`
-
-반대로 단순 CRUD나 계산성 state만 있는 feature에는 굳이 도입할 필요가 없습니다.
-
-## 기본 패턴
+## Recommended pattern
 
 ```swift
 import InnoFlow
 
 @InnoFlow
 struct ProfileFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {
     enum Phase: Hashable, Sendable {
-        case idle
-        case loading
-        case loaded
-        case failed
+      case idle
+      case loading
+      case loaded
+      case failed
     }
 
-    struct State: Equatable, Sendable, DefaultInitializable {
-        var phase: Phase = .idle
-        var profile: UserProfile?
-    }
+    var phase: Phase = .idle
+    var profile: UserProfile?
+    var errorMessage: String?
+  }
 
-    enum Action: Sendable {
-        case load
-        case _loaded(UserProfile)
-        case _failed
-    }
+  enum Action: Equatable, Sendable {
+    case load
+    case _loaded(UserProfile)
+    case _failed(String)
+  }
 
-    static let phaseGraph: PhaseTransitionGraph<Phase> = [
-        .idle: [.loading],
-        .loading: [.loaded, .failed],
-        .failed: [.loading],
-    ]
-
-    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-        switch action {
-        case .load:
-            state.phase = .loading
-            return .none
-        case ._loaded(let profile):
-            state.phase = .loaded
-            state.profile = profile
-            return .none
-        case ._failed:
-            state.phase = .failed
-            return .none
-        }
+  static var phaseMap: PhaseMap<State, Action, State.Phase> {
+    PhaseMap(\.phase) {
+      From(.idle) {
+        On(.load, to: .loading)
+      }
+      From(.loading) {
+        On(Action.loadedCasePath, to: .loaded)
+        On(Action.failedCasePath, to: .failed)
+      }
+      From(.failed) {
+        On(.load, to: .loading)
+      }
     }
+  }
+
+  static var phaseGraph: PhaseTransitionGraph<State.Phase> {
+    phaseMap.derivedGraph
+  }
+
+  var body: some Reducer<State, Action> {
+    let phaseMap: PhaseMap<State, Action, State.Phase> = Self.phaseMap
+
+    return Reduce { state, action in
+      switch action {
+      case .load:
+        return .none
+      case ._loaded(let profile):
+        state.profile = profile
+        return .none
+      case ._failed(let message):
+        state.errorMessage = message
+        return .none
+      }
+    }
+    .phaseMap(phaseMap)
+  }
 }
 ```
 
-## 테스트 패턴
-
-`InnoFlowTesting`의 `TestStore` helper를 쓰면 reducer action이 phase graph를 따르는지 검증할 수 있습니다.
+## Test-side validation
 
 ```swift
 import InnoFlowTesting
 
 let store = TestStore(reducer: ProfileFeature())
+let phaseMap: PhaseMap<ProfileFeature.State, ProfileFeature.Action, ProfileFeature.State.Phase> =
+  ProfileFeature.phaseMap
 
-await store.send(.load, tracking: \.phase, through: ProfileFeature.phaseGraph) {
-    $0.phase = .loading
+await store.send(.load, through: phaseMap) {
+  $0.phase = .loading
 }
 ```
 
-이 helper는 illegal transition이 생기면 일반 state mismatch와 별도로 실패를 기록합니다.
+If a team wants stricter phase-contract checks, validate explicitly declared triggers in tests:
 
-## 설계 기준
+```swift
+let report = ProfileFeature.phaseMap.validationReport(
+  expectedTriggersByPhase: [
+    .idle: [.action(.load)],
+    .loading: [
+      .casePath(ProfileFeature.Action.loadedCasePath, label: "loaded", sample: .fixture),
+      .casePath(ProfileFeature.Action.failedCasePath, label: "failed", sample: "boom")
+    ]
+  ]
+)
 
-- phase는 `enum`으로 유지한다.
-- graph는 `static let`로 feature 내부에 둔다.
-- guard, stack, non-deterministic automata까지 일반화하지 않는다.
-- 복잡한 전이 orchestration은 reducer/action/effect로 풀고, graph는 **허용 전이 문서 + 검증** 용도로 쓴다.
+precondition(report.isEmpty)
+```
 
-## 하지 말아야 할 것
+## Design rules
 
-- `InnoFlow`를 범용 DFA/NFA/PDA 엔진으로 확장하기
-- `InnoRouter`의 navigation phase를 `InnoFlow` phase와 중복 모델링하기
-- `InnoNetwork` retry/reconnect lifecycle을 비즈니스 phase graph에 다시 복제하기
+- Use `PhaseMap` only when the domain has meaningful legal transitions.
+- Keep `phaseMap` and `phaseGraph = phaseMap.derivedGraph` as feature-local statics.
+- Keep the base reducer focused on non-phase state mutation and effects.
+- Use `PhaseTransitionGraph` as contract + validation, not as a full runtime engine.
+- Prefer `CasePath` matching in `On` when payload matters, use equatable action matching for simple
+  events, and reserve `where:` for escape-hatch cases.
+- Treat `validationReport(expectedTriggersByPhase:)` as an opt-in contract check, not as a runtime requirement.
 
-요약하면, `InnoFlow`의 phase-driven FSM은 **도메인 전이를 더 명시적으로 만들기 위한 얇은 레이어**여야 합니다.
+## Anti-patterns
+
+Do not:
+
+- mutate the declared phase directly inside the base reducer once `PhaseMap` is active
+- move route stack ownership into InnoFlow state
+- mirror InnoRouter path transitions as phase graph transitions
+- mirror retry/reconnect/websocket/session lifecycle from InnoNetwork into business phases
+- turn InnoFlow into a DFA/NFA/PDA framework

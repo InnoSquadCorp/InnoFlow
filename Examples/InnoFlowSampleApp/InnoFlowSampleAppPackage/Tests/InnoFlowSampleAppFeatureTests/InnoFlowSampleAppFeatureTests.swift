@@ -1,0 +1,255 @@
+import Foundation
+import Testing
+import InnoFlow
+import InnoFlowTesting
+
+@testable import InnoFlowSampleAppFeature
+
+@Suite("InnoFlowSampleAppFeature tests")
+struct InnoFlowSampleAppFeatureTests {
+  @Test("Basics demo records queued follow-up increment")
+  @MainActor
+  func basicsQueuedFollowUp() async {
+    let store = TestStore(reducer: BasicsFeature())
+
+    await store.send(.queueIncrement) {
+      $0.eventLog = ["queue increment requested"]
+    }
+
+    await store.receive(._applyQueuedIncrement) {
+      $0.count = 1
+      $0.eventLog = ["queue increment requested", "queued follow-up applied -> count 1"]
+    }
+  }
+
+  @Test("Orchestration demo models parent-child refresh in order")
+  @MainActor
+  func orchestrationRefreshOrder() async {
+    let store = TestStore(reducer: OrchestrationFeature())
+
+    await store.send(.refreshDashboard) {
+      $0.isRefreshing = true
+      $0.refreshLog = ["refresh requested"]
+    }
+    await store.receive(.profile(.reset)) {
+      $0.profile.isReady = false
+      $0.profile.log = []
+    }
+    await store.receive(.permissions(.reset)) {
+      $0.permissions.isReady = false
+      $0.permissions.log = []
+    }
+    await store.receive(.profile(.markReady)) {
+      $0.profile.isReady = true
+      $0.profile.log = ["profile ready"]
+      $0.refreshLog = ["refresh requested", "profile child finished"]
+    }
+    await store.receive(.permissions(.markReady)) {
+      $0.permissions.isReady = true
+      $0.permissions.log = ["permissions ready"]
+      $0.refreshLog = ["refresh requested", "profile child finished", "permissions child finished"]
+    }
+    await store.receive(._refreshFinished) {
+      $0.isRefreshing = false
+      $0.refreshLog = [
+        "refresh requested",
+        "profile child finished",
+        "permissions child finished",
+        "refresh finished",
+      ]
+    }
+  }
+
+  @Test("Orchestration demo long-running sync reaches completion")
+  @MainActor
+  func orchestrationSyncPipeline() async {
+    let store = TestStore(reducer: OrchestrationFeature())
+
+    await store.send(.startSync) {
+      $0.isSyncing = true
+      $0.syncLog = ["sync started"]
+    }
+    await store.receive(._syncProgress(10)) {
+      $0.syncProgress = 10
+      $0.syncLog = ["sync started", "progress 10%"]
+    }
+    await store.receive(._syncProgress(55)) {
+      $0.syncProgress = 55
+      $0.syncLog = ["sync started", "progress 10%", "progress 55%"]
+    }
+    await store.receive(._syncProgress(100)) {
+      $0.syncProgress = 100
+      $0.syncLog = ["sync started", "progress 10%", "progress 55%", "progress 100%"]
+    }
+    await store.receive(._syncFinished) {
+      $0.isSyncing = false
+      $0.syncLog = ["sync started", "progress 10%", "progress 55%", "progress 100%", "sync finished"]
+    }
+  }
+
+  @Test("Phase-driven sample follows the documented graph on success")
+  @MainActor
+  func phaseDrivenSuccess() async {
+    let map: PhaseMap<PhaseDrivenTodoFeature.State, PhaseDrivenTodoFeature.Action, PhaseDrivenTodoFeature.State.Phase> = PhaseDrivenTodoFeature.phaseMap
+    assertValidGraph(
+      PhaseDrivenTodoFeature.phaseGraph,
+      allPhases: [.idle, .loading, .loaded, .failed],
+      root: .idle
+    )
+
+    let store = TestStore(
+      reducer: PhaseDrivenTodoFeature(
+        todoService: MockTodoService()
+      )
+    )
+
+    await store.send(.loadTodos, through: map) {
+      $0.phase = .loading
+      $0.errorMessage = nil
+    }
+
+    await store.receive(._loaded(MockTodoService.fixtures), through: map) {
+      $0.phase = .loaded
+      $0.todos = MockTodoService.fixtures
+      $0.errorMessage = nil
+    }
+  }
+
+  @Test("Phase-driven sample fails and recovers to idle when dismissing the error")
+  @MainActor
+  func phaseDrivenFailureRecovery() async {
+    let map: PhaseMap<PhaseDrivenTodoFeature.State, PhaseDrivenTodoFeature.Action, PhaseDrivenTodoFeature.State.Phase> = PhaseDrivenTodoFeature.phaseMap
+    let store = TestStore(
+      reducer: PhaseDrivenTodoFeature(
+        todoService: MockTodoService(shouldAlwaysFail: true)
+      )
+    )
+
+    await store.send(.loadTodos, through: map) {
+      $0.phase = .loading
+      $0.errorMessage = nil
+    }
+
+    await store.receive(._failed("Sample network request failed"), through: map) {
+      $0.phase = .failed
+      $0.errorMessage = "Sample network request failed"
+    }
+
+    await store.send(.dismissError) {
+      $0.phase = .idle
+      $0.errorMessage = nil
+    }
+  }
+
+  @Test("Phase-driven sample routes todo child actions by id")
+  @MainActor
+  func phaseDrivenTodoChildAction() async {
+    let store = TestStore(
+      reducer: PhaseDrivenTodoFeature(
+        todoService: MockTodoService()
+      ),
+      initialState: .init(
+        phase: .loaded,
+        todos: MockTodoService.fixtures,
+        errorMessage: nil,
+        shouldFail: false
+      )
+    )
+
+    let targetID = MockTodoService.fixtures[1].id
+    await store.send(PhaseDrivenTodoFeature.Action.todo(id: targetID, action: .setDone(true))) {
+      $0.todos[1].isDone = true
+    }
+  }
+
+  @Test("Orchestration demo child scope can be asserted through ScopedTestStore")
+  @MainActor
+  func orchestrationScopedChildTesting() async {
+    let store = TestStore(reducer: OrchestrationFeature())
+    let profile = store.scope(state: \.profile, action: OrchestrationFeature.Action.profileCasePath)
+
+    await profile.send(.markReady) {
+      $0.isReady = true
+      $0.log = ["profile ready"]
+    }
+
+    #expect(store.state.refreshLog == ["profile child finished"])
+  }
+
+  @Test("Phase-driven sample collection scope can target a single todo by id")
+  @MainActor
+  func phaseDrivenScopedTodoTesting() async {
+    let store = TestStore(
+      reducer: PhaseDrivenTodoFeature(
+        todoService: MockTodoService()
+      ),
+      initialState: .init(
+        phase: .loaded,
+        todos: MockTodoService.fixtures,
+        errorMessage: nil,
+        shouldFail: false
+      )
+    )
+    let targetID = MockTodoService.fixtures[2].id
+    let todo = store.scope(
+      collection: \.todos,
+      id: targetID,
+      action: PhaseDrivenTodoFeature.Action.todoActionPath
+    )
+
+    await todo.send(.setDone(true))
+
+    todo.assert {
+      $0.isDone = true
+    }
+    #expect(store.state.todos[2].isDone == true)
+  }
+
+  @Test("Router composition replays pending detail when view syncs after auth version changes")
+  @MainActor
+  func routerCompositionReplaysPendingRoute() async {
+    let coordinator = RouterCompositionCoordinator()
+    coordinator.queueProtectedDetail()
+    coordinator.submitLogin()
+
+    let deadline = ContinuousClock().now.advanced(by: .seconds(2))
+    let clock = ContinuousClock()
+    while clock.now < deadline {
+      if coordinator.loginStore.authVersion == 1 {
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+
+    coordinator.syncNavigationWithDomainState()
+
+    #expect(coordinator.path == [.dashboard, .detail(id: "invoice-42")])
+    #expect(coordinator.pendingRoute == nil)
+  }
+}
+
+private struct MockTodoService: SampleTodoServiceProtocol {
+  static let fixtures: [SampleTodo] = [
+    SampleTodo(
+      id: UUID(uuidString: "00000000-0000-0000-0000-000000000101")!,
+      title: "Document legal transitions"
+    ),
+    SampleTodo(
+      id: UUID(uuidString: "00000000-0000-0000-0000-000000000102")!,
+      title: "Keep navigation out of the phase graph"
+    ),
+    SampleTodo(
+      id: UUID(uuidString: "00000000-0000-0000-0000-000000000103")!,
+      title: "Assert transitions with TestStore"
+    ),
+  ]
+
+  var shouldAlwaysFail = false
+
+  func loadTodos(shouldFail: Bool) async throws -> [SampleTodo] {
+    if shouldFail || shouldAlwaysFail {
+      throw SampleTodoServiceError(errorDescription: "Sample network request failed")
+    }
+    return Self.fixtures
+  }
+}

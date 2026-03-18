@@ -55,11 +55,62 @@ private actor ActionQueue<Action: Sendable> {
   }
 }
 
+@MainActor
+private final class TestStoreRunEndpoint<Action: Sendable> {
+  private let isTaskActiveImpl: (UUID) -> Bool
+  private let finishTrackedTaskImpl: (UUID, EffectID?) -> Void
+
+  init(
+    isTaskActive: @escaping (UUID) -> Bool,
+    finishTrackedTask: @escaping (UUID, EffectID?) -> Void
+  ) {
+    self.isTaskActiveImpl = isTaskActive
+    self.finishTrackedTaskImpl = finishTrackedTask
+  }
+
+  func isTaskActive(token: UUID) -> Bool {
+    isTaskActiveImpl(token)
+  }
+
+  func finishTrackedTask(token: UUID, cancellationID: EffectID?) {
+    finishTrackedTaskImpl(token, cancellationID)
+  }
+}
+
+private actor TestStoreRunBridge<Action: Sendable> {
+  private let endpoint: TestStoreRunEndpoint<Action>
+  private let queue: ActionQueue<Action>
+  private let token: UUID
+  private let cancellationID: EffectID?
+
+  init(
+    endpoint: TestStoreRunEndpoint<Action>,
+    queue: ActionQueue<Action>,
+    token: UUID,
+    cancellationID: EffectID?
+  ) {
+    self.endpoint = endpoint
+    self.queue = queue
+    self.token = token
+    self.cancellationID = cancellationID
+  }
+
+  func emit(_ action: Action) async {
+    guard await endpoint.isTaskActive(token: token) else { return }
+    await queue.enqueue(action)
+  }
+
+  func finish() async {
+    await endpoint.finishTrackedTask(token: token, cancellationID: cancellationID)
+  }
+}
+
 /// A deterministic test harness for InnoFlow v2 reducers.
 ///
 /// `TestStore` asserts state transitions and captures effect-emitted actions.
 /// Timeout behavior is controlled with structured-concurrency races,
-/// avoiding arbitrary polling sleeps.
+/// avoiding arbitrary polling sleeps. Follow-up actions are observed using the
+/// same queue-based vocabulary as `Store`.
 @MainActor
 public final class TestStore<R: Reducer> where R.State: Equatable {
 
@@ -69,39 +120,53 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   private let reducer: R
   private let effectTimeout: Duration
-  private let clock = ContinuousClock()
+  private let diffLineLimit: Int
+  private let wallClock = ContinuousClock()
+  private let manualClock: ManualTestClock?
   private let queue = ActionQueue<R.Action>()
 
   private var runningTasks: [UUID: Task<Void, Never>] = [:]
   private var taskIDsByEffectID: [EffectID: Set<UUID>] = [:]
   private var debounceDelayTasksByID: [EffectID: Task<Void, Never>] = [:]
   private var debounceGenerationByID: [EffectID: UUID] = [:]
-  private var throttleWindowEndByID: [EffectID: ContinuousClock.Instant] = [:]
-  private var throttlePendingTrailingByID: [EffectID: PendingTrailing<R.Action>] = [:]
-  private var throttleTrailingTaskByID: [EffectID: Task<Void, Never>] = [:]
-  private var throttleGenerationByID: [EffectID: UInt64] = [:]
+  package let throttleState = ThrottleStateMap<R.Action>()
+
+  private var walker: EffectWalker<TestStore<R>> {
+    EffectWalker(driver: self)
+  }
 
   // MARK: - Initialization
 
   public init(
     reducer: R,
     initialState: R.State,
-    effectTimeout: Duration = .seconds(1)
+    clock: ManualTestClock? = nil,
+    effectTimeout: Duration = .seconds(1),
+    diffLineLimit: Int? = nil
   ) {
     self.reducer = reducer
     self.state = initialState
+    self.manualClock = clock
     self.effectTimeout = effectTimeout
+    self.diffLineLimit = resolveDiffLineLimit(
+      explicit: diffLineLimit,
+      environment: ProcessInfo.processInfo.environment
+    )
   }
 
   public convenience init(
     reducer: R,
     initialState: R.State? = nil,
-    effectTimeout: Duration = .seconds(1)
+    clock: ManualTestClock? = nil,
+    effectTimeout: Duration = .seconds(1),
+    diffLineLimit: Int? = nil
   ) where R.State: DefaultInitializable {
     self.init(
       reducer: reducer,
       initialState: initialState ?? R.State(),
-      effectTimeout: effectTimeout
+      clock: clock,
+      effectTimeout: effectTimeout,
+      diffLineLimit: diffLineLimit
     )
   }
 
@@ -112,9 +177,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     for task in debounceDelayTasksByID.values {
       task.cancel()
     }
-    for task in throttleTrailingTaskByID.values {
-      task.cancel()
-    }
+    throttleState.clearAll()
   }
 
   // MARK: - Public APIs
@@ -131,11 +194,18 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     let effect = reducer.reduce(into: &state, action: action)
 
     if updateExpectedState != nil, state != expectedState {
+      let diffSection = renderStateDiff(
+        expected: expectedState,
+        actual: state,
+        lineLimit: diffLineLimit
+      ).map {
+        "Diff:\n\($0)\n\n"
+      } ?? ""
       testStoreAssertionFailure(
         """
         State mismatch after action.
 
-        Expected:
+        \(diffSection)Expected:
         \(expectedState)
 
         Actual:
@@ -146,7 +216,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       )
     }
 
-    execute(effect)
+    await walker.walk(effect, awaited: false)
   }
 
   public func receive(
@@ -192,11 +262,18 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     let effect = reducer.reduce(into: &state, action: action)
 
     if updateExpectedState != nil, state != expectedState {
+      let diffSection = renderStateDiff(
+        expected: expectedState,
+        actual: state,
+        lineLimit: diffLineLimit
+      ).map {
+        "Diff:\n\($0)\n\n"
+      } ?? ""
       testStoreAssertionFailure(
         """
         State mismatch after receiving action.
 
-        Expected:
+        \(diffSection)Expected:
         \(expectedState)
 
         Actual:
@@ -207,7 +284,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       )
     }
 
-    execute(effect)
+    await walker.walk(effect, awaited: false)
   }
 
   public func assertNoMoreActions(
@@ -255,243 +332,178 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     cancelAllEffectsSynchronously()
   }
 
-  // MARK: - Effect Execution
-
-  private struct ExecutionContext: Sendable {
-    let cancellationID: EffectID?
-    let animation: Animation?
+  fileprivate func makeScopedTestStore<ChildState: Equatable, ChildAction>(
+    state: WritableKeyPath<R.State, ChildState>,
+    extractAction: @escaping @Sendable (R.Action) -> ChildAction?,
+    embedAction: @escaping @Sendable (ChildAction) -> R.Action
+  ) -> ScopedTestStore<R, ChildState, ChildAction> {
+    ScopedTestStore(
+      parent: self,
+      stateReader: { $0[keyPath: state] },
+      expectedStateUpdater: { rootState, update in
+        var childState = rootState[keyPath: state]
+        update(&childState)
+        rootState[keyPath: state] = childState
+      },
+      actionExtractor: extractAction,
+      actionEmbedder: embedAction
+    )
   }
 
-  private struct PendingTrailing<Action: Sendable>: Sendable {
-    let effect: EffectTask<Action>
-    let context: ExecutionContext
+  public func scope<ChildState: Equatable, ChildAction>(
+    state: WritableKeyPath<R.State, ChildState>,
+    action: CasePath<R.Action, ChildAction>
+  ) -> ScopedTestStore<R, ChildState, ChildAction> {
+    makeScopedTestStore(
+      state: state,
+      extractAction: action.extract,
+      embedAction: action.embed
+    )
   }
 
-  private func execute(
-    _ effect: EffectTask<R.Action>,
-    context: ExecutionContext? = nil
-  ) {
-    switch effect._testingOperation {
-    case .none:
-      return
+  fileprivate func makeScopedCollectionTestStore<CollectionState, ChildAction>(
+    collection: WritableKeyPath<R.State, CollectionState>,
+    id: CollectionState.Element.ID,
+    extractAction: @escaping @Sendable (R.Action) -> (CollectionState.Element.ID, ChildAction)?,
+    embedAction: @escaping @Sendable (CollectionState.Element.ID, ChildAction) -> R.Action
+  ) -> ScopedTestStore<R, CollectionState.Element, ChildAction>
+  where
+    CollectionState: MutableCollection & RandomAccessCollection,
+    CollectionState.Element: Identifiable & Equatable,
+    CollectionState.Element.ID: Sendable
+  {
+    let staleMessage = scopedStoreFailureMessage(
+      parentType: R.self,
+      childType: CollectionState.Element.self,
+      stableID: AnyHashable(id),
+      kind: .collectionEntryRemoved
+    )
 
-    case .send(let action):
-      Task {
-        await queue.enqueue(action)
-      }
-
-    case .run(let priority, let operation):
-      startRunTask(priority: priority, operation: operation, context: context)
-
-    case .merge(let effects):
-      for effect in effects {
-        execute(effect, context: context)
-      }
-
-    case .concatenate(let effects):
-      let token = UUID()
-      let cancellationID = context?.cancellationID
-      let task = Task { @MainActor [weak self] in
-        guard let self else { return }
-        defer {
-          self.removeTrackedTask(token: token, cancellationID: cancellationID)
+    return ScopedTestStore(
+      parent: self,
+      stateReader: { rootState in
+        guard let element = rootState[keyPath: collection].first(where: { $0.id == id }) else {
+          preconditionFailure(staleMessage)
         }
-        for effect in effects {
-          guard !Task.isCancelled else { break }
-          await self.executeAwaited(effect, context: context)
+        return element
+      },
+      expectedStateUpdater: { rootState, update in
+        var collectionState = rootState[keyPath: collection]
+        guard let index = collectionState.firstIndex(where: { $0.id == id }) else {
+          preconditionFailure(staleMessage)
         }
-      }
-      runningTasks[token] = task
-      if let id = cancellationID {
-        taskIDsByEffectID[id, default: []].insert(token)
-      }
-
-    case .cancel(let id):
-      cancelEffectsSynchronously(identifiedBy: id)
-
-    case .cancellable(let nested, let id, let cancelInFlight):
-      if cancelInFlight {
-        cancelEffectsSynchronously(identifiedBy: id)
-      }
-      execute(nested, context: contextWithCancellation(id, on: context))
-
-    case .debounce(let nested, let id, let interval):
-      _ = scheduleDebounce(
-        nested,
-        id: id,
-        interval: interval,
-        context: context
-      )
-
-    case .throttle(let nested, let id, let interval, let leading, let trailing):
-      let now = clock.now
-      let throttleContext = contextWithCancellation(id, on: context)
-      if let windowEnd = throttleWindowEndByID[id], now < windowEnd {
-        if trailing {
-          throttlePendingTrailingByID[id] = .init(
-            effect: nested,
-            context: throttleContext
-          )
+        update(&collectionState[index])
+        rootState[keyPath: collection] = collectionState
+      },
+      actionExtractor: { rootAction in
+        guard let (receivedID, childAction) = extractAction(rootAction), receivedID == id else {
+          return nil
         }
-        return
-      }
-      throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
-      throttleGenerationByID.removeValue(forKey: id)
-      throttlePendingTrailingByID.removeValue(forKey: id)
-      throttleWindowEndByID[id] = now.advanced(by: interval)
-
-      if trailing {
-        if !leading {
-          throttlePendingTrailingByID[id] = .init(
-            effect: nested,
-            context: throttleContext
-          )
-        }
-        scheduleThrottleTrailing(for: id, interval: interval)
-      }
-
-      if leading {
-        execute(
-          nested,
-          context: throttleContext
-        )
-      }
-
-    case .animation(let nested, let animation):
-      execute(
-        nested,
-        context: contextWithAnimation(animation, on: context)
-      )
-    }
+        return childAction
+      },
+      actionEmbedder: { childAction in
+        embedAction(id, childAction)
+      },
+      stableID: AnyHashable(id)
+    )
   }
 
-  private func executeAwaited(
-    _ effect: EffectTask<R.Action>,
-    context: ExecutionContext? = nil
-  ) async {
-    switch effect._testingOperation {
-    case .none:
-      return
-
-    case .send(let action):
-      await queue.enqueue(action)
-
-    case .run(let priority, let operation):
-      await withCheckedContinuation { continuation in
-        startRunTask(
-          priority: priority,
-          operation: operation,
-          context: context,
-          completion: {
-            continuation.resume()
-          }
-        )
-      }
-
-    case .merge(let effects):
-      await withTaskGroup(of: Void.self) { group in
-        for effect in effects {
-          group.addTask { [weak self] in
-            guard let self else { return }
-            await self.executeAwaited(effect, context: context)
-          }
-        }
-        await group.waitForAll()
-      }
-
-    case .concatenate(let effects):
-      for effect in effects {
-        await executeAwaited(effect, context: context)
-      }
-
-    case .cancel(let id):
-      cancelEffectsSynchronously(identifiedBy: id)
-
-    case .cancellable(let nested, let id, let cancelInFlight):
-      if cancelInFlight {
-        cancelEffectsSynchronously(identifiedBy: id)
-      }
-      await executeAwaited(
-        nested,
-        context: contextWithCancellation(id, on: context)
-      )
-
-    case .debounce(let nested, let id, let interval):
-      let task = scheduleDebounce(
-        nested,
-        id: id,
-        interval: interval,
-        context: context
-      )
-      _ = await task.result
-
-    case .throttle(let nested, let id, let interval, let leading, let trailing):
-      let now = clock.now
-      let throttleContext = contextWithCancellation(id, on: context)
-      if let windowEnd = throttleWindowEndByID[id], now < windowEnd {
-        if trailing {
-          throttlePendingTrailingByID[id] = .init(
-            effect: nested,
-            context: throttleContext
-          )
-        }
-        return
-      }
-      throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
-      throttleGenerationByID.removeValue(forKey: id)
-      throttlePendingTrailingByID.removeValue(forKey: id)
-      throttleWindowEndByID[id] = now.advanced(by: interval)
-
-      if trailing {
-        if !leading {
-          throttlePendingTrailingByID[id] = .init(
-            effect: nested,
-            context: throttleContext
-          )
-        }
-        scheduleThrottleTrailing(for: id, interval: interval)
-      }
-
-      if leading {
-        await executeAwaited(
-          nested,
-          context: throttleContext
-        )
-      }
-
-    case .animation(let nested, let animation):
-      await executeAwaited(
-        nested,
-        context: contextWithAnimation(animation, on: context)
-      )
-    }
+  public func scope<CollectionState, ChildAction>(
+    collection: WritableKeyPath<R.State, CollectionState>,
+    id: CollectionState.Element.ID,
+    action: CollectionActionPath<R.Action, CollectionState.Element.ID, ChildAction>
+  ) -> ScopedTestStore<R, CollectionState.Element, ChildAction>
+  where
+    CollectionState: MutableCollection & RandomAccessCollection,
+    CollectionState.Element: Identifiable & Equatable,
+    CollectionState.Element.ID: Sendable
+  {
+    makeScopedCollectionTestStore(
+      collection: collection,
+      id: id,
+      extractAction: action.extract,
+      embedAction: action.embed
+    )
   }
+
+  fileprivate func applyScopedAction(_ action: R.Action) -> EffectTask<R.Action> {
+    reducer.reduce(into: &state, action: action)
+  }
+
+  fileprivate func walkScopedEffect(_ effect: EffectTask<R.Action>) async {
+    await walker.walk(effect, awaited: false)
+  }
+
+  fileprivate func nextScopedActionWithinTimeout() async -> R.Action? {
+    await nextActionWithinTimeout()
+  }
+
+  fileprivate var scopedEffectTimeout: Duration {
+    effectTimeout
+  }
+
+  package var resolvedDiffLineLimit: Int {
+    diffLineLimit
+  }
+  // MARK: - Task Management
 
   private func startRunTask(
     priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<R.Action>) async -> Void,
-    context: ExecutionContext?,
-    completion: (() -> Void)? = nil
-  ) {
+    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    context: EffectExecutionContext?
+  ) -> Task<Void, Never> {
     let token = UUID()
-    let queue = self.queue
-
-    let send = Send<R.Action> { action in
-      let isActive = await MainActor.run { [weak self] in
-        self?.runningTasks[token] != nil
+    let endpoint = TestStoreRunEndpoint<R.Action>(
+      isTaskActive: { [weak self] token in
+        self?.isRunTaskActive(token: token) ?? false
+      },
+      finishTrackedTask: { [weak self] token, cancellationID in
+        self?.finishTrackedRunTask(token: token, cancellationID: cancellationID)
       }
-      guard isActive else { return }
-      await queue.enqueue(action)
-    }
+    )
+    let runBridge = TestStoreRunBridge(
+      endpoint: endpoint,
+      queue: queue,
+      token: token,
+      cancellationID: context?.cancellationID
+    )
+    let manualClock = self.manualClock
+    let wallClock = self.wallClock
 
-    let task = Task(priority: priority) { [weak self] in
-      await operation(send)
-
-      await MainActor.run {
-        guard let self else { return }
-        self.removeTrackedTask(token: token, cancellationID: context?.cancellationID)
-        completion?()
+    let task = Task(priority: priority) {
+      let send = Send<R.Action> { action in
+        await runBridge.emit(action)
       }
+
+      let effectContext = EffectContext(
+        now: {
+          if let manualClock {
+            return await manualClock.now
+          }
+          return wallClock.now
+        },
+        sleep: { duration in
+          if let manualClock {
+            try await manualClock.sleep(for: duration)
+          } else {
+            try await Task.sleep(for: duration)
+          }
+        },
+        isCancelled: {
+          Task.isCancelled
+        },
+        checkCancellation: {
+          let isTaskActive = await MainActor.run {
+            endpoint.isTaskActive(token: token)
+          }
+          if Task.isCancelled || isTaskActive == false {
+            throw CancellationError()
+          }
+        }
+      )
+
+      await operation(send, effectContext)
+      await runBridge.finish()
     }
 
     runningTasks[token] = task
@@ -499,12 +511,14 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     if let id = context?.cancellationID {
       taskIDsByEffectID[id, default: []].insert(token)
     }
+
+    return task
   }
 
   private func cancelEffectsSynchronously(identifiedBy id: EffectID) {
     debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
     debounceGenerationByID.removeValue(forKey: id)
-    clearThrottleState(for: id)
+    throttleState.clearState(for: id)
     guard let ids = taskIDsByEffectID.removeValue(forKey: id) else { return }
 
     for token in ids {
@@ -519,7 +533,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     for task in debounceDelayTasksByID.values {
       task.cancel()
     }
-    clearAllThrottleState()
+    throttleState.clearAll()
     runningTasks.removeAll()
     taskIDsByEffectID.removeAll()
     debounceDelayTasksByID.removeAll()
@@ -538,117 +552,6 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     } else {
       taskIDsByEffectID[id] = tokens
     }
-  }
-
-  private func scheduleDebounce(
-    _ nested: EffectTask<R.Action>,
-    id: EffectID,
-    interval: Duration,
-    context: ExecutionContext?
-  ) -> Task<Void, Never> {
-    debounceDelayTasksByID[id]?.cancel()
-    cancelEffectsSynchronously(identifiedBy: id)
-
-    let generation = UUID()
-    debounceGenerationByID[id] = generation
-    let debounceContext = contextWithCancellation(id, on: context)
-
-    let task = Task { @MainActor [weak self] in
-      guard let self else { return }
-      defer {
-        if self.debounceGenerationByID[id] == generation {
-          self.debounceDelayTasksByID.removeValue(forKey: id)
-          self.debounceGenerationByID.removeValue(forKey: id)
-        }
-      }
-
-      do {
-        try await Task.sleep(for: interval)
-      } catch {
-        return
-      }
-
-      guard !Task.isCancelled else { return }
-      guard self.debounceGenerationByID[id] == generation else { return }
-      await self.executeAwaited(
-        nested,
-        context: debounceContext
-      )
-    }
-
-    debounceDelayTasksByID[id] = task
-    return task
-  }
-
-  private func contextWithCancellation(
-    _ id: EffectID,
-    on context: ExecutionContext?
-  ) -> ExecutionContext {
-    .init(
-      cancellationID: id,
-      animation: context?.animation
-    )
-  }
-
-  private func contextWithAnimation(
-    _ animation: Animation?,
-    on context: ExecutionContext?
-  ) -> ExecutionContext {
-    .init(
-      cancellationID: context?.cancellationID,
-      animation: animation
-    )
-  }
-
-  private func scheduleThrottleTrailing(for id: EffectID, interval: Duration) {
-    throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
-    let generation = (throttleGenerationByID[id] ?? 0) &+ 1
-    throttleGenerationByID[id] = generation
-    throttleTrailingTaskByID[id] = Task { [weak self] in
-      do {
-        try await Task.sleep(for: interval)
-      } catch {
-        return
-      }
-      await MainActor.run {
-        self?.drainThrottleTrailing(for: id, generation: generation)
-      }
-    }
-  }
-
-  private func drainThrottleTrailing(for id: EffectID, generation: UInt64) {
-    guard throttleGenerationByID[id] == generation else {
-      return
-    }
-    defer {
-      if throttleGenerationByID[id] == generation {
-        throttleTrailingTaskByID.removeValue(forKey: id)
-        throttlePendingTrailingByID.removeValue(forKey: id)
-        throttleWindowEndByID.removeValue(forKey: id)
-        throttleGenerationByID.removeValue(forKey: id)
-      }
-    }
-    guard let pending = throttlePendingTrailingByID[id] else {
-      return
-    }
-    execute(pending.effect, context: pending.context)
-  }
-
-  private func clearThrottleState(for id: EffectID) {
-    throttleTrailingTaskByID.removeValue(forKey: id)?.cancel()
-    throttlePendingTrailingByID.removeValue(forKey: id)
-    throttleWindowEndByID.removeValue(forKey: id)
-    throttleGenerationByID.removeValue(forKey: id)
-  }
-
-  private func clearAllThrottleState() {
-    for task in throttleTrailingTaskByID.values {
-      task.cancel()
-    }
-    throttleTrailingTaskByID.removeAll()
-    throttlePendingTrailingByID.removeAll()
-    throttleWindowEndByID.removeAll()
-    throttleGenerationByID.removeAll()
   }
 
   // MARK: - Receiving
@@ -679,6 +582,419 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       return result
     }
   }
+
+  private func isRunTaskActive(token: UUID) -> Bool {
+    runningTasks[token] != nil
+  }
+
+  private func finishTrackedRunTask(token: UUID, cancellationID: EffectID?) {
+    removeTrackedTask(token: token, cancellationID: cancellationID)
+  }
+
+  private func sleepForDriver(_ duration: Duration) async throws {
+    if let manualClock {
+      try await manualClock.sleep(for: duration)
+    } else {
+      try await Task.sleep(for: duration)
+    }
+  }
+}
+
+// MARK: - EffectDriver Conformance
+
+extension TestStore: EffectDriver {
+  package typealias Action = R.Action
+
+  package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
+    Task {
+      await queue.enqueue(action)
+    }
+  }
+
+  package func startRun(
+    priority: TaskPriority?,
+    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    context: EffectExecutionContext?,
+    awaited: Bool
+  ) async {
+    let task = startRunTask(
+      priority: priority,
+      operation: operation,
+      context: context
+    )
+
+    if awaited {
+      _ = await task.result
+    }
+  }
+
+  package func cancelEffects(id: EffectID, context: EffectExecutionContext?) async {
+    cancelEffectsSynchronously(identifiedBy: id)
+  }
+
+  package func cancelInFlightEffects(id: EffectID, context: EffectExecutionContext?) async {
+    cancelEffectsSynchronously(identifiedBy: id)
+  }
+
+  package func shouldProceed(context: EffectExecutionContext?) -> Bool {
+    true
+  }
+
+  package func debounce(
+    _ nested: EffectTask<R.Action>,
+    id: EffectID,
+    interval: Duration,
+    context: EffectExecutionContext?,
+    awaited: Bool,
+    recurse: @escaping @MainActor @Sendable (
+      EffectTask<R.Action>, EffectExecutionContext?, Bool
+    ) async -> Void
+  ) async {
+    debounceDelayTasksByID[id]?.cancel()
+    cancelEffectsSynchronously(identifiedBy: id)
+
+    let generation = UUID()
+    debounceGenerationByID[id] = generation
+
+    let task = Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer {
+        if self.debounceGenerationByID[id] == generation {
+          self.debounceDelayTasksByID.removeValue(forKey: id)
+          self.debounceGenerationByID.removeValue(forKey: id)
+        }
+      }
+
+      do {
+        try await self.sleepForDriver(interval)
+      } catch {
+        return
+      }
+
+      guard !Task.isCancelled else { return }
+      guard self.debounceGenerationByID[id] == generation else { return }
+      await recurse(nested, context, true)
+    }
+
+    debounceDelayTasksByID[id] = task
+
+    if awaited {
+      _ = await task.result
+    }
+  }
+
+  package func scheduleTrailingDrain(
+    for id: EffectID,
+    interval: Duration,
+    recurse: @escaping @MainActor @Sendable (
+      EffectTask<R.Action>, EffectExecutionContext?, Bool
+    ) async -> Void
+  ) {
+    throttleState.cancelTrailingTask(for: id)
+    let generation = throttleState.nextGeneration(for: id)
+    let task = Task { [weak self] in
+      guard let self else { return }
+      do {
+        try await self.sleepForDriver(interval)
+      } catch {
+        return
+      }
+      guard self.throttleState.generation(for: id) == generation else { return }
+      defer {
+        if self.throttleState.generation(for: id) == generation {
+          self.throttleState.clearState(for: id)
+        }
+      }
+      guard let pending = self.throttleState.pending(for: id) else { return }
+      await recurse(pending.effect, pending.context, false)
+    }
+    throttleState.setTrailingTask(task, for: id)
+  }
+
+  package var now: ContinuousClock.Instant {
+    get async {
+      if let manualClock {
+        return await manualClock.now
+      }
+      return wallClock.now
+    }
+  }
+
+  package func runConcurrently(
+    _ children: [EffectTask<R.Action>],
+    context: EffectExecutionContext?,
+    awaited: Bool,
+    recurse: @escaping @MainActor @Sendable (
+      EffectTask<R.Action>, EffectExecutionContext?, Bool
+    ) async -> Void
+  ) async {
+    if awaited {
+      await withTaskGroup(of: Void.self) { group in
+        for child in children {
+          group.addTask {
+            await recurse(child, context, true)
+          }
+        }
+        await group.waitForAll()
+      }
+    } else {
+      for child in children {
+        Task { [weak self] in
+          guard self != nil else { return }
+          await recurse(child, context, false)
+        }
+      }
+    }
+  }
+
+  package func runSequentially(
+    _ children: [EffectTask<R.Action>],
+    context: EffectExecutionContext?,
+    awaited: Bool,
+    recurse: @escaping @MainActor @Sendable (
+      EffectTask<R.Action>, EffectExecutionContext?, Bool
+    ) async -> Void
+  ) async {
+    if awaited {
+      for child in children {
+        await recurse(child, context, true)
+      }
+    } else {
+      let token = UUID()
+      let cancellationID = context?.cancellationID
+      let task = Task { @MainActor [weak self] in
+        guard let self else { return }
+        defer {
+          self.removeTrackedTask(token: token, cancellationID: cancellationID)
+        }
+        for child in children {
+          guard !Task.isCancelled else { break }
+          await recurse(child, context, true)
+        }
+      }
+      runningTasks[token] = task
+      if let id = cancellationID {
+        taskIDsByEffectID[id, default: []].insert(token)
+      }
+    }
+  }
+}
+
+@dynamicMemberLookup
+@MainActor
+public struct ScopedTestStore<Root: Reducer, ChildState: Equatable, ChildAction>
+where Root.State: Equatable {
+  private let parent: TestStore<Root>
+  private let diffLineLimit: Int
+  private let stateReader: (Root.State) -> ChildState
+  private let expectedStateUpdater: (inout Root.State, (inout ChildState) -> Void) -> Void
+  private let actionExtractor: @Sendable (Root.Action) -> ChildAction?
+  private let actionEmbedder: @Sendable (ChildAction) -> Root.Action
+  private let failureContext: String?
+  private let stateMismatchLabel: String
+
+  public var state: ChildState {
+    stateReader(parent.state)
+  }
+
+  public subscript<Value>(dynamicMember keyPath: KeyPath<ChildState, Value>) -> Value {
+    state[keyPath: keyPath]
+  }
+
+  public subscript<Value>(dynamicMember keyPath: KeyPath<ChildState, BindableProperty<Value>>) -> Value
+  where Value: Equatable & Sendable {
+    state[keyPath: keyPath].value
+  }
+
+  init(
+    parent: TestStore<Root>,
+    stateReader: @escaping (Root.State) -> ChildState,
+    expectedStateUpdater: @escaping (inout Root.State, (inout ChildState) -> Void) -> Void,
+    actionExtractor: @escaping @Sendable (Root.Action) -> ChildAction?,
+    actionEmbedder: @escaping @Sendable (ChildAction) -> Root.Action,
+    stableID: AnyHashable? = nil
+  ) {
+    self.parent = parent
+    self.diffLineLimit = parent.resolvedDiffLineLimit
+    self.stateReader = stateReader
+    self.expectedStateUpdater = expectedStateUpdater
+    self.actionExtractor = actionExtractor
+    self.actionEmbedder = actionEmbedder
+    self.failureContext = scopedTestStoreFailureContext(stableID: stableID)
+    self.stateMismatchLabel = scopedTestStoreStateMismatchLabel(stableID: stableID)
+  }
+
+  public func send(
+    _ action: ChildAction,
+    assert updateExpectedState: ((inout ChildState) -> Void)? = nil,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async {
+    var expectedState = state
+    updateExpectedState?(&expectedState)
+
+    let effect = parent.applyScopedAction(actionEmbedder(action))
+    let actualState = stateReader(parent.state)
+
+    if updateExpectedState != nil, actualState != expectedState {
+      reportStateMismatch(
+        expected: expectedState,
+        actual: actualState,
+        eventDescription: "mismatch after action.",
+        file: file,
+        line: line
+      )
+    }
+
+    await parent.walkScopedEffect(effect)
+  }
+
+  public func receive(
+    _ expectedAction: ChildAction,
+    assert updateExpectedState: ((inout ChildState) -> Void)? = nil,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async where ChildAction: Equatable {
+    guard let rootAction = await parent.nextScopedActionWithinTimeout() else {
+      testStoreAssertionFailure(
+        decorateFailure(
+          """
+        Expected to receive child action:
+        \(expectedAction)
+
+        But timed out after \(parent.scopedEffectTimeout).
+        """
+        ),
+        file: file,
+        line: line
+      )
+      return
+    }
+
+    guard let childAction = actionExtractor(rootAction) else {
+      testStoreAssertionFailure(
+        decorateFailure(
+          """
+        Received unexpected parent action for scoped test store.
+
+        Expected child action:
+        \(expectedAction)
+
+        Received parent action:
+        \(rootAction)
+        """
+        ),
+        file: file,
+        line: line
+      )
+      return
+    }
+
+    if childAction != expectedAction {
+      testStoreAssertionFailure(
+        decorateFailure(
+          """
+        Received unexpected child action.
+
+        Expected:
+        \(expectedAction)
+
+        Received:
+        \(childAction)
+        """
+        ),
+        file: file,
+        line: line
+      )
+      return
+    }
+
+    var expectedState = state
+    updateExpectedState?(&expectedState)
+
+    let effect = parent.applyScopedAction(rootAction)
+    let actualState = stateReader(parent.state)
+
+    if updateExpectedState != nil, actualState != expectedState {
+      reportStateMismatch(
+        expected: expectedState,
+        actual: actualState,
+        eventDescription: "mismatch after receiving action.",
+        file: file,
+        line: line
+      )
+    }
+
+    await parent.walkScopedEffect(effect)
+  }
+
+  public func assert(
+    _ updateExpectedState: (inout ChildState) -> Void,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    var expectedState = state
+    updateExpectedState(&expectedState)
+    let actualState = stateReader(parent.state)
+
+    if actualState != expectedState {
+      reportStateMismatch(
+        expected: expectedState,
+        actual: actualState,
+        eventDescription: "mismatch.",
+        file: file,
+        line: line
+      )
+    }
+  }
+
+  public func assertNoMoreActions(
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async {
+    await parent.assertNoMoreActions(file: file, line: line)
+  }
+
+  package var resolvedDiffLineLimit: Int {
+    diffLineLimit
+  }
+
+  private func decorateFailure(_ message: String) -> String {
+    guard let failureContext else { return message }
+    return "\(failureContext)\n\n\(message)"
+  }
+
+  private func reportStateMismatch(
+    expected: ChildState,
+    actual: ChildState,
+    eventDescription: String,
+    file: StaticString,
+    line: UInt
+  ) {
+    let diffSection = renderStateDiff(
+      expected: expected,
+      actual: actual,
+      lineLimit: diffLineLimit
+    ).map {
+      "Diff:\n\($0)\n\n"
+    } ?? ""
+
+    testStoreAssertionFailure(
+      decorateFailure(
+        """
+        \(stateMismatchLabel) \(eventDescription)
+
+        \(diffSection)Expected:
+        \(expected)
+
+        Actual:
+        \(actual)
+        """
+      ),
+      file: file,
+      line: line
+    )
+  }
 }
 
 // MARK: - Assertion Helper
@@ -705,6 +1021,18 @@ func testStoreAssertionFailure(
   #else
     Swift.assertionFailure(message, file: file, line: line)
   #endif
+}
+
+func scopedTestStoreFailureContext(stableID: AnyHashable?) -> String? {
+  guard let stableID else { return nil }
+  return "Scoped collection element (id: \(String(describing: stableID)))"
+}
+
+func scopedTestStoreStateMismatchLabel(stableID: AnyHashable?) -> String {
+  guard let failureContext = scopedTestStoreFailureContext(stableID: stableID) else {
+    return "Scoped state"
+  }
+  return "\(failureContext) state"
 }
 
 #if canImport(Testing)

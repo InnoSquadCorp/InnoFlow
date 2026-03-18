@@ -1,295 +1,310 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file explains the current InnoFlow authoring model and repository rules.
 
 ## Developer Guidelines
 
-### Language Policy
-- I am Korean.
-- Even if I ask questions in English, please respond in Korean unless I am explicitly requesting or handling a system prompt.
-- PR description always in Korean.
+### Language policy
 
-### Root Cause First Approach
-- I am an iOS Engineer.
-- I value fundamental problem solving.
-- When addressing an issue, do not suggest code modifications first.
-  Instead:
-  - Carefully review whether the provided context is sufficient.
-  - For iOS issues, always consider:
-    - Reproducibility (device vs simulator, iOS version, build configuration).
-    - Logs and crash reports (Xcode console, OSLog, crash logs, Instruments).
-    - App lifecycle and state (foreground/background, navigation stack, async tasks).
-  - Identify the root cause before proposing any code changes.
+- Reply in Korean unless system-prompt handling requires English.
+- PR descriptions should be written in Korean.
 
-### Avoid Focusing on Passing Tests and Hard-coding
-- Please write a high quality, general purpose solution. Implement a solution that works correctly for all valid inputs, not just the test cases.
-  Do not hard-code values or create solutions that only work for specific test inputs.
-  Instead, implement the actual logic that solves the problem generally.
-- Focus on understanding the problem requirements and implementing the correct algorithm or architecture.
-  For iOS:
-  - Respect the chosen architecture (e.g. MVVM, unidirectional data flow, InnoFlow/TCA-style patterns).
-  - Keep side effects isolated and testable (networking, persistence, analytics, etc.).
-- Tests are there to verify correctness, not to define the solution.
-  Provide a principled implementation that follows best practices and software design principles:
-  - Prefer pure functions and small, composable types where possible.
-  - Keep UIKit/SwiftUI views thin and move business logic out of the view layer.
-  - Avoid leaking implementation details into public APIs.
-- If the task is unreasonable or infeasible, or if any of the tests are incorrect, please tell me.
-  The solution should be robust, maintainable, and extendable:
-  - Consider performance (main thread usage, layout cost, unnecessary re-renders).
-  - Consider memory (retain cycles, long-living closures, async tasks).
+### Engineering expectations
 
-### iOS-specific Guidelines
-- UI updates must occur on the main thread. Do not perform heavy work on the main actor unless strictly necessary.
-- Handle lifecycle correctly:
-  - Understand the difference between app launch, scene activation, view appearance, and background transitions.
-  - Avoid relying on undefined timing (e.g. assuming viewDidLoad/viewDidAppear order for logic that should live in the model/store).
-- For async work (networking, database, etc.):
-  - Use structured concurrency (`async/await`, `Task` boundaries) and avoid unstructured "fire-and-forget" unless intentional.
-  - Make types `Sendable` where appropriate and be explicit about actor isolation.
-- Prefer dependency injection over singletons for testability and flexibility (e.g. API clients, storage, feature flags).
+- Solve root causes before proposing code changes.
+- Do not optimize for passing tests with hard-coded behavior.
+- Respect unidirectional flow and explicit side-effect boundaries.
+- Prefer general-purpose architecture changes over case-specific patches.
 
-### Git and Version Control
-- Branch name always in English.
-- Commit message is always in English.
-- DO NOT git add unstaged changes unless specified.
-- Do not commit generated or local-only files (DerivedData, .xcuserdata, etc.).
-- Keep commits focused and logically grouped (feature, fix, refactor, chore, etc.).
+## InnoFlow 3.0.0 rules
+
+These rules are source-of-truth and are enforced by macro diagnostics, tests, and principle gates.
+
+1. `@InnoFlow` features must declare `var body: some Reducer<State, Action>`.
+2. Public feature authoring must not directly implement `func reduce(into:action:)`.
+3. Composition happens through `Reduce`, `CombineReducers`, and `Scope`.
+4. `PhaseTransitionGraph` is an opt-in topology validator, and `PhaseMap` is the canonical post-reduce phase ownership layer.
+5. Binding stays explicit through `@BindableField` (property wrapper) and `store.binding(\.$field, send:)`.
+6. `BindableProperty` is a low-level storage type — never authored directly in public features.
+7. InnoFlow owns business/domain transitions only.
+
+Cross-framework ownership:
+
+- The app boundary or another navigation layer owns concrete route stacks and navigation transitions.
+- Transport and session lifecycle stay outside InnoFlow.
+- Construction-time dependency graphs stay outside InnoFlow and enter reducers as explicit bundles.
 
 ## Project Overview
 
-InnoFlow is a lightweight, hybrid architecture framework for SwiftUI that combines Elm Architecture with Swift's `@Observable` pattern. It provides unidirectional data flow (`Action → Reduce → Mutation → State → View`) with minimal boilerplate.
+InnoFlow is a SwiftUI-native architecture framework built around:
 
-**Key Components:**
-- `@InnoFlow` macro: Generates `Reducer` protocol conformance and default `Effect = Never` if not defined
-- `Store`: Main runtime that manages state and processes actions (uses `@Observable` and `@dynamicMemberLookup`)
-- `Reducer` protocol: Defines `reduce()`, `mutate()`, and `handle()` methods
-- `TestStore`: Testing utility from `InnoFlowTesting` module for comprehensive feature testing
-- `@BindableField` macro: Marks state properties for two-way binding with SwiftUI
+- `Reducer<State, Action>`
+- `Store`
+- `EffectTask<Action>`
+- `TestStore`
+- `@InnoFlow`
+- `@BindableField`
 
-## Development Commands
+The data flow is:
 
-### Building
-```bash
-swift build
+`Action -> reducer composition -> state mutation + EffectTask -> Store runtime -> View`
+
+## Official authoring style
+
+```swift
+import InnoFlow
+
+@InnoFlow
+struct Feature {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var count = 0
+    @BindableField var step = 1
+  }
+
+  enum Action: Equatable, Sendable {
+    case increment
+    case decrement
+    case setStep(Int)
+  }
+
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .increment:
+        state.count += state.step
+        return .none
+      case .decrement:
+        state.count -= state.step
+        return .none
+      case .setStep(let step):
+        state.step = max(1, step)
+        return .none
+      }
+    }
+  }
+}
 ```
 
-### Testing
-```bash
-# Run all tests
-swift test
+## Composition primitives
 
-# Run tests with code coverage
-swift test --enable-code-coverage --parallel
+### `Reduce`
 
-# List available tests
-swift test --list-tests
+Closure-backed reducer primitive.
 
-# Run a single test
-swift test --filter InnoFlowTests.StoreTests/storeIncrement
+### `CombineReducers`
+
+Runs reducers in declaration order and merges returned effects.
+
+### `Scope`
+
+Lifts child state, child actions, and child effects into a parent reducer space.
+
+### `IfLet`
+
+Runs child reducer while optional state is `Some`. Used for `.sheet(item:)` and `.navigationDestination` patterns.
+
+### `IfCaseLet`
+
+Runs child reducer while enum case matches. Used for tab-based or enum-state driven composition.
+
+### `EffectTask.map`
+
+Used to lift child effect actions while preserving cancellation, debounce, throttle, and animation semantics.
+
+### CasePath auto-synthesis
+
+`@InnoFlow` auto-generates CasePath for standard patterns:
+- `case child(ChildAction)` → `Action.childCasePath`
+- `case todo(id: ID, action: ChildAction)` → `Action.todoActionPath`
+- `case _loaded(Output)` → `Action.loadedCasePath`
+
+Collection `id/action` routing remains special-cased as `CollectionActionPath`, while single
+unlabeled payload cases synthesize plain `CasePath`.
+
+## Phase-driven modeling
+
+Use `PhaseMap` when a feature has meaningful domain phases and the phase transitions themselves
+should be declared as part of the reducer contract.
+
+```swift
+@InnoFlow
+struct LoadingFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    enum Phase: Hashable, Sendable {
+      case idle
+      case loading
+      case loaded
+      case failed
+    }
+
+    var phase: Phase = .idle
+    var output: String?
+    var errorMessage: String?
+  }
+
+  enum Action: Equatable, Sendable {
+    case load
+    case _loaded(String)
+    case _failed(String)
+  }
+
+  static var phaseMap: PhaseMap<State, Action, State.Phase> {
+    PhaseMap(\.phase) {
+      From(.idle) {
+        On(.load, to: .loading)
+      }
+      From(.loading) {
+        On(Action.loadedCasePath, to: .loaded)
+        On(Action.failedCasePath, to: .failed)
+      }
+    }
+  }
+
+  static var phaseGraph: PhaseTransitionGraph<State.Phase> {
+    phaseMap.derivedGraph
+  }
+
+  var body: some Reducer<State, Action> {
+    let phaseMap: PhaseMap<State, Action, State.Phase> = Self.phaseMap
+
+    return Reduce { state, action in
+      switch action {
+      case .load:
+        return .none
+      case ._loaded(let output):
+        state.output = output
+        return .none
+      case ._failed(let message):
+        state.errorMessage = message
+        return .none
+      }
+    }
+    .phaseMap(phaseMap)
+  }
+}
 ```
 
-### Building Examples
-```bash
-# CounterApp
-cd Examples/CounterApp
-xcodebuild -scheme CounterApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build
+Rules:
 
-# TodoApp
-cd Examples/TodoApp
-xcodebuild -scheme TodoApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build
+- `PhaseMap` is post-reduce and owns the declared phase key path.
+- Base reducers must not mutate that phase directly once `PhaseMap` is active.
+- Same-phase actions are ignored by the phase layer.
+- Illegal transitions assert in debug builds.
+- Store runtime remains phase-agnostic.
+- `PhaseTransitionGraph` remains topology-only. Guard-bearing graph metadata is still out of scope.
+- Generated action path members strip one leading underscore, so `_loadedCasePath` becomes `loadedCasePath`.
+
+## Testing
+
+Use `TestStore` for deterministic reducer tests.
+
+```swift
+import InnoFlowTesting
+
+@Test
+@MainActor
+func loadingFlow() async {
+  let store = TestStore(reducer: LoadingFeature())
+  let phaseMap: PhaseMap<LoadingFeature.State, LoadingFeature.Action, LoadingFeature.State.Phase> =
+    LoadingFeature.phaseMap
+
+  await store.send(.load, through: phaseMap) {
+    $0.phase = .loading
+  }
+
+  await store.receive(._loaded(.fixture), through: phaseMap) {
+    $0.phase = .loaded
+  }
+
+  await store.assertNoMoreActions()
+}
 ```
 
-### Documentation
-Documentation is built with DocC and hosted at: https://innosquad-mdd.github.io/InnoFlow/documentation/innoflow/
+State mismatches include a `Diff:` section before the full expected/actual dump. The renderer defaults to 12 lines, can be overridden with `TestStore(..., diffLineLimit: 24)`, and also reads `INNOFLOW_TESTSTORE_DIFF_LINE_LIMIT`.
 
-## Architecture
+For child reducer assertions, project the parent harness instead of building a second store:
 
-### Module Structure
+```swift
+let store = TestStore(reducer: ParentFeature())
+let child = store.scope(state: \.child, action: .childCasePath)
 
+await child.send(.start) {
+  $0.phase = .loading
+}
+
+await child.receive(.finished) {
+  $0.phase = .loaded
+}
 ```
+
+Scoped child state must conform to `Equatable`. `ScopedStore` keeps a cached child snapshot, refreshes that projection during the parent store's action drain, and only invalidates observers when that snapshot actually changes.
+
+When `ParentFeature.Action` declares `case child(ChildAction)`, `@InnoFlow` synthesizes
+`ParentFeature.Action.childCasePath` automatically. Reuse that generated path across both
+`Scope` and `TestStore.scope`:
+
+```swift
+@InnoFlow
+struct ParentFeature {
+  enum Action: Equatable, Sendable {
+    case child(ChildAction)
+  }
+}
+```
+
+Use `scope(collection:id:action:)` with a `CollectionActionPath` when you need to target a single identifiable child inside a collection. Public scoping stays on `CasePath` / `CollectionActionPath` so the authoring story matches `@InnoFlow` synthesis. Removal assertions stay on the parent `TestStore`.
+Collection-scoped projections also preserve per-element `ScopedStore` identity by `id`, so sibling updates do not invalidate unrelated row observers.
+
+## Repository Structure
+
+```text
 InnoFlow/
 ├── Sources/
-│   ├── InnoFlow/              # Core framework
-│   │   ├── InnoFlow.swift     # @InnoFlow and @BindableField macros
-│   │   ├── Store.swift        # Store and ScopedStore implementation
-│   │   ├── Reducer.swift      # Reducer protocol
-│   │   ├── Reduce.swift       # Reduce result type
-│   │   └── EffectOutput.swift # Effect output types (.none, .single, .stream)
-│   ├── InnoFlowMacros/        # Macro implementations (uses swift-syntax)
-│   │   └── InnoFlowMacro.swift
-│   └── InnoFlowTesting/       # Testing utilities
-│       └── TestStore.swift
-└── Tests/
-    ├── InnoFlowTests/         # Core framework tests
-    └── InnoFlowMacrosTests/   # Macro expansion tests
+│   ├── InnoFlow/
+│   │   ├── Reducer.swift
+│   │   ├── ReducerComposition.swift
+│   │   ├── Store.swift                  # main actor state owner + action queue entry point
+│   │   ├── StoreEffectBridge.swift      # store/runtime bridge
+│   │   ├── EffectRuntime.swift          # actor runtime bookkeeping
+│   │   ├── StoreSupport.swift           # queue, observer registry, caches, throttle support
+│   │   ├── ScopedStore.swift            # child projections + collection scoping
+│   │   ├── SelectedStore.swift          # derived read models + dependency-aware refresh
+│   │   ├── Store+SwiftUIBindings.swift  # binding surface
+│   │   ├── Store+SwiftUIPreviews.swift  # Store.preview(...)
+│   │   ├── BindableField.swift
+│   │   ├── BindableProperty.swift
+│   │   ├── EffectTask.swift
+│   │   ├── EffectTask+SwiftUI.swift
+│   │   ├── EffectWalker.swift
+│   │   ├── EffectDriver.swift
+│   │   ├── StoreInstrumentation.swift
+│   │   ├── CasePath.swift
+│   │   ├── CollectionActionPath.swift
+│   │   ├── ActionMatcher.swift
+│   │   ├── PhaseMap.swift
+│   │   ├── PhaseTransitionGraph.swift
+│   │   └── PhaseValidationReducer.swift
+│   ├── InnoFlowMacros/
+│   └── InnoFlowTesting/
+└── Examples/InnoFlowSampleApp/
 ```
 
-### Data Flow
+## Commands
 
-1. **Action Dispatch**: View calls `store.send(action)`
-2. **Reduce Phase**: `reduce(state:action:)` returns `Reduce<Mutation, Effect>`
-3. **Mutation Phase**: Each mutation applied via `mutate(state:mutation:)`
-4. **Effect Execution**: Effects handled asynchronously via `handle(effect:)` returning `EffectOutput<Action>`
-5. **State Update**: Mutations update state, triggering view refresh via `@Observable`
-
-### Effect Output Types
-
-Effects can return:
-- `.none` - Fire-and-forget (analytics, logging)
-- `.single(action)` - Single action response (most common for API calls)
-- `.stream(AsyncStream<Action>)` - Multiple actions over time (WebSocket, progress updates)
-- `.actions(action1, action2, ...)` - Convenience for multiple sequential actions
-
-### Macro Expansions
-
-**`@InnoFlow` macro:**
-- Adds `extension FeatureName: Reducer {}`
-- If `Effect` type not defined: adds `typealias Effect = Never`
-- If `Effect == Never` and no `handle()`: adds default `handle(effect:)` implementation
-
-**`@BindableField` macro:**
-- Transforms `@BindableField var step = 1` into:
-  - Private storage: `private var _step_storage = BindableProperty(1)`
-  - Computed property with getter/setter accessing `.value`
-- Only properties marked with `@BindableField` can use `store.binding(_:send:)`
-
-### Store Features
-
-- **Dynamic Member Lookup**: `store.count` instead of `store.state.count`
-- **Automatic Unwrapping**: `BindableProperty<T>` values auto-unwrapped via subscript
-- **Thread Safety**: `@MainActor` on `Store`, thread-safe effect task storage using `Mutex`
-- **Scoping**: `store.scope(state:action:)` creates `ScopedStore` for child views
-- **Effect Lifecycle**: Effects auto-canceled on `deinit` or via `cancelAllEffects()`
-
-## Testing Guidelines
-
-### Using TestStore
-
-```swift
-@Test
-func testIncrement() async {
-    let store = TestStore(CounterFeature())
-
-    // Send action and assert state change
-    await store.send(.increment) {
-        $0.count = 1
-    }
-}
-
-@Test
-func testAsyncEffect() async {
-    let mockAPI = MockAPI(user: User(name: "Test"))
-    let store = TestStore(UserFeature(api: mockAPI))
-
-    // Action that triggers effect
-    await store.send(.load) {
-        $0.isLoading = true
-    }
-
-    // Receive action from effect
-    await store.receive(._loaded(User(name: "Test"))) {
-        $0.user = User(name: "Test")
-        $0.isLoading = false
-    }
-
-    // Assert no unhandled actions
-    await store.assertNoMoreActions()
-}
+```bash
+swift test --package-path .
+swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage
+xcodebuild -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+./scripts/principle-gates.sh
 ```
 
-**Important**:
-- `TestStore` requires `State: Equatable`
-- `receive()` requires `Action: Equatable`
-- Always call `await store.assertNoMoreActions()` at end of async tests
-- Use dependency injection for testing (pass mock services via init)
+## Contribution rule
 
-## Common Patterns
+If a change violates the documented authoring model or ownership rules, update:
 
-### Feature Without Effects
-```swift
-@InnoFlow
-struct CounterFeature {
-    struct State: Equatable { var count = 0 }
-    enum Action { case increment }
-    enum Mutation { case setCount(Int) }
+- macro diagnostics
+- tests
+- principle gates
+- CI
 
-    func reduce(state: State, action: Action) -> Reduce<Mutation, Never> {
-        .mutation(.setCount(state.count + 1))
-    }
-
-    func mutate(state: inout State, mutation: Mutation) {
-        switch mutation { case .setCount(let v): state.count = v }
-    }
-}
-```
-
-### Feature With Effects
-```swift
-@InnoFlow
-struct UserFeature {
-    struct State: Equatable { var user: User? }
-    enum Action: Sendable { case load; case _loaded(User) }
-    enum Mutation { case setUser(User?) }
-    enum Effect: Sendable { case fetchUser }
-
-    let api: APIClient
-
-    func reduce(state: State, action: Action) -> Reduce<Mutation, Effect> {
-        switch action {
-        case .load: return .effect(.fetchUser)
-        case ._loaded(let user): return .mutation(.setUser(user))
-        }
-    }
-
-    func mutate(state: inout State, mutation: Mutation) {
-        switch mutation { case .setUser(let u): state.user = u }
-    }
-
-    func handle(effect: Effect) async -> EffectOutput<Action> {
-        switch effect {
-        case .fetchUser:
-            let user = try? await api.fetchUser()
-            return .single(._loaded(user))
-        }
-    }
-}
-```
-
-### Bindable Fields
-```swift
-struct State: Equatable {
-    @BindableField var name = ""
-    @BindableField var step = 1
-    var count = 0  // Not bindable
-}
-
-// In view:
-TextField("Name", text: store.binding(\.name, send: { .nameChanged($0) }))
-Stepper("Step", value: store.binding(\.step, send: { .setStep($0) }))
-```
-
-## CI/CD
-
-The project uses GitHub Actions (`.github/workflows/`):
-- **ci.yml**: Runs tests, builds package, and builds example apps on macOS
-- **cd.yml**: Handles releases and versioning
-- **docs.yml**: Builds and deploys DocC documentation to GitHub Pages
-
-## Platform Requirements
-
-- iOS 18.0+ / macOS 15.0+ / tvOS 18.0+ / watchOS 11.0+
-- Swift 6.0+
-- Xcode 16.0+
-
-## Dependencies
-
-- `swift-syntax` 602.0.0+ (for macro implementation)
-- `swift-docc-plugin` 1.0.0+ (for documentation)
-
-## Naming Conventions
-
-- **Internal Actions**: Prefix with `_` (e.g., `._loaded`, `._dataFetched`)
-- **State**: Must conform to `Equatable`, optionally `DefaultInitializable` for `Store(feature)` init
-- **Action/Effect**: Should be `Sendable` for concurrency safety
-- **Mutation**: Pure state transformations only, no side effects
+Do not leave the rule enforced only by prose.

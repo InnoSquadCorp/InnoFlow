@@ -1,40 +1,52 @@
 # Contributing to InnoFlow
 
-Thank you for your interest in contributing to InnoFlow! This document provides guidelines and instructions for contributing.
+## Before you change code
 
-## Getting Started
+Read these files first:
 
-1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/InnoFlow.git`
-3. Create a branch: `git checkout -b feature/your-feature-name`
-4. Make your changes
-5. Test your changes: `swift test`
-6. Commit your changes: `git commit -m "Add: your feature description"`
-7. Push to your fork: `git push origin feature/your-feature-name`
-8. Open a Pull Request
+- `README.md`
+- `ARCHITECTURE_REVIEW.md`
+- `CLAUDE.md`
+- `AGENTS.md`
 
-## Code Style
+Those files define the current framework contract.
 
-- Follow Swift API Design Guidelines
-- Use meaningful variable and function names
-- Add documentation comments for public APIs
-- Keep functions focused and small
-- Write tests for new features
+## Non-negotiable rules
 
-## Testing
+- `@InnoFlow` features use `var body: some Reducer<State, Action>`.
+- Public feature authoring does not use explicit `reduce(into:action:)`.
+- Reducer composition should use `Reduce`, `CombineReducers`, and `Scope`.
+- Binding must stay explicit through `@BindableField`, and SwiftUI entry points should use projected key paths like `\.$field`.
+- Concrete navigation ownership belongs to the app boundary or another navigation layer, not InnoFlow.
+- Transport and session lifecycle belong outside InnoFlow.
+- Dependency graph construction belongs outside InnoFlow and should enter reducers as explicit bundles.
 
-- All new features should include tests
-- Run tests before submitting: `swift test`
-- Ensure all existing tests pass
+## When changing framework rules
 
-## Pull Request Process
+If you change the framework surface or architectural rules, update all of these together:
 
-1. Update README.md if needed
-2. Update CHANGELOG.md with your changes
-3. Ensure all tests pass
-4. Request review from maintainers
+1. source code
+2. tests
+3. docs
+4. `scripts/principle-gates.sh`
+5. `.github/workflows/ci.yml`
 
-## Questions?
+The repository should fail fast if the new rule is violated.
 
-Feel free to open an issue for questions or discussions.
+## Validation
 
+Run all of these before proposing the change:
+
+```bash
+swift test --package-path .
+swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage
+xcodebuild -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+./scripts/principle-gates.sh
+```
+
+## Change quality
+
+- Fix root causes, not just failing tests.
+- Keep public APIs small and explicit.
+- Keep ownership boundaries between InnoFlow and app-owned navigation, transport, and dependency systems clear.
+- Prefer observer-style diagnostics over middleware that changes reducer behavior.

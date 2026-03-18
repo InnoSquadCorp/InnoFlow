@@ -27,6 +27,7 @@ public struct PhaseTransition<Phase: Hashable & Sendable>: Hashable, Sendable {
 /// legal transitions explicit for documentation, debug assertions, and tests.
 public struct PhaseTransitionGraph<Phase: Hashable & Sendable>: Sendable {
   private let adjacency: [Phase: Set<Phase>]
+  private let suggestedRoot: Phase?
 
   /// Creates a graph from an explicit list of legal transitions.
   public init(_ transitions: some Sequence<PhaseTransition<Phase>>) {
@@ -35,11 +36,13 @@ public struct PhaseTransitionGraph<Phase: Hashable & Sendable>: Sendable {
       adjacency[transition.from, default: []].insert(transition.to)
     }
     self.adjacency = adjacency
+    self.suggestedRoot = nil
   }
 
   /// Creates a graph from adjacency data keyed by source phase.
   public init(_ adjacency: [Phase: Set<Phase>]) {
     self.adjacency = adjacency
+    self.suggestedRoot = nil
   }
 
   /// Returns `true` when a phase can legally move to the next phase.
@@ -58,6 +61,102 @@ public struct PhaseTransitionGraph<Phase: Hashable & Sendable>: Sendable {
       adjacency.flatMap { from, successors in
         successors.map { PhaseTransition(from: from, to: $0) }
       }
+    )
+  }
+
+  public enum ValidationIssue: Hashable, Sendable {
+    case rootNotDeclared(Phase)
+    case unreachablePhase(Phase)
+    case unknownSuccessor(from: Phase, to: Phase)
+    case nonTerminalDeadEnd(Phase)
+    case terminalHasOutgoingEdges(Phase)
+  }
+
+  public struct ValidationReport: Hashable, Sendable {
+    public let issues: [ValidationIssue]
+    public let reachable: Set<Phase>
+    public let unreachable: Set<Phase>
+    public let declaredPhases: Set<Phase>
+    public let terminalPhases: Set<Phase>
+
+    public init(
+      issues: [ValidationIssue],
+      reachable: Set<Phase>,
+      unreachable: Set<Phase>,
+      declaredPhases: Set<Phase>,
+      terminalPhases: Set<Phase>
+    ) {
+      self.issues = issues
+      self.reachable = reachable
+      self.unreachable = unreachable
+      self.declaredPhases = declaredPhases
+      self.terminalPhases = terminalPhases
+    }
+  }
+
+  /// Validates reachability and terminal-state consistency for a declared phase set.
+  public func validate(
+    allPhases: Set<Phase>,
+    root: Phase,
+    terminalPhases: Set<Phase> = []
+  ) -> [ValidationIssue] {
+    validationReport(
+      allPhases: allPhases,
+      root: root,
+      terminalPhases: terminalPhases
+    ).issues
+  }
+
+  /// Returns a detailed static validation report for a declared phase set.
+  public func validationReport(
+    allPhases: Set<Phase>,
+    root: Phase,
+    terminalPhases: Set<Phase> = []
+  ) -> ValidationReport {
+    let declaredPhases = allPhases.union(terminalPhases)
+    var issues = Set<ValidationIssue>()
+
+    if !allPhases.contains(root) {
+      issues.insert(.rootNotDeclared(root))
+    }
+
+    for (from, successors) in adjacency {
+      for to in successors where !declaredPhases.contains(from) || !declaredPhases.contains(to) {
+        issues.insert(.unknownSuccessor(from: from, to: to))
+      }
+    }
+
+    var visited: Set<Phase> = [root]
+    var stack: [Phase] = [root]
+    while let phase = stack.popLast() {
+      for successor in successors(from: phase) where declaredPhases.contains(successor) {
+        if visited.insert(successor).inserted {
+          stack.append(successor)
+        }
+      }
+    }
+
+    let unreachable = declaredPhases.subtracting(visited)
+    for phase in unreachable {
+      issues.insert(.unreachablePhase(phase))
+    }
+
+    for phase in declaredPhases {
+      let knownSuccessors = successors(from: phase).filter { declaredPhases.contains($0) }
+      if terminalPhases.contains(phase), !knownSuccessors.isEmpty {
+        issues.insert(.terminalHasOutgoingEdges(phase))
+      }
+      if !terminalPhases.contains(phase), knownSuccessors.isEmpty {
+        issues.insert(.nonTerminalDeadEnd(phase))
+      }
+    }
+
+    return .init(
+      issues: issues.sorted { String(reflecting: $0) < String(reflecting: $1) },
+      reachable: visited.intersection(declaredPhases.union([root])),
+      unreachable: unreachable,
+      declaredPhases: declaredPhases,
+      terminalPhases: terminalPhases
     )
   }
 }
@@ -82,6 +181,43 @@ public extension PhaseTransitionGraph {
     for index in phases.indices.dropLast() {
       adjacency[phases[index], default: []].insert(phases[index + 1])
     }
-    return .init(adjacency)
+    return .init(adjacency, suggestedRoot: phases.first)
+  }
+
+  /// Validates a graph using the root inferred by `linear(_:)`.
+  func validate(
+    allPhases: Set<Phase>,
+    terminalPhases: Set<Phase> = []
+  ) -> [ValidationIssue] {
+    guard let suggestedRoot else { return [] }
+    return validate(allPhases: allPhases, root: suggestedRoot, terminalPhases: terminalPhases)
+  }
+
+  /// Returns a detailed validation report using the root inferred by `linear(_:)`.
+  func validationReport(
+    allPhases: Set<Phase>,
+    terminalPhases: Set<Phase> = []
+  ) -> ValidationReport {
+    guard let suggestedRoot else {
+      return .init(
+        issues: [],
+        reachable: [],
+        unreachable: [],
+        declaredPhases: allPhases.union(terminalPhases),
+        terminalPhases: terminalPhases
+      )
+    }
+    return validationReport(
+      allPhases: allPhases,
+      root: suggestedRoot,
+      terminalPhases: terminalPhases
+    )
+  }
+}
+
+private extension PhaseTransitionGraph {
+  init(_ adjacency: [Phase: Set<Phase>], suggestedRoot: Phase?) {
+    self.adjacency = adjacency
+    self.suggestedRoot = suggestedRoot
   }
 }

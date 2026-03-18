@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 env:
-  XCODE_PATH: /Applications/Xcode_26.0.1.app
+  XCODE_PATH: /Applications/Xcode26.3.app
 
 jobs:
   lint:
@@ -15,96 +15,139 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Select Xcode
-      run: sudo xcode-select -s "$XCODE_PATH"
+      - name: Select Xcode
+        run: sudo xcode-select -s "$XCODE_PATH"
 
-    - name: Lint (swift-format)
-      run: |
-        set -eo pipefail
-        echo "🔍 Running style lint..."
-        xcrun swift --version
-        swift format lint --strict --recursive Sources Tests Examples
+      - name: Lint sources
+        run: |
+          set -eo pipefail
+          xcrun swift --version
+          swift format lint --strict --recursive Sources Tests Examples
 
-  test:
-    name: Build and Test
+  tests:
+    name: Package Tests
     runs-on: macos-latest
     needs: lint
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Select Xcode
-      run: sudo xcode-select -s "$XCODE_PATH"
+      - name: Select Xcode
+        run: sudo xcode-select -s "$XCODE_PATH"
 
-    - name: Build
-      run: |
-        set -eo pipefail
-        echo "🔨 Building InnoFlow..."
-        xcrun swift --version
-        swift build
-        echo "✅ Build completed successfully!"
+      - name: Run package tests
+        run: |
+          set -eo pipefail
+          swift test --package-path "$GITHUB_WORKSPACE" -Xswiftc -warnings-as-errors
 
-    - name: Test
-      run: |
-        set -eo pipefail
-        echo "🧪 Running tests..."
-        echo ""
-        swift test --enable-code-coverage --parallel
-        echo ""
-        echo "✅ All tests passed!"
+      - name: Run sample package tests
+        run: |
+          set -eo pipefail
+          swift test --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" -Xswiftc -warnings-as-errors
 
-    - name: Test Summary
-      if: always()
-      run: |
-        echo "## 🧪 Build & Test Results" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- Job status: **${{ job.status }}**" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        if [ "${{ job.status }}" = "success" ]; then
-          echo "- ✅ Build and tests passed" >> $GITHUB_STEP_SUMMARY
-          echo "- 📊 Code coverage enabled" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "- ❌ Build or tests failed" >> $GITHUB_STEP_SUMMARY
-        fi
-
-  build-examples:
-    name: Build Examples
+  package-builds:
+    name: Package Build (${{ matrix.platform }})
     runs-on: macos-latest
-    needs:
-    - lint
-    - test
+    needs: tests
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macOS, iOS, tvOS, watchOS, visionOS]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Select Xcode
-      run: sudo xcode-select -s "$XCODE_PATH"
+      - name: Select Xcode
+        run: sudo xcode-select -s "$XCODE_PATH"
 
-    - name: Install xcpretty
-      run: |
-        set -eo pipefail
-        echo "📦 Installing xcpretty..."
-        gem install xcpretty --no-document
-        echo "✅ xcpretty installed"
+      - name: Build package scheme for ${{ matrix.platform }}
+        run: |
+          set -eo pipefail
+          xcodebuild \
+            -scheme InnoFlow-Package \
+            -destination "generic/platform=${{ matrix.platform }}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
 
-    - name: Build example apps
-      run: |
-        set -eo pipefail
-        REPO_ROOT="${GITHUB_WORKSPACE}"
-        echo "📱 Building example apps..."
-        echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "🔨 Building CounterApp..."
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        cd "${REPO_ROOT}/Examples/CounterApp"
-        xcodebuild -workspace CounterApp.xcworkspace -scheme CounterApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty
-        echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "🔨 Building TodoApp..."
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        cd "${REPO_ROOT}/Examples/TodoApp"
-        xcodebuild -workspace TodoApp.xcworkspace -scheme TodoApp -destination 'platform=iOS Simulator,name=iPhone 16' clean build | xcpretty
-        echo ""
-        echo "✅ All example apps built successfully!"
+  principle-gates:
+    name: Principle Gates
+    runs-on: macos-latest
+    needs: [tests, package-builds]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "$XCODE_PATH"
+
+      - name: Run principle gates
+        run: |
+          set -eo pipefail
+          "$GITHUB_WORKSPACE/scripts/principle-gates.sh"
+
+  sample-package-builds:
+    name: Sample Package Build (visionOS)
+    runs-on: macos-latest
+    needs: tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "$XCODE_PATH"
+
+      - name: Build sample package for visionOS
+        run: |
+          set -eo pipefail
+          swift build \
+            --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" \
+            --triple arm64-apple-xros2.0-simulator \
+            -Xswiftc -warnings-as-errors
+
+  sample-build:
+    name: Canonical Sample Build
+    runs-on: macos-latest
+    needs: principle-gates
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "$XCODE_PATH"
+
+      - name: Build canonical sample
+        run: |
+          set -eo pipefail
+          xcodebuild \
+            -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
+            -scheme InnoFlowSampleApp \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+  sample-ui-tests:
+    name: Canonical Sample UI Smoke Tests
+    runs-on: macos-latest
+    needs: sample-build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "$XCODE_PATH"
+
+      - name: Run canonical sample UI smoke tests
+        run: |
+          set -eo pipefail
+          xcodebuild \
+            -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
+            -scheme InnoFlowSampleApp \
+            -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17' \
+            -only-testing:InnoFlowSampleAppUITests \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test
