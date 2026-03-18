@@ -52,8 +52,6 @@ This release tightens the semantics around the new phase-ownership model, adds o
 5. `validatePhaseTransitions(...)` remains available for backwards compatibility, but new runtime
    phase ownership should prefer `PhaseMap`.
 
-**요약(KR)**: 이번 패치는 `PhaseMap`의 의미론을 더 단단히 고정하고, underscore-stripped action path naming과 phase ownership 계약을 migration note로 명확히 정리한 릴리스입니다.
-
 ## 2.5.0 Patch (Queued Dispatch + Ordering Contract)
 
 This release clarifies runtime semantics by moving `Store` dispatch onto a single FIFO queue while
@@ -77,8 +75,6 @@ preserving cancellation, debounce, throttle, and animation contracts.
 1. `Store.send(_:)` no longer processes `.send` follow-up actions through reducer re-entry.
 2. Effect-emitted actions now flow through the same FIFO dispatch queue as external store actions.
 3. README and DocC now document queue-based action ordering and navigation ownership boundaries.
-
-**요약(KR)**: v2.5는 `Store`를 queue 기반 dispatch로 정리하고, effect 실행 순서 계약과 InnoRouter 직접 조합 가이드를 공식화한 릴리스입니다.
 
 ## 2.4.0 Patch (Throttle Full Control + Animation Modifier)
 
@@ -104,8 +100,6 @@ This release extends effect orchestration while preserving cancellation guarante
 2. Trailing throttle state is cleaned up on ID cancellation and global cancellation.
 3. Effect execution context now carries animation metadata without introducing dynamic `EffectID` values.
 
-**요약(KR)**: v2.4는 throttle의 leading/trailing 전체 조합과 animation modifier를 추가하고, 취소 강보장을 유지한 채 테스트 범위를 확장한 릴리스입니다.
-
 ## 2.3.0 Patch (Coverage + Combinators + Diagnostics)
 
 This release focuses on runtime ergonomics and quality gates without changing `Store` public method signatures.
@@ -128,37 +122,33 @@ This release focuses on runtime ergonomics and quality gates without changing `S
 ### Changed
 
 1. Runtime semantics are now aligned for `merge` in awaited paths (concurrent execution + wait-for-all).
-2. Documentation is updated with English-primary content and Korean summary notes.
-
-**요약(KR)**: v2.3은 `debounce`/`throttle` 내장, 테스트 커버리지 확대, 매크로 진단 고도화를 포함한 품질 패치 릴리스입니다.
+2. Documentation is updated with English-primary content and canonical entry-point guidance.
 
 ## 🚧 2.0.0 Preview (Breaking API Changes)
 
 This section previews the intended API direction of **InnoFlow v2**.
 v2 prioritizes ideal API design over backward compatibility, and allows breaking changes.
 
-**요약(KR)**: 이 섹션은 v2 API 방향을 미리 공유하는 프리뷰이며, 하위호환보다 이상적 설계를 우선합니다.
-
 ### Why v2?
 
-1. Effect 모델을 단일 조합 DSL로 통합
-2. binding/reducer 계약의 일관성 강화
-3. async 취소/테스트 결정성 개선
-4. SwiftUI 사용성은 유지하면서 동시성 런타임을 강화
+1. Unify the effect model around a single compositional DSL
+2. Tighten the consistency of the binding and reducer contracts
+3. Improve async cancellation semantics and test determinism
+4. Strengthen the concurrency runtime while keeping SwiftUI ergonomics intact
 
 ### Planned Breaking Changes (Preview)
 
 1. `Reducer<State, Action, Mutation, Effect>` → `Reducer<State, Action>`
-2. `Reduce`, `EffectOutput` 제거
-3. `handle(effect:)` 파이프라인 제거
-4. `reduce(into:action:) -> EffectTask<Action>` 도입
-5. `Store.binding`을 `@BindableField` 기반 필드로 제한
-6. `@InnoFlow` 매크로 계약을 v2 reducer 형태로 변경
-7. `EffectTask.Operation` 내부 캡슐화 (public surface 제거)
-8. `EffectID`를 `StaticString` 기반 `Sendable` 타입으로 재정의 (동적 `String` ID 금지)
-9. `Store.cancelEffects` / `Store.cancelAllEffects`를 `async` 계약으로 변경
-10. 매크로 시그니처 검증을 구조 중심(`reduce` + `into`/`action` + `inout`)으로 조정
-11. 취소 경계 런타임 단순화 (`pendingCancellableRunsByID` 제거, emit 게이트 강화)
+2. Remove `Reduce` and `EffectOutput`
+3. Remove the `handle(effect:)` pipeline
+4. Introduce `reduce(into:action:) -> EffectTask<Action>`
+5. Restrict `Store.binding` to `@BindableField`-backed fields
+6. Update the `@InnoFlow` macro contract to the v2 reducer form
+7. Encapsulate `EffectTask.Operation` and remove it from the public surface
+8. Redefine `EffectID` as a `StaticString`-backed `Sendable` type and disallow dynamic `String` IDs
+9. Change `Store.cancelEffects` and `Store.cancelAllEffects` to `async`
+10. Shift macro signature validation toward structural checks (`reduce` + `into`/`action` + `inout`)
+11. Simplify cancellation-boundary runtime handling by removing `pendingCancellableRunsByID` and tightening the emission gate
 
 ### Quality Gates (SwiftUI + SOLID)
 
@@ -181,16 +171,14 @@ v2 prioritizes ideal API design over backward compatibility, and allows breaking
 InnoFlow and InnoRouter are highly compatible from a state-driven navigation perspective.
 The supported v2 direction is direct composition at the app/coordinator boundary plus updated effect-integration examples.
 
-**요약(KR)**: 상태 기반 네비게이션 궁합은 높고, v2에서는 브리지 없이 앱/Coordinator 경계에서 직접 조합하는 방향을 사용합니다.
-
 ### Migration Planning
 
 See [API_DESIGN_EVALUATION.md](API_DESIGN_EVALUATION.md) for full migration and evaluation details.
 
-1. 외부 프레임워크 가중 비교(TCA/ReactorKit/ReSwift/SwiftRex)
-2. v1 점수표와 API gap
-3. v2 공개 API 제안과 migration checklist
-4. InnoRouter 연동 전략과 회귀 시나리오
+1. Weighted comparison against external frameworks (TCA, ReactorKit, ReSwift, SwiftRex)
+2. v1 scorecard and API gap analysis
+3. v2 public API proposal and migration checklist
+4. InnoRouter integration strategy and regression scenarios
 
 ---
 

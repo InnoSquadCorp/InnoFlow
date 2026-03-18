@@ -5113,6 +5113,16 @@ struct TestStoreTests {
     #expect(diff == #"state: expected Set(["alpha", "beta"]), actual Set(["alpha", "gamma"])"#)
   }
 
+  @Test("TestStore diff renderer treats reordered dictionaries as equal")
+  func stateDiffRendererIgnoresDictionaryInsertionOrder() {
+    let expected = ["alpha": 1, "beta": 2]
+    let actual = Dictionary(uniqueKeysWithValues: [("beta", 2), ("alpha", 1)])
+
+    let diff = renderStateDiff(expected: expected, actual: actual)
+
+    #expect(diff == nil)
+  }
+
   @Test("TestStore diff line limit resolves env and explicit overrides")
   func testStoreDiffLineLimitResolution() {
     #expect(

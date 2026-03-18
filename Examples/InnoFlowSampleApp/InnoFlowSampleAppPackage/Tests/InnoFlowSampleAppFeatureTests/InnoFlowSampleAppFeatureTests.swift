@@ -12,17 +12,18 @@ struct InnoFlowSampleAppFeatureTests {
     _ target: Int,
     in coordinator: RouterCompositionCoordinator,
     timeout: Duration = .seconds(2)
-  ) async -> Bool {
+  ) async {
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: timeout)
     while clock.now < deadline {
       if coordinator.loginStore.authVersion == target {
-        return true
+        return
       }
       await Task.yield()
       try? await Task.sleep(for: .milliseconds(20))
     }
-    return false
+
+    Issue.record("Expected authVersion to reach \(target) before timing out")
   }
 
   @Test("Basics demo records queued follow-up increment")
@@ -262,16 +263,16 @@ struct InnoFlowSampleAppFeatureTests {
   @Test("Router composition replays pending detail when view syncs after auth version changes")
   @MainActor
   func routerCompositionReplaysPendingRoute() async {
-    let coordinator = RouterCompositionCoordinator()
+    let protectedDetailID = "invoice-99"
+    let coordinator = RouterCompositionCoordinator(protectedDetailID: protectedDetailID)
     coordinator.queueProtectedDetail()
     coordinator.submitLogin()
 
-    let authenticated = await waitForAuthVersion(1, in: coordinator)
-    #expect(authenticated, "Expected router login to complete before timing out")
+    await waitForAuthVersion(1, in: coordinator)
 
     coordinator.syncNavigationWithDomainState()
 
-    #expect(coordinator.path == [.dashboard, .detail(id: "invoice-42")])
+    #expect(coordinator.path == [.dashboard, .detail(id: protectedDetailID)])
     #expect(coordinator.pendingRoute == nil)
   }
 }

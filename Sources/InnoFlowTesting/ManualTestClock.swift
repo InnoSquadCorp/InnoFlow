@@ -19,6 +19,14 @@ public actor ManualTestClock {
   private var sleepers: [UUID: SleepRequest] = [:]
   private var nextInsertionOrder: UInt64 = 0
 
+  deinit {
+    for request in sleepers.values {
+      request.continuation.resume(throwing: CancellationError())
+    }
+    sleepers.removeAll()
+    nextInsertionOrder = 0
+  }
+
   /// Creates a deterministic test clock starting from the supplied instant.
   public init(now: Instant = ContinuousClock().now) {
     self.current = now

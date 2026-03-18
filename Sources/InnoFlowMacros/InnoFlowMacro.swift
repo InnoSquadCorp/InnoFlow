@@ -451,10 +451,10 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
 
     return items.map { item in
       item.description
-        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .trimmingCharacters(in: .newlines)
         .split(separator: "\n", omittingEmptySubsequences: false)
         .map { line in
-          if line.isEmpty {
+          if line.trimmingCharacters(in: .whitespaces).isEmpty {
             return prefix.trimmingCharacters(in: .whitespaces)
           }
           return prefix + line

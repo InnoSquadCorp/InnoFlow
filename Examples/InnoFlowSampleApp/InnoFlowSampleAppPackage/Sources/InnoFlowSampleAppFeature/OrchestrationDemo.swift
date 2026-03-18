@@ -174,6 +174,7 @@ struct OrchestrationFeature {
       } catch is CancellationError {
         return
       } catch {
+        debugPrint("bootstrapTask(\(name)) unexpected error: \(error)")
         return
       }
     }
@@ -188,6 +189,7 @@ struct OrchestrationFeature {
       } catch is CancellationError {
         return
       } catch {
+        debugPrint("progressTask(\(progress)) unexpected error: \(error)")
         return
       }
     }

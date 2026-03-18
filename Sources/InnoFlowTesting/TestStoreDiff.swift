@@ -77,13 +77,12 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
       ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
 
   case .set:
-    return [
-      formatDiff(
-        path: path,
-        expected: stableSetDescription(expectedMirror),
-        actual: stableSetDescription(actualMirror)
-      )
-    ]
+    let expectedSetDescription = stableSetDescription(expectedMirror)
+    let actualSetDescription = stableSetDescription(actualMirror)
+    guard expectedSetDescription != actualSetDescription else {
+      return []
+    }
+    return [formatDiff(path: path, expected: expectedSetDescription, actual: actualSetDescription)]
 
   case .collection:
     let expectedChildren = Array(expectedMirror.children)
@@ -140,7 +139,18 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
       ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
 
   case .dictionary:
-    return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
+    let expectedDictionaryDescription = stableDictionaryDescription(expectedMirror)
+    let actualDictionaryDescription = stableDictionaryDescription(actualMirror)
+    guard expectedDictionaryDescription != actualDictionaryDescription else {
+      return []
+    }
+    return [
+      formatDiff(
+        path: path,
+        expected: expectedDictionaryDescription,
+        actual: actualDictionaryDescription
+      )
+    ]
 
   default:
     return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
@@ -157,4 +167,25 @@ private func stableSetDescription(_ mirror: Mirror) -> String {
     .map { String(reflecting: $0.value) }
     .sorted()
   return "Set([\(elements.joined(separator: ", "))])"
+}
+
+private func stableDictionaryDescription(_ mirror: Mirror) -> String {
+  let entries = mirror.children.compactMap { child -> (String, String)? in
+    let tupleChildren = Array(Mirror(reflecting: child.value).children)
+    guard tupleChildren.count == 2 else { return nil }
+    let key = String(reflecting: tupleChildren[0].value)
+    let value = String(reflecting: tupleChildren[1].value)
+    return (key, value)
+  }
+  .sorted { lhs, rhs in
+    if lhs.0 == rhs.0 {
+      return lhs.1 < rhs.1
+    }
+    return lhs.0 < rhs.0
+  }
+  .map { key, value in
+    "\(key): \(value)"
+  }
+
+  return "[\(entries.joined(separator: ", "))]"
 }

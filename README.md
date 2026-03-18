@@ -1,5 +1,9 @@
 # InnoFlow
 
+English | [한국어](./README.kr.md) | [日本語](./README.jp.md) | [简体中文](./README.cn.md)
+
+> The English README is the canonical, most up-to-date version. The localized README files are companion entry points that summarize the framework and link back to the English source of truth.
+
 InnoFlow is a SwiftUI-first unidirectional architecture framework for business and domain state transitions.
 
 ## InnoFlow 3.0.0 direction

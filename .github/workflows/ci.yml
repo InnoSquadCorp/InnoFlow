@@ -9,7 +9,7 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: macos-latest
+    runs-on: macos-26
 
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
 
   tests:
     name: Package Tests
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: lint
 
     steps:
@@ -46,7 +46,7 @@ jobs:
 
   package-builds:
     name: Package Build (${{ matrix.platform }})
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: tests
     strategy:
       fail-fast: false
@@ -71,7 +71,7 @@ jobs:
 
   principle-gates:
     name: Principle Gates
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: [tests, package-builds]
 
     steps:
@@ -87,7 +87,7 @@ jobs:
 
   sample-package-builds:
     name: Sample Package Build (visionOS)
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: tests
 
     steps:
@@ -118,7 +118,7 @@ jobs:
 
   sample-build:
     name: Canonical Sample Build
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: principle-gates
 
     steps:
@@ -140,7 +140,7 @@ jobs:
 
   sample-ui-tests:
     name: Canonical Sample UI Smoke Tests
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: sample-build
 
     steps:
@@ -153,7 +153,7 @@ jobs:
         id: ios-simulator
         run: |
           set -eo pipefail
-          IOS_SIMULATOR_ID="$(
+          IOS_SIMULATOR_UDID="$(
             xcrun simctl list devices available -j | /usr/bin/python3 -c '
           import json
           import re
@@ -179,11 +179,11 @@ jobs:
           print(candidates[-1][2])
           '
           )"
-          if [[ -z "$IOS_SIMULATOR_ID" ]]; then
+          if [[ -z "$IOS_SIMULATOR_UDID" ]]; then
             echo "Unable to resolve an available iPhone simulator" >&2
             exit 1
           fi
-          echo "id=$IOS_SIMULATOR_ID" >> "$GITHUB_OUTPUT"
+          echo "udid=$IOS_SIMULATOR_UDID" >> "$GITHUB_OUTPUT"
 
       - name: Run canonical sample UI smoke tests
         run: |
@@ -191,7 +191,7 @@ jobs:
           xcodebuild \
             -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
             -scheme InnoFlowSampleApp \
-            -destination "${{ steps.ios-simulator.outputs.id }}" \
+            -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.udid }}" \
             -only-testing:InnoFlowSampleAppUITests \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \

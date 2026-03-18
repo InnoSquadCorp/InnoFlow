@@ -295,6 +295,137 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow leaves empty action enums without synthesized action paths")
+  func emptyActionEnumDoesNotSynthesizeActionPaths() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct EmptyActionFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {}
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct EmptyActionFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {}
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension EmptyActionFeature: Reducer {}
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow does not synthesize case paths for labeled single-parameter cases")
+  func labeledSingleParameterCaseDoesNotSynthesizeActionPath() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct LabeledActionFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                case child(action: ChildAction)
+            }
+            enum ChildAction: Sendable {
+                case start
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct LabeledActionFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  case child(action: ChildAction)
+              }
+              enum ChildAction: Sendable {
+                  case start
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension LabeledActionFeature: Reducer {}
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow does not synthesize case paths for multi-parameter cases")
+  func multiParameterCaseDoesNotSynthesizeActionPath() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct MultiParameterActionFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                case child(id: UUID, action: ChildAction, metadata: String)
+            }
+            enum ChildAction: Sendable {
+                case start
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct MultiParameterActionFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  case child(id: UUID, action: ChildAction, metadata: String)
+              }
+              enum ChildAction: Sendable {
+                  case start
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension MultiParameterActionFeature: Reducer {}
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow strips one leading underscore from generated collection action path names")
   func leadingUnderscoreCollectionActionPathUsesCleanName() throws {
     #if canImport(InnoFlowMacros)
