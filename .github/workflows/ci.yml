@@ -99,38 +99,16 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Resolve visionOS simulator SDK and triple
-        id: vision-build
-        run: |
-          set -eo pipefail
-          HOST_ARCH="$(uname -m)"
-          VISION_SDK_PATH="$(xcrun --sdk xrsimulator --show-sdk-path)"
-          VISION_SDK_VERSION_RAW="$(xcrun --sdk xrsimulator --show-sdk-version 2>/dev/null || true)"
-          if [[ -z "$VISION_SDK_PATH" ]]; then
-            echo "Unable to resolve a visionOS simulator SDK path" >&2
-            exit 1
-          fi
-          if [[ -z "$VISION_SDK_VERSION_RAW" ]]; then
-            echo "Unable to resolve the visionOS simulator SDK version" >&2
-            exit 1
-          fi
-          IFS='.' read -r VISION_SDK_MAJOR VISION_SDK_MINOR _ <<< "$VISION_SDK_VERSION_RAW"
-          if [[ -z "$VISION_SDK_MAJOR" ]]; then
-            echo "Unable to parse the visionOS simulator SDK version: $VISION_SDK_VERSION_RAW" >&2
-            exit 1
-          fi
-          VISION_SDK_MINOR="${VISION_SDK_MINOR:-0}"
-          echo "sdk=$VISION_SDK_PATH" >> "$GITHUB_OUTPUT"
-          echo "triple=${HOST_ARCH}-apple-xros${VISION_SDK_MAJOR}.${VISION_SDK_MINOR}-simulator" >> "$GITHUB_OUTPUT"
-
       - name: Build sample package for visionOS
         run: |
           set -eo pipefail
-          swift build \
-            --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" \
-            --sdk "${{ steps.vision-build.outputs.sdk }}" \
-            --triple "${{ steps.vision-build.outputs.triple }}" \
-            -Xswiftc -warnings-as-errors
+          cd "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
+          xcodebuild \
+            -scheme InnoFlowSampleAppFeature \
+            -destination 'generic/platform=visionOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
 
   sample-build:
     name: Canonical Sample Build
