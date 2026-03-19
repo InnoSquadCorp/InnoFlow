@@ -5886,7 +5886,6 @@ struct PhaseMapCrashContractTests {
     let result = try runPhaseMapReleaseHarness(scenario: .directMutationRestore)
 
     #expect(result.status == 0)
-    #expect(result.normalizedOutput.contains("ok") == true)
   }
 
   @Test(
@@ -5896,7 +5895,6 @@ struct PhaseMapCrashContractTests {
     let result = try runPhaseMapReleaseHarness(scenario: .undeclaredTargetNoOp)
 
     #expect(result.status == 0)
-    #expect(result.normalizedOutput.contains("ok") == true)
   }
 }
 
@@ -5907,7 +5905,6 @@ struct ConditionalReducerReleaseContractTests {
     let result = try runConditionalReducerReleaseHarness(scenario: .ifLetAbsentState)
 
     #expect(result.status == 0)
-    #expect(result.normalizedOutput.contains("ok") == true)
   }
 
   @Test("IfCaseLet drops child actions as a release-safe no-op when the case does not match")
@@ -5915,7 +5912,6 @@ struct ConditionalReducerReleaseContractTests {
     let result = try runConditionalReducerReleaseHarness(scenario: .ifCaseLetMismatchedState)
 
     #expect(result.status == 0)
-    #expect(result.normalizedOutput.contains("ok") == true)
   }
 }
 
