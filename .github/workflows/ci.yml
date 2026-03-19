@@ -6,13 +6,16 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
     runs-on: macos-26
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -29,7 +32,7 @@ jobs:
     needs: lint
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -54,7 +57,7 @@ jobs:
         platform: [macOS, iOS, tvOS, watchOS, visionOS]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -75,7 +78,7 @@ jobs:
     needs: [tests, package-builds]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -91,29 +94,31 @@ jobs:
     needs: tests
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Resolve visionOS simulator triple
-        id: vision-triple
+      - name: Resolve visionOS simulator SDK and triple
+        id: vision-build
         run: |
           set -eo pipefail
           HOST_ARCH="$(uname -m)"
-          VISION_SDK_VERSION="$(xcrun --sdk xrsimulator --show-sdk-version)"
-          if [[ -z "$VISION_SDK_VERSION" ]]; then
-            echo "Unable to resolve a visionOS simulator SDK version" >&2
+          VISION_SDK_PATH="$(xcrun --sdk xrsimulator --show-sdk-path)"
+          if [[ -z "$VISION_SDK_PATH" ]]; then
+            echo "Unable to resolve a visionOS simulator SDK path" >&2
             exit 1
           fi
-          echo "triple=${HOST_ARCH}-apple-xros${VISION_SDK_VERSION}-simulator" >> "$GITHUB_OUTPUT"
+          echo "sdk=$VISION_SDK_PATH" >> "$GITHUB_OUTPUT"
+          echo "triple=${HOST_ARCH}-apple-xros2.0-simulator" >> "$GITHUB_OUTPUT"
 
       - name: Build sample package for visionOS
         run: |
           set -eo pipefail
           swift build \
             --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" \
-            --triple "${{ steps.vision-triple.outputs.triple }}" \
+            --sdk "${{ steps.vision-build.outputs.sdk }}" \
+            --triple "${{ steps.vision-build.outputs.triple }}" \
             -Xswiftc -warnings-as-errors
 
   sample-build:
@@ -122,7 +127,7 @@ jobs:
     needs: principle-gates
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -144,7 +149,7 @@ jobs:
     needs: sample-build
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Show Xcode version
         run: xcodebuild -version

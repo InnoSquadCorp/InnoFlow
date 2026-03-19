@@ -39,6 +39,8 @@ struct InnoFlowSampleAppFeatureTests {
       $0.count = 1
       $0.eventLog = ["queue increment requested", "queued follow-up applied -> count 1"]
     }
+
+    await store.assertNoMoreActions()
   }
 
   @Test("Orchestration demo models parent-child refresh in order")
@@ -77,6 +79,8 @@ struct InnoFlowSampleAppFeatureTests {
         "refresh finished",
       ]
     }
+
+    await store.assertNoMoreActions()
   }
 
   @Test("Orchestration demo long-running sync reaches completion")
@@ -106,6 +110,8 @@ struct InnoFlowSampleAppFeatureTests {
         "sync started", "progress 10%", "progress 55%", "progress 100%", "sync finished",
       ]
     }
+
+    await store.assertNoMoreActions()
   }
 
   @Test("Phase-driven sample follows the documented graph on success")
@@ -138,6 +144,8 @@ struct InnoFlowSampleAppFeatureTests {
       $0.todos = MockTodoService.fixtures
       $0.errorMessage = nil
     }
+
+    await store.assertNoMoreActions()
   }
 
   @Test("Phase-driven sample fails and recovers to idle when dismissing the error")
@@ -168,6 +176,8 @@ struct InnoFlowSampleAppFeatureTests {
       $0.phase = .idle
       $0.errorMessage = nil
     }
+
+    await store.assertNoMoreActions()
   }
 
   @Test("Phase-driven sample routes todo child actions by id")
@@ -187,8 +197,12 @@ struct InnoFlowSampleAppFeatureTests {
 
     let targetID = MockTodoService.fixtures[1].id
     await store.send(PhaseDrivenTodoFeature.Action.todo(id: targetID, action: .setDone(true))) {
-      $0.todos[1].isDone = true
+      if let index = $0.todos.firstIndex(where: { $0.id == targetID }) {
+        $0.todos[index].isDone = true
+      }
     }
+
+    await store.assertNoMoreActions()
   }
 
   @Test("Orchestration demo child scope can be asserted through ScopedTestStore")
@@ -203,6 +217,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     #expect(store.state.refreshLog == ["profile child finished"])
+    await store.assertNoMoreActions()
   }
 
   @Test("Phase-driven sample collection scope can target a single todo by id")
@@ -231,7 +246,8 @@ struct InnoFlowSampleAppFeatureTests {
     todo.assert {
       $0.isDone = true
     }
-    #expect(store.state.todos[2].isDone == true)
+    #expect(store.state.todos.first(where: { $0.id == targetID })?.isDone == true)
+    await store.assertNoMoreActions()
   }
 
   @Test("Router login cancels in-flight submit on logout")

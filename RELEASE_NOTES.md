@@ -49,7 +49,7 @@ This release tightens the semantics around the new phase-ownership model, adds o
    - `Action._failedCasePath` → `Action.failedCasePath`
 4. `PhaseMap` remains partial by default. Unmatched phase/action pairs stay legal no-ops unless
    tests opt into stricter validation.
-5. `validatePhaseTransitions(...)` remains available for backwards compatibility, but new runtime
+5. `validatePhaseTransitions(...)` remains available for backward compatibility, but new runtime
    phase ownership should prefer `PhaseMap`.
 
 ## 2.5.0 Patch (Queued Dispatch + Ordering Contract)

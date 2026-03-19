@@ -38,7 +38,10 @@ public actor ManualTestClock {
   }
 
   /// Advances the clock and resumes any sleepers whose deadlines have passed.
+  ///
+  /// - Precondition: `duration` must be non-negative.
   public func advance(by duration: Duration) async {
+    precondition(duration >= .zero, "ManualTestClock cannot move backwards.")
     await Task.yield()
     current = current.advanced(by: duration)
     resumeReadySleepers()

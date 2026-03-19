@@ -524,11 +524,18 @@ struct RunEmissionBoundaryFeature: Reducer {
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     switch action {
     case .start(let label):
-      return .run { send in
-        await send(._record("\(label)-1"))
-        try? await Task.sleep(for: .milliseconds(80))
-        await send(._record("\(label)-2"))
-        await send(._record("\(label)-3"))
+      return .run { send, context in
+        do {
+          await send(._record("\(label)-1"))
+          try await context.sleep(for: .milliseconds(80))
+          try await context.checkCancellation()
+          await send(._record("\(label)-2"))
+          await send(._record("\(label)-3"))
+        } catch is CancellationError {
+          return
+        } catch {
+          return
+        }
       }
       .cancellable("run-boundary", cancelInFlight: true)
 
@@ -4213,70 +4220,91 @@ struct StoreTests {
 
   @Test("Store .run drops post-cancellation emissions but keeps earlier values")
   func storeRunDropsPostCancellationEmissions() async {
+    let clock = ManualTestClock()
     let store = Store(
       reducer: RunEmissionBoundaryFeature(),
-      initialState: .init()
+      initialState: .init(),
+      clock: .manual(clock)
     )
 
     store.send(.start("first"))
 
-    for _ in 0..<20 {
+    for _ in 0..<128 {
       if store.events.contains("first-1") {
         break
       }
-      try? await Task.sleep(for: .milliseconds(10))
+      await drainAsyncWork(iterations: 1)
     }
 
+    #expect(store.events.contains("first-1"))
     store.send(.cancel)
-    try? await Task.sleep(for: .milliseconds(140))
+    await drainAsyncWork()
+    await clock.advance(by: .milliseconds(140))
+    await drainAsyncWork()
 
     #expect(store.events == ["first-1"])
   }
 
   @Test("Store .run keeps FIFO ordering for multiple emitted actions")
   func storeRunEmissionOrderingRemainsFIFO() async {
+    let clock = ManualTestClock()
     let store = Store(
       reducer: RunEmissionBoundaryFeature(),
-      initialState: .init()
+      initialState: .init(),
+      clock: .manual(clock)
     )
 
     store.send(.start("ordered"))
 
-    for _ in 0..<30 {
-      if store.events == ["ordered-1", "ordered-2", "ordered-3"] {
+    for _ in 0..<128 {
+      if store.events == ["ordered-1"] {
         break
       }
-      try? await Task.sleep(for: .milliseconds(20))
+      await drainAsyncWork(iterations: 1)
     }
+
+    #expect(store.events == ["ordered-1"])
+    await clock.advance(by: .milliseconds(100))
+    await drainAsyncWork()
 
     #expect(store.events == ["ordered-1", "ordered-2", "ordered-3"])
   }
 
   @Test("Store .run remains reusable after cancel and restart")
   func storeRunEmissionRecoversAfterRestart() async {
+    let clock = ManualTestClock()
     let store = Store(
       reducer: RunEmissionBoundaryFeature(),
-      initialState: .init()
+      initialState: .init(),
+      clock: .manual(clock)
     )
 
     store.send(.start("first"))
-    for _ in 0..<20 {
+    for _ in 0..<128 {
       if store.events.contains("first-1") {
         break
       }
-      try? await Task.sleep(for: .milliseconds(10))
+      await drainAsyncWork(iterations: 1)
     }
-    store.send(.cancel)
+    #expect(store.events.contains("first-1"))
 
-    try? await Task.sleep(for: .milliseconds(40))
+    store.send(.cancel)
+    await drainAsyncWork()
+    await clock.advance(by: .milliseconds(100))
+    await drainAsyncWork()
+
     store.send(.start("second"))
 
-    for _ in 0..<30 {
-      if store.events == ["first-1", "second-1", "second-2", "second-3"] {
+    for _ in 0..<128 {
+      if store.events == ["first-1", "second-1"] {
         break
       }
-      try? await Task.sleep(for: .milliseconds(20))
+      await drainAsyncWork(iterations: 1)
     }
+
+    #expect(store.events == ["first-1", "second-1"])
+    await clock.advance(by: .milliseconds(100))
+    await drainAsyncWork()
 
     #expect(store.events == ["first-1", "second-1", "second-2", "second-3"])
   }

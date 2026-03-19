@@ -11,7 +11,7 @@ InnoFlow is a SwiftUI-first unidirectional architecture framework for business a
 The framework now treats the following as source-of-truth principles:
 
 - Official feature authoring is `var body: some Reducer<State, Action>`.
-- `@InnoFlow` features no longer define public authoring logic with `func reduce(into:action:)` directly.
+- `@InnoFlow` features implement `Reducer` through `body`, and the macro generates the required `reduce(into:action:)` entry point from that composition.
 - Composition happens through `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`.
 - `PhaseTransitionGraph` is an opt-in validation layer, not a generic automata runtime.
 - Binding remains explicit opt-in through `@BindableField`, and SwiftUI bindings use projected key paths such as `\.$step`.
@@ -95,7 +95,11 @@ import InnoFlow
 import SwiftUI
 
 struct CounterView: View {
-  @State private var store = Store(reducer: CounterFeature())
+  @State private var store: Store<CounterFeature>
+
+  init(store: Store<CounterFeature> = Store(reducer: CounterFeature())) {
+    _store = State(initialValue: store)
+  }
 
   var body: some View {
     VStack(spacing: 20) {
@@ -109,7 +113,7 @@ struct CounterView: View {
 
       Stepper(
         "Step: \(store.step)",
-        value: store.binding(\.$step, send: Action.setStep)
+        value: store.binding(\.$step, send: CounterFeature.Action.setStep)
       )
     }
   }
@@ -514,7 +518,7 @@ Use these rules:
 - The first matching `On` rule wins. Returning `nil` from a guard means “consume the action, keep the current phase”.
 - `PhaseMap` remains partial by default. Unmatched phase/action pairs are legal no-ops unless a team opts into stricter validation in tests.
 - `PhaseTransitionGraph` remains a topology validation tool, not a general state-machine runtime.
-- `validatePhaseTransitions(...)` still exists for backwards compatibility, but new examples should prefer `PhaseMap`.
+- `validatePhaseTransitions(...)` still exists for backward compatibility, but new examples should prefer `PhaseMap`.
 - Generated action path members strip one leading underscore, so `_loadedCasePath` becomes `loadedCasePath`.
 - Prefer `On(CasePath, ...)` when the action carries meaningful payload, `On(.equatableAction, ...)` for simple events, and keep `On(where:)` as an escape hatch when the trigger cannot be expressed cleanly otherwise.
 - Adopt `PhaseMap` when a feature already has a phase enum, legal transitions are part of the business contract, and imperative `state.phase = ...` updates are spreading across multiple reducer branches.
@@ -581,7 +585,7 @@ func loadFlow() async {
     $0.phase = .loading
   }
 
-  await store.receive(._loaded(.fixture), through: phaseMap) {
+  await store.send(._loaded(.fixture), through: phaseMap) {
     $0.phase = .loaded
     $0.profile = .fixture
   }

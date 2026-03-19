@@ -51,7 +51,7 @@ scope.
 - phase ownership becomes explicit; base reducers should not mutate the declared phase directly once
   `PhaseMap` is active
 - graph validation remains available through `phaseMap.derivedGraph`
-- `validatePhaseTransitions(...)` remains for backwards compatibility, but new docs and canonical
+- `validatePhaseTransitions(...)` remains for backward compatibility, but new docs and canonical
   samples should prefer `PhaseMap`
 - guard semantics live at the reducer layer, not inside `PhaseTransitionGraph`
 

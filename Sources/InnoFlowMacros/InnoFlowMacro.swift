@@ -454,16 +454,28 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
         .trimmingCharacters(in: .newlines)
         .split(separator: "\n", omittingEmptySubsequences: false)
         .map { line in
-          if line.trimmingCharacters(in: .whitespaces).isEmpty {
-            return prefix.trimmingCharacters(in: .whitespaces)
+          let lineText = String(line)
+          if lineText.trimmingCharacters(in: .whitespaces).isEmpty {
+            return prefix
           }
-          return prefix + line
+
+          let leadingWhitespace = String(lineText.prefix { $0.isWhitespace })
+          let normalizedLeadingWhitespace = leadingWhitespace.replacingOccurrences(
+            of: "\t",
+            with: String(repeating: " ", count: 4)
+          )
+          let content = String(lineText.dropFirst(leadingWhitespace.count))
+          return prefix + normalizedLeadingWhitespace + content
         }
         .joined(separator: "\n")
     }
     .joined(separator: "\n")
   }
 
+  // Nested collection routes often use child action types like `TodoAction`.
+  // Treating `*Action` as collection-like preserves canonical synthesis for
+  // those feature-local wrappers without forcing a single `CollectionAction`
+  // type name across sample and app code.
   private static func isCollectionActionLikeType(_ typeName: String) -> Bool {
     typeName == "Action"
       || typeName.hasSuffix(".Action")

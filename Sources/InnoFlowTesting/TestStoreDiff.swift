@@ -33,12 +33,14 @@ func renderStateDiff(
   lineLimit: Int = defaultStateDiffLineLimit
 ) -> String? {
   guard lineLimit > 0 else { return nil }
-  let lines = diffLines(expected: expected, actual: actual, path: "")
+  let lines = diffLines(expected: expected, actual: actual, path: "", remaining: lineLimit)
   guard !lines.isEmpty else { return nil }
-  return lines.prefix(lineLimit).joined(separator: "\n")
+  return lines.joined(separator: "\n")
 }
 
-private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
+private func diffLines(expected: Any, actual: Any, path: String, remaining: Int) -> [String] {
+  guard remaining > 0 else { return [] }
+
   let expectedDescription = String(reflecting: expected)
   let actualDescription = String(reflecting: actual)
 
@@ -65,16 +67,19 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
 
     var lines: [String] = []
     for index in expectedChildren.indices {
+      guard lines.count < remaining else { break }
       let label = expectedChildren[index].label ?? actualChildren[index].label ?? "\(index)"
       let childPath = path.isEmpty ? label : "\(path).\(label)"
       lines += diffLines(
         expected: expectedChildren[index].value,
         actual: actualChildren[index].value,
-        path: childPath
+        path: childPath,
+        remaining: remaining - lines.count
       )
     }
-    return lines.isEmpty
-      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
+    let bounded = Array(lines.prefix(remaining))
+    return bounded.isEmpty
+      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : bounded
 
   case .set:
     let expectedSetDescription = stableSetDescription(expectedMirror)
@@ -93,15 +98,18 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
 
     var lines: [String] = []
     for index in expectedChildren.indices {
+      guard lines.count < remaining else { break }
       let childPath = path.isEmpty ? "[\(index)]" : "\(path)[\(index)]"
       lines += diffLines(
         expected: expectedChildren[index].value,
         actual: actualChildren[index].value,
-        path: childPath
+        path: childPath,
+        remaining: remaining - lines.count
       )
     }
-    return lines.isEmpty
-      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
+    let bounded = Array(lines.prefix(remaining))
+    return bounded.isEmpty
+      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : bounded
 
   case .optional:
     let expectedChildren = Array(expectedMirror.children)
@@ -110,7 +118,7 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
     case (nil, nil):
       return []
     case (let lhs?, let rhs?):
-      return diffLines(expected: lhs.value, actual: rhs.value, path: path)
+      return diffLines(expected: lhs.value, actual: rhs.value, path: path, remaining: remaining)
     default:
       return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
     }
@@ -126,17 +134,20 @@ private func diffLines(expected: Any, actual: Any, path: String) -> [String] {
 
     var lines: [String] = []
     for index in expectedChildren.indices {
+      guard lines.count < remaining else { break }
       let label =
         expectedChildren[index].label ?? actualChildren[index].label ?? "associatedValue\(index)"
       let childPath = path.isEmpty ? label : "\(path).\(label)"
       lines += diffLines(
         expected: expectedChildren[index].value,
         actual: actualChildren[index].value,
-        path: childPath
+        path: childPath,
+        remaining: remaining - lines.count
       )
     }
-    return lines.isEmpty
-      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : lines
+    let bounded = Array(lines.prefix(remaining))
+    return bounded.isEmpty
+      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : bounded
 
   case .dictionary:
     let expectedDictionaryDescription = stableDictionaryDescription(expectedMirror)

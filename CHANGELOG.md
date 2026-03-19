@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generated case path member names strip one leading underscore
   - `Action._loadedCasePath` → `Action.loadedCasePath`
   - `Action._failedCasePath` → `Action.failedCasePath`
-- `validatePhaseTransitions(...)` remains available for backwards compatibility, but `PhaseMap` is now the canonical authoring pattern for runtime phase movement
+- `validatePhaseTransitions(...)` remains available for backward compatibility, but `PhaseMap` is now the canonical authoring pattern for runtime phase movement
 - `Store` now dispatches reducer input and effect-emitted follow-up actions through a single FIFO queue
 - `EffectTask.send` follow-up actions are queued rather than reducer-reentrant
 - Documentation now defines `concatenate` as declaration-ordered and `merge` as completion-ordered

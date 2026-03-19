@@ -29,7 +29,7 @@ This document captures the stable framework guarantees that should not drift wit
 - `PhaseMap` is a post-reduce decorator and owns the declared phase key path.
 - `phaseGraph = phaseMap.derivedGraph` remains the canonical pattern when a feature needs static topology checks and runtime phase ownership together.
 - `PhaseTransitionGraph` stays topology-only and `validationReport(...)` remains the graph-level validation surface.
-- `validatePhaseTransitions(...)` still exists for backwards compatibility.
+- `validatePhaseTransitions(...)` still exists for backward compatibility.
 - Guard-bearing transitions remain intentionally out of scope for `PhaseTransitionGraph`; see `ADR-phase-transition-guards`.
 - Conditional phase resolution lives in `PhaseMap`; see `ADR-declarative-phase-map`.
 
@@ -49,4 +49,3 @@ This document captures the stable framework guarantees that should not drift wit
 - Canonical sample interactions keep stable `accessibilityIdentifier` values for hub rows, modal dismiss actions, destructive actions, and cancellation actions.
 - Prefer explicit VoiceOver semantics over relying on button text alone.
 - Prefer Dynamic Type-friendly system layout over fixed sizing.
-
