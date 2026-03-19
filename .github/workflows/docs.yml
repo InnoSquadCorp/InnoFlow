@@ -60,6 +60,31 @@ jobs:
           --transform-for-static-hosting \
           --hosting-base-path InnoFlow \
           --output-path docs-build
+
+        # GitHub Pages serves the DocC root shell at /InnoFlow/, but the
+        # canonical landing page lives under /documentation/innoflow/.
+        # Replace the generic shell with a stable redirect so the root URL
+        # behaves like a normal docs homepage.
+        cat > docs-build/index.html <<'EOF'
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta http-equiv="refresh" content="0; url=./documentation/innoflow/" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>InnoFlow Documentation</title>
+            <script>
+              window.location.replace("./documentation/innoflow/");
+            </script>
+          </head>
+          <body>
+            <p>
+              Redirecting to
+              <a href="./documentation/innoflow/">InnoFlow documentation</a>.
+            </p>
+          </body>
+        </html>
+        EOF
         
         echo "✅ Documentation built successfully!"
     
