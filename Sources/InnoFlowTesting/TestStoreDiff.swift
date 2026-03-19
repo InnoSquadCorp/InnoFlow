@@ -41,20 +41,22 @@ func renderStateDiff(
 private func diffLines(expected: Any, actual: Any, path: String, remaining: Int) -> [String] {
   guard remaining > 0 else { return [] }
 
-  let expectedDescription = String(reflecting: expected)
-  let actualDescription = String(reflecting: actual)
-
-  guard expectedDescription != actualDescription else {
-    return []
-  }
-
   let expectedMirror = Mirror(reflecting: expected)
   let actualMirror = Mirror(reflecting: actual)
 
   guard type(of: expected) == type(of: actual),
     expectedMirror.displayStyle == actualMirror.displayStyle
   else {
+    let expectedDescription = String(reflecting: expected)
+    let actualDescription = String(reflecting: actual)
     return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
+  }
+
+  let expectedDescription = String(reflecting: expected)
+  let actualDescription = String(reflecting: actual)
+
+  guard expectedDescription != actualDescription else {
+    return []
   }
 
   switch expectedMirror.displayStyle {
@@ -78,8 +80,7 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
       )
     }
     let bounded = Array(lines.prefix(remaining))
-    return bounded.isEmpty
-      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : bounded
+    return bounded
 
   case .set:
     let expectedSetDescription = stableSetDescription(expectedMirror)
@@ -108,8 +109,7 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
       )
     }
     let bounded = Array(lines.prefix(remaining))
-    return bounded.isEmpty
-      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : bounded
+    return bounded
 
   case .optional:
     let expectedChildren = Array(expectedMirror.children)
@@ -146,8 +146,7 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
       )
     }
     let bounded = Array(lines.prefix(remaining))
-    return bounded.isEmpty
-      ? [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)] : bounded
+    return bounded
 
   case .dictionary:
     let expectedDictionaryDescription = stableDictionaryDescription(expectedMirror)

@@ -570,9 +570,16 @@ struct LazyMappedEffectFeature: Reducer {
     case .start:
       let childEffect: EffectTask<ChildAction> = .concatenate(
         .send(.immediate("first")),
-        .run { send in
-          try? await Task.sleep(for: .milliseconds(60))
-          await send(.delayed("second"))
+        .run { send, context in
+          do {
+            try await context.sleep(for: .milliseconds(60))
+            try await context.checkCancellation()
+            await send(.delayed("second"))
+          } catch is CancellationError {
+            return
+          } catch {
+            return
+          }
         }
       )
       .cancellable("lazy-mapped-effect", cancelInFlight: true)
@@ -4311,18 +4318,31 @@ struct StoreTests {
 
   @Test("Lazy-mapped structured effects preserve ordering")
   func lazyMappedStructuredEffectsPreserveOrdering() async {
+    let clock = ManualTestClock()
     let store = Store(
       reducer: LazyMappedEffectFeature(),
-      initialState: .init()
+      initialState: .init(),
+      clock: .manual(clock)
     )
 
     store.send(.start)
 
-    for _ in 0..<30 {
+    for _ in 0..<128 {
+      if store.values == ["first"] {
+        break
+      }
+      await drainAsyncWork(iterations: 1)
+    }
+
+    #expect(store.values == ["first"])
+    await drainAsyncWork(iterations: 128)
+    await clock.advance(by: .milliseconds(80))
+
+    for _ in 0..<128 {
       if store.values == ["first", "second"] {
         break
       }
-      try? await Task.sleep(for: .milliseconds(20))
+      await drainAsyncWork(iterations: 1)
     }
 
     #expect(store.values == ["first", "second"])
@@ -4330,22 +4350,27 @@ struct StoreTests {
 
   @Test("Lazy-mapped structured effects honor cancellation")
   func lazyMappedStructuredEffectsHonorCancellation() async {
+    let clock = ManualTestClock()
     let store = Store(
       reducer: LazyMappedEffectFeature(),
-      initialState: .init()
+      initialState: .init(),
+      clock: .manual(clock)
     )
 
     store.send(.start)
 
-    for _ in 0..<20 {
+    for _ in 0..<128 {
       if store.values.contains("first") {
         break
       }
-      try? await Task.sleep(for: .milliseconds(10))
+      await drainAsyncWork(iterations: 1)
     }
 
+    #expect(store.values == ["first"])
     store.send(.cancel)
-    try? await Task.sleep(for: .milliseconds(120))
+    await drainAsyncWork()
+    await clock.advance(by: .milliseconds(120))
+    await drainAsyncWork()
 
     #expect(store.values == ["first"])
   }

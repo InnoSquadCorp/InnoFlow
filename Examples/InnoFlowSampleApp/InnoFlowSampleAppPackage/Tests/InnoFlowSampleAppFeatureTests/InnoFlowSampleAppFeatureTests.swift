@@ -12,15 +12,23 @@ struct InnoFlowSampleAppFeatureTests {
     _ target: Int,
     in coordinator: RouterCompositionCoordinator,
     timeout: Duration = .seconds(2)
-  ) async {
+  ) async throws {
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: timeout)
     while clock.now < deadline {
       if coordinator.loginStore.authVersion == target {
         return
       }
+      try Task.checkCancellation()
       await Task.yield()
-      try? await Task.sleep(for: .milliseconds(20))
+      do {
+        try await Task.sleep(for: .milliseconds(20))
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        Issue.record("Unexpected wait failure while observing authVersion: \(error)")
+        return
+      }
     }
 
     Issue.record("Expected authVersion to reach \(target) before timing out")
@@ -195,7 +203,7 @@ struct InnoFlowSampleAppFeatureTests {
       )
     )
 
-    let targetID = MockTodoService.fixtures[1].id
+    let targetID = MockTodoService.navigationTodoID
     await store.send(PhaseDrivenTodoFeature.Action.todo(id: targetID, action: .setDone(true))) {
       if let index = $0.todos.firstIndex(where: { $0.id == targetID }) {
         $0.todos[index].isDone = true
@@ -234,7 +242,7 @@ struct InnoFlowSampleAppFeatureTests {
         shouldFail: false
       )
     )
-    let targetID = MockTodoService.fixtures[2].id
+    let targetID = MockTodoService.assertionTodoID
     let todo = store.scope(
       collection: \.todos,
       id: targetID,
@@ -278,13 +286,13 @@ struct InnoFlowSampleAppFeatureTests {
 
   @Test("Router composition replays pending detail when view syncs after auth version changes")
   @MainActor
-  func routerCompositionReplaysPendingRoute() async {
+  func routerCompositionReplaysPendingRoute() async throws {
     let protectedDetailID = "invoice-99"
     let coordinator = RouterCompositionCoordinator(protectedDetailID: protectedDetailID)
     coordinator.queueProtectedDetail()
     coordinator.submitLogin()
 
-    await waitForAuthVersion(1, in: coordinator)
+    try await waitForAuthVersion(1, in: coordinator)
 
     coordinator.syncNavigationWithDomainState()
 
@@ -308,6 +316,10 @@ private struct MockTodoService: SampleTodoServiceProtocol {
       title: "Assert transitions with TestStore"
     ),
   ]
+  static let navigationTodoID =
+    fixtures.first { $0.title == "Keep navigation out of the phase graph" }!.id
+  static let assertionTodoID =
+    fixtures.first { $0.title == "Assert transitions with TestStore" }!.id
 
   var shouldAlwaysFail = false
 

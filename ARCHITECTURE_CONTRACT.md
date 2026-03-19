@@ -30,8 +30,8 @@ This document captures the stable framework guarantees that should not drift wit
 - `phaseGraph = phaseMap.derivedGraph` remains the canonical pattern when a feature needs static topology checks and runtime phase ownership together.
 - `PhaseTransitionGraph` stays topology-only and `validationReport(...)` remains the graph-level validation surface.
 - `validatePhaseTransitions(...)` still exists for backward compatibility.
-- Guard-bearing transitions remain intentionally out of scope for `PhaseTransitionGraph`; see `ADR-phase-transition-guards`.
-- Conditional phase resolution lives in `PhaseMap`; see `ADR-declarative-phase-map`.
+- Guard-bearing transitions remain intentionally out of scope for `PhaseTransitionGraph`; see [ADR-phase-transition-guards](docs/adr/ADR-phase-transition-guards.md).
+- Conditional phase resolution lives in `PhaseMap`; see [ADR-declarative-phase-map](docs/adr/ADR-declarative-phase-map.md).
 
 ## Effects and runtime
 

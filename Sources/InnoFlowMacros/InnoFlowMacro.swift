@@ -143,7 +143,17 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
   private static func findReduceFunction(in declaration: StructDeclSyntax) -> FunctionDeclSyntax? {
     declaration.memberBlock.members
       .compactMap { $0.decl.as(FunctionDeclSyntax.self) }
-      .first { $0.name.text == "reduce" }
+      .first { function in
+        guard function.name.text == "reduce" else { return false }
+        let parameters = Array(function.signature.parameterClause.parameters)
+        guard parameters.count == 2 else { return false }
+        guard parameters[0].firstName.text == "into",
+          parameters[1].firstName.text == "action"
+        else {
+          return false
+        }
+        return function.signature.returnClause?.type.trimmedDescription == "EffectTask<Action>"
+      }
   }
 
   private static func findBodyProperty(in declaration: StructDeclSyntax) -> VariableDeclSyntax? {
