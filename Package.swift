@@ -9,7 +9,8 @@ let package = Package(
         .iOS(.v18),
         .macOS(.v15),
         .tvOS(.v18),
-        .watchOS(.v11)
+        .watchOS(.v11),
+        .visionOS(.v2)
     ],
     products: [
         .library(
@@ -31,7 +32,7 @@ let package = Package(
             name: "InnoFlow",
             dependencies: ["InnoFlowMacros"]
         ),
-        
+
         // MARK: - Macro Implementation
         .macro(
             name: "InnoFlowMacros",
@@ -51,7 +52,10 @@ let package = Package(
         // MARK: - Tests
         .testTarget(
             name: "InnoFlowTests",
-            dependencies: ["InnoFlow", "InnoFlowTesting"]
+            dependencies: [
+                "InnoFlow",
+                "InnoFlowTesting",
+            ]
         ),
         .testTarget(
             name: "InnoFlowMacrosTests",

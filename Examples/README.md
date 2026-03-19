@@ -1,92 +1,43 @@
 # InnoFlow Sample Apps
 
-Real-world example applications using InnoFlow.
+`InnoFlow` now ships one canonical sample app instead of parallel mini-apps.
 
-## 📱 Available Sample Apps
+## Canonical Sample
 
-### 1. CounterApp
+### InnoFlowSampleApp
 
-**Simplest Example** - A basic counter app without Effects
+The canonical app demonstrates the full recommended story in one place:
 
-- Increment/Decrement counter
-- Reset counter
-- Set increment step
+- `Basics`: `@InnoFlow`, `Store`, `@BindableField`, queue-based follow-up actions
+- `Orchestration`: parent-child orchestration, cancellation fan-out, long-running progress pipeline
+- `Phase-Driven FSM`: explicit business lifecycle and `phaseGraph` validation
+- `App-Boundary Navigation`: direct composition at the app/coordinator boundary with pure SwiftUI navigation state
 
-**Learning Points**:
-- Basic usage of `@InnoFlow` macro
-- Implementing Features without Effects
-- Using `@dynamicMemberLookup`
+[Learn more →](./InnoFlowSampleApp/README.md)
 
-[Learn more →](./CounterApp/README.md)
+## Recommended Learning Order
 
----
+1. Open the sample hub
+2. Start with `Basics`
+3. Move to `Orchestration`
+4. Study `Phase-Driven FSM`
+5. Finish with `App-Boundary Navigation`
 
-### 2. TodoApp
+## Modeling Notes
 
-**Real-world Example** - Todo management app with async Effects
+Use the canonical sample together with these guides:
 
-- Todo CRUD (Create/Read/Update/Delete)
-- Toggle completion status
-- Filtering (All/Active/Completed)
-- Data persistence (UserDefaults)
-- Async data loading
+- [PHASE_DRIVEN_MODELING.md](../PHASE_DRIVEN_MODELING.md)
+- [README.md](../README.md)
 
-**Learning Points**:
-- Handling async Effects
-- Dependency injection pattern
-- Protocol-based service design
-- Applying SOLID principles
+The sample intentionally keeps one concern in one layer:
 
-[Learn more →](./TodoApp/README.md)
+- domain and feature lifecycle in `InnoFlow`
+- navigation state ownership in the app boundary
+- sample-specific services behind protocol boundaries and explicit dependency bundles
 
----
+The canonical sample also acts as the preview and accessibility contract:
 
-## 🎯 Features of Each Sample App
-
-### CounterApp
-```
-Complexity: ⭐
-Effect Usage: ❌
-Dependency Injection: ❌
-```
-
-### TodoApp
-```
-Complexity: ⭐⭐⭐
-Effect Usage: ✅
-Dependency Injection: ✅
-```
-
----
-
-## 🚀 How to Run
-
-Each sample app can be run independently:
-
-1. Open the project in Xcode
-2. Select the target of the desired sample app
-3. Run on simulator or physical device
-
----
-
-## 📚 Recommended Learning Order
-
-1. Start with **CounterApp** to understand basic concepts
-2. Learn practical patterns with **TodoApp**
-3. Apply to your own app
-
----
-
-## 🔍 Code Analysis
-
-Each sample app follows SOLID principles and demonstrates InnoFlow best practices:
-
-- ✅ Single Responsibility: Each component has a clear responsibility
-- ✅ Open/Closed: Protocol-based extensible design
-- ✅ Liskov Substitution: Protocol implementations are interchangeable
-- ✅ Interface Segregation: Minimal interfaces
-- ✅ Dependency Inversion: Depend on protocols
-
----
-
-**Need more examples?** Please open an issue!
+- feature views keep at least one `#Preview`
+- tested controls keep stable `accessibilityIdentifier(...)` values
+- layouts prefer system controls and Dynamic Type-friendly sizing
