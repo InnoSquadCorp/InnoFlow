@@ -19,7 +19,7 @@ InnoFlow 是一个面向业务/领域状态转换的 SwiftUI-first 单向架构�
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.0")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.1")
 ]
 ```
 

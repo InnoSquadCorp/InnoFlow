@@ -17,12 +17,12 @@ stay in the app layer or in other dedicated libraries.
 
 `Store` executes actions through a single FIFO dispatch queue. Immediate follow-up actions from
 ``EffectTask/send(_:)`` are queued rather than reducer-reentrant, async emissions from
-``EffectTask/run(priority:operation:)`` re-enter the same queue after their suspension boundary,
-``EffectTask/concatenate(_:)`` preserves declaration order, and ``EffectTask/merge(_:)`` emits in
+``EffectTask/run(priority:_:)-(_,(Send<Action>)->Void)`` re-enter the same queue after their suspension boundary,
+``EffectTask/concatenate(_:)-(EffectTask<Action>...)`` preserves declaration order, and ``EffectTask/merge(_:)-(EffectTask<Action>...)`` emits in
 child completion order.
 
 For larger features, model orchestration explicitly: parent actions coordinate child actions,
-long-running progress pipelines are composed with ``EffectTask/concatenate(_:)``, and batch work
+long-running progress pipelines are composed with ``EffectTask/concatenate(_:)-(EffectTask<Action>...)``, and batch work
 shares cancellation IDs for fan-out cancellation from the store boundary.
 
 Conditional child composition stays explicit:

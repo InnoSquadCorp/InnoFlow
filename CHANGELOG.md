@@ -3,15 +3,25 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
 ### Added
+- No unreleased entries yet.
+
+## [3.0.1] - 2026-03-21
+
+### Added
+
+- `MIGRATION.md` guidance for the consumer dependency graph cleanup.
 
 ### Changed
 
-### Fixed
+- Removed `swift-docc-plugin` from the main consumer package graph so SwiftPM users only resolve dependencies required to build and test InnoFlow.
+- Moved DocC generation to a docs-only flow that injects the DocC plugin into a temporary package during maintainer and CI documentation builds.
+- Updated the release workflow to publish the matching changelog section as the GitHub Release body.
+- Updated installation snippets and release governance docs for the `3.0.1` stable tag.
 
 ## [3.0.0] - 2026-03-18
 

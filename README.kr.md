@@ -19,7 +19,7 @@ InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.0")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.1")
 ]
 ```
 
