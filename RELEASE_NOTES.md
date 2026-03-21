@@ -1,5 +1,27 @@
 # InnoFlow Release Notes
 
+## 3.0.2 Release
+
+This patch release aligns the macro target manifest with the `swift-syntax` modules already used during compilation so package consumers and maintainers get a quieter, explicit build graph.
+
+### Changed
+
+1. Declared the missing `swift-syntax` products required by `InnoFlowMacros`.
+2. Removed Xcode and SwiftPM missing-dependency scan noise around the macro implementation target.
+3. Kept the public `InnoFlow` and `InnoFlowTesting` API surface unchanged.
+
+## Migration Note
+
+### What changed
+
+- `InnoFlowMacros` now explicitly declares the `swift-syntax` helper products it was already relying on indirectly.
+- No reducer authoring, runtime semantics, or consumer import paths changed.
+
+### What you may need to update
+
+- No source update is required.
+- Consumers that pin exact tags can move to `3.0.2` to pick up the macro dependency manifest fix.
+
 ## 3.0.1 Release
 
 This patch release removes `swift-docc-plugin` from the consumer package graph while preserving DocC generation for maintainers through a docs-only flow.
