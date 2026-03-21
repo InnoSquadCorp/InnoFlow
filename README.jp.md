@@ -19,7 +19,7 @@ InnoFlow は、ビジネス/ドメイン状態遷移に集中した SwiftUI フ�
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.1")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.2")
 ]
 ```
 

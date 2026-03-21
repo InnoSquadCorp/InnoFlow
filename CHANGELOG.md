@@ -10,6 +10,13 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 ### Added
 - No unreleased entries yet.
 
+## [3.0.2] - 2026-03-21
+
+### Changed
+
+- Declared the full `swift-syntax` product set required by `InnoFlowMacros` so SwiftPM and Xcode package builds no longer emit missing macro dependency scan warnings.
+- Kept the consumer-facing `InnoFlow` and `InnoFlowTesting` package surface unchanged while tightening the maintainer macro build graph.
+
 ## [3.0.1] - 2026-03-21
 
 ### Added
