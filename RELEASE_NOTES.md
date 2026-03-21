@@ -1,15 +1,28 @@
 # InnoFlow Release Notes
 
+## 3.0.1 Release
+
+This patch release removes `swift-docc-plugin` from the consumer package graph while preserving DocC generation for maintainers through a docs-only flow.
+
+### Changed
+
+1. SwiftPM consumers now resolve only the dependencies required to build and test InnoFlow.
+2. DocC generation now runs through `Tools/generate-docc.sh`, which injects the DocC plugin into a temporary package copy.
+3. Release automation now publishes the matching changelog section as the GitHub Release body.
+
 ## Migration Note
 
 ### What changed
 
+- `swift-docc-plugin` no longer ships in the main consumer package graph.
+- DocC generation now runs through a docs-only maintainer flow that injects the plugin into a temporary package copy.
 - `PhaseMap` is the canonical runtime phase-transition layer for phase-heavy features.
 - Once `.phaseMap(...)` is active, the base reducer must stop mutating the owned phase directly.
 - Generated action path names now strip one leading underscore.
 
 ### What you may need to update
 
+- CI or local scripts that previously assumed `swift package generate-documentation` was available directly from the checked-in `Package.swift`.
 - Features that still assign `state.phase = ...` inside a reducer branch after adopting `PhaseMap`.
 - Sample or app code that still references underscored generated path members.
 - Feature guides that present `On(where:)` as the default matching path instead of `CasePath` or equatable actions.
