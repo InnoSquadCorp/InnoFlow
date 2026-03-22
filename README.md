@@ -32,7 +32,7 @@ For stable framework guarantees that should not drift with scorecards or line co
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.1")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.2")
 ]
 ```
 

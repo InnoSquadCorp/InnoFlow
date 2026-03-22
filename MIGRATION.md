@@ -2,6 +2,21 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
+## 3.0.2
+
+### Who is affected
+
+- Maintainers and CI jobs that build the `InnoFlowMacros` target through SwiftPM or Xcode package resolution.
+
+### Required action
+
+- No source migration is required for framework consumers.
+- Update downstream lockfiles only if you want the quieter macro dependency graph from the `3.0.2` tag.
+
+### Notes
+
+- This patch release only aligns the declared `swift-syntax` macro dependencies with what the compiler already loads during package builds.
+
 ## 3.0.1
 
 ### Who is affected

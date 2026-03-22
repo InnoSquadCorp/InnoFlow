@@ -2,7 +2,7 @@
 
 This document defines the minimum release quality bar for InnoFlow.
 
-Current stable public release target: `3.0.1`
+Current stable public release target: `3.0.2`
 
 ## Release Checklist
 
