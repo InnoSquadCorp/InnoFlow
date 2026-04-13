@@ -84,12 +84,10 @@ public final class Store<R: Reducer> {
     await effectBridge.cancelAllEffects(upTo: sequence)
   }
 
-  deinit {
-    MainActor.assumeIsolated {
-      lifetime.markReleased()
-      let shutdownSequence = effectBridge.shutdown()
-      instrumentation.didCancelEffects(.init(id: nil, sequence: shutdownSequence))
-    }
+  isolated deinit {
+    lifetime.markReleased()
+    let shutdownSequence = effectBridge.shutdown()
+    instrumentation.didCancelEffects(.init(id: nil, sequence: shutdownSequence))
   }
 
   private func executeEffect(_ effect: EffectTask<R.Action>, sequence: UInt64) {
