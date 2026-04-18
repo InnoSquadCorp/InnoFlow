@@ -7,8 +7,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
-### Added
-- No unreleased entries yet.
+### Changed
+
+- `ReducerBuilder` now preserves each composed reducer's concrete type through the whole builder chain. A block of N child reducers produces a left-leaning `_ReducerSequence<…>` tower of concrete types instead of an O(N) tower of nested closures, and `if` / `if-else` / `for` blocks emit dedicated `_OptionalReducer`, `_ConditionalReducer`, and `_ArrayReducer` composition types. Public authoring (`CombineReducers { … }` with `Reduce`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`) is unchanged. Construction-side benchmarks (debug build) show −29%/−34%/−40% at N=2/8/32; dispatch-side benchmarks show modest −3 to −5% gains in debug and are expected to improve further in release builds where `@inlinable` unlocks specialization across the builder boundary.
 
 ## [3.0.2] - 2026-03-21
 

@@ -156,6 +156,10 @@ main() {
     echo "[principle-gates] Failed: docs or canonical sample expose builder implementation types"
     exit 1
   fi
+  if search_lines "_ReducerSequence|_OptionalReducer|_ConditionalReducer|_ArrayReducer|_EmptyReducer" README.md CLAUDE.md AGENTS.md CONTRIBUTING.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources; then
+    echo "[principle-gates] Failed: docs or canonical sample expose builder-internal composition types"
+    exit 1
+  fi
   if search_lines "extractAction|embedAction" "${DOC_AND_SAMPLE_PATHS[@]}"; then
     echo "[principle-gates] Failed: docs or canonical sample still mention closure-based scoping hooks"
     exit 1

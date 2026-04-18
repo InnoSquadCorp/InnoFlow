@@ -4578,7 +4578,7 @@ struct StoreTests {
 
     #expect(state.log == ["optional"])
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("Reduce<"))
+    #expect(String(reflecting: type(of: reducer)).contains("_OptionalReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
@@ -4591,7 +4591,7 @@ struct StoreTests {
 
     #expect(state.log == ["second"])
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("Reduce<"))
+    #expect(String(reflecting: type(of: reducer)).contains("_ConditionalReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
@@ -4605,7 +4605,7 @@ struct StoreTests {
 
     #expect(state.log == labels)
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("Reduce<"))
+    #expect(String(reflecting: type(of: reducer)).contains("_ArrayReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
@@ -4619,9 +4619,96 @@ struct StoreTests {
 
     #expect(state.log == ["first", "second"])
     #expect(effect.isNone)
-    #expect(typeDescription.contains("Reduce<"))
+    #expect(typeDescription.contains("_ReducerSequence<"))
     #expect(!typeDescription.contains("_ReducerBuilder"))
     #expect(!typeDescription.contains("[any Reducer"))
+  }
+
+  @Test("Builder preserves declaration order across mixed if/for/if-else/straight-line blocks")
+  func combineReducersMixedBuilderBlock() {
+    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action>
+    {
+      BuilderCompositionFeature.append("a")
+      if true {
+        BuilderCompositionFeature.append("b")
+      }
+      for label in ["c", "d"] {
+        BuilderCompositionFeature.append(label)
+      }
+      if false {
+        BuilderCompositionFeature.append("skipped-first")
+      } else {
+        BuilderCompositionFeature.append("else")
+      }
+      BuilderCompositionFeature.append("z")
+    }
+    var state = BuilderCompositionFeature.State()
+
+    let effect = reducer.reduce(into: &state, action: .run)
+
+    // Declaration order must be preserved across heterogeneous builder
+    // constructs (expression, if-without-else, for, if/else, expression).
+    #expect(state.log == ["a", "b", "c", "d", "else", "z"])
+    #expect(effect.isNone)
+  }
+
+  @Test("Builder compiles and preserves order for N=32 straight-line block")
+  func combineReducersN32StressPreservesOrder() {
+    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action>
+    {
+      BuilderCompositionFeature.append("01")
+      BuilderCompositionFeature.append("02")
+      BuilderCompositionFeature.append("03")
+      BuilderCompositionFeature.append("04")
+      BuilderCompositionFeature.append("05")
+      BuilderCompositionFeature.append("06")
+      BuilderCompositionFeature.append("07")
+      BuilderCompositionFeature.append("08")
+      BuilderCompositionFeature.append("09")
+      BuilderCompositionFeature.append("10")
+      BuilderCompositionFeature.append("11")
+      BuilderCompositionFeature.append("12")
+      BuilderCompositionFeature.append("13")
+      BuilderCompositionFeature.append("14")
+      BuilderCompositionFeature.append("15")
+      BuilderCompositionFeature.append("16")
+      BuilderCompositionFeature.append("17")
+      BuilderCompositionFeature.append("18")
+      BuilderCompositionFeature.append("19")
+      BuilderCompositionFeature.append("20")
+      BuilderCompositionFeature.append("21")
+      BuilderCompositionFeature.append("22")
+      BuilderCompositionFeature.append("23")
+      BuilderCompositionFeature.append("24")
+      BuilderCompositionFeature.append("25")
+      BuilderCompositionFeature.append("26")
+      BuilderCompositionFeature.append("27")
+      BuilderCompositionFeature.append("28")
+      BuilderCompositionFeature.append("29")
+      BuilderCompositionFeature.append("30")
+      BuilderCompositionFeature.append("31")
+      BuilderCompositionFeature.append("32")
+    }
+    var state = BuilderCompositionFeature.State()
+
+    let effect = reducer.reduce(into: &state, action: .run)
+
+    #expect(state.log.count == 32)
+    #expect(state.log.first == "01")
+    #expect(state.log.last == "32")
+    #expect(effect.isNone)
+  }
+
+  @Test("Builder optional path with false condition yields .none effect and no state change")
+  func combineReducersEmptyOptional() {
+    let reducer = BuilderCompositionFeature.optionalBuilder(includeReducer: false)
+    var state = BuilderCompositionFeature.State()
+
+    let effect = reducer.reduce(into: &state, action: .run)
+
+    #expect(state.log.isEmpty)
+    #expect(effect.isNone)
+    #expect(String(reflecting: type(of: reducer)).contains("_OptionalReducer<"))
   }
 
   @Test("Phase validation decorator allows same-phase actions and legal transitions")
