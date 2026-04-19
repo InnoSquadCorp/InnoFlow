@@ -3925,16 +3925,21 @@ struct StoreTests {
     #expect(store.completed == 0)
 
     store.send(.start)
-    await drainAsyncWork()
+    // The second run's Task must reach its `context.sleep(for:)` call and
+    // register a sleeper on the ManualTestClock BEFORE we call advance(by:).
+    // If advance runs first, it finds no sleeper to wake and the Task stays
+    // suspended forever. `drainAsyncWork`'s fixed 128-yield budget is enough
+    // on fast hardware but not on saturated CI — poll `sleeperCount` on a
+    // wall-clock interval instead.
+    for _ in 0..<500 {
+      if await clock.sleeperCount >= 1 { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
     await clock.advance(by: .milliseconds(100))
-    await drainAsyncWork()
 
-    // After the second advance, the effect's sleep resumes on the cooperative
-    // executor. CI (GitHub Actions macos-latest) can saturate the executor
-    // heavily — a fixed `drainAsyncWork` yield budget is insufficient there,
-    // while the observable condition (`finishedRuns == 2`) is the idiomatic
-    // marker for "second run has completed end-to-end." Poll it with a
-    // wall-clock bounded `waitUntil` so the check adapts to executor jitter.
+    // After advance, the effect's sleep resumes on the cooperative executor.
+    // Poll the observable completion marker so the check adapts to executor
+    // jitter on saturated CI.
     await waitUntil(timeout: .seconds(5)) {
       store.completed == 1
     }
