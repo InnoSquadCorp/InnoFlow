@@ -5159,8 +5159,8 @@ struct TestStoreTests {
       // CI can heavily saturate the cooperative executor while multiple suites
       // start together. Keep this basic smoke test tolerant of startup jitter;
       // the stronger 40-iteration test below still validates deterministic
-      // first-delivery behavior under the tighter default budget.
-      effectTimeout: .seconds(10)
+      // first-delivery behavior under the tighter budget.
+      effectTimeout: .seconds(60)
     )
 
     await store.send(.load) {
