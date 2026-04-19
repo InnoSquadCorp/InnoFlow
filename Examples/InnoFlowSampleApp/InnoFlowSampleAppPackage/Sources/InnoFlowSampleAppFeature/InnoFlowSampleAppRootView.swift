@@ -28,6 +28,14 @@ public struct InnoFlowSampleAppRootView: View {
       PhaseDrivenFSMDemoView()
     case .routerComposition:
       RouterCompositionDemoView()
+    case .authenticationFlow:
+      AuthenticationFlowDemoView()
+    case .listDetailPagination:
+      ListDetailPaginationDemoView()
+    case .offlineFirst:
+      OfflineFirstDemoView()
+    case .realtimeStream:
+      RealtimeStreamDemoView()
     }
   }
 
@@ -120,6 +128,10 @@ enum SampleDemo: String, CaseIterable, Identifiable, Hashable {
   case orchestration
   case phaseDrivenFSM
   case routerComposition
+  case authenticationFlow
+  case listDetailPagination
+  case offlineFirst
+  case realtimeStream
 
   var id: String { rawValue }
 
@@ -133,6 +145,14 @@ enum SampleDemo: String, CaseIterable, Identifiable, Hashable {
       "Phase-Driven FSM"
     case .routerComposition:
       "App-Boundary Navigation"
+    case .authenticationFlow:
+      "Authentication Flow"
+    case .listDetailPagination:
+      "List + Detail + Pagination"
+    case .offlineFirst:
+      "Offline-First"
+    case .realtimeStream:
+      "Realtime Stream"
     }
   }
 
@@ -146,6 +166,14 @@ enum SampleDemo: String, CaseIterable, Identifiable, Hashable {
       "Business lifecycle modeling with a documented phase graph."
     case .routerComposition:
       "Pure SwiftUI route state driven at the app/coordinator boundary."
+    case .authenticationFlow:
+      "Multi-step credential + MFA flow modeled with PhaseMap and cancellable retry."
+    case .listDetailPagination:
+      "Paginated list with per-row ForEachReducer and scoped detail projection."
+    case .offlineFirst:
+      "Optimistic local update with debounced save and server-side rollback."
+    case .realtimeStream:
+      "Looping .run subscription driven by an injectable clock dependency."
     }
   }
 
@@ -163,6 +191,14 @@ enum SampleDemo: String, CaseIterable, Identifiable, Hashable {
       "Opens the phase-driven finite-state-machine demo with documented legal transitions"
     case .routerComposition:
       "Opens the app-boundary navigation demo in a modal presentation"
+    case .authenticationFlow:
+      "Opens the multi-step authentication sample with PhaseMap and cancellable retry"
+    case .listDetailPagination:
+      "Opens the paginated list sample with per-row child reducer and scoped detail"
+    case .offlineFirst:
+      "Opens the offline-first sample with optimistic update, debounce, and rollback"
+    case .realtimeStream:
+      "Opens the realtime stream sample driven by an injectable clock"
     }
   }
 
@@ -176,6 +212,14 @@ enum SampleDemo: String, CaseIterable, Identifiable, Hashable {
       "sample.phase-driven-fsm"
     case .routerComposition:
       "sample.router-composition"
+    case .authenticationFlow:
+      "sample.authentication-flow"
+    case .listDetailPagination:
+      "sample.list-detail-pagination"
+    case .offlineFirst:
+      "sample.offline-first"
+    case .realtimeStream:
+      "sample.realtime-stream"
     }
   }
 
@@ -197,6 +241,14 @@ enum SampleDemo: String, CaseIterable, Identifiable, Hashable {
       self = .phaseDrivenFSM
     case "router-composition", "routerComposition", "sample.router-composition":
       self = .routerComposition
+    case "authentication-flow", "authenticationFlow", "sample.authentication-flow":
+      self = .authenticationFlow
+    case "list-detail-pagination", "listDetailPagination", "sample.list-detail-pagination":
+      self = .listDetailPagination
+    case "offline-first", "offlineFirst", "sample.offline-first":
+      self = .offlineFirst
+    case "realtime-stream", "realtimeStream", "sample.realtime-stream":
+      self = .realtimeStream
     default:
       return nil
     }

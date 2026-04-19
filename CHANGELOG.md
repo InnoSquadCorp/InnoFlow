@@ -16,6 +16,12 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 ### Added
 
 - `ManualTestClock.sleeperCount` — test-only observable for the number of sleepers currently suspended on the clock. Tests that need to confirm `.run` / `.debounce` / `.throttle` effects have reached their `try await clock.sleep(...)` registration before calling `advance(by:)` can poll this instead of relying on a fixed yield count.
+- Four new canonical sample demos in `Examples/InnoFlowSampleApp` covering the domains flagged as missing by the competitive analysis:
+  - `AuthenticationFlowDemo` — multi-step credentials + MFA flow modeled with `PhaseMap` (idle → credentials → submitting → mfaRequired → submittingMFA → authenticated / failed) plus a `.cancellable("auth-submit", cancelInFlight: true)` effect for cancel-and-retry.
+  - `ListDetailPaginationDemo` — paginated list + per-row child reducer + detail scope. Uses `ForEachReducer(state:action:reducer:)` for row state, `scope(collection:action:)` for list rendering, and `Action.articleActionPath` for the generated collection action path. Intentionally phase-light to contrast `AuthenticationFlowDemo`.
+  - `OfflineFirstDemo` — optimistic local update + debounced save + server-side rollback. Uses `.cancellable("offline-save-debounce", cancelInFlight: true)` to collapse consecutive edits and `_saveConfirmed` / `_saveRolledBack(previous:reason:)` actions to reconcile with repository truth.
+  - `RealtimeStreamDemo` — looping `.run` subscription driven by the injected `tickInterval: Duration` dependency and `context.sleep`. Tests swap in `ManualTestClock` to advance time deterministically and poll `sleeperCount` instead of sleeping on wall clock.
+- Ten new `@Test` cases in `InnoFlowSampleAppFeatureTests` that exercise each new sample through `TestStore` — happy paths, failure / retry paths, collection-scoped row actions, debounced-save confirmation vs. rollback, and clock-driven tick receipts.
 
 ### Changed
 
