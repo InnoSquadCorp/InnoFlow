@@ -2021,7 +2021,13 @@ struct EffectTaskTests {
 
     await store.send(.trigger(1))
     await store.send(.trigger(2))
-    await Task.yield()
+
+    for _ in 0..<200 {
+      if await clock.sleeperCount == 1 {
+        break
+      }
+      await Task.yield()
+    }
     await clock.advance(by: .milliseconds(60))
 
     await store.receive(._emitted(2)) {
@@ -3936,6 +3942,16 @@ struct StoreTests {
       try? await Task.sleep(for: .milliseconds(10))
     }
     await clock.advance(by: .milliseconds(100))
+    for _ in 0..<250 {
+      let metrics = await store.effectRuntimeMetrics
+      if metrics.finishedRuns == 2,
+        metrics.emissionDecisions >= 1,
+        store.completed == 1
+      {
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(20))
+    }
 
     // After advance, the effect's sleep resumes on the cooperative executor.
     // Poll the observable completion marker so the check adapts to executor
@@ -4569,7 +4585,7 @@ struct StoreTests {
     try? await Task.sleep(for: .milliseconds(100))
 
     await clock.advance(by: .milliseconds(50))
-    await waitUntil(timeout: .seconds(5)) {
+    await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
       store.debounced == [2]
     }
 
@@ -6295,7 +6311,16 @@ where
 }
 
 private func settleTimingScenarioWork() async {
-  await drainAsyncWork(iterations: 512)
+  // `Store.send` schedules non-`.send` effects onto a separate Task. For the
+  // randomized debounce/throttle property tests, some in-window updates only
+  // mutate internal pending state and do not immediately change user-visible
+  // state or sleeper counts. A pure `Task.yield()` loop can therefore advance
+  // the manual clock before the walker Task has actually applied the pending
+  // replacement under release optimization. Add a tiny wall-clock handoff so
+  // the queued Task gets a real executor turn before the scenario continues.
+  await drainAsyncWork(iterations: 64)
+  try? await Task.sleep(for: .milliseconds(1))
+  await drainAsyncWork(iterations: 64)
 }
 
 @MainActor
