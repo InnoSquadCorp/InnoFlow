@@ -87,13 +87,45 @@ extension SelectedStore: ProjectionObserver {
   }
 }
 
+private func selectionDependencyRegistration<Snapshot, Dependency: Equatable>(
+  _ keyPath: KeyPath<Snapshot, Dependency>
+) -> ProjectionDependencyRegistration<Snapshot> {
+  .init(
+    .keyPath(keyPath as AnyKeyPath),
+    hasChanged: { previousState, nextState in
+      previousState[keyPath: keyPath] != nextState[keyPath: keyPath]
+    }
+  )
+}
+
+private func selectionDependencyRegistrations<Snapshot>(
+  _ registrations: ProjectionDependencyRegistration<Snapshot>...
+) -> ProjectionObserverRegistration<Snapshot> {
+  precondition(!registrations.isEmpty, "selectionDependencyRegistrations requires at least one key path")
+
+  if registrations.count == 1, let registration = registrations.first {
+    return .dependency(registration.key, hasChanged: registration.hasChanged)
+  }
+
+  return .dependencies(registrations)
+}
+
+private func alwaysRefreshSelectionRegistration<Snapshot>(
+  callsite: SelectionCallsite
+) -> ProjectionObserverRegistration<Snapshot> {
+  .dependency(
+    .custom(callsite),
+    hasChanged: { _, _ in true }
+  )
+}
+
 extension Store {
-  public func select<Value: Equatable & Sendable>(
-    _ keyPath: KeyPath<R.State, Value>,
-    fileID: StaticString = #fileID,
-    line: UInt = #line
+  private func cachedSelectedStore<Value: Equatable & Sendable>(
+    callsite: SelectionCallsite,
+    initialValue: @autoclosure () -> Value,
+    registration: ProjectionObserverRegistration<R.State>,
+    valueResolver: @escaping @MainActor () -> Value?
   ) -> SelectedStore<Value> {
-    let callsite = selectionCallsite(fileID: fileID, line: line)
     if let cached: SelectedStore<Value> = selectionCache.cached(
       for: callsite, valueType: Value.self)
     {
@@ -101,13 +133,10 @@ extension Store {
     }
 
     let selectedStore = SelectedStore(
-      initialValue: state[keyPath: keyPath],
+      initialValue: initialValue(),
       parentObject: self,
-      valueResolver: { [weak self] in
-        guard let self else { return nil }
-        return self.state[keyPath: keyPath]
-      },
-      inactiveMessage: {
+      valueResolver: valueResolver,
+      inactiveMessage: { @MainActor @Sendable in
         selectedStoreFailureMessage(
           parentType: R.self,
           valueType: Value.self,
@@ -115,7 +144,7 @@ extension Store {
           reason: "the parent store was released"
         )
       },
-      parentReleasedMessage: {
+      parentReleasedMessage: { @MainActor @Sendable in
         selectedStoreFailureMessage(
           parentType: R.self,
           valueType: Value.self,
@@ -125,16 +154,27 @@ extension Store {
       }
     )
     selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    registerProjectionObserver(
-      selectedStore,
-      registration: .dependency(
-        .keyPath(keyPath as AnyKeyPath),
-        hasChanged: { previousState, nextState in
-          previousState[keyPath: keyPath] != nextState[keyPath: keyPath]
-        }
-      )
-    )
+    registerProjectionObserver(selectedStore, registration: registration)
     return selectedStore
+  }
+
+  public func select<Value: Equatable & Sendable>(
+    _ keyPath: KeyPath<R.State, Value>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) -> SelectedStore<Value> {
+    let callsite = selectionCallsite(fileID: fileID, line: line)
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: state[keyPath: keyPath],
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(keyPath)
+      ),
+      valueResolver: { [weak self] in
+        guard let self else { return nil }
+        return self.state[keyPath: keyPath]
+      }
+    )
   }
 
   public func select<Dependency: Equatable & Sendable, Value: Equatable & Sendable>(
@@ -144,47 +184,17 @@ extension Store {
     _ transform: @escaping @Sendable (Dependency) -> Value
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: callsite, valueType: Value.self)
-    {
-      return cached
-    }
-
-    let selectedStore = SelectedStore(
+    return cachedSelectedStore(
+      callsite: callsite,
       initialValue: transform(state[keyPath: dependency]),
-      parentObject: self,
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(dependency)
+      ),
       valueResolver: { [weak self] in
         guard let self else { return nil }
         return transform(self.state[keyPath: dependency])
-      },
-      inactiveMessage: {
-        selectedStoreFailureMessage(
-          parentType: R.self,
-          valueType: Value.self,
-          stableID: nil,
-          reason: "the parent store was released"
-        )
-      },
-      parentReleasedMessage: {
-        selectedStoreFailureMessage(
-          parentType: R.self,
-          valueType: Value.self,
-          stableID: nil,
-          reason: "the parent store was released"
-        )
       }
     )
-    selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    registerProjectionObserver(
-      selectedStore,
-      registration: .dependency(
-        .keyPath(dependency as AnyKeyPath),
-        hasChanged: { previousState, nextState in
-          previousState[keyPath: dependency] != nextState[keyPath: dependency]
-        }
-      )
-    )
-    return selectedStore
   }
 
   public func select<
@@ -202,56 +212,21 @@ extension Store {
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency) = dependencies
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: callsite, valueType: Value.self)
-    {
-      return cached
-    }
-
-    let selectedStore = SelectedStore(
+    return cachedSelectedStore(
+      callsite: callsite,
       initialValue: transform(state[keyPath: firstDependency], state[keyPath: secondDependency]),
-      parentObject: self,
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency)
+      ),
       valueResolver: { [weak self] in
         guard let self else { return nil }
         return transform(
           self.state[keyPath: firstDependency],
           self.state[keyPath: secondDependency]
         )
-      },
-      inactiveMessage: {
-        selectedStoreFailureMessage(
-          parentType: R.self,
-          valueType: Value.self,
-          stableID: nil,
-          reason: "the parent store was released"
-        )
-      },
-      parentReleasedMessage: {
-        selectedStoreFailureMessage(
-          parentType: R.self,
-          valueType: Value.self,
-          stableID: nil,
-          reason: "the parent store was released"
-        )
       }
     )
-    selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    registerProjectionObserver(
-      selectedStore,
-      registration: .dependencies([
-        .init(
-          .keyPath(firstDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
-          }),
-        .init(
-          .keyPath(secondDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
-          }),
-      ])
-    )
-    return selectedStore
   }
 
   public func select<
@@ -271,19 +246,18 @@ extension Store {
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency) = dependencies
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: callsite, valueType: Value.self)
-    {
-      return cached
-    }
-
-    let selectedStore = SelectedStore(
+    return cachedSelectedStore(
+      callsite: callsite,
       initialValue: transform(
         state[keyPath: firstDependency],
         state[keyPath: secondDependency],
         state[keyPath: thirdDependency]
       ),
-      parentObject: self,
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency),
+        selectionDependencyRegistration(thirdDependency)
+      ),
       valueResolver: { [weak self] in
         guard let self else { return nil }
         return transform(
@@ -291,46 +265,184 @@ extension Store {
           self.state[keyPath: secondDependency],
           self.state[keyPath: thirdDependency]
         )
-      },
-      inactiveMessage: {
-        selectedStoreFailureMessage(
-          parentType: R.self,
-          valueType: Value.self,
-          stableID: nil,
-          reason: "the parent store was released"
-        )
-      },
-      parentReleasedMessage: {
-        selectedStoreFailureMessage(
-          parentType: R.self,
-          valueType: Value.self,
-          stableID: nil,
-          reason: "the parent store was released"
+      }
+    )
+  }
+
+  public func select<
+    FirstDependency: Equatable & Sendable,
+    SecondDependency: Equatable & Sendable,
+    ThirdDependency: Equatable & Sendable,
+    FourthDependency: Equatable & Sendable,
+    Value: Equatable & Sendable
+  >(
+    dependingOn dependencies: (
+      KeyPath<R.State, FirstDependency>,
+      KeyPath<R.State, SecondDependency>,
+      KeyPath<R.State, ThirdDependency>,
+      KeyPath<R.State, FourthDependency>
+    ),
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ transform: @escaping @Sendable (
+      FirstDependency,
+      SecondDependency,
+      ThirdDependency,
+      FourthDependency
+    ) -> Value
+  ) -> SelectedStore<Value> {
+    let (firstDependency, secondDependency, thirdDependency, fourthDependency) = dependencies
+    let callsite = selectionCallsite(fileID: fileID, line: line)
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: transform(
+        state[keyPath: firstDependency],
+        state[keyPath: secondDependency],
+        state[keyPath: thirdDependency],
+        state[keyPath: fourthDependency]
+      ),
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency),
+        selectionDependencyRegistration(thirdDependency),
+        selectionDependencyRegistration(fourthDependency)
+      ),
+      valueResolver: { [weak self] in
+        guard let self else { return nil }
+        return transform(
+          self.state[keyPath: firstDependency],
+          self.state[keyPath: secondDependency],
+          self.state[keyPath: thirdDependency],
+          self.state[keyPath: fourthDependency]
         )
       }
     )
-    selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    registerProjectionObserver(
-      selectedStore,
-      registration: .dependencies([
-        .init(
-          .keyPath(firstDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
-          }),
-        .init(
-          .keyPath(secondDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
-          }),
-        .init(
-          .keyPath(thirdDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: thirdDependency] != nextState[keyPath: thirdDependency]
-          }),
-      ])
+  }
+
+  public func select<
+    FirstDependency: Equatable & Sendable,
+    SecondDependency: Equatable & Sendable,
+    ThirdDependency: Equatable & Sendable,
+    FourthDependency: Equatable & Sendable,
+    FifthDependency: Equatable & Sendable,
+    Value: Equatable & Sendable
+  >(
+    dependingOn dependencies: (
+      KeyPath<R.State, FirstDependency>,
+      KeyPath<R.State, SecondDependency>,
+      KeyPath<R.State, ThirdDependency>,
+      KeyPath<R.State, FourthDependency>,
+      KeyPath<R.State, FifthDependency>
+    ),
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ transform: @escaping @Sendable (
+      FirstDependency,
+      SecondDependency,
+      ThirdDependency,
+      FourthDependency,
+      FifthDependency
+    ) -> Value
+  ) -> SelectedStore<Value> {
+    let (firstDependency, secondDependency, thirdDependency, fourthDependency, fifthDependency) =
+      dependencies
+    let callsite = selectionCallsite(fileID: fileID, line: line)
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: transform(
+        state[keyPath: firstDependency],
+        state[keyPath: secondDependency],
+        state[keyPath: thirdDependency],
+        state[keyPath: fourthDependency],
+        state[keyPath: fifthDependency]
+      ),
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency),
+        selectionDependencyRegistration(thirdDependency),
+        selectionDependencyRegistration(fourthDependency),
+        selectionDependencyRegistration(fifthDependency)
+      ),
+      valueResolver: { [weak self] in
+        guard let self else { return nil }
+        return transform(
+          self.state[keyPath: firstDependency],
+          self.state[keyPath: secondDependency],
+          self.state[keyPath: thirdDependency],
+          self.state[keyPath: fourthDependency],
+          self.state[keyPath: fifthDependency]
+        )
+      }
     )
-    return selectedStore
+  }
+
+  public func select<
+    FirstDependency: Equatable & Sendable,
+    SecondDependency: Equatable & Sendable,
+    ThirdDependency: Equatable & Sendable,
+    FourthDependency: Equatable & Sendable,
+    FifthDependency: Equatable & Sendable,
+    SixthDependency: Equatable & Sendable,
+    Value: Equatable & Sendable
+  >(
+    dependingOn dependencies: (
+      KeyPath<R.State, FirstDependency>,
+      KeyPath<R.State, SecondDependency>,
+      KeyPath<R.State, ThirdDependency>,
+      KeyPath<R.State, FourthDependency>,
+      KeyPath<R.State, FifthDependency>,
+      KeyPath<R.State, SixthDependency>
+    ),
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ transform: @escaping @Sendable (
+      FirstDependency,
+      SecondDependency,
+      ThirdDependency,
+      FourthDependency,
+      FifthDependency,
+      SixthDependency
+    ) -> Value
+  ) -> SelectedStore<Value> {
+    let (
+      firstDependency,
+      secondDependency,
+      thirdDependency,
+      fourthDependency,
+      fifthDependency,
+      sixthDependency
+    ) = dependencies
+    let callsite = selectionCallsite(fileID: fileID, line: line)
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: transform(
+        state[keyPath: firstDependency],
+        state[keyPath: secondDependency],
+        state[keyPath: thirdDependency],
+        state[keyPath: fourthDependency],
+        state[keyPath: fifthDependency],
+        state[keyPath: sixthDependency]
+      ),
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency),
+        selectionDependencyRegistration(thirdDependency),
+        selectionDependencyRegistration(fourthDependency),
+        selectionDependencyRegistration(fifthDependency),
+        selectionDependencyRegistration(sixthDependency)
+      ),
+      valueResolver: { [weak self] in
+        guard let self else { return nil }
+        return transform(
+          self.state[keyPath: firstDependency],
+          self.state[keyPath: secondDependency],
+          self.state[keyPath: thirdDependency],
+          self.state[keyPath: fourthDependency],
+          self.state[keyPath: fifthDependency],
+          self.state[keyPath: sixthDependency]
+        )
+      }
+    )
   }
 
   public func select<Value: Equatable & Sendable>(
@@ -339,55 +451,25 @@ extension Store {
     _ selector: @escaping @Sendable (R.State) -> Value
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: callsite, valueType: Value.self)
-    {
-      return cached
-    }
-
-    let selectedStore = SelectedStore(
+    return cachedSelectedStore(
+      callsite: callsite,
       initialValue: selector(state),
-      parentObject: self,
+      registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
         guard let self else { return nil }
         return selector(self.state)
-      },
-      inactiveMessage: {
-        selectedStoreFailureMessage(
-          parentType: R.self,
-          valueType: Value.self,
-          stableID: nil,
-          reason: "the parent store was released"
-        )
-      },
-      parentReleasedMessage: {
-        selectedStoreFailureMessage(
-          parentType: R.self,
-          valueType: Value.self,
-          stableID: nil,
-          reason: "the parent store was released"
-        )
       }
     )
-    selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    registerProjectionObserver(
-      selectedStore,
-      registration: .dependency(
-        .custom(callsite),
-        hasChanged: { _, _ in true }
-      )
-    )
-    return selectedStore
   }
 }
 
 extension ScopedStore {
-  public func select<Value: Equatable & Sendable>(
-    _ keyPath: KeyPath<ChildState, Value>,
-    fileID: StaticString = #fileID,
-    line: UInt = #line
+  private func cachedSelectedStore<Value: Equatable & Sendable>(
+    callsite: SelectionCallsite,
+    initialValue: @autoclosure () -> Value,
+    registration: ProjectionObserverRegistration<ChildState>,
+    valueResolver: @escaping @MainActor () -> Value?
   ) -> SelectedStore<Value> {
-    let callsite = SelectionCallsite(fileID: fileID.description, line: line)
     if let cached: SelectedStore<Value> = selectionCache.cached(
       for: callsite, valueType: Value.self)
     {
@@ -395,13 +477,10 @@ extension ScopedStore {
     }
 
     let selectedStore = SelectedStore(
-      initialValue: state[keyPath: keyPath],
+      initialValue: initialValue(),
       parentObject: self,
-      valueResolver: { [weak self] in
-        guard let self, self.isActive else { return nil }
-        return self.cachedState[keyPath: keyPath]
-      },
-      inactiveMessage: { [weak self] in
+      valueResolver: valueResolver,
+      inactiveMessage: { @MainActor @Sendable [weak self] in
         guard let self else {
           return selectedStoreFailureMessage(
             parentType: ParentReducer.self,
@@ -419,7 +498,7 @@ extension ScopedStore {
             : "the parent scoped store became unavailable"
         )
       },
-      parentReleasedMessage: { [weak self] in
+      parentReleasedMessage: { @MainActor @Sendable [weak self] in
         selectedStoreFailureMessage(
           parentType: ParentReducer.self,
           valueType: Value.self,
@@ -429,16 +508,27 @@ extension ScopedStore {
       }
     )
     selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    observerRegistry.register(
-      selectedStore,
-      registration: .dependency(
-        .keyPath(keyPath as AnyKeyPath),
-        hasChanged: { previousState, nextState in
-          previousState[keyPath: keyPath] != nextState[keyPath: keyPath]
-        }
-      )
-    )
+    observerRegistry.register(selectedStore, registration: registration)
     return selectedStore
+  }
+
+  public func select<Value: Equatable & Sendable>(
+    _ keyPath: KeyPath<ChildState, Value>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) -> SelectedStore<Value> {
+    let callsite = SelectionCallsite(fileID: fileID.description, line: line)
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: state[keyPath: keyPath],
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(keyPath)
+      ),
+      valueResolver: { [weak self] in
+        guard let self, self.isActive else { return nil }
+        return self.cachedState[keyPath: keyPath]
+      }
+    )
   }
 
   public func select<Dependency: Equatable & Sendable, Value: Equatable & Sendable>(
@@ -448,57 +538,17 @@ extension ScopedStore {
     _ transform: @escaping @Sendable (Dependency) -> Value
   ) -> SelectedStore<Value> {
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: callsite, valueType: Value.self)
-    {
-      return cached
-    }
-
-    let selectedStore = SelectedStore(
+    return cachedSelectedStore(
+      callsite: callsite,
       initialValue: transform(state[keyPath: dependency]),
-      parentObject: self,
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(dependency)
+      ),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
         return transform(self.cachedState[keyPath: dependency])
-      },
-      inactiveMessage: { [weak self] in
-        guard let self else {
-          return selectedStoreFailureMessage(
-            parentType: ParentReducer.self,
-            valueType: Value.self,
-            stableID: nil,
-            reason: "the parent scoped store was released"
-          )
-        }
-        return selectedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          valueType: Value.self,
-          stableID: self.stableID,
-          reason: self.failureKind == .collectionEntryRemoved
-            ? "the source collection entry was removed"
-            : "the parent scoped store became unavailable"
-        )
-      },
-      parentReleasedMessage: { [weak self] in
-        selectedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          valueType: Value.self,
-          stableID: self?.stableID,
-          reason: "the parent scoped store was released"
-        )
       }
     )
-    selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    observerRegistry.register(
-      selectedStore,
-      registration: .dependency(
-        .keyPath(dependency as AnyKeyPath),
-        hasChanged: { previousState, nextState in
-          previousState[keyPath: dependency] != nextState[keyPath: dependency]
-        }
-      )
-    )
-    return selectedStore
   }
 
   public func select<
@@ -516,66 +566,21 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency) = dependencies
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: callsite, valueType: Value.self)
-    {
-      return cached
-    }
-
-    let selectedStore = SelectedStore(
+    return cachedSelectedStore(
+      callsite: callsite,
       initialValue: transform(state[keyPath: firstDependency], state[keyPath: secondDependency]),
-      parentObject: self,
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency)
+      ),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
         return transform(
           self.cachedState[keyPath: firstDependency],
           self.cachedState[keyPath: secondDependency]
         )
-      },
-      inactiveMessage: { [weak self] in
-        guard let self else {
-          return selectedStoreFailureMessage(
-            parentType: ParentReducer.self,
-            valueType: Value.self,
-            stableID: nil,
-            reason: "the parent scoped store was released"
-          )
-        }
-        return selectedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          valueType: Value.self,
-          stableID: self.stableID,
-          reason: self.failureKind == .collectionEntryRemoved
-            ? "the source collection entry was removed"
-            : "the parent scoped store became unavailable"
-        )
-      },
-      parentReleasedMessage: { [weak self] in
-        selectedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          valueType: Value.self,
-          stableID: self?.stableID,
-          reason: "the parent scoped store was released"
-        )
       }
     )
-    selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    observerRegistry.register(
-      selectedStore,
-      registration: .dependencies([
-        .init(
-          .keyPath(firstDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
-          }),
-        .init(
-          .keyPath(secondDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
-          }),
-      ])
-    )
-    return selectedStore
   }
 
   public func select<
@@ -595,19 +600,18 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency) = dependencies
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: callsite, valueType: Value.self)
-    {
-      return cached
-    }
-
-    let selectedStore = SelectedStore(
+    return cachedSelectedStore(
+      callsite: callsite,
       initialValue: transform(
         state[keyPath: firstDependency],
         state[keyPath: secondDependency],
         state[keyPath: thirdDependency]
       ),
-      parentObject: self,
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency),
+        selectionDependencyRegistration(thirdDependency)
+      ),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
         return transform(
@@ -615,56 +619,184 @@ extension ScopedStore {
           self.cachedState[keyPath: secondDependency],
           self.cachedState[keyPath: thirdDependency]
         )
-      },
-      inactiveMessage: { [weak self] in
-        guard let self else {
-          return selectedStoreFailureMessage(
-            parentType: ParentReducer.self,
-            valueType: Value.self,
-            stableID: nil,
-            reason: "the parent scoped store was released"
-          )
-        }
-        return selectedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          valueType: Value.self,
-          stableID: self.stableID,
-          reason: self.failureKind == .collectionEntryRemoved
-            ? "the source collection entry was removed"
-            : "the parent scoped store became unavailable"
-        )
-      },
-      parentReleasedMessage: { [weak self] in
-        selectedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          valueType: Value.self,
-          stableID: self?.stableID,
-          reason: "the parent scoped store was released"
+      }
+    )
+  }
+
+  public func select<
+    FirstDependency: Equatable & Sendable,
+    SecondDependency: Equatable & Sendable,
+    ThirdDependency: Equatable & Sendable,
+    FourthDependency: Equatable & Sendable,
+    Value: Equatable & Sendable
+  >(
+    dependingOn dependencies: (
+      KeyPath<ChildState, FirstDependency>,
+      KeyPath<ChildState, SecondDependency>,
+      KeyPath<ChildState, ThirdDependency>,
+      KeyPath<ChildState, FourthDependency>
+    ),
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ transform: @escaping @Sendable (
+      FirstDependency,
+      SecondDependency,
+      ThirdDependency,
+      FourthDependency
+    ) -> Value
+  ) -> SelectedStore<Value> {
+    let (firstDependency, secondDependency, thirdDependency, fourthDependency) = dependencies
+    let callsite = SelectionCallsite(fileID: fileID.description, line: line)
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: transform(
+        state[keyPath: firstDependency],
+        state[keyPath: secondDependency],
+        state[keyPath: thirdDependency],
+        state[keyPath: fourthDependency]
+      ),
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency),
+        selectionDependencyRegistration(thirdDependency),
+        selectionDependencyRegistration(fourthDependency)
+      ),
+      valueResolver: { [weak self] in
+        guard let self, self.isActive else { return nil }
+        return transform(
+          self.cachedState[keyPath: firstDependency],
+          self.cachedState[keyPath: secondDependency],
+          self.cachedState[keyPath: thirdDependency],
+          self.cachedState[keyPath: fourthDependency]
         )
       }
     )
-    selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    observerRegistry.register(
-      selectedStore,
-      registration: .dependencies([
-        .init(
-          .keyPath(firstDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: firstDependency] != nextState[keyPath: firstDependency]
-          }),
-        .init(
-          .keyPath(secondDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: secondDependency] != nextState[keyPath: secondDependency]
-          }),
-        .init(
-          .keyPath(thirdDependency as AnyKeyPath),
-          hasChanged: { previousState, nextState in
-            previousState[keyPath: thirdDependency] != nextState[keyPath: thirdDependency]
-          }),
-      ])
+  }
+
+  public func select<
+    FirstDependency: Equatable & Sendable,
+    SecondDependency: Equatable & Sendable,
+    ThirdDependency: Equatable & Sendable,
+    FourthDependency: Equatable & Sendable,
+    FifthDependency: Equatable & Sendable,
+    Value: Equatable & Sendable
+  >(
+    dependingOn dependencies: (
+      KeyPath<ChildState, FirstDependency>,
+      KeyPath<ChildState, SecondDependency>,
+      KeyPath<ChildState, ThirdDependency>,
+      KeyPath<ChildState, FourthDependency>,
+      KeyPath<ChildState, FifthDependency>
+    ),
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ transform: @escaping @Sendable (
+      FirstDependency,
+      SecondDependency,
+      ThirdDependency,
+      FourthDependency,
+      FifthDependency
+    ) -> Value
+  ) -> SelectedStore<Value> {
+    let (firstDependency, secondDependency, thirdDependency, fourthDependency, fifthDependency) =
+      dependencies
+    let callsite = SelectionCallsite(fileID: fileID.description, line: line)
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: transform(
+        state[keyPath: firstDependency],
+        state[keyPath: secondDependency],
+        state[keyPath: thirdDependency],
+        state[keyPath: fourthDependency],
+        state[keyPath: fifthDependency]
+      ),
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency),
+        selectionDependencyRegistration(thirdDependency),
+        selectionDependencyRegistration(fourthDependency),
+        selectionDependencyRegistration(fifthDependency)
+      ),
+      valueResolver: { [weak self] in
+        guard let self, self.isActive else { return nil }
+        return transform(
+          self.cachedState[keyPath: firstDependency],
+          self.cachedState[keyPath: secondDependency],
+          self.cachedState[keyPath: thirdDependency],
+          self.cachedState[keyPath: fourthDependency],
+          self.cachedState[keyPath: fifthDependency]
+        )
+      }
     )
-    return selectedStore
+  }
+
+  public func select<
+    FirstDependency: Equatable & Sendable,
+    SecondDependency: Equatable & Sendable,
+    ThirdDependency: Equatable & Sendable,
+    FourthDependency: Equatable & Sendable,
+    FifthDependency: Equatable & Sendable,
+    SixthDependency: Equatable & Sendable,
+    Value: Equatable & Sendable
+  >(
+    dependingOn dependencies: (
+      KeyPath<ChildState, FirstDependency>,
+      KeyPath<ChildState, SecondDependency>,
+      KeyPath<ChildState, ThirdDependency>,
+      KeyPath<ChildState, FourthDependency>,
+      KeyPath<ChildState, FifthDependency>,
+      KeyPath<ChildState, SixthDependency>
+    ),
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ transform: @escaping @Sendable (
+      FirstDependency,
+      SecondDependency,
+      ThirdDependency,
+      FourthDependency,
+      FifthDependency,
+      SixthDependency
+    ) -> Value
+  ) -> SelectedStore<Value> {
+    let (
+      firstDependency,
+      secondDependency,
+      thirdDependency,
+      fourthDependency,
+      fifthDependency,
+      sixthDependency
+    ) = dependencies
+    let callsite = SelectionCallsite(fileID: fileID.description, line: line)
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: transform(
+        state[keyPath: firstDependency],
+        state[keyPath: secondDependency],
+        state[keyPath: thirdDependency],
+        state[keyPath: fourthDependency],
+        state[keyPath: fifthDependency],
+        state[keyPath: sixthDependency]
+      ),
+      registration: selectionDependencyRegistrations(
+        selectionDependencyRegistration(firstDependency),
+        selectionDependencyRegistration(secondDependency),
+        selectionDependencyRegistration(thirdDependency),
+        selectionDependencyRegistration(fourthDependency),
+        selectionDependencyRegistration(fifthDependency),
+        selectionDependencyRegistration(sixthDependency)
+      ),
+      valueResolver: { [weak self] in
+        guard let self, self.isActive else { return nil }
+        return transform(
+          self.cachedState[keyPath: firstDependency],
+          self.cachedState[keyPath: secondDependency],
+          self.cachedState[keyPath: thirdDependency],
+          self.cachedState[keyPath: fourthDependency],
+          self.cachedState[keyPath: fifthDependency],
+          self.cachedState[keyPath: sixthDependency]
+        )
+      }
+    )
   }
 
   public func select<Value: Equatable & Sendable>(
@@ -673,54 +805,14 @@ extension ScopedStore {
     _ selector: @escaping @Sendable (ChildState) -> Value
   ) -> SelectedStore<Value> {
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: callsite, valueType: Value.self)
-    {
-      return cached
-    }
-
-    let selectedStore = SelectedStore(
+    return cachedSelectedStore(
+      callsite: callsite,
       initialValue: selector(state),
-      parentObject: self,
+      registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
         return selector(self.cachedState)
-      },
-      inactiveMessage: { [weak self] in
-        guard let self else {
-          return selectedStoreFailureMessage(
-            parentType: ParentReducer.self,
-            valueType: Value.self,
-            stableID: nil,
-            reason: "the parent scoped store was released"
-          )
-        }
-        return selectedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          valueType: Value.self,
-          stableID: self.stableID,
-          reason: self.failureKind == .collectionEntryRemoved
-            ? "the source collection entry was removed"
-            : "the parent scoped store became unavailable"
-        )
-      },
-      parentReleasedMessage: { [weak self] in
-        selectedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          valueType: Value.self,
-          stableID: self?.stableID,
-          reason: "the parent scoped store was released"
-        )
       }
     )
-    selectionCache.store(selectedStore, for: callsite, valueType: Value.self)
-    observerRegistry.register(
-      selectedStore,
-      registration: .dependency(
-        .custom(callsite),
-        hasChanged: { _, _ in true }
-      )
-    )
-    return selectedStore
   }
 }

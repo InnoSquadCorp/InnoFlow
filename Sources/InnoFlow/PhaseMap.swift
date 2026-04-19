@@ -8,13 +8,16 @@ import Foundation
 public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Sendable> {
   package let phaseKeyPath: WritableKeyPath<State, Phase>
   package let rules: [PhaseRule<State, Action, Phase>]
+  package let rulesBySourcePhase: [Phase: [PhaseRule<State, Action, Phase>]]
 
   public init(
     _ phaseKeyPath: WritableKeyPath<State, Phase>,
     @PhaseRuleBuilder<State, Action, Phase> _ rules: () -> [PhaseRule<State, Action, Phase>]
   ) {
     self.phaseKeyPath = phaseKeyPath
-    self.rules = rules()
+    let declaredRules = rules()
+    self.rules = declaredRules
+    self.rulesBySourcePhase = Self.makeRulesBySourcePhase(from: declaredRules)
   }
 
   public var derivedGraph: PhaseTransitionGraph<Phase> {
@@ -38,7 +41,7 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
     var missingTriggers: [PhaseMapValidationReport<Phase>.MissingTrigger] = []
 
     for (phase, expectedTriggers) in expectedTriggersByPhase {
-      let declaredTransitions = rules.first(where: { $0.sourcePhase == phase })?.transitions ?? []
+      let declaredTransitions = (rulesBySourcePhase[phase] ?? []).flatMap(\.transitions)
 
       for expectedTrigger in expectedTriggers {
         let isCovered = declaredTransitions.contains(where: { transition in
@@ -51,6 +54,16 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
     }
 
     return .init(missingTriggers: missingTriggers)
+  }
+
+  private static func makeRulesBySourcePhase(
+    from rules: [PhaseRule<State, Action, Phase>]
+  ) -> [Phase: [PhaseRule<State, Action, Phase>]] {
+    var rulesBySourcePhase: [Phase: [PhaseRule<State, Action, Phase>]] = [:]
+    for rule in rules {
+      rulesBySourcePhase[rule.sourcePhase, default: []].append(rule)
+    }
+    return rulesBySourcePhase
   }
 }
 
@@ -334,7 +347,7 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
       state[keyPath: phaseMap.phaseKeyPath] = previousPhase
     }
 
-    for rule in phaseMap.rules where rule.sourcePhase == previousPhase {
+    for rule in phaseMap.rulesBySourcePhase[previousPhase] ?? [] {
       for transition in rule.transitions {
         guard transition.matches(action) else { continue }
 

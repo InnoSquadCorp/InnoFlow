@@ -758,6 +758,9 @@ struct ScopedBindableChildFeature {
     @BindableField var step = 1
     var title = "Child"
     var note = "Ready"
+    var priority = 0
+    var isEnabled = true
+    var version = 1
   }
 
   struct State: Equatable, Sendable, DefaultInitializable {
@@ -774,7 +777,18 @@ struct ScopedBindableChildFeature {
     case setStep(Int)
     case setTitle(String)
     case setNote(String)
+    case setPriority(Int)
+    case setEnabled(Bool)
+    case setVersion(Int)
     case setSnapshot(step: Int, title: String, note: String)
+    case setSelectionProbe(
+      step: Int,
+      title: String,
+      note: String,
+      priority: Int,
+      isEnabled: Bool,
+      version: Int
+    )
   }
 
   var body: some Reducer<State, Action> {
@@ -792,10 +806,40 @@ struct ScopedBindableChildFeature {
         state.child.note = note
         return .none
 
+      case .child(.setPriority(let priority)):
+        state.child.priority = priority
+        return .none
+
+      case .child(.setEnabled(let isEnabled)):
+        state.child.isEnabled = isEnabled
+        return .none
+
+      case .child(.setVersion(let version)):
+        state.child.version = version
+        return .none
+
       case .child(.setSnapshot(let step, let title, let note)):
         state.child.step = max(1, step)
         state.child.title = title
         state.child.note = note
+        return .none
+
+      case .child(
+        .setSelectionProbe(
+          let step,
+          let title,
+          let note,
+          let priority,
+          let isEnabled,
+          let version
+        )
+      ):
+        state.child.step = max(1, step)
+        state.child.title = title
+        state.child.note = note
+        state.child.priority = priority
+        state.child.isEnabled = isEnabled
+        state.child.version = version
         return .none
 
       case .setUnrelated(let value):
@@ -3141,6 +3185,101 @@ struct StoreTests {
     #expect(selected.value == "Child-1-2")
   }
 
+  @Test(
+    "Store.select(dependingOn:(..., ..., ..., ...)) preserves SelectedStore identity across repeated calls"
+  )
+  func selectedStoreFourFieldDependingOnPreservesIdentity() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority),
+      fileID: #fileID,
+      line: callsiteLine
+    ) { step, title, note, priority in
+      "\(title)-\(step)-\(note)-\(priority)"
+    }
+    let second = store.select(
+      dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority),
+      fileID: #fileID,
+      line: callsiteLine
+    ) { step, title, note, priority in
+      "\(title)-\(step)-\(note)-\(priority)"
+    }
+
+    #expect(first === second)
+    #expect(first.value == "Child-1-Ready-0")
+  }
+
+  @Test(
+    "Store.select(dependingOn:(..., ..., ..., ..., ...)) invalidates only for tracked mutations"
+  )
+  func selectedStoreFiveFieldDependingOnInvalidatesForTrackedMutations() async {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let selected = store.select(
+      dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority, \.child.isEnabled)
+    ) { step, title, note, priority, isEnabled in
+      "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)"
+    }
+    let initial = store.projectionObserverStats
+
+    store.send(.setUnrelated(1))
+    try? await Task.sleep(for: .milliseconds(20))
+    let afterUnrelated = store.projectionObserverStats
+    #expect(afterUnrelated.evaluatedObservers == initial.evaluatedObservers)
+    #expect(afterUnrelated.refreshedObservers == initial.refreshedObservers)
+    #expect(selected.value == "Child-1-Ready-0-true")
+
+    store.send(.child(.setPriority(2)))
+    try? await Task.sleep(for: .milliseconds(20))
+    let afterPriority = store.projectionObserverStats
+    #expect(afterPriority.evaluatedObservers == afterUnrelated.evaluatedObservers + 1)
+    #expect(afterPriority.refreshedObservers == afterUnrelated.refreshedObservers + 1)
+    #expect(selected.value == "Child-1-Ready-2-true")
+
+    store.send(.child(.setEnabled(false)))
+    try? await Task.sleep(for: .milliseconds(20))
+    let afterEnabled = store.projectionObserverStats
+    #expect(afterEnabled.evaluatedObservers == afterPriority.evaluatedObservers + 1)
+    #expect(afterEnabled.refreshedObservers == afterPriority.refreshedObservers + 1)
+    #expect(selected.value == "Child-1-Ready-2-false")
+  }
+
+  @Test("Store.select(dependingOn:(..., ..., ..., ..., ..., ...)) tracks six explicit slices")
+  func selectedStoreSixFieldDependingOnTracksExplicitSlices() async {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let selected = store.select(
+      dependingOn: (
+        \.child.step,
+        \.child.title,
+        \.child.note,
+        \.child.priority,
+        \.child.isEnabled,
+        \.child.version
+      )
+    ) { step, title, note, priority, isEnabled, version in
+      "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)-\(version)"
+    }
+    let probe = ObservationProbe()
+
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
+
+    store.send(.setUnrelated(2))
+    try? await Task.sleep(for: .milliseconds(20))
+    #expect(probe.count == 0)
+    #expect(selected.value == "Child-1-Ready-0-true-1")
+
+    store.send(.child(.setVersion(5)))
+    try? await Task.sleep(for: .milliseconds(20))
+    #expect(probe.count == 1)
+    #expect(selected.value == "Child-1-Ready-0-true-5")
+  }
+
   @Test("Store.select ignores parent mutations when the selected value is unchanged")
   func selectedStoreIgnoresUnchangedParentSelection() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -3390,6 +3529,96 @@ struct StoreTests {
     try? await Task.sleep(for: .milliseconds(20))
     #expect(probe.count == 1)
     #expect(selected.value == "Child-1-Updated")
+  }
+
+  @Test(
+    "ScopedStore.select(dependingOn:(..., ..., ..., ...)) preserves SelectedStore identity across repeated calls"
+  )
+  func scopedSelectedStoreFourFieldDependingOnPreservesIdentity() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let callsiteLine: UInt = #line
+    let first = scoped.select(
+      dependingOn: (\.step, \.title, \.note, \.priority),
+      fileID: #fileID,
+      line: callsiteLine
+    ) { step, title, note, priority in
+      "\(title)-\(step)-\(note)-\(priority)"
+    }
+    let second = scoped.select(
+      dependingOn: (\.step, \.title, \.note, \.priority),
+      fileID: #fileID,
+      line: callsiteLine
+    ) { step, title, note, priority in
+      "\(title)-\(step)-\(note)-\(priority)"
+    }
+
+    #expect(first === second)
+    #expect(first.value == "Child-1-Ready-0")
+  }
+
+  @Test(
+    "ScopedStore.select(dependingOn:(..., ..., ..., ..., ...)) ignores parent mutations outside tracked slices"
+  )
+  func scopedSelectedStoreFiveFieldDependingOnIgnoresNonDependencies() async {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let selected = scoped.select(
+      dependingOn: (\.step, \.title, \.note, \.priority, \.isEnabled)
+    ) { step, title, note, priority, isEnabled in
+      "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)"
+    }
+    let probe = ObservationProbe()
+
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
+
+    store.send(.setUnrelated(1))
+    try? await Task.sleep(for: .milliseconds(20))
+    #expect(probe.count == 0)
+    #expect(selected.value == "Child-1-Ready-0-true")
+
+    store.send(.child(.setEnabled(false)))
+    try? await Task.sleep(for: .milliseconds(20))
+    #expect(probe.count == 1)
+    #expect(selected.value == "Child-1-Ready-0-false")
+  }
+
+  @Test("ScopedStore.select(dependingOn:(..., ..., ..., ..., ..., ...)) tracks six explicit slices")
+  func scopedSelectedStoreSixFieldDependingOnTracksExplicitSlices() async {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let selected = scoped.select(
+      dependingOn: (\.step, \.title, \.note, \.priority, \.isEnabled, \.version)
+    ) { step, title, note, priority, isEnabled, version in
+      "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)-\(version)"
+    }
+    let probe = ObservationProbe()
+
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
+
+    store.send(.child(.setNote("Updated")))
+    try? await Task.sleep(for: .milliseconds(20))
+    #expect(probe.count == 1)
+    #expect(selected.value == "Child-1-Updated-0-true-1")
+
+    store.send(.setUnrelated(9))
+    try? await Task.sleep(for: .milliseconds(20))
+    #expect(probe.count == 1)
   }
 
   @Test("Collection-scoped stores preserve identity across repeated calls")
@@ -4017,6 +4246,56 @@ struct StoreTests {
     #expect(afterSnapshotMutation.refreshPassCount == initial.refreshPassCount + 1)
     #expect(afterSnapshotMutation.evaluatedObservers == initial.evaluatedObservers + 1)
     #expect(afterSnapshotMutation.refreshedObservers == initial.refreshedObservers + 1)
+  }
+
+  @Test(
+    "Projection observer stats dedupe six-field selections and fallback selectors still always refresh"
+  )
+  func projectionObserverStatsDedupeSixFieldSelections() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    _ = store.select(
+      dependingOn: (
+        \.child.step,
+        \.child.title,
+        \.child.note,
+        \.child.priority,
+        \.child.isEnabled,
+        \.child.version
+      )
+    ) { step, title, note, priority, isEnabled, version in
+      "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)-\(version)"
+    }
+    _ = store.select {
+      "\($0.child.title)-\($0.child.step)-\($0.child.note)-\($0.child.priority)-\($0.child.isEnabled)-\($0.child.version)"
+    }
+
+    let initial = store.projectionObserverStats
+    #expect(initial.registeredObservers == 2)
+
+    store.send(.setUnrelated(1))
+
+    let afterUnrelated = store.projectionObserverStats
+    #expect(afterUnrelated.refreshPassCount == initial.refreshPassCount + 1)
+    #expect(afterUnrelated.evaluatedObservers == initial.evaluatedObservers + 1)
+    #expect(afterUnrelated.refreshedObservers == initial.refreshedObservers)
+
+    store.send(
+      .child(
+        .setSelectionProbe(
+          step: 3,
+          title: "Updated",
+          note: "Synced",
+          priority: 4,
+          isEnabled: false,
+          version: 2
+        )
+      )
+    )
+
+    let afterProbeMutation = store.projectionObserverStats
+    #expect(afterProbeMutation.refreshPassCount == afterUnrelated.refreshPassCount + 1)
+    #expect(afterProbeMutation.evaluatedObservers == afterUnrelated.evaluatedObservers + 2)
+    #expect(afterProbeMutation.refreshedObservers == afterUnrelated.refreshedObservers + 2)
   }
 
   @Test("Scoped projection stats track dependency-annotated and fallback selections")
@@ -5488,6 +5767,48 @@ struct TestStoreTests {
     }
   }
 
+  @Test("PhaseMap preserves ordering across separate rule blocks for the same source phase")
+  func phaseMapPreservesOrderingAcrossSeparateRuleBlocks() async {
+    struct Harness: Reducer {
+      struct State: Equatable, Sendable, DefaultInitializable {
+        enum Phase: Equatable, Hashable, Sendable {
+          case idle
+          case first
+          case second
+        }
+
+        var phase: Phase = .idle
+      }
+
+      enum Action: Equatable, Sendable {
+        case advance
+      }
+
+      static var phaseMap: PhaseMap<State, Action, State.Phase> {
+        PhaseMap(\State.phase) {
+          From(.idle) {
+            On(.advance, to: .first)
+          }
+          From(.idle) {
+            On(where: { $0 == .advance }, targets: [.second]) { _, _ in .second }
+          }
+        }
+      }
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        Reduce<State, Action> { _, _ in .none }
+          .phaseMap(Self.phaseMap)
+          .reduce(into: &state, action: action)
+      }
+    }
+
+    let store = TestStore(reducer: Harness(), initialState: .init())
+
+    await store.send(.advance, through: Harness.phaseMap) {
+      $0.phase = .first
+    }
+  }
+
   @Test("PhaseMap derivedGraph can be validated with existing graph helpers")
   func phaseMapDerivedGraphValidation() {
     let graph: PhaseTransitionGraph<PhaseMapHarness.State.Phase> = PhaseMapHarness.phaseGraph
@@ -5549,6 +5870,66 @@ struct TestStoreTests {
     let store = TestStore(reducer: PhaseMapHarness(), initialState: .init())
     await store.send(.noop, through: PhaseMapHarness.phaseMap)
     #expect(store.state.phase == .idle)
+  }
+
+  @Test("PhaseMap validation report combines repeated source-phase blocks via the source index")
+  func phaseMapValidationReportUsesIndexedRulesForRepeatedSourcePhases() {
+    enum Phase: Hashable, Sendable {
+      case idle
+      case loading
+      case loaded
+      case failed
+    }
+
+    struct State: Equatable, Sendable {
+      var phase: Phase
+    }
+
+    enum Action: Equatable, Sendable {
+      case load
+      case loaded([Int])
+      case failed(String)
+    }
+
+    let loadedCasePath = CasePath<Action, [Int]>(
+      embed: Action.loaded,
+      extract: { action in
+        guard case .loaded(let payload) = action else { return nil }
+        return payload
+      }
+    )
+
+    let failedCasePath = CasePath<Action, String>(
+      embed: Action.failed,
+      extract: { action in
+        guard case .failed(let payload) = action else { return nil }
+        return payload
+      }
+    )
+
+    let map = PhaseMap<State, Action, Phase>(\.phase) {
+      From(.idle) {
+        On(.load, to: .loading)
+      }
+      From(.loading) {
+        On(loadedCasePath, to: .loaded)
+      }
+      From(.loading) {
+        On(failedCasePath, to: .failed)
+      }
+    }
+
+    let report = map.validationReport(
+      expectedTriggersByPhase: [
+        .loading: [
+          .casePath(loadedCasePath, label: "loaded", sample: [1, 2, 3]),
+          .casePath(failedCasePath, label: "failed", sample: "boom"),
+        ]
+      ]
+    )
+
+    #expect(report.isEmpty)
+    #expect(report.missingTriggers.isEmpty)
   }
 
   @Test("PhaseMap supports predicate-based fixed-target, nil-guard, and same-phase guard paths")
