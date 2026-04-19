@@ -296,6 +296,14 @@ main() {
     echo "[principle-gates] Failed: VisionOSIntegration.md is missing"
     exit 1
   fi
+  if [[ ! -f "docs/DEPENDENCY_PATTERNS.md" ]]; then
+    echo "[principle-gates] Failed: docs/DEPENDENCY_PATTERNS.md is missing"
+    exit 1
+  fi
+  if ! search_lines "docs/DEPENDENCY_PATTERNS\\.md" README.md README.kr.md README.jp.md README.cn.md ARCHITECTURE_CONTRACT.md >/dev/null; then
+    echo "[principle-gates] Failed: READMEs and ARCHITECTURE_CONTRACT must link to docs/DEPENDENCY_PATTERNS.md"
+    exit 1
+  fi
   README_SECTION_COUNT="$(count_line_matches '^## InnoFlow 3.0.0 direction$' README.md)"
   CONTRACT_SECTION_COUNT="$(count_line_matches '^# Architecture Contract$' ARCHITECTURE_CONTRACT.md)"
   GETTING_STARTED_SECTION_COUNT="$(count_line_matches '^# Getting Started$' Sources/InnoFlow/InnoFlow.docc/GettingStarted.md)"
