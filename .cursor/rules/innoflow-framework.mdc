@@ -127,9 +127,9 @@ struct State: Equatable {
     var count = 0  // Bindable 아님
 }
 
-// View에서:
-TextField("Name", text: store.binding(\.name, send: { .nameChanged($0) }))
-Stepper("Step", value: store.binding(\.step, send: { .setStep($0) }))
+// View에서 (enum case constructor 를 `send:` 에 직접 전달 — 클로저 래핑 불필요):
+TextField("Name", text: store.binding(\.$name, send: Feature.Action.nameChanged))
+Stepper("Step", value: store.binding(\.$step, send: Feature.Action.setStep))
 ```
 
 ## 네이밍 규칙
