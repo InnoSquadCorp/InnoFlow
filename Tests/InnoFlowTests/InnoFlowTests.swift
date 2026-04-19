@@ -3929,6 +3929,16 @@ struct StoreTests {
     await clock.advance(by: .milliseconds(100))
     await drainAsyncWork()
 
+    // After the second advance, the effect's sleep resumes on the cooperative
+    // executor. CI (GitHub Actions macos-latest) can saturate the executor
+    // heavily — a fixed `drainAsyncWork` yield budget is insufficient there,
+    // while the observable condition (`finishedRuns == 2`) is the idiomatic
+    // marker for "second run has completed end-to-end." Poll it with a
+    // wall-clock bounded `waitUntil` so the check adapts to executor jitter.
+    await waitUntil(timeout: .seconds(5)) {
+      store.completed == 1
+    }
+
     let afterSuccessfulFinish = await store.effectRuntimeMetrics
     #expect(afterSuccessfulFinish.preparedRuns == 2)
     #expect(afterSuccessfulFinish.attachedRuns == 2)
@@ -4272,7 +4282,14 @@ struct StoreTests {
 
     #expect(store.events == ["ordered-1"])
     await clock.advance(by: .milliseconds(100))
-    await drainAsyncWork()
+
+    // Two more emissions (ordered-2, ordered-3) land as queued follow-up
+    // actions after the sleep resumes. `drainAsyncWork`'s fixed yield budget
+    // is sufficient on fast hardware but not on saturated CI executors —
+    // poll the observable outcome with a wall-clock bounded wait instead.
+    await waitUntil(timeout: .seconds(5)) {
+      store.events.count >= 3
+    }
 
     #expect(store.events == ["ordered-1", "ordered-2", "ordered-3"])
   }
@@ -4311,7 +4328,13 @@ struct StoreTests {
 
     #expect(store.events == ["first-1", "second-1"])
     await clock.advance(by: .milliseconds(100))
-    await drainAsyncWork()
+
+    // Same CI-executor-saturation risk as `storeRunEmissionOrderingRemainsFIFO`
+    // above: after the advance, the two remaining emissions arrive as queued
+    // follow-up actions. Poll observable state with a wall-clock bounded wait.
+    await waitUntil(timeout: .seconds(5)) {
+      store.events.count >= 4
+    }
 
     #expect(store.events == ["first-1", "second-1", "second-2", "second-3"])
   }
@@ -4530,22 +4553,19 @@ struct StoreTests {
 
     store.send(.start(2))
     // The second merge's throttle must run and see the still-open window BEFORE
-    // we advance the clock. If we advance first, the window will be treated as
-    // expired and the throttle will emit the second value as a new leading
-    // emission. We cannot observe "throttle_2 has executed" directly — there is
-    // no state change — so we poll for debounce_2's replacement sleeper
-    // registration. Debounce cancels the in-flight sleeper and registers a
-    // fresh one on the same id, so the only safe marker is "enough yields to
-    // drain the merge's MainActor work". 200 yields is empirically sufficient
-    // and cheap.
-    for _ in 0..<200 {
-      await Task.yield()
-    }
+    // we advance the clock. If we advance first, the window is treated as
+    // expired and the throttle emits the second value as a new leading emission.
+    // Neither throttle_2's suppression nor debounce_2's replacement registration
+    // produces a distinct observable state change (sleeperCount stays at 1
+    // across the cancel+re-register), so we can only wait for the merge's
+    // MainActor walker work to drain. A small wall-clock sleep on the system
+    // ContinuousClock gives the cooperative executor a real chance to run
+    // other tasks — more reliable than a fixed yield count on saturated CI.
+    try? await Task.sleep(for: .milliseconds(100))
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<200 {
-      if store.debounced == [2] { break }
-      await Task.yield()
+    await waitUntil(timeout: .seconds(5)) {
+      store.debounced == [2]
     }
 
     #expect(store.debounced == [2])
