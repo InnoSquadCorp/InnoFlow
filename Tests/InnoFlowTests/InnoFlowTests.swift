@@ -3223,21 +3223,29 @@ struct StoreTests {
     let initial = store.projectionObserverStats
 
     store.send(.setUnrelated(1))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitForProjectionRefreshPass(store, after: initial)
     let afterUnrelated = store.projectionObserverStats
     #expect(afterUnrelated.evaluatedObservers == initial.evaluatedObservers)
     #expect(afterUnrelated.refreshedObservers == initial.refreshedObservers)
     #expect(selected.value == "Child-1-Ready-0-true")
 
     store.send(.child(.setPriority(2)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitForProjectionObserverStats(store) { stats in
+      stats.refreshPassCount > afterUnrelated.refreshPassCount
+        && stats.evaluatedObservers >= afterUnrelated.evaluatedObservers + 1
+        && stats.refreshedObservers >= afterUnrelated.refreshedObservers + 1
+    }
     let afterPriority = store.projectionObserverStats
     #expect(afterPriority.evaluatedObservers == afterUnrelated.evaluatedObservers + 1)
     #expect(afterPriority.refreshedObservers == afterUnrelated.refreshedObservers + 1)
     #expect(selected.value == "Child-1-Ready-2-true")
 
     store.send(.child(.setEnabled(false)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitForProjectionObserverStats(store) { stats in
+      stats.refreshPassCount > afterPriority.refreshPassCount
+        && stats.evaluatedObservers >= afterPriority.evaluatedObservers + 1
+        && stats.refreshedObservers >= afterPriority.refreshedObservers + 1
+    }
     let afterEnabled = store.projectionObserverStats
     #expect(afterEnabled.evaluatedObservers == afterPriority.evaluatedObservers + 1)
     #expect(afterEnabled.refreshedObservers == afterPriority.refreshedObservers + 1)
@@ -3269,13 +3277,16 @@ struct StoreTests {
         probe.recordChange()
       })
 
+    let initial = store.projectionObserverStats
     store.send(.setUnrelated(2))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitForProjectionRefreshPass(store, after: initial)
     #expect(probe.count == 0)
     #expect(selected.value == "Child-1-Ready-0-true-1")
 
     store.send(.child(.setVersion(5)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitUntil {
+      probe.count == 1 && selected.value == "Child-1-Ready-0-true-5"
+    }
     #expect(probe.count == 1)
     #expect(selected.value == "Child-1-Ready-0-true-5")
   }
@@ -3580,13 +3591,16 @@ struct StoreTests {
         probe.recordChange()
       })
 
+    let initial = store.projectionObserverStats
     store.send(.setUnrelated(1))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitForProjectionRefreshPass(store, after: initial)
     #expect(probe.count == 0)
     #expect(selected.value == "Child-1-Ready-0-true")
 
     store.send(.child(.setEnabled(false)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitUntil {
+      probe.count == 1 && selected.value == "Child-1-Ready-0-false"
+    }
     #expect(probe.count == 1)
     #expect(selected.value == "Child-1-Ready-0-false")
   }
@@ -3612,12 +3626,15 @@ struct StoreTests {
       })
 
     store.send(.child(.setNote("Updated")))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitUntil {
+      probe.count == 1 && selected.value == "Child-1-Updated-0-true-1"
+    }
     #expect(probe.count == 1)
     #expect(selected.value == "Child-1-Updated-0-true-1")
 
+    let afterTrackedMutation = store.projectionObserverStats
     store.send(.setUnrelated(9))
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitForProjectionRefreshPass(store, after: afterTrackedMutation)
     #expect(probe.count == 1)
   }
 
@@ -6742,6 +6759,34 @@ private func waitUntil(
       return
     }
     try? await Task.sleep(for: pollInterval)
+  }
+}
+
+@MainActor
+private func waitForProjectionObserverStats<R: Reducer>(
+  _ store: Store<R>,
+  timeout: Duration = .seconds(2),
+  pollInterval: Duration = .milliseconds(10),
+  condition: @escaping @MainActor (ProjectionObserverRegistryStats) -> Bool
+) async {
+  await waitUntil(timeout: timeout, pollInterval: pollInterval) {
+    condition(store.projectionObserverStats)
+  }
+}
+
+@MainActor
+private func waitForProjectionRefreshPass<R: Reducer>(
+  _ store: Store<R>,
+  after previousStats: ProjectionObserverRegistryStats,
+  timeout: Duration = .seconds(2),
+  pollInterval: Duration = .milliseconds(10)
+) async {
+  await waitForProjectionObserverStats(
+    store,
+    timeout: timeout,
+    pollInterval: pollInterval
+  ) { stats in
+    stats.refreshPassCount > previousStats.refreshPassCount
   }
 }
 

@@ -231,24 +231,13 @@ extension Store {
     )
   }
 
-  /// Creates or reuses a selected store derived from four equatable dependency slices.
+  /// Creates or reuses a selected store derived from three equatable dependency slices.
   ///
   /// The dependency tuple is registered for selective invalidation, so the selected
   /// store refreshes only when one of the supplied slices changes.
   ///
   /// - Parameters:
-  ///   - dependencies: Four equatable state slices tracked for invalidation.
-  ///   - fileID: Callsite metadata used to preserve stable selection caching.
-  ///   - line: Callsite metadata used to preserve stable selection caching.
-  ///   - transform: Maps the tracked dependency values into the selected output.
-  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
-  /// Creates or reuses a selected store derived from four equatable child-state slices.
-  ///
-  /// The dependency tuple is registered for selective invalidation, so the selected
-  /// store refreshes only when one of the supplied slices changes.
-  ///
-  /// - Parameters:
-  ///   - dependencies: Four equatable child-state slices tracked for invalidation.
+  ///   - dependencies: Three equatable state slices tracked for invalidation.
   ///   - fileID: Callsite metadata used to preserve stable selection caching.
   ///   - line: Callsite metadata used to preserve stable selection caching.
   ///   - transform: Maps the tracked dependency values into the selected output.
@@ -293,24 +282,13 @@ extension Store {
     )
   }
 
-  /// Creates or reuses a selected store derived from five equatable dependency slices.
+  /// Creates or reuses a selected store derived from four equatable dependency slices.
   ///
   /// The dependency tuple is registered for selective invalidation, so the selected
   /// store refreshes only when one of the supplied slices changes.
   ///
   /// - Parameters:
-  ///   - dependencies: Five equatable state slices tracked for invalidation.
-  ///   - fileID: Callsite metadata used to preserve stable selection caching.
-  ///   - line: Callsite metadata used to preserve stable selection caching.
-  ///   - transform: Maps the tracked dependency values into the selected output.
-  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
-  /// Creates or reuses a selected store derived from five equatable child-state slices.
-  ///
-  /// The dependency tuple is registered for selective invalidation, so the selected
-  /// store refreshes only when one of the supplied slices changes.
-  ///
-  /// - Parameters:
-  ///   - dependencies: Five equatable child-state slices tracked for invalidation.
+  ///   - dependencies: Four equatable state slices tracked for invalidation.
   ///   - fileID: Callsite metadata used to preserve stable selection caching.
   ///   - line: Callsite metadata used to preserve stable selection caching.
   ///   - transform: Maps the tracked dependency values into the selected output.
@@ -366,24 +344,13 @@ extension Store {
     )
   }
 
-  /// Creates or reuses a selected store derived from six equatable dependency slices.
+  /// Creates or reuses a selected store derived from five equatable dependency slices.
   ///
   /// The dependency tuple is registered for selective invalidation, so the selected
   /// store refreshes only when one of the supplied slices changes.
   ///
   /// - Parameters:
-  ///   - dependencies: Six equatable state slices tracked for invalidation.
-  ///   - fileID: Callsite metadata used to preserve stable selection caching.
-  ///   - line: Callsite metadata used to preserve stable selection caching.
-  ///   - transform: Maps the tracked dependency values into the selected output.
-  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
-  /// Creates or reuses a selected store derived from six equatable child-state slices.
-  ///
-  /// The dependency tuple is registered for selective invalidation, so the selected
-  /// store refreshes only when one of the supplied slices changes.
-  ///
-  /// - Parameters:
-  ///   - dependencies: Six equatable child-state slices tracked for invalidation.
+  ///   - dependencies: Five equatable state slices tracked for invalidation.
   ///   - fileID: Callsite metadata used to preserve stable selection caching.
   ///   - line: Callsite metadata used to preserve stable selection caching.
   ///   - transform: Maps the tracked dependency values into the selected output.
@@ -446,6 +413,17 @@ extension Store {
     )
   }
 
+  /// Creates or reuses a selected store derived from six equatable dependency slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Six equatable state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
   public func select<
     FirstDependency: Equatable & Sendable,
     SecondDependency: Equatable & Sendable,
@@ -694,6 +672,17 @@ extension ScopedStore {
     )
   }
 
+  /// Creates or reuses a selected store derived from four equatable child-state slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Four equatable child-state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
   public func select<
     FirstDependency: Equatable & Sendable,
     SecondDependency: Equatable & Sendable,
@@ -745,6 +734,17 @@ extension ScopedStore {
     )
   }
 
+  /// Creates or reuses a selected store derived from five equatable child-state slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Five equatable child-state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
   public func select<
     FirstDependency: Equatable & Sendable,
     SecondDependency: Equatable & Sendable,
@@ -803,6 +803,17 @@ extension ScopedStore {
     )
   }
 
+  /// Creates or reuses a selected store derived from six equatable child-state slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Six equatable child-state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
   public func select<
     FirstDependency: Equatable & Sendable,
     SecondDependency: Equatable & Sendable,
