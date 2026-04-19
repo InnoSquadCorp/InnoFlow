@@ -23,6 +23,32 @@ This document captures the stable framework guarantees that should not drift wit
 - Closure-based selection remains an always-refresh fallback when dependency reads cannot be declared soundly.
 - Multi-field `dependingOn:` overloads exist for the common 2-field and 3-field cases. Larger projections remain a trigger-based backlog item, not a current framework defect.
 
+## Projection lifecycle contract
+
+`ScopedStore` and `SelectedStore` are projections of a parent `Store`. Their
+lifetime is bounded by the parent. SwiftUI observers, however, can read a
+projection on the same run-loop tick that its parent is being released — a
+race that is internal to the integration, not a programming error.
+
+The framework handles this race explicitly:
+
+- **Reads** (`ScopedStore.state`, `SelectedStore.value`, and their
+  `@dynamicMemberLookup` subscripts) return the **last valid cached snapshot**
+  when the parent is gone or the projection has been marked inactive. The
+  observer refresh pass invalidates dependents within the next tick, so the
+  stale read is bounded to one tick.
+- **Writes** (`ScopedStore.send(_:)`) are **silent no-ops** once the parent is
+  gone or the projection is inactive.
+- Debug builds surface both cases via `assertionFailure`, so the race is
+  immediately visible in development. Release builds do not abort.
+- Programming errors that are **not** lifecycle races still trap — in
+  particular, constructing a `ScopedStore` whose state resolver returns `nil`
+  at init time, and reading `ScopedStore.id` when the stable identifier type
+  does not match the child state's `Identifiable.ID`.
+
+This contract applies to single-child `Scope`, collection `ForEachReducer`
+children, and derived `SelectedStore` projections alike.
+
 ## Phase-driven modeling
 
 - `PhaseMap` is the canonical runtime phase ownership layer for phase-heavy features.

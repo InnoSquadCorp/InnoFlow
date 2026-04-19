@@ -311,6 +311,20 @@ main() {
     exit 1
   fi
 
+  echo "[principle-gates] Verifying release build succeeds (SIL inliner regression guard)"
+  # Use an isolated build path so release object files do not leak into the
+  # main .build/ tree. The stale-scope and phase-map subprocess harnesses
+  # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
+  # debug and release artifacts there causes duplicate-symbol failures.
+  RELEASE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
+  if ! swift build --package-path "$ROOT_DIR" --build-path "$RELEASE_BUILD_PATH" -c release >/dev/null 2>&1; then
+    echo "[principle-gates] Failed: 'swift build -c release' crashed or failed — SIL inliner regression suspected"
+    swift --version || true
+    rm -rf "$RELEASE_BUILD_PATH"
+    exit 1
+  fi
+  rm -rf "$RELEASE_BUILD_PATH"
+
   echo "[principle-gates] Running package tests"
   swift test --package-path "$ROOT_DIR" -Xswiftc -warnings-as-errors
 

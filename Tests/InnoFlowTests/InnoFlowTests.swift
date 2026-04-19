@@ -5936,6 +5936,30 @@ struct StaleScopeCrashContractTests {
   }
 }
 
+@Suite("Stale Scope Release Contract Tests", .serialized)
+struct StaleScopeReleaseContractTests {
+  @Test("Stale ScopedStore returns cached state after parent release in release-like execution")
+  func staleScopedStoreReleaseNoCrash() throws {
+    let result = try runStaleScopedStoreReleaseHarness(scenario: .parentReleased)
+
+    #expect(result.status == 0)
+  }
+
+  @Test("Stale collection-scoped ScopedStore tolerates removed entry in release-like execution")
+  func staleCollectionScopeReleaseNoCrash() throws {
+    let result = try runStaleScopedStoreReleaseHarness(scenario: .collectionEntryRemoved)
+
+    #expect(result.status == 0)
+  }
+
+  @Test("Stale SelectedStore returns cached value after parent release in release-like execution")
+  func staleSelectedStoreReleaseNoCrash() throws {
+    let result = try runStaleScopedStoreReleaseHarness(scenario: .selectedParentReleased)
+
+    #expect(result.status == 0)
+  }
+}
+
 @Suite("PhaseMap Crash Contract Tests", .serialized)
 struct PhaseMapCrashContractTests {
   @Test("PhaseMap direct phase mutations crash in a subprocess with contextual diagnostics")
@@ -6637,6 +6661,51 @@ private func runStaleScopedStoreHarness(
 private enum ConditionalReducerReleaseScenario: String {
   case ifLetAbsentState = "iflet-absent-state"
   case ifCaseLetMismatchedState = "ifcase-mismatched-state"
+}
+
+private enum StaleScopedStoreReleaseScenario: String {
+  case parentReleased = "parent-released"
+  case collectionEntryRemoved = "collection-entry-removed"
+  case selectedParentReleased = "selected-parent-released"
+}
+
+private func runStaleScopedStoreReleaseHarness(
+  scenario: StaleScopedStoreReleaseScenario
+) throws -> ProcessResult {
+  let packageRoot = currentInnoFlowPackageRoot()
+  let temporaryDirectory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+  let sourceFile = temporaryDirectory.appendingPathComponent("StaleScopeReleaseProbe.swift")
+  let executableURL = temporaryDirectory.appendingPathComponent("StaleScopeReleaseProbe")
+  try staleScopedStoreReleaseHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
+
+  let compileResult = try runProcess(
+    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+    arguments: [
+      "swiftc",
+      "-O",
+      "-parse-as-library",
+      "-package-name",
+      "InnoFlow",
+      sourceFile.path,
+    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
+      "-o",
+      executableURL.path,
+    ]
+  )
+
+  guard compileResult.status == 0 else {
+    throw StaleScopeHarnessError.compileFailed(output: compileResult.normalizedOutput)
+  }
+
+  return try runProcess(
+    executableURL: executableURL,
+    arguments: [],
+    environment: ["INNOFLOW_STALE_SCOPE_RELEASE_SCENARIO": scenario.rawValue]
+  )
 }
 
 private enum PhaseMapCrashScenario: String {
@@ -7348,6 +7417,153 @@ private let phaseMapReleaseHarnessSource = #"""
 
       default:
         fputs("Unknown PhaseMap release scenario\n", stderr)
+        Foundation.exit(2)
+      }
+    }
+  }
+  """#
+
+private let staleScopedStoreReleaseHarnessSource = #"""
+  import Foundation
+
+  struct ReleaseParentReleasedFeature: Reducer {
+    struct Child: Equatable, Sendable {
+      var value = 42
+    }
+
+    struct State: Equatable, Sendable {
+      var child = Child()
+    }
+
+    enum Action: Equatable, Sendable {
+      case child(ChildAction)
+
+      static let childCasePath = CasePath<Self, ChildAction>(
+        embed: Action.child,
+        extract: { action in
+          guard case .child(let childAction) = action else { return nil }
+          return childAction
+        }
+      )
+    }
+
+    enum ChildAction: Equatable, Sendable {
+      case noop
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      .none
+    }
+  }
+
+  struct ReleaseCollectionRemovedFeature: Reducer {
+    struct Todo: Identifiable, Equatable, Sendable {
+      let id: UUID
+      var title: String
+    }
+
+    struct State: Equatable, Sendable {
+      var todos: [Todo] = [
+        Todo(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, title: "One")
+      ]
+    }
+
+    enum Action: Equatable, Sendable {
+      case todo(id: UUID, action: TodoAction)
+      case remove(id: UUID)
+
+      static let todoActionPath = CollectionActionPath<Self, UUID, TodoAction>(
+        embed: Action.todo(id:action:),
+        extract: { action in
+          guard case let .todo(id, childAction) = action else { return nil }
+          return (id, childAction)
+        }
+      )
+    }
+
+    enum TodoAction: Equatable, Sendable {
+      case rename(String)
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      switch action {
+      case .todo(let id, .rename(let title)):
+        guard let index = state.todos.firstIndex(where: { $0.id == id }) else {
+          return .none
+        }
+        state.todos[index].title = title
+        return .none
+
+      case .remove(let id):
+        state.todos.removeAll { $0.id == id }
+        return .none
+      }
+    }
+  }
+
+  @main
+  struct StaleScopeReleaseProbe {
+    @MainActor
+    static func main() {
+      switch ProcessInfo.processInfo.environment["INNOFLOW_STALE_SCOPE_RELEASE_SCENARIO"] {
+      case "parent-released":
+        let scoped:
+          ScopedStore<
+            ReleaseParentReleasedFeature,
+            ReleaseParentReleasedFeature.Child,
+            ReleaseParentReleasedFeature.ChildAction
+          > = {
+            let store = Store(
+              reducer: ReleaseParentReleasedFeature(), initialState: .init())
+            return store.scope(
+              state: \.child,
+              action: ReleaseParentReleasedFeature.Action.childCasePath
+            )
+          }()
+        // Parent store is now released. Release builds must return the
+        // cached child state instead of aborting the process.
+        let cached = scoped.state
+        guard cached.value == 42 else {
+          fputs("Expected cached ScopedStore value 42, got \(cached.value)\n", stderr)
+          Foundation.exit(1)
+        }
+        // Sending after parent release must be a silent no-op.
+        scoped.send(.noop)
+        print("ok")
+
+      case "collection-entry-removed":
+        let store = Store(
+          reducer: ReleaseCollectionRemovedFeature(), initialState: .init())
+        let targetID = store.state.todos[0].id
+        let row = store.scope(
+          collection: \.todos,
+          action: ReleaseCollectionRemovedFeature.Action.todoActionPath
+        )[0]
+        store.send(.remove(id: targetID))
+        // Both read and write after the entry is removed must tolerate the
+        // lifecycle race without aborting.
+        row.send(.rename("Updated"))
+        _ = row.state
+        print("ok")
+
+      case "selected-parent-released":
+        let selected: SelectedStore<Int> = {
+          let store = Store(
+            reducer: ReleaseParentReleasedFeature(), initialState: .init())
+          return store.select(\.child.value)
+        }()
+        // Release builds must return the cached projected value instead of
+        // aborting.
+        let cachedValue = selected.value
+        guard cachedValue == 42 else {
+          fputs(
+            "Expected cached SelectedStore value 42, got \(cachedValue)\n", stderr)
+          Foundation.exit(1)
+        }
+        print("ok")
+
+      default:
+        fputs("Unknown stale scope release scenario\n", stderr)
         Foundation.exit(2)
       }
     }

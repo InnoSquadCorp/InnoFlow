@@ -267,9 +267,16 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package nonisolated(unsafe) let stableID: AnyHashable?
 
   public var state: ChildState {
-    _ = resolvedParent()
-    guard isActive else {
-      preconditionFailure(staleMessage())
+    // Lifecycle race: a SwiftUI observer may read this projection on the same
+    // tick that its parent store is released. Rather than aborting the
+    // process in release builds, return the last valid cached projection —
+    // the observer refresh pass will invalidate dependents within the next
+    // tick. Debug builds surface the race via `assertionFailure`.
+    //
+    // See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
+    guard isActive, parent != nil else {
+      assertionFailure(staleMessage())
+      return cachedState
     }
     return cachedState
   }
@@ -310,20 +317,6 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     )
   }
 
-  private func resolvedParent() -> Store<ParentReducer> {
-    guard let parent else {
-      preconditionFailure(
-        scopedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          childType: ChildState.self,
-          stableID: stableID,
-          kind: .parentReleased
-        )
-      )
-    }
-    return parent
-  }
-
   private func refreshStateFromParent() -> Bool {
     guard isActive else {
       if pendingObserverPrune {
@@ -361,10 +354,14 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   }
 
   public func send(_ action: ChildAction) {
-    guard isActive else {
-      preconditionFailure(staleMessage())
+    // Lifecycle race: silently drop the action if the parent store is gone.
+    // See `state` above and ARCHITECTURE_CONTRACT.md — "Projection lifecycle
+    // contract". Debug builds still surface the race via `assertionFailure`.
+    guard isActive, let parent else {
+      assertionFailure(staleMessage())
+      return
     }
-    resolvedParent().send(actionTransform(action))
+    parent.send(actionTransform(action))
   }
 
   package var projectionObserverStats: ProjectionObserverRegistryStats {

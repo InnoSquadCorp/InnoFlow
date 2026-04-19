@@ -31,11 +31,20 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   @ObservationIgnored private var isActive = true
 
   public var value: Value {
+    // Lifecycle race: a SwiftUI observer may read this projection on the same
+    // tick that its parent store is released. Rather than aborting the
+    // process in release builds, return the last valid cached projection —
+    // the observer refresh pass will invalidate dependents within the next
+    // tick. Debug builds surface the race via `assertionFailure`.
+    //
+    // See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
     guard parentObject != nil else {
-      preconditionFailure(parentReleasedMessage())
+      assertionFailure(parentReleasedMessage())
+      return cachedValue
     }
     guard isActive else {
-      preconditionFailure(inactiveMessage())
+      assertionFailure(inactiveMessage())
+      return cachedValue
     }
     return cachedValue
   }
