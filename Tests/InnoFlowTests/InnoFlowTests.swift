@@ -5807,6 +5807,7 @@ struct TestStoreTests {
     await store.send(.advance, through: Harness.phaseMap) {
       $0.phase = .first
     }
+    await store.assertNoMoreActions()
   }
 
   @Test("PhaseMap derivedGraph can be validated with existing graph helpers")

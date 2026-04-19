@@ -101,10 +101,9 @@ private func selectionDependencyRegistration<Snapshot, Dependency: Equatable>(
 private func selectionDependencyRegistrations<Snapshot>(
   _ registrations: ProjectionDependencyRegistration<Snapshot>...
 ) -> ProjectionObserverRegistration<Snapshot> {
-  precondition(
-    !registrations.isEmpty,
-    "selectionDependencyRegistrations requires at least one key path"
-  )
+  guard !registrations.isEmpty else {
+    return .alwaysRefresh
+  }
 
   if registrations.count == 1, let registration = registrations.first {
     return .dependency(registration.key, hasChanged: registration.hasChanged)
@@ -232,6 +231,28 @@ extension Store {
     )
   }
 
+  /// Creates or reuses a selected store derived from four equatable dependency slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Four equatable state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
+  /// Creates or reuses a selected store derived from four equatable child-state slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Four equatable child-state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
   public func select<
     FirstDependency: Equatable & Sendable,
     SecondDependency: Equatable & Sendable,
@@ -272,6 +293,28 @@ extension Store {
     )
   }
 
+  /// Creates or reuses a selected store derived from five equatable dependency slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Five equatable state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
+  /// Creates or reuses a selected store derived from five equatable child-state slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Five equatable child-state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
   public func select<
     FirstDependency: Equatable & Sendable,
     SecondDependency: Equatable & Sendable,
@@ -323,6 +366,28 @@ extension Store {
     )
   }
 
+  /// Creates or reuses a selected store derived from six equatable dependency slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Six equatable state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
+  /// Creates or reuses a selected store derived from six equatable child-state slices.
+  ///
+  /// The dependency tuple is registered for selective invalidation, so the selected
+  /// store refreshes only when one of the supplied slices changes.
+  ///
+  /// - Parameters:
+  ///   - dependencies: Six equatable child-state slices tracked for invalidation.
+  ///   - fileID: Callsite metadata used to preserve stable selection caching.
+  ///   - line: Callsite metadata used to preserve stable selection caching.
+  ///   - transform: Maps the tracked dependency values into the selected output.
+  /// - Returns: A cached `SelectedStore` derived from the supplied dependencies.
   public func select<
     FirstDependency: Equatable & Sendable,
     SecondDependency: Equatable & Sendable,
