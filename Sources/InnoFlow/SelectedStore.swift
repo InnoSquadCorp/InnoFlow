@@ -101,7 +101,10 @@ private func selectionDependencyRegistration<Snapshot, Dependency: Equatable>(
 private func selectionDependencyRegistrations<Snapshot>(
   _ registrations: ProjectionDependencyRegistration<Snapshot>...
 ) -> ProjectionObserverRegistration<Snapshot> {
-  precondition(!registrations.isEmpty, "selectionDependencyRegistrations requires at least one key path")
+  precondition(
+    !registrations.isEmpty,
+    "selectionDependencyRegistrations requires at least one key path"
+  )
 
   if registrations.count == 1, let registration = registrations.first {
     return .dependency(registration.key, hasChanged: registration.hasChanged)
@@ -284,12 +287,13 @@ extension Store {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    _ transform: @escaping @Sendable (
-      FirstDependency,
-      SecondDependency,
-      ThirdDependency,
-      FourthDependency
-    ) -> Value
+    _ transform:
+      @escaping @Sendable (
+        FirstDependency,
+        SecondDependency,
+        ThirdDependency,
+        FourthDependency
+      ) -> Value
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency, fourthDependency) = dependencies
     let callsite = selectionCallsite(fileID: fileID, line: line)
@@ -336,13 +340,14 @@ extension Store {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    _ transform: @escaping @Sendable (
-      FirstDependency,
-      SecondDependency,
-      ThirdDependency,
-      FourthDependency,
-      FifthDependency
-    ) -> Value
+    _ transform:
+      @escaping @Sendable (
+        FirstDependency,
+        SecondDependency,
+        ThirdDependency,
+        FourthDependency,
+        FifthDependency
+      ) -> Value
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency, fourthDependency, fifthDependency) =
       dependencies
@@ -395,14 +400,15 @@ extension Store {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    _ transform: @escaping @Sendable (
-      FirstDependency,
-      SecondDependency,
-      ThirdDependency,
-      FourthDependency,
-      FifthDependency,
-      SixthDependency
-    ) -> Value
+    _ transform:
+      @escaping @Sendable (
+        FirstDependency,
+        SecondDependency,
+        ThirdDependency,
+        FourthDependency,
+        FifthDependency,
+        SixthDependency
+      ) -> Value
   ) -> SelectedStore<Value> {
     let (
       firstDependency,
@@ -638,12 +644,13 @@ extension ScopedStore {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    _ transform: @escaping @Sendable (
-      FirstDependency,
-      SecondDependency,
-      ThirdDependency,
-      FourthDependency
-    ) -> Value
+    _ transform:
+      @escaping @Sendable (
+        FirstDependency,
+        SecondDependency,
+        ThirdDependency,
+        FourthDependency
+      ) -> Value
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency, fourthDependency) = dependencies
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
@@ -690,13 +697,14 @@ extension ScopedStore {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    _ transform: @escaping @Sendable (
-      FirstDependency,
-      SecondDependency,
-      ThirdDependency,
-      FourthDependency,
-      FifthDependency
-    ) -> Value
+    _ transform:
+      @escaping @Sendable (
+        FirstDependency,
+        SecondDependency,
+        ThirdDependency,
+        FourthDependency,
+        FifthDependency
+      ) -> Value
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency, fourthDependency, fifthDependency) =
       dependencies
@@ -749,14 +757,15 @@ extension ScopedStore {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    _ transform: @escaping @Sendable (
-      FirstDependency,
-      SecondDependency,
-      ThirdDependency,
-      FourthDependency,
-      FifthDependency,
-      SixthDependency
-    ) -> Value
+    _ transform:
+      @escaping @Sendable (
+        FirstDependency,
+        SecondDependency,
+        ThirdDependency,
+        FourthDependency,
+        FifthDependency,
+        SixthDependency
+      ) -> Value
   ) -> SelectedStore<Value> {
     let (
       firstDependency,
