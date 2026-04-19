@@ -2,9 +2,50 @@
 set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+CANONICAL_ROOT_DIR=""
 
 HAS_RG=0
 RG_BIN=""
+
+cleanup_temp_dirs() {
+  if [[ -n "$CANONICAL_ROOT_DIR" ]]; then
+    rm -rf "$(dirname "$CANONICAL_ROOT_DIR")"
+  fi
+}
+
+canonical_root_for_sample_package_tests() {
+  if [[ "$(basename "$ROOT_DIR")" == "InnoFlow" ]]; then
+    printf '%s\n' "$ROOT_DIR"
+    return
+  fi
+
+  if [[ -n "$CANONICAL_ROOT_DIR" ]]; then
+    printf '%s\n' "$CANONICAL_ROOT_DIR"
+    return
+  fi
+
+  local temp_parent
+  temp_parent="$(mktemp -d "${TMPDIR:-/tmp}/innoflow-principle-gates.XXXXXX")"
+  CANONICAL_ROOT_DIR="$temp_parent/InnoFlow"
+  mkdir -p "$CANONICAL_ROOT_DIR"
+
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a \
+      --delete \
+      --exclude '.build' \
+      --exclude '.build-principle-gates-release' \
+      --exclude '.git' \
+      "$ROOT_DIR/" "$CANONICAL_ROOT_DIR/"
+  else
+    ditto "$ROOT_DIR" "$CANONICAL_ROOT_DIR"
+    rm -rf \
+      "$CANONICAL_ROOT_DIR/.build" \
+      "$CANONICAL_ROOT_DIR/.build-principle-gates-release" \
+      "$CANONICAL_ROOT_DIR/.git"
+  fi
+
+  printf '%s\n' "$CANONICAL_ROOT_DIR"
+}
 
 initialize_search_backend() {
   if [[ "${PRINCIPLE_GATES_FORCE_NO_RG:-0}" == "1" ]]; then
@@ -114,6 +155,7 @@ count_line_matches() {
 
 main() {
   initialize_search_backend
+  trap cleanup_temp_dirs EXIT
   cd "$ROOT_DIR"
 
   DOC_AND_SAMPLE_PATHS=(
@@ -154,6 +196,10 @@ main() {
   fi
   if search_lines "_ReducerBuilder[A-Za-z]+" README.md CLAUDE.md AGENTS.md CONTRIBUTING.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources; then
     echo "[principle-gates] Failed: docs or canonical sample expose builder implementation types"
+    exit 1
+  fi
+  if search_lines "_ReducerSequence|_OptionalReducer|_ConditionalReducer|_ArrayReducer|_EmptyReducer" "${DOC_AND_SAMPLE_PATHS[@]}"; then
+    echo "[principle-gates] Failed: docs or canonical sample expose builder-internal composition types"
     exit 1
   fi
   if search_lines "extractAction|embedAction" "${DOC_AND_SAMPLE_PATHS[@]}"; then
@@ -307,15 +353,44 @@ main() {
     exit 1
   fi
 
+  echo "[principle-gates] Verifying release build succeeds (SIL inliner regression guard)"
+  # Use an isolated build path so release object files do not leak into the
+  # main .build/ tree. The stale-scope and phase-map subprocess harnesses
+  # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
+  # debug and release artifacts there causes duplicate-symbol failures.
+  RELEASE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
+  if ! swift build --package-path "$ROOT_DIR" --build-path "$RELEASE_BUILD_PATH" -c release >/dev/null 2>&1; then
+    echo "[principle-gates] Failed: 'swift build -c release' crashed or failed — SIL inliner regression suspected"
+    swift --version || true
+    rm -rf "$RELEASE_BUILD_PATH"
+    exit 1
+  fi
+  rm -rf "$RELEASE_BUILD_PATH"
+
   echo "[principle-gates] Running package tests"
   swift test --package-path "$ROOT_DIR" -Xswiftc -warnings-as-errors
 
+  echo "[principle-gates] Running package tests in release configuration"
+  # Release-mode test gate. Uses an isolated build path for the same reason as
+  # the release build gate above. Catches regressions where tests pass in debug
+  # but fail under release optimization (e.g., flaky timing assertions that
+  # assumed a fixed `Task.yield()` count).
+  RELEASE_TEST_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-test"
+  if ! swift test --package-path "$ROOT_DIR" --build-path "$RELEASE_TEST_BUILD_PATH" -c release -Xswiftc -warnings-as-errors; then
+    echo "[principle-gates] Failed: 'swift test -c release' failed — release-mode regression"
+    rm -rf "$RELEASE_TEST_BUILD_PATH"
+    exit 1
+  fi
+  rm -rf "$RELEASE_TEST_BUILD_PATH"
+
   echo "[principle-gates] Running sample package tests"
-  swift test --package-path "$ROOT_DIR/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" -Xswiftc -warnings-as-errors
+  local sample_test_root
+  sample_test_root="$(canonical_root_for_sample_package_tests)"
+  swift test --package-path "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" -Xswiftc -warnings-as-errors
 
   echo "[principle-gates] Building canonical sample app"
   xcodebuild \
-    -project "$ROOT_DIR/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
+    -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
     -scheme InnoFlowSampleApp \
     -destination 'generic/platform=iOS' \
     CODE_SIGNING_ALLOWED=NO \

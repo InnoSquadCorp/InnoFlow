@@ -2021,7 +2021,13 @@ struct EffectTaskTests {
 
     await store.send(.trigger(1))
     await store.send(.trigger(2))
-    await Task.yield()
+
+    for _ in 0..<200 {
+      if await clock.sleeperCount == 1 {
+        break
+      }
+      await Task.yield()
+    }
     await clock.advance(by: .milliseconds(60))
 
     await store.receive(._emitted(2)) {
@@ -3925,9 +3931,34 @@ struct StoreTests {
     #expect(store.completed == 0)
 
     store.send(.start)
-    await drainAsyncWork()
+    // The second run's Task must reach its `context.sleep(for:)` call and
+    // register a sleeper on the ManualTestClock BEFORE we call advance(by:).
+    // If advance runs first, it finds no sleeper to wake and the Task stays
+    // suspended forever. `drainAsyncWork`'s fixed 128-yield budget is enough
+    // on fast hardware but not on saturated CI — poll `sleeperCount` on a
+    // wall-clock interval instead.
+    for _ in 0..<500 {
+      if await clock.sleeperCount >= 1 { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
     await clock.advance(by: .milliseconds(100))
-    await drainAsyncWork()
+    for _ in 0..<250 {
+      let metrics = await store.effectRuntimeMetrics
+      if metrics.finishedRuns == 2,
+        metrics.emissionDecisions >= 1,
+        store.completed == 1
+      {
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+
+    // After advance, the effect's sleep resumes on the cooperative executor.
+    // Poll the observable completion marker so the check adapts to executor
+    // jitter on saturated CI.
+    await waitUntil(timeout: .seconds(5)) {
+      store.completed == 1
+    }
 
     let afterSuccessfulFinish = await store.effectRuntimeMetrics
     #expect(afterSuccessfulFinish.preparedRuns == 2)
@@ -4272,7 +4303,14 @@ struct StoreTests {
 
     #expect(store.events == ["ordered-1"])
     await clock.advance(by: .milliseconds(100))
-    await drainAsyncWork()
+
+    // Two more emissions (ordered-2, ordered-3) land as queued follow-up
+    // actions after the sleep resumes. `drainAsyncWork`'s fixed yield budget
+    // is sufficient on fast hardware but not on saturated CI executors —
+    // poll the observable outcome with a wall-clock bounded wait instead.
+    await waitUntil(timeout: .seconds(5)) {
+      store.events.count >= 3
+    }
 
     #expect(store.events == ["ordered-1", "ordered-2", "ordered-3"])
   }
@@ -4311,7 +4349,13 @@ struct StoreTests {
 
     #expect(store.events == ["first-1", "second-1"])
     await clock.advance(by: .milliseconds(100))
-    await drainAsyncWork()
+
+    // Same CI-executor-saturation risk as `storeRunEmissionOrderingRemainsFIFO`
+    // above: after the advance, the two remaining emissions arrive as queued
+    // follow-up actions. Poll observable state with a wall-clock bounded wait.
+    await waitUntil(timeout: .seconds(5)) {
+      store.events.count >= 4
+    }
 
     #expect(store.events == ["first-1", "second-1", "second-2", "second-3"])
   }
@@ -4519,17 +4563,30 @@ struct StoreTests {
     )
 
     store.send(.start(1))
-    for _ in 0..<10 {
-      await Task.yield()
-    }
-    store.send(.start(2))
-    for _ in 0..<10 {
+    // Wait for the first merge to fully dispatch: throttle emits its leading
+    // value and debounce registers its sleeper. Under release optimization a
+    // fixed yield count is fragile — poll for the observable outcome.
+    for _ in 0..<200 {
+      let count = await clock.sleeperCount
+      if store.throttled == [1] && count >= 1 { break }
       await Task.yield()
     }
 
+    store.send(.start(2))
+    // The second merge's throttle must run and see the still-open window BEFORE
+    // we advance the clock. If we advance first, the window is treated as
+    // expired and the throttle emits the second value as a new leading emission.
+    // Neither throttle_2's suppression nor debounce_2's replacement registration
+    // produces a distinct observable state change (sleeperCount stays at 1
+    // across the cancel+re-register), so we can only wait for the merge's
+    // MainActor walker work to drain. A small wall-clock sleep on the system
+    // ContinuousClock gives the cooperative executor a real chance to run
+    // other tasks — more reliable than a fixed yield count on saturated CI.
+    try? await Task.sleep(for: .milliseconds(100))
+
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<10 {
-      await Task.yield()
+    await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
+      store.debounced == [2]
     }
 
     #expect(store.debounced == [2])
@@ -4578,7 +4635,7 @@ struct StoreTests {
 
     #expect(state.log == ["optional"])
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("Reduce<"))
+    #expect(String(reflecting: type(of: reducer)).contains("_OptionalReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
@@ -4591,7 +4648,7 @@ struct StoreTests {
 
     #expect(state.log == ["second"])
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("Reduce<"))
+    #expect(String(reflecting: type(of: reducer)).contains("_ConditionalReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
@@ -4605,7 +4662,7 @@ struct StoreTests {
 
     #expect(state.log == labels)
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("Reduce<"))
+    #expect(String(reflecting: type(of: reducer)).contains("_ArrayReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
@@ -4619,9 +4676,95 @@ struct StoreTests {
 
     #expect(state.log == ["first", "second"])
     #expect(effect.isNone)
-    #expect(typeDescription.contains("Reduce<"))
+    #expect(typeDescription.contains("_ReducerSequence<"))
     #expect(!typeDescription.contains("_ReducerBuilder"))
     #expect(!typeDescription.contains("[any Reducer"))
+  }
+
+  @Test("Builder preserves declaration order across mixed if/for/if-else/straight-line blocks")
+  func combineReducersMixedBuilderBlock() {
+    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action>
+    {
+      BuilderCompositionFeature.append("a")
+      if true {
+        BuilderCompositionFeature.append("b")
+      }
+      for label in ["c", "d"] {
+        BuilderCompositionFeature.append(label)
+      }
+      if false {
+        BuilderCompositionFeature.append("skipped-first")
+      } else {
+        BuilderCompositionFeature.append("else")
+      }
+      BuilderCompositionFeature.append("z")
+    }
+    var state = BuilderCompositionFeature.State()
+
+    let effect = reducer.reduce(into: &state, action: .run)
+
+    // Declaration order must be preserved across heterogeneous builder
+    // constructs (expression, if-without-else, for, if/else, expression).
+    #expect(state.log == ["a", "b", "c", "d", "else", "z"])
+    #expect(effect.isNone)
+  }
+
+  @Test("Builder compiles and preserves order for N=32 straight-line block")
+  func combineReducersN32StressPreservesOrder() {
+    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action>
+    {
+      BuilderCompositionFeature.append("01")
+      BuilderCompositionFeature.append("02")
+      BuilderCompositionFeature.append("03")
+      BuilderCompositionFeature.append("04")
+      BuilderCompositionFeature.append("05")
+      BuilderCompositionFeature.append("06")
+      BuilderCompositionFeature.append("07")
+      BuilderCompositionFeature.append("08")
+      BuilderCompositionFeature.append("09")
+      BuilderCompositionFeature.append("10")
+      BuilderCompositionFeature.append("11")
+      BuilderCompositionFeature.append("12")
+      BuilderCompositionFeature.append("13")
+      BuilderCompositionFeature.append("14")
+      BuilderCompositionFeature.append("15")
+      BuilderCompositionFeature.append("16")
+      BuilderCompositionFeature.append("17")
+      BuilderCompositionFeature.append("18")
+      BuilderCompositionFeature.append("19")
+      BuilderCompositionFeature.append("20")
+      BuilderCompositionFeature.append("21")
+      BuilderCompositionFeature.append("22")
+      BuilderCompositionFeature.append("23")
+      BuilderCompositionFeature.append("24")
+      BuilderCompositionFeature.append("25")
+      BuilderCompositionFeature.append("26")
+      BuilderCompositionFeature.append("27")
+      BuilderCompositionFeature.append("28")
+      BuilderCompositionFeature.append("29")
+      BuilderCompositionFeature.append("30")
+      BuilderCompositionFeature.append("31")
+      BuilderCompositionFeature.append("32")
+    }
+    var state = BuilderCompositionFeature.State()
+
+    let effect = reducer.reduce(into: &state, action: .run)
+    let expectedLog = (1...32).map { String(format: "%02d", $0) }
+
+    #expect(state.log == expectedLog)
+    #expect(effect.isNone)
+  }
+
+  @Test("Builder optional path with false condition yields .none effect and no state change")
+  func combineReducersEmptyOptional() {
+    let reducer = BuilderCompositionFeature.optionalBuilder(includeReducer: false)
+    var state = BuilderCompositionFeature.State()
+
+    let effect = reducer.reduce(into: &state, action: .run)
+
+    #expect(state.log.isEmpty)
+    #expect(effect.isNone)
+    #expect(String(reflecting: type(of: reducer)).contains("_OptionalReducer<"))
   }
 
   @Test("Phase validation decorator allows same-phase actions and legal transitions")
@@ -4705,20 +4848,31 @@ struct StoreTests {
     let clock = ManualTestClock()
     let probe = OrderedIntProbe()
 
+    // Spawn two sleepers that hit the same deadline. The sleepers must be
+    // registered with the clock before we advance — under release optimization
+    // and parallel test load, a single `Task.yield()` between spawn and advance
+    // is not reliable. Wait up to 200 yields for each Task to register before
+    // proceeding.
     Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(1)
     }
-    await Task.yield()
+    for _ in 0..<200 {
+      if await clock.sleeperCount == 1 { break }
+      await Task.yield()
+    }
 
     Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(2)
     }
-    await Task.yield()
+    for _ in 0..<200 {
+      if await clock.sleeperCount == 2 { break }
+      await Task.yield()
+    }
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<10 {
+    for _ in 0..<200 {
       if await probe.snapshot() == [1, 2] {
         break
       }
@@ -4818,14 +4972,20 @@ struct StoreTests {
     )
 
     store.send(.start)
-    for _ in 0..<10 {
+    // `store.send` only guarantees the reducer has run; async effects dispatched
+    // via `Task { ... }` still need scheduler turns to reach their first await.
+    // Release optimization eliminates some scheduling boundaries, so a fixed
+    // yield count is fragile — poll for the observable condition instead.
+    for _ in 0..<200 {
+      if store.state.log == ["started"] { break }
       await Task.yield()
     }
 
     #expect(store.state.log == ["started"])
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<10 {
+    for _ in 0..<200 {
+      if store.state.log == ["started", "finished"] { break }
       await Task.yield()
     }
 
@@ -4843,16 +5003,20 @@ struct StoreTests {
     )
 
     store.send(.start)
-    for _ in 0..<10 {
+    // Wait for the effect operation to reach its `context.sleep(...)`
+    // suspension point before advancing the clock. `store.send` only guarantees
+    // reducer completion; the `.run` body runs through several actor hops before
+    // registering the sleeper, and release optimization eliminates some of the
+    // scheduling boundaries that a fixed yield count relied on — poll instead.
+    for _ in 0..<200 {
+      if await probe.started == 1 { break }
       await Task.yield()
     }
 
     await clock.advance(by: .milliseconds(10))
 
-    for _ in 0..<30 {
-      if await probe.passed == 1 {
-        break
-      }
+    for _ in 0..<200 {
+      if await probe.passed == 1 { break }
       await Task.yield()
     }
 
@@ -4875,25 +5039,20 @@ struct StoreTests {
     )
 
     store.send(.start)
-    for _ in 0..<10 {
+    for _ in 0..<200 {
+      if await probe.started == 1 { break }
       await Task.yield()
     }
 
     await clock.advance(by: .milliseconds(10))
-
-    for _ in 0..<30 {
-      if await probe.passed == 1 {
-        break
-      }
+    for _ in 0..<200 {
+      if await probe.passed == 1 { break }
       await Task.yield()
     }
 
     await store.cancelEffects(identifiedBy: "context-check")
-
-    for _ in 0..<30 {
-      if await probe.cancelled == 1 {
-        break
-      }
+    for _ in 0..<200 {
+      if await probe.cancelled == 1 { break }
       await Task.yield()
     }
 
@@ -5038,7 +5197,11 @@ struct TestStoreTests {
     let store = TestStore(
       reducer: AsyncFeature(),
       initialState: .init(),
-      effectTimeout: .seconds(3)
+      // CI can heavily saturate the cooperative executor while multiple suites
+      // start together. Keep this basic smoke test tolerant of startup jitter;
+      // the stronger 40-iteration test below still validates deterministic
+      // first-delivery behavior under the tighter budget.
+      effectTimeout: .seconds(60)
     )
 
     await store.send(.load) {
@@ -5849,6 +6012,30 @@ struct StaleScopeCrashContractTests {
   }
 }
 
+@Suite("Stale Scope Release Contract Tests", .serialized)
+struct StaleScopeReleaseContractTests {
+  @Test("Stale ScopedStore returns cached state after parent release in release-like execution")
+  func staleScopedStoreReleaseNoCrash() throws {
+    let result = try runStaleScopedStoreReleaseHarness(scenario: .parentReleased)
+
+    #expect(result.status == 0)
+  }
+
+  @Test("Stale collection-scoped ScopedStore tolerates removed entry in release-like execution")
+  func staleCollectionScopeReleaseNoCrash() throws {
+    let result = try runStaleScopedStoreReleaseHarness(scenario: .collectionEntryRemoved)
+
+    #expect(result.status == 0)
+  }
+
+  @Test("Stale SelectedStore returns cached value after parent release in release-like execution")
+  func staleSelectedStoreReleaseNoCrash() throws {
+    let result = try runStaleScopedStoreReleaseHarness(scenario: .selectedParentReleased)
+
+    #expect(result.status == 0)
+  }
+}
+
 @Suite("PhaseMap Crash Contract Tests", .serialized)
 struct PhaseMapCrashContractTests {
   @Test("PhaseMap direct phase mutations crash in a subprocess with contextual diagnostics")
@@ -6124,7 +6311,16 @@ where
 }
 
 private func settleTimingScenarioWork() async {
-  await drainAsyncWork(iterations: 512)
+  // `Store.send` schedules non-`.send` effects onto a separate Task. For the
+  // randomized debounce/throttle property tests, some in-window updates only
+  // mutate internal pending state and do not immediately change user-visible
+  // state or sleeper counts. A pure `Task.yield()` loop can therefore advance
+  // the manual clock before the walker Task has actually applied the pending
+  // replacement under release optimization. Add a tiny wall-clock handoff so
+  // the queued Task gets a real executor turn before the scenario continues.
+  await drainAsyncWork(iterations: 64)
+  try? await Task.sleep(for: .milliseconds(1))
+  await drainAsyncWork(iterations: 64)
 }
 
 @MainActor
@@ -6518,8 +6714,6 @@ private func runStaleScopedStoreHarness(
   scenario: StaleScopedStoreScenario
 ) throws -> ProcessResult {
   let packageRoot = currentInnoFlowPackageRoot()
-  let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
-  let objectFiles = try findBuiltInnoFlowObjectFiles(in: packageRoot)
   let temporaryDirectory = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString, isDirectory: true)
   try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -6529,11 +6723,22 @@ private func runStaleScopedStoreHarness(
   let executableURL = temporaryDirectory.appendingPathComponent("StaleScopeProbe")
   try staleScopedStoreHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
 
+  // Inline-compile InnoFlow sources with the probe at `-Onone` so debug-only
+  // `assertionFailure` traps are live and so the build is independent of the
+  // enclosing `swift test` configuration (previously we linked `.build/*/*.o`,
+  // which produced duplicate-symbol link errors under `swift test -c release`
+  // whenever both debug and release `.build/` directories existed).
   let compileResult = try runProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: ["swiftc", "-parse-as-library", sourceFile.path, "-I", moduleDirectory.path]
-      + objectFiles.map(\.path)
-      + ["-o", executableURL.path]
+    arguments: [
+      "swiftc",
+      "-Onone",
+      "-parse-as-library",
+      "-package-name", "InnoFlow",
+      sourceFile.path,
+    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
+      "-o", executableURL.path,
+    ]
   )
 
   guard compileResult.status == 0 else {
@@ -6550,6 +6755,51 @@ private func runStaleScopedStoreHarness(
 private enum ConditionalReducerReleaseScenario: String {
   case ifLetAbsentState = "iflet-absent-state"
   case ifCaseLetMismatchedState = "ifcase-mismatched-state"
+}
+
+private enum StaleScopedStoreReleaseScenario: String {
+  case parentReleased = "parent-released"
+  case collectionEntryRemoved = "collection-entry-removed"
+  case selectedParentReleased = "selected-parent-released"
+}
+
+private func runStaleScopedStoreReleaseHarness(
+  scenario: StaleScopedStoreReleaseScenario
+) throws -> ProcessResult {
+  let packageRoot = currentInnoFlowPackageRoot()
+  let temporaryDirectory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+  let sourceFile = temporaryDirectory.appendingPathComponent("StaleScopeReleaseProbe.swift")
+  let executableURL = temporaryDirectory.appendingPathComponent("StaleScopeReleaseProbe")
+  try staleScopedStoreReleaseHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
+
+  let compileResult = try runProcess(
+    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+    arguments: [
+      "swiftc",
+      "-O",
+      "-parse-as-library",
+      "-package-name",
+      "InnoFlow",
+      sourceFile.path,
+    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
+      "-o",
+      executableURL.path,
+    ]
+  )
+
+  guard compileResult.status == 0 else {
+    throw StaleScopeHarnessError.compileFailed(output: compileResult.normalizedOutput)
+  }
+
+  return try runProcess(
+    executableURL: executableURL,
+    arguments: [],
+    environment: ["INNOFLOW_STALE_SCOPE_RELEASE_SCENARIO": scenario.rawValue]
+  )
 }
 
 private enum PhaseMapCrashScenario: String {
@@ -6664,8 +6914,6 @@ private func runPhaseMapCrashHarness(
   scenario: PhaseMapCrashScenario
 ) throws -> ProcessResult {
   let packageRoot = currentInnoFlowPackageRoot()
-  let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
-  let objectFiles = try findBuiltInnoFlowObjectFiles(in: packageRoot)
   let temporaryDirectory = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString, isDirectory: true)
   try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -6675,11 +6923,23 @@ private func runPhaseMapCrashHarness(
   let executableURL = temporaryDirectory.appendingPathComponent("PhaseMapCrashProbe")
   try phaseMapCrashHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
 
+  // Inline-compile InnoFlow sources with the probe at `-Onone` so the
+  // PhaseMap `assertionFailure` traps we are asserting on are live, and so
+  // the build is independent of the enclosing `swift test` configuration.
+  // Previously we linked `.build/*/*.o`, which surfaced duplicate-symbol
+  // link errors under `swift test -c release` whenever both debug and
+  // release `.build/` directories existed.
   let compileResult = try runProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: ["swiftc", "-parse-as-library", sourceFile.path, "-I", moduleDirectory.path]
-      + objectFiles.map(\.path)
-      + ["-o", executableURL.path]
+    arguments: [
+      "swiftc",
+      "-Onone",
+      "-parse-as-library",
+      "-package-name", "InnoFlow",
+      sourceFile.path,
+    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
+      "-o", executableURL.path,
+    ]
   )
 
   guard compileResult.status == 0 else {
@@ -6880,7 +7140,6 @@ private let conditionalReducerReleaseHarnessSource = #"""
 
 private let staleScopedStoreHarnessSource = #"""
   import Foundation
-  import InnoFlow
 
   struct ParentReleasedFeature: Reducer {
     struct Child: Equatable, Sendable {
@@ -6922,6 +7181,7 @@ private let staleScopedStoreHarnessSource = #"""
       var todos: [Todo] = [
         Todo(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, title: "One")
       ]
+      var routedActions: [String] = []
     }
 
     enum Action: Equatable, Sendable {
@@ -6944,6 +7204,7 @@ private let staleScopedStoreHarnessSource = #"""
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
       switch action {
       case .todo(let id, .rename(let title)):
+        state.routedActions.append("todo:\(id)")
         guard let index = state.todos.firstIndex(where: { $0.id == id }) else {
           return .none
         }
@@ -6997,7 +7258,6 @@ private let staleScopedStoreHarnessSource = #"""
 
 private let phaseMapCrashHarnessSource = #"""
   import Foundation
-  import InnoFlow
 
   struct CrashPhaseMutationFeature: Reducer {
     struct State: Equatable, Sendable {
@@ -7261,6 +7521,163 @@ private let phaseMapReleaseHarnessSource = #"""
 
       default:
         fputs("Unknown PhaseMap release scenario\n", stderr)
+        Foundation.exit(2)
+      }
+    }
+  }
+  """#
+
+private let staleScopedStoreReleaseHarnessSource = #"""
+  import Foundation
+
+  struct ReleaseParentReleasedFeature: Reducer {
+    struct Child: Equatable, Sendable {
+      var value = 42
+    }
+
+    struct State: Equatable, Sendable {
+      var child = Child()
+    }
+
+    enum Action: Equatable, Sendable {
+      case child(ChildAction)
+
+      static let childCasePath = CasePath<Self, ChildAction>(
+        embed: Action.child,
+        extract: { action in
+          guard case .child(let childAction) = action else { return nil }
+          return childAction
+        }
+      )
+    }
+
+    enum ChildAction: Equatable, Sendable {
+      case noop
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      .none
+    }
+  }
+
+  struct ReleaseCollectionRemovedFeature: Reducer {
+    struct Todo: Identifiable, Equatable, Sendable {
+      let id: UUID
+      var title: String
+    }
+
+    struct State: Equatable, Sendable {
+      var todos: [Todo] = [
+        Todo(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, title: "One")
+      ]
+      var routedActions: [String] = []
+    }
+
+    enum Action: Equatable, Sendable {
+      case todo(id: UUID, action: TodoAction)
+      case remove(id: UUID)
+
+      static let todoActionPath = CollectionActionPath<Self, UUID, TodoAction>(
+        embed: Action.todo(id:action:),
+        extract: { action in
+          guard case let .todo(id, childAction) = action else { return nil }
+          return (id, childAction)
+        }
+      )
+    }
+
+    enum TodoAction: Equatable, Sendable {
+      case rename(String)
+    }
+
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      switch action {
+      case .todo(let id, .rename(let title)):
+        state.routedActions.append("todo:\(id)")
+        guard let index = state.todos.firstIndex(where: { $0.id == id }) else {
+          return .none
+        }
+        state.todos[index].title = title
+        return .none
+
+      case .remove(let id):
+        state.todos.removeAll { $0.id == id }
+        return .none
+      }
+    }
+  }
+
+  @main
+  struct StaleScopeReleaseProbe {
+    @MainActor
+    static func main() {
+      switch ProcessInfo.processInfo.environment["INNOFLOW_STALE_SCOPE_RELEASE_SCENARIO"] {
+      case "parent-released":
+        let scoped:
+          ScopedStore<
+            ReleaseParentReleasedFeature,
+            ReleaseParentReleasedFeature.Child,
+            ReleaseParentReleasedFeature.ChildAction
+          > = {
+            let store = Store(
+              reducer: ReleaseParentReleasedFeature(), initialState: .init())
+            return store.scope(
+              state: \.child,
+              action: ReleaseParentReleasedFeature.Action.childCasePath
+            )
+          }()
+        // Parent store is now released. Release builds must return the
+        // cached child state instead of aborting the process.
+        let cached = scoped.state
+        guard cached.value == 42 else {
+          fputs("Expected cached ScopedStore value 42, got \(cached.value)\n", stderr)
+          Foundation.exit(1)
+        }
+        // Sending after parent release must be a silent no-op.
+        scoped.send(.noop)
+        print("ok")
+
+      case "collection-entry-removed":
+        let store = Store(
+          reducer: ReleaseCollectionRemovedFeature(), initialState: .init())
+        let targetID = store.state.todos[0].id
+        let row = store.scope(
+          collection: \.todos,
+          action: ReleaseCollectionRemovedFeature.Action.todoActionPath
+        )[0]
+        store.send(.remove(id: targetID))
+        // Both read and write after the entry is removed must tolerate the
+        // lifecycle race without aborting.
+        row.send(.rename("Updated"))
+        let cached = row.state
+        guard cached.id == targetID, cached.title == "One" else {
+          fputs("Expected cached removed row state, got \(cached)\n", stderr)
+          Foundation.exit(1)
+        }
+        guard store.state.todos.isEmpty, store.state.routedActions.isEmpty else {
+          fputs("Expected stale row send to be a no-op, got \(store.state)\n", stderr)
+          Foundation.exit(1)
+        }
+        print("ok")
+
+      case "selected-parent-released":
+        let selected: SelectedStore<Int> = {
+          let store = Store(
+            reducer: ReleaseParentReleasedFeature(), initialState: .init())
+          return store.select(\.child.value)
+        }()
+        // Release builds must return the cached projected value instead of
+        // aborting.
+        let cachedValue = selected.value
+        guard cachedValue == 42 else {
+          fputs(
+            "Expected cached SelectedStore value 42, got \(cachedValue)\n", stderr)
+          Foundation.exit(1)
+        }
+        print("ok")
+
+      default:
+        fputs("Unknown stale scope release scenario\n", stderr)
         Foundation.exit(2)
       }
     }

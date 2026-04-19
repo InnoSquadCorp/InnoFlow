@@ -267,9 +267,20 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package nonisolated(unsafe) let stableID: AnyHashable?
 
   public var state: ChildState {
-    _ = resolvedParent()
+    // Lifecycle race: a SwiftUI observer may read this projection on the same
+    // tick that its parent store is released. Rather than aborting the
+    // process in release builds, return the last valid cached projection —
+    // the observer refresh pass will invalidate dependents within the next
+    // tick. Debug builds surface the race via `assertionFailure`.
+    //
+    // See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
+    guard parent != nil else {
+      assertionFailure(parentReleasedMessage())
+      return cachedState
+    }
     guard isActive else {
-      preconditionFailure(staleMessage())
+      assertionFailure(staleMessage())
+      return cachedState
     }
     return cachedState
   }
@@ -310,18 +321,13 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     )
   }
 
-  private func resolvedParent() -> Store<ParentReducer> {
-    guard let parent else {
-      preconditionFailure(
-        scopedStoreFailureMessage(
-          parentType: ParentReducer.self,
-          childType: ChildState.self,
-          stableID: stableID,
-          kind: .parentReleased
-        )
-      )
-    }
-    return parent
+  private func parentReleasedMessage() -> String {
+    scopedStoreFailureMessage(
+      parentType: ParentReducer.self,
+      childType: ChildState.self,
+      stableID: stableID,
+      kind: .parentReleased
+    )
   }
 
   private func refreshStateFromParent() -> Bool {
@@ -335,8 +341,9 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     guard let parent else { return false }
     let previousState = cachedState
     guard let nextState = stateResolver(parent.state) else {
-      // Background refresh deactivates a stale projection, but any direct access to
-      // that stale handle remains a programmer error and still traps via `state`/`send`.
+      // Background refresh deactivates a stale projection; direct access follows
+      // the projection lifecycle contract via cached reads/no-op sends plus
+      // debug assertions.
       isActive = false
       pendingObserverPrune = true
       observerRegistry.refreshAll()
@@ -361,10 +368,18 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   }
 
   public func send(_ action: ChildAction) {
-    guard isActive else {
-      preconditionFailure(staleMessage())
+    // Lifecycle race: silently drop the action if the parent store is gone.
+    // See `state` above and ARCHITECTURE_CONTRACT.md — "Projection lifecycle
+    // contract". Debug builds still surface the race via `assertionFailure`.
+    guard let parent else {
+      assertionFailure(parentReleasedMessage())
+      return
     }
-    resolvedParent().send(actionTransform(action))
+    guard isActive else {
+      assertionFailure(staleMessage())
+      return
+    }
+    parent.send(actionTransform(action))
   }
 
   package var projectionObserverStats: ProjectionObserverRegistryStats {

@@ -7,8 +7,27 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- `swift build -c release` now succeeds on the current Swift 6.3 toolchain. The SIL `EarlyPerfInliner` previously segfaulted in `isCallerAndCalleeLayoutConstraintsCompatible` while scanning `Store.deinit` and `TestStore.deinit` for inlining candidates. Both deinits are now annotated with `@_optimize(none)`, which sidesteps the crash without changing `@MainActor isolated deinit` semantics or the public API. Deinit is not a hot path, so the localized optimization loss is negligible. Upstream tracker: [swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173) (and adjacent #87077 / #87736 / #87462). A minimal in-tree reproducer lives at `Repro/SILCrashRepro/` with the full crash dump in `Repro/SILCrashRepro/CRASH.txt`; retest on toolchain bumps to retire the workaround.
+- `swift test -c release` now passes the full InnoFlow test suite (212 tests). Five crash-contract subprocess tests (`StaleScope*CrashContractTests`, `PhaseMap*CrashContractTests`) previously failed in release because `runStaleScopedStoreHarness` and `runPhaseMapCrashHarness` linked against enumerated `.build/**/InnoFlow.build/*.o` object files — which pulls in whichever configuration happened to be in `.build/`. When the outer runner was invoked with `-c release`, the harness picked up release-optimized objects where `assertionFailure` had been elided, so the subprocess could not abort and the crash contract could not be verified. Both harnesses now inline-compile InnoFlow sources with `-Onone` + `-package-name InnoFlow` via the existing `innoFlowCoreSourcePaths` helper, matching the pattern already used by the release-harness counterparts and removing any dependency on the outer test-runner's build configuration.
+- Five timing-sensitive tests (`effectContextUsesStoreClock`, `effectContextCheckCancellationPassesWhileActive`, `effectContextCheckCancellationThrowsAfterCancelEffects`, `storeCombinatorComposition`, and `manualTestClockResumesSameDeadlineSleepersInInsertionOrder`) previously asserted state after a fixed number of `await Task.yield()` calls. That count was sufficient in debug but not in release — release-mode WMO eliminates some scheduling boundaries, and the remaining actor hops inside `Store.executeEffect → Task { walker.walk → driver.startRun → inner Task { gate.wait }}` still need scheduler turns. The tests now poll for the observable outcome (e.g., `store.throttled == [1]`, `await probe.started == 1`, `await clock.sleeperCount == N`), which is the idiomatic pattern for async-effect tests and was already used for the `_completed` probe flows elsewhere in the suite. The `Store.send(_:)` scheduling contract is now documented in `ARCHITECTURE_CONTRACT.md` under "Store.send(_:) scheduling contract".
+
 ### Added
-- No unreleased entries yet.
+
+- `ManualTestClock.sleeperCount` — test-only observable for the number of sleepers currently suspended on the clock. Tests that need to confirm `.run` / `.debounce` / `.throttle` effects have reached their `try await clock.sleep(...)` registration before calling `advance(by:)` can poll this instead of relying on a fixed yield count.
+
+### Changed
+
+- `ScopedStore` and `SelectedStore` now survive the SwiftUI observer / parent-store-release race without aborting release builds. When a projection is read or written after its parent `Store` has been released (or the projection has been marked inactive), reads return the last valid cached snapshot and writes become silent no-ops. Debug builds surface both cases through `assertionFailure` so the race stays immediately visible in development. Programming errors that are not lifecycle races — state resolver returning `nil` at init, or `Identifiable.id` type mismatch — still trap. The new contract is documented in `ARCHITECTURE_CONTRACT.md` under "Projection lifecycle contract".
+- `ReducerBuilder` now preserves composed reducer structure through the full builder chain instead of collapsing every step into nested closure composition. Public authoring (`CombineReducers { … }` with `Reduce`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`) is unchanged. Construction-side benchmarks (debug build) show −29%/−34%/−40% at N=2/8/32; dispatch-side benchmarks show modest −3 to −5% gains in debug and are expected to improve further in release builds where `@inlinable` unlocks specialization across the builder boundary.
+
+### Internal
+
+- Added a release-build regression guard to `scripts/principle-gates.sh`. The gate runs `swift build -c release` in an isolated build path so release object files cannot leak into `.build/` and pollute subprocess harness linking.
+- Added a release-test regression gate to `scripts/principle-gates.sh`. The gate runs `swift test -c release` in an isolated build path so tests that pass under debug but regress under release optimization (flaky timing assumptions, harness configuration leakage, SIL inliner variants) surface in CI instead of only manual runs.
+- Added release-mode subprocess tests that verify `ScopedStore.state`, `ScopedStore.send`, collection-scoped projections, and `SelectedStore.value` all fall back to cached snapshots instead of aborting after the parent store is released.
+- Added `Repro/SILCrashRepro/` — a minimal, standalone SwiftPM package that reproduces the Swift 6.3 `EarlyPerfInliner` crash on a generic `@MainActor` class with an `isolated deinit` that stores result-builder-composed value types. Kept in-tree so toolchain bumps can retest whether the InnoFlow `@_optimize(none)` workaround is still required.
 
 ## [3.0.2] - 2026-03-21
 

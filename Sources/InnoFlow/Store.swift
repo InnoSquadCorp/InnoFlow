@@ -84,6 +84,16 @@ public final class Store<R: Reducer> {
     await effectBridge.cancelAllEffects(upTo: sequence)
   }
 
+  // NOTE: `@_optimize(none)` is intentional. The SIL `EarlyPerfInliner` under
+  // Swift 6.3 release optimization crashes in
+  // `isCallerAndCalleeLayoutConstraintsCompatible` while scanning this
+  // isolated deinit for inlining candidates — the generic `R.Action` context
+  // combined with the builder-emitted composition types that `Store` stores
+  // appears to trip the layout-compatibility check. Disabling optimization on
+  // just this one function sidesteps the crash. `deinit` is not a hot path, so
+  // the lost optimization opportunity is negligible. Lifecycle semantics
+  // (`@MainActor isolated deinit`) are unchanged.
+  @_optimize(none)
   isolated deinit {
     lifetime.markReleased()
     let shutdownSequence = effectBridge.shutdown()

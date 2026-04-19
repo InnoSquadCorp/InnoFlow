@@ -19,80 +19,245 @@ public struct Reduce<State: Sendable, Action: Sendable>: Reducer {
   }
 }
 
+// MARK: - Builder-internal composition types
+//
+// These five types are emitted by the `ReducerBuilder` result-builder chain:
+// `_EmptyReducer` plus the four composition wrappers.
+// They preserve concrete reducer types across builder steps so the compiler
+// can specialize and inline the aggregate `reduce(into:action:)` call, and
+// so the builder chain never materializes an O(N) tower of nested closures.
+//
+// They are `public` because the builder's return types must cross module
+// boundaries (e.g. a reducer authored in a downstream module consumes the
+// builder chain emitted here). The leading underscore marks them as
+// implementation detail — canonical authoring uses only `CombineReducers`,
+// `Reduce`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`. The
+// principle gates block documentation and canonical samples from exposing
+// these names.
+
+/// An empty composition. Emitted by `ReducerBuilder.buildBlock()` when a
+/// composition body is syntactically empty. Produces no state mutation
+/// and no effect.
+public struct _EmptyReducer<State: Sendable, Action: Sendable>: Reducer {
+  @inlinable
+  public init() {}
+
+  @inlinable
+  public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    .none
+  }
+}
+
+/// A left-leaning pair composition that runs `first` then `second`, merging
+/// their effects. Emitted by `ReducerBuilder.buildPartialBlock(accumulated:next:)`
+/// so that a block of N reducers produces a
+/// `_ReducerSequence<_ReducerSequence<_ReducerSequence<A, B>, C>, D>` tower
+/// of concrete types — the optimizer sees the full composition and can
+/// inline or specialize each step instead of going through the type-erased
+/// closures the previous builder produced.
+///
+/// The binary-tree shape is a deliberate fallback from a flat N-way pack:
+/// Swift does not yet support same-element requirements on parameter packs
+/// (e.g. `repeat (each R).State == State`), which makes a single variadic
+/// pack of reducers impossible to constrain to a shared state/action space.
+public struct _ReducerSequence<First: Reducer, Second: Reducer>: Reducer
+where
+  First.State == Second.State,
+  First.Action == Second.Action
+{
+  public typealias State = First.State
+  public typealias Action = First.Action
+
+  @usableFromInline let first: First
+  @usableFromInline let second: Second
+
+  @inlinable
+  init(first: First, second: Second) {
+    self.first = first
+    self.second = second
+  }
+
+  @inlinable
+  public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    let firstEffect = first.reduce(into: &state, action: action)
+    let secondEffect = second.reduce(into: &state, action: action)
+    return .merge(firstEffect, secondEffect)
+  }
+}
+
+/// Runs the wrapped reducer when present, or produces no effect.
+/// Emitted by `ReducerBuilder.buildOptional(_:)`.
+public struct _OptionalReducer<Wrapped: Reducer>: Reducer {
+  public typealias State = Wrapped.State
+  public typealias Action = Wrapped.Action
+
+  @usableFromInline let wrapped: Wrapped?
+
+  @inlinable
+  init(_ wrapped: Wrapped?) {
+    self.wrapped = wrapped
+  }
+
+  @inlinable
+  public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    wrapped?.reduce(into: &state, action: action) ?? .none
+  }
+}
+
+/// Runs exactly one of two reducers depending on which branch the
+/// builder selected. Emitted by `ReducerBuilder.buildEither(first:)` and
+/// `buildEither(second:)`.
+public struct _ConditionalReducer<First: Reducer, Second: Reducer>: Reducer
+where
+  First.State == Second.State,
+  First.Action == Second.Action
+{
+  public typealias State = First.State
+  public typealias Action = First.Action
+
+  @usableFromInline enum Branch {
+    case first(First)
+    case second(Second)
+  }
+
+  @usableFromInline let branch: Branch
+
+  @inlinable
+  init(branch: Branch) {
+    self.branch = branch
+  }
+
+  @inlinable
+  public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch branch {
+    case .first(let reducer):
+      return reducer.reduce(into: &state, action: action)
+    case .second(let reducer):
+      return reducer.reduce(into: &state, action: action)
+    }
+  }
+}
+
+/// Runs a homogeneous collection of reducers in order and merges their
+/// effects. Emitted by `ReducerBuilder.buildArray(_:)` for `for`-loop
+/// expansions inside a reducer block.
+public struct _ArrayReducer<Element: Reducer>: Reducer {
+  public typealias State = Element.State
+  public typealias Action = Element.Action
+
+  @usableFromInline let elements: [Element]
+
+  @inlinable
+  init(_ elements: [Element]) {
+    self.elements = elements
+  }
+
+  @inlinable
+  public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    guard !elements.isEmpty else { return .none }
+    var effects: [EffectTask<Action>] = []
+    effects.reserveCapacity(elements.count)
+    for element in elements {
+      effects.append(element.reduce(into: &state, action: action))
+    }
+    return .merge(effects)
+  }
+}
+
 /// A result builder for reducer composition.
+///
+/// The builder preserves concrete reducer types through every step so the
+/// optimizer sees the full composition as a single generic expression and
+/// can inline/specialize the aggregate `reduce(into:action:)` call. See
+/// the `_EmptyReducer`, `_ReducerSequence`, `_OptionalReducer`,
+/// `_ConditionalReducer`, and `_ArrayReducer` types for the emitted
+/// intermediate values.
 @resultBuilder
 public enum ReducerBuilder<State: Sendable, Action: Sendable> {
-  public static func buildBlock() -> Reduce<State, Action> {
-    .init { _, _ in .none }
+  @inlinable
+  public static func buildBlock() -> _EmptyReducer<State, Action> {
+    _EmptyReducer()
   }
 
+  @inlinable
   public static func buildExpression<R: Reducer>(
     _ reducer: R
+  ) -> R where R.State == State, R.Action == Action {
+    reducer
+  }
+
+  @inlinable
+  public static func buildPartialBlock<R: Reducer>(
+    first component: R
+  ) -> R where R.State == State, R.Action == Action {
+    component
+  }
+
+  @inlinable
+  public static func buildPartialBlock<Accumulated: Reducer, Next: Reducer>(
+    accumulated: Accumulated,
+    next component: Next
+  ) -> _ReducerSequence<Accumulated, Next>
+  where
+    Accumulated.State == State, Accumulated.Action == Action,
+    Next.State == State, Next.Action == Action
+  {
+    _ReducerSequence(first: accumulated, second: component)
+  }
+
+  @inlinable
+  public static func buildOptional<R: Reducer>(
+    _ component: R?
+  ) -> _OptionalReducer<R>
+  where R.State == State, R.Action == Action {
+    _OptionalReducer(component)
+  }
+
+  @inlinable
+  public static func buildEither<First: Reducer, Second: Reducer>(
+    first component: First
+  ) -> _ConditionalReducer<First, Second>
+  where
+    First.State == State, First.Action == Action,
+    Second.State == State, Second.Action == Action
+  {
+    _ConditionalReducer(branch: .first(component))
+  }
+
+  @inlinable
+  public static func buildEither<First: Reducer, Second: Reducer>(
+    second component: Second
+  ) -> _ConditionalReducer<First, Second>
+  where
+    First.State == State, First.Action == Action,
+    Second.State == State, Second.Action == Action
+  {
+    _ConditionalReducer(branch: .second(component))
+  }
+
+  @inlinable
+  public static func buildArray<R: Reducer>(
+    _ components: [R]
+  ) -> _ArrayReducer<R>
+  where R.State == State, R.Action == Action {
+    _ArrayReducer(components)
+  }
+
+  @inlinable
+  public static func buildLimitedAvailability<R: Reducer>(
+    _ component: R
   ) -> Reduce<State, Action> where R.State == State, R.Action == Action {
-    .init { state, action in
-      reducer.reduce(into: &state, action: action)
+    Reduce { state, action in
+      component.reduce(into: &state, action: action)
     }
-  }
-
-  public static func buildPartialBlock(
-    first component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
-    component
-  }
-
-  public static func buildPartialBlock(
-    accumulated: Reduce<State, Action>,
-    next component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
-    .init { state, action in
-      let firstEffect = accumulated.reduce(into: &state, action: action)
-      let secondEffect = component.reduce(into: &state, action: action)
-      return .merge(firstEffect, secondEffect)
-    }
-  }
-
-  public static func buildOptional(
-    _ component: Reduce<State, Action>?
-  ) -> Reduce<State, Action> {
-    .init { state, action in
-      component?.reduce(into: &state, action: action) ?? .none
-    }
-  }
-
-  public static func buildEither(
-    first component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
-    component
-  }
-
-  public static func buildEither(
-    second component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
-    component
-  }
-
-  public static func buildArray(
-    _ components: [Reduce<State, Action>]
-  ) -> Reduce<State, Action> {
-    .init { state, action in
-      let effects = components.map { reducer in
-        reducer.reduce(into: &state, action: action)
-      }
-      return .merge(effects)
-    }
-  }
-
-  public static func buildLimitedAvailability(
-    _ component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
-    component
   }
 }
 
 /// Runs multiple reducers in declaration order and merges their effects.
 public struct CombineReducers<State: Sendable, Action: Sendable>: Reducer {
-  private let reduceContent: (inout State, Action) -> EffectTask<Action>
+  @usableFromInline let reduceContent: (inout State, Action) -> EffectTask<Action>
 
+  @inlinable
   public init<Content: Reducer>(
     @ReducerBuilder<State, Action> _ content: () -> Content
   )
@@ -103,6 +268,7 @@ public struct CombineReducers<State: Sendable, Action: Sendable>: Reducer {
     }
   }
 
+  @inlinable
   public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     reduceContent(&state, action)
   }

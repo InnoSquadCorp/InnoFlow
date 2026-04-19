@@ -1,0 +1,105 @@
+SIL EarlyPerfInliner crash — minimal reproduction for InnoFlow Swift 6.3 workaround
+==================================================================================
+
+Toolchain
+---------
+  Apple Swift version 6.3 (swiftlang-6.3.0.123.5 clang-2100.0.123.102)
+  swift-driver version: 1.148.6
+  Target: arm64-apple-macosx26.0
+  SDK: MacOSX26.4.sdk
+  Host: macOS 26 on arm64e
+
+Reproduction
+------------
+  rm -rf Repro/SILCrashRepro/.build
+  swift build --package-path Repro/SILCrashRepro -c release
+
+  -> compile command failed due to signal 11 (segfault)
+
+Relevant frontend state
+-----------------------
+  3.  While evaluating request
+      ExecuteSILPipelineRequest(Run pipelines {
+        PrepareOptimizationPasses, EarlyModulePasses,
+        HighLevel,Function+EarlyLoopOpt, HighLevel,Module+StackPromote,
+        MidLevel,Function, ClosureSpecialize, LowLevel,Function,
+        LateLoopOpt, SIL Debug Info Generator
+      } on SIL for SILCrashRepro)
+  4.  While running pass #1929 SILFunctionTransform "EarlyPerfInliner"
+      on SILFunction "@$s13SILCrashRepro0B6_StoreCfD".
+      for 'deinit' (at Repro.swift:93:12)
+
+Stack (unsymbolicated, frame summary)
+-------------------------------------
+  #4  isCallerAndCalleeLayoutConstraintsCompatible(swift::FullApplySite) + 236
+  #5  isCallerAndCalleeLayoutConstraintsCompatible(swift::FullApplySite) + 236
+  #6  swift::getEligibleFunction(...) + 1988
+  #7  SILPerformanceInliner::collectAppliesToInline(...) + 1340
+  #8  SILPerformanceInlinerPass::run() + 680
+  #9  swift::SILPassManager::runFunctionPasses(...) + 3256
+
+(Recursive call to isCallerAndCalleeLayoutConstraintsCompatible at frames 4–5
+appears to be the crash site — the pass recurses while walking layout
+constraints of the apply site chain inside the isolated deinit.)
+
+Minimal trigger
+---------------
+The reproducing shape is in Repro.swift:
+
+  * A generic @MainActor final class
+      Repro_Store<R: Repro_Reducer>
+  * With an `isolated deinit`
+  * That stores a result-builder-style composed value (`Repro_Sequence`
+    nested with `Repro_Optional` nested with `Repro_Sequence` over the
+    leaf reducer), reached via `repro_make()`.
+  * Reducer composition types have @inlinable `reduce(...)` methods
+    referencing @usableFromInline stored properties.
+
+Removing any one of:
+  * `isolated` on the deinit, or
+  * the generic parameter on the class, or
+  * the nested result-builder composition, or
+  * `@inlinable` on `reduce(...)`
+avoids the crash in our experience. The combination above is the smallest
+reliable reproduction.
+
+Upstream references
+-------------------
+This is a known family of SIL EarlyPerfInliner crashes around isolated
+deinit on generic @MainActor classes under -O. Relevant tracker issues:
+
+  * swiftlang/swift#88173 (open) — MainActor + -O + inliner +
+    `-default-isolation MainActor`. Closest match; our reproduction
+    can be filed as a comment referencing this issue. Workarounds
+    listed include `-Xllvm -sil-disable-pass=performance-inliner` and
+    `-Onone`.
+    https://github.com/swiftlang/swift/issues/88173
+
+  * swiftlang/swift#87077 (open) — generic struct / property wrapper
+    + MainActor + deinit under -O. Same crash frame.
+    https://github.com/swiftlang/swift/issues/87077
+
+  * swiftlang/swift#87736 (open) — generic NSHostingView subclass
+    implicit deinit. Same
+    `isCallerAndCalleeLayoutConstraintsCompatible` SIGSEGV.
+    https://github.com/swiftlang/swift/issues/87736
+
+  * swiftlang/swift#87462 / PR #87504 (closed, merged 2026-02-28) —
+    earlier fix for a sibling case of this family. Our toolchain
+    post-dates the fix but still crashes on the variant described
+    above, consistent with #88173.
+
+Because an active open tracker issue (#88173) already covers this
+exact inliner crash signature, we do not file a new upstream issue.
+We keep this reproducer and CRASH.txt in-tree so future toolchain
+bumps can retest and retire the workaround when the InnoFlow variant
+stops crashing.
+
+InnoFlow workaround
+-------------------
+`Sources/InnoFlow/Store.swift` marks the isolated deinit
+`@_optimize(none)`, which removes it from the EarlyPerfInliner's work set.
+Deinit is not a hot path, so the optimization loss is negligible and the
+public `@MainActor isolated deinit` lifecycle semantics are unchanged.
+
+See CHANGELOG.md "Fixed" section for the corresponding entry.
