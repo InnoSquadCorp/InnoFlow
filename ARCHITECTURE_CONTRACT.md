@@ -65,6 +65,33 @@ children, and derived `SelectedStore` projections alike.
 - Cancellation is cooperative. Runtime teardown continues as best-effort async cleanup.
 - The runtime is designed to be deadlock-resistant and avoids coupling reducer semantics to middleware-style interception.
 
+### `Store.send(_:)` scheduling contract
+
+`Store.send(_:)` is synchronous. It guarantees two things and nothing more:
+
+1. The reducer has finished running against the current state and any
+   `.send(...)` follow-up actions returned by the reducer have been drained.
+2. Any `.run { ... }` / `.merge(...)` / `.concatenate(...)` / `.debounce(...)` /
+   `.throttle(...)` effect returned by the reducer has been **scheduled** onto
+   an unstructured `Task`, but the body of that task has not necessarily started
+   yet.
+
+Reaching the first `await` inside an effect's operation requires scheduler
+turns — the outer `Task`, the `EffectWalker`, and `driver.startRun` each cross
+an actor boundary before the operation body runs. The number of scheduler turns
+required is not stable across Swift optimization levels: release-mode WMO
+eliminates some scheduling boundaries that debug keeps, but the remaining
+actor hops still need turns.
+
+**Tests must therefore poll for observable conditions, not fixed yield counts.**
+A bounded poll like `for _ in 0..<200 { if condition { break }; await Task.yield() }`
+is the idiomatic pattern and is used throughout `InnoFlowTests`.
+
+`ManualTestClock` exposes `sleeperCount` for a related purpose: when a test
+needs to confirm that a `.run` body or a `.debounce`/`.throttle` wrapper has
+reached its `try await clock.sleep(...)` registration before the clock is
+advanced, polling `await clock.sleeperCount == N` is the safe marker.
+
 ## Instrumentation
 
 - `StoreInstrumentation.sink`, `.osLog`, and `.combined` are the official instrumentation surfaces.

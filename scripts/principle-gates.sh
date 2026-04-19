@@ -370,6 +370,19 @@ main() {
   echo "[principle-gates] Running package tests"
   swift test --package-path "$ROOT_DIR" -Xswiftc -warnings-as-errors
 
+  echo "[principle-gates] Running package tests in release configuration"
+  # Release-mode test gate. Uses an isolated build path for the same reason as
+  # the release build gate above. Catches regressions where tests pass in debug
+  # but fail under release optimization (e.g., flaky timing assertions that
+  # assumed a fixed `Task.yield()` count).
+  RELEASE_TEST_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-test"
+  if ! swift test --package-path "$ROOT_DIR" --build-path "$RELEASE_TEST_BUILD_PATH" -c release -Xswiftc -warnings-as-errors; then
+    echo "[principle-gates] Failed: 'swift test -c release' failed — release-mode regression"
+    rm -rf "$RELEASE_TEST_BUILD_PATH"
+    exit 1
+  fi
+  rm -rf "$RELEASE_TEST_BUILD_PATH"
+
   echo "[principle-gates] Running sample package tests"
   local sample_test_root
   sample_test_root="$(canonical_root_for_sample_package_tests)"

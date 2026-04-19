@@ -4519,16 +4519,32 @@ struct StoreTests {
     )
 
     store.send(.start(1))
-    for _ in 0..<10 {
+    // Wait for the first merge to fully dispatch: throttle emits its leading
+    // value and debounce registers its sleeper. Under release optimization a
+    // fixed yield count is fragile — poll for the observable outcome.
+    for _ in 0..<200 {
+      let count = await clock.sleeperCount
+      if store.throttled == [1] && count >= 1 { break }
       await Task.yield()
     }
+
     store.send(.start(2))
-    for _ in 0..<10 {
+    // The second merge's throttle must run and see the still-open window BEFORE
+    // we advance the clock. If we advance first, the window will be treated as
+    // expired and the throttle will emit the second value as a new leading
+    // emission. We cannot observe "throttle_2 has executed" directly — there is
+    // no state change — so we poll for debounce_2's replacement sleeper
+    // registration. Debounce cancels the in-flight sleeper and registers a
+    // fresh one on the same id, so the only safe marker is "enough yields to
+    // drain the merge's MainActor work". 200 yields is empirically sufficient
+    // and cheap.
+    for _ in 0..<200 {
       await Task.yield()
     }
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<10 {
+    for _ in 0..<200 {
+      if store.debounced == [2] { break }
       await Task.yield()
     }
 
@@ -4791,20 +4807,31 @@ struct StoreTests {
     let clock = ManualTestClock()
     let probe = OrderedIntProbe()
 
+    // Spawn two sleepers that hit the same deadline. The sleepers must be
+    // registered with the clock before we advance — under release optimization
+    // and parallel test load, a single `Task.yield()` between spawn and advance
+    // is not reliable. Wait up to 200 yields for each Task to register before
+    // proceeding.
     Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(1)
     }
-    await Task.yield()
+    for _ in 0..<200 {
+      if await clock.sleeperCount == 1 { break }
+      await Task.yield()
+    }
 
     Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(2)
     }
-    await Task.yield()
+    for _ in 0..<200 {
+      if await clock.sleeperCount == 2 { break }
+      await Task.yield()
+    }
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<10 {
+    for _ in 0..<200 {
       if await probe.snapshot() == [1, 2] {
         break
       }
@@ -4904,14 +4931,20 @@ struct StoreTests {
     )
 
     store.send(.start)
-    for _ in 0..<10 {
+    // `store.send` only guarantees the reducer has run; async effects dispatched
+    // via `Task { ... }` still need scheduler turns to reach their first await.
+    // Release optimization eliminates some scheduling boundaries, so a fixed
+    // yield count is fragile — poll for the observable condition instead.
+    for _ in 0..<200 {
+      if store.state.log == ["started"] { break }
       await Task.yield()
     }
 
     #expect(store.state.log == ["started"])
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<10 {
+    for _ in 0..<200 {
+      if store.state.log == ["started", "finished"] { break }
       await Task.yield()
     }
 
@@ -4929,16 +4962,20 @@ struct StoreTests {
     )
 
     store.send(.start)
-    for _ in 0..<10 {
+    // Wait for the effect operation to reach its `context.sleep(...)`
+    // suspension point before advancing the clock. `store.send` only guarantees
+    // reducer completion; the `.run` body runs through several actor hops before
+    // registering the sleeper, and release optimization eliminates some of the
+    // scheduling boundaries that a fixed yield count relied on — poll instead.
+    for _ in 0..<200 {
+      if await probe.started == 1 { break }
       await Task.yield()
     }
 
     await clock.advance(by: .milliseconds(10))
 
-    for _ in 0..<30 {
-      if await probe.passed == 1 {
-        break
-      }
+    for _ in 0..<200 {
+      if await probe.passed == 1 { break }
       await Task.yield()
     }
 
@@ -4961,25 +4998,20 @@ struct StoreTests {
     )
 
     store.send(.start)
-    for _ in 0..<10 {
+    for _ in 0..<200 {
+      if await probe.started == 1 { break }
       await Task.yield()
     }
 
     await clock.advance(by: .milliseconds(10))
-
-    for _ in 0..<30 {
-      if await probe.passed == 1 {
-        break
-      }
+    for _ in 0..<200 {
+      if await probe.passed == 1 { break }
       await Task.yield()
     }
 
     await store.cancelEffects(identifiedBy: "context-check")
-
-    for _ in 0..<30 {
-      if await probe.cancelled == 1 {
-        break
-      }
+    for _ in 0..<200 {
+      if await probe.cancelled == 1 { break }
       await Task.yield()
     }
 
@@ -6628,8 +6660,6 @@ private func runStaleScopedStoreHarness(
   scenario: StaleScopedStoreScenario
 ) throws -> ProcessResult {
   let packageRoot = currentInnoFlowPackageRoot()
-  let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
-  let objectFiles = try findBuiltInnoFlowObjectFiles(in: packageRoot)
   let temporaryDirectory = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString, isDirectory: true)
   try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -6639,11 +6669,22 @@ private func runStaleScopedStoreHarness(
   let executableURL = temporaryDirectory.appendingPathComponent("StaleScopeProbe")
   try staleScopedStoreHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
 
+  // Inline-compile InnoFlow sources with the probe at `-Onone` so debug-only
+  // `assertionFailure` traps are live and so the build is independent of the
+  // enclosing `swift test` configuration (previously we linked `.build/*/*.o`,
+  // which produced duplicate-symbol link errors under `swift test -c release`
+  // whenever both debug and release `.build/` directories existed).
   let compileResult = try runProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: ["swiftc", "-parse-as-library", sourceFile.path, "-I", moduleDirectory.path]
-      + objectFiles.map(\.path)
-      + ["-o", executableURL.path]
+    arguments: [
+      "swiftc",
+      "-Onone",
+      "-parse-as-library",
+      "-package-name", "InnoFlow",
+      sourceFile.path,
+    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
+      "-o", executableURL.path,
+    ]
   )
 
   guard compileResult.status == 0 else {
@@ -6819,8 +6860,6 @@ private func runPhaseMapCrashHarness(
   scenario: PhaseMapCrashScenario
 ) throws -> ProcessResult {
   let packageRoot = currentInnoFlowPackageRoot()
-  let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
-  let objectFiles = try findBuiltInnoFlowObjectFiles(in: packageRoot)
   let temporaryDirectory = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString, isDirectory: true)
   try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -6830,11 +6869,23 @@ private func runPhaseMapCrashHarness(
   let executableURL = temporaryDirectory.appendingPathComponent("PhaseMapCrashProbe")
   try phaseMapCrashHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
 
+  // Inline-compile InnoFlow sources with the probe at `-Onone` so the
+  // PhaseMap `assertionFailure` traps we are asserting on are live, and so
+  // the build is independent of the enclosing `swift test` configuration.
+  // Previously we linked `.build/*/*.o`, which surfaced duplicate-symbol
+  // link errors under `swift test -c release` whenever both debug and
+  // release `.build/` directories existed.
   let compileResult = try runProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: ["swiftc", "-parse-as-library", sourceFile.path, "-I", moduleDirectory.path]
-      + objectFiles.map(\.path)
-      + ["-o", executableURL.path]
+    arguments: [
+      "swiftc",
+      "-Onone",
+      "-parse-as-library",
+      "-package-name", "InnoFlow",
+      sourceFile.path,
+    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
+      "-o", executableURL.path,
+    ]
   )
 
   guard compileResult.status == 0 else {
@@ -7035,7 +7086,6 @@ private let conditionalReducerReleaseHarnessSource = #"""
 
 private let staleScopedStoreHarnessSource = #"""
   import Foundation
-  import InnoFlow
 
   struct ParentReleasedFeature: Reducer {
     struct Child: Equatable, Sendable {
@@ -7154,7 +7204,6 @@ private let staleScopedStoreHarnessSource = #"""
 
 private let phaseMapCrashHarnessSource = #"""
   import Foundation
-  import InnoFlow
 
   struct CrashPhaseMutationFeature: Reducer {
     struct State: Equatable, Sendable {

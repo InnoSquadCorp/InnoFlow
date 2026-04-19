@@ -37,6 +37,16 @@ public actor ManualTestClock {
     current
   }
 
+  /// The number of sleepers currently suspended on this clock.
+  ///
+  /// Test harnesses can poll this to wait for `Task { try await clock.sleep(...) }`
+  /// sleepers to reach the registration point before calling `advance(by:)` —
+  /// release optimization and parallel test load make a fixed yield count
+  /// between spawning a sleeper and advancing unreliable.
+  public var sleeperCount: Int {
+    sleepers.count
+  }
+
   /// Advances the clock and resumes any sleepers whose deadlines have passed.
   ///
   /// - Precondition: `duration` must be non-negative.
