@@ -4692,10 +4692,9 @@ struct StoreTests {
     var state = BuilderCompositionFeature.State()
 
     let effect = reducer.reduce(into: &state, action: .run)
+    let expectedLog = (1...32).map { String(format: "%02d", $0) }
 
-    #expect(state.log.count == 32)
-    #expect(state.log.first == "01")
-    #expect(state.log.last == "32")
+    #expect(state.log == expectedLog)
     #expect(effect.isNone)
   }
 
@@ -7078,6 +7077,7 @@ private let staleScopedStoreHarnessSource = #"""
       var todos: [Todo] = [
         Todo(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, title: "One")
       ]
+      var routedActions: [String] = []
     }
 
     enum Action: Equatable, Sendable {
@@ -7100,6 +7100,7 @@ private let staleScopedStoreHarnessSource = #"""
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
       switch action {
       case .todo(let id, .rename(let title)):
+        state.routedActions.append("todo:\(id)")
         guard let index = state.todos.firstIndex(where: { $0.id == id }) else {
           return .none
         }
@@ -7466,6 +7467,7 @@ private let staleScopedStoreReleaseHarnessSource = #"""
       var todos: [Todo] = [
         Todo(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, title: "One")
       ]
+      var routedActions: [String] = []
     }
 
     enum Action: Equatable, Sendable {
@@ -7488,6 +7490,7 @@ private let staleScopedStoreReleaseHarnessSource = #"""
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
       switch action {
       case .todo(let id, .rename(let title)):
+        state.routedActions.append("todo:\(id)")
         guard let index = state.todos.firstIndex(where: { $0.id == id }) else {
           return .none
         }
@@ -7543,7 +7546,15 @@ private let staleScopedStoreReleaseHarnessSource = #"""
         // Both read and write after the entry is removed must tolerate the
         // lifecycle race without aborting.
         row.send(.rename("Updated"))
-        _ = row.state
+        let cached = row.state
+        guard cached.id == targetID, cached.title == "One" else {
+          fputs("Expected cached removed row state, got \(cached)\n", stderr)
+          Foundation.exit(1)
+        }
+        guard store.state.todos.isEmpty, store.state.routedActions.isEmpty else {
+          fputs("Expected stale row send to be a no-op, got \(store.state)\n", stderr)
+          Foundation.exit(1)
+        }
         print("ok")
 
       case "selected-parent-released":

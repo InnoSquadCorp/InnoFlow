@@ -21,7 +21,8 @@ public struct Reduce<State: Sendable, Action: Sendable>: Reducer {
 
 // MARK: - Builder-internal composition types
 //
-// These four types are emitted by the `ReducerBuilder` result-builder chain.
+// These five types are emitted by the `ReducerBuilder` result-builder chain:
+// `_EmptyReducer` plus the four composition wrappers.
 // They preserve concrete reducer types across builder steps so the compiler
 // can specialize and inline the aggregate `reduce(into:action:)` call, and
 // so the builder chain never materializes an O(N) tower of nested closures.
@@ -168,8 +169,9 @@ public struct _ArrayReducer<Element: Reducer>: Reducer {
 /// The builder preserves concrete reducer types through every step so the
 /// optimizer sees the full composition as a single generic expression and
 /// can inline/specialize the aggregate `reduce(into:action:)` call. See
-/// the `_ReducerSequence`, `_OptionalReducer`, `_ConditionalReducer`, and
-/// `_ArrayReducer` types for the emitted intermediate values.
+/// the `_EmptyReducer`, `_ReducerSequence`, `_OptionalReducer`,
+/// `_ConditionalReducer`, and `_ArrayReducer` types for the emitted
+/// intermediate values.
 @resultBuilder
 public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   @inlinable
@@ -244,8 +246,10 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   @inlinable
   public static func buildLimitedAvailability<R: Reducer>(
     _ component: R
-  ) -> R where R.State == State, R.Action == Action {
-    component
+  ) -> Reduce<State, Action> where R.State == State, R.Action == Action {
+    Reduce { state, action in
+      component.reduce(into: &state, action: action)
+    }
   }
 }
 

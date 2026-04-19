@@ -12,14 +12,17 @@
 //      composition many times. Sensitive to the per-step merge/closure overhead.
 //
 // The tests are not pass/fail gates — they print timings so humans can compare
-// before/after numbers across refactors. Disabled by default (prefixed with
-// `_perf` so `swift test` does not run them unless invoked explicitly via
-// `--filter PerfReducerComposition`).
+// before/after numbers across refactors. The `_perf` prefix is only a naming
+// convention; benchmarks run only when `INNOFLOW_PERF_BENCHMARKS=1` is set.
 
 import Foundation
 import Testing
 
 @testable import InnoFlow
+
+private var isReducerCompositionPerfBenchmarkEnabled: Bool {
+  ProcessInfo.processInfo.environment["INNOFLOW_PERF_BENCHMARKS"] == "1"
+}
 
 // MARK: - Fixture
 
@@ -50,7 +53,8 @@ private struct PerfResult {
   var perIteration: Duration { total / iterations }
 
   func formatted() -> String {
-    let totalMs = Double(total.components.seconds) * 1_000
+    let totalMs =
+      Double(total.components.seconds) * 1_000
       + Double(total.components.attoseconds) / 1e15
     let perUs = totalMs * 1_000 / Double(iterations)
     let paddedLabel = label.padding(toLength: 48, withPad: " ", startingAt: 0)
@@ -83,6 +87,8 @@ private func measureBlock(
 struct PerfReducerComposition {
 
   @Test func _perf_constructOnly_N2() async throws {
+    guard isReducerCompositionPerfBenchmarkEnabled else { return }
+
     let result = measureBlock(label: "construct-only N=2", iterations: 5_000) {
       _ = CombineReducers<PerfBenchState, PerfBenchAction> {
         PerfBenchAppender()
@@ -93,6 +99,8 @@ struct PerfReducerComposition {
   }
 
   @Test func _perf_constructOnly_N8() async throws {
+    guard isReducerCompositionPerfBenchmarkEnabled else { return }
+
     let result = measureBlock(label: "construct-only N=8", iterations: 5_000) {
       _ = CombineReducers<PerfBenchState, PerfBenchAction> {
         PerfBenchAppender()
@@ -109,16 +117,42 @@ struct PerfReducerComposition {
   }
 
   @Test func _perf_constructOnly_N32() async throws {
+    guard isReducerCompositionPerfBenchmarkEnabled else { return }
+
     let result = measureBlock(label: "construct-only N=32", iterations: 2_000) {
       _ = CombineReducers<PerfBenchState, PerfBenchAction> {
-        PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-        PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-        PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-        PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-        PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-        PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-        PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-        PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
+        PerfBenchAppender()
       }
     }
     print(result.formatted())
@@ -127,6 +161,8 @@ struct PerfReducerComposition {
   // MARK: - Dispatch benchmarks
 
   @Test func _perf_dispatch_N8_10k() async throws {
+    guard isReducerCompositionPerfBenchmarkEnabled else { return }
+
     let reducer = CombineReducers<PerfBenchState, PerfBenchAction> {
       PerfBenchAppender()
       PerfBenchAppender()
@@ -147,15 +183,41 @@ struct PerfReducerComposition {
   }
 
   @Test func _perf_dispatch_N32_10k() async throws {
+    guard isReducerCompositionPerfBenchmarkEnabled else { return }
+
     let reducer = CombineReducers<PerfBenchState, PerfBenchAction> {
-      PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-      PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-      PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-      PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-      PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-      PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-      PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
-      PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender(); PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
+      PerfBenchAppender()
     }
     var state = PerfBenchState()
 
