@@ -174,7 +174,10 @@ private struct RouterLoginRootView: View {
         VStack(alignment: .leading, spacing: 12) {
           TextField(
             "Email",
-            text: coordinator.loginStore.binding(\.$username, send: RouterLoginFeature.Action.setUsername)
+            text: coordinator.loginStore.binding(
+              \.$username,
+              send: RouterLoginFeature.Action.setUsername
+            )
           )
           .textFieldStyle(.roundedBorder)
           .accessibilityIdentifier("router.username")

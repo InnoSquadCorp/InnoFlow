@@ -1,13 +1,14 @@
 // Realtime stream subscription driven by a clock dependency.
 //
-// The reducer wires `.run { send, context in ... }` to an `AsyncStream` and
-// emits a tick action every `tickInterval`. Because the clock is a
+// The reducer wires `.run { send, context in ... }` to a looping
+// `context.sleep(for:)` effect and emits a tick action every `tickInterval`.
+// Because the clock is a
 // construction-time dependency (`StoreClock`), tests swap in a
 // `ManualTestClock` to advance time deterministically — no wall-clock sleep.
 //
-// Subscription lifetime is controlled with `.cancellable("stream", ...)`
-// plus `.cancel("stream")`. Repeated "Start" calls coalesce because
-// `cancelInFlight: true` is set.
+// Subscription lifetime is controlled with `.cancellable("realtime-stream", ...)`
+// plus `.cancel("realtime-stream")`. Repeated "Start" calls coalesce because
+// `cancelInFlight: true` restarts the loop.
 
 import Foundation
 import InnoFlow
@@ -47,7 +48,6 @@ struct RealtimeStreamFeature {
     Reduce { state, action in
       switch action {
       case .subscribe:
-        guard !state.isSubscribed else { return .none }
         state.isSubscribed = true
         let interval = dependencies.tickInterval
         return .run { send, context in

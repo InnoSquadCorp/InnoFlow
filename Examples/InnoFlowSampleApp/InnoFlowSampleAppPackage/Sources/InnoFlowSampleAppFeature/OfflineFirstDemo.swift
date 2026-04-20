@@ -76,7 +76,7 @@ struct OfflineFirstFeature {
     case saveNow
     case _persistPendingSave
     case _saveConfirmed(title: String)
-    case _saveRolledBack(previous: String, reason: String)
+    case _saveRolledBack(previous: String, failedTitle: String, reason: String)
   }
 
   let dependencies: Dependencies
@@ -120,7 +120,10 @@ struct OfflineFirstFeature {
         .cancellable("offline-save-debounce", cancelInFlight: true)
 
       case .saveNow:
-        return .send(._persistPendingSave)
+        return .concatenate(
+          .cancel("offline-save-debounce"),
+          .send(._persistPendingSave)
+        )
 
       case ._persistPendingSave:
         // Optimistic update: the local title already reflects the user's
@@ -128,26 +131,33 @@ struct OfflineFirstFeature {
         // server's truth when the task resumes.
         let draft = state.draft
         guard draft.title != draft.lastSavedTitle else { return .none }
+        guard draft.inFlightTitle != draft.title else { return .none }
         state.draft.inFlightTitle = draft.title
+        state.errorMessage = nil
         state.log.append("save attempt: '\(draft.title)'")
 
         let repository = dependencies.repository
         let id = draft.id
         let pendingTitle = draft.title
         let previousTitle = draft.lastSavedTitle
-        return .run { send, _ in
+        return .run { send, context in
           do {
             try await repository.save(id: id, title: pendingTitle)
+            try await context.checkCancellation()
             await send(._saveConfirmed(title: pendingTitle))
+          } catch is CancellationError {
+            return
           } catch {
             await send(
               ._saveRolledBack(
                 previous: previousTitle,
+                failedTitle: pendingTitle,
                 reason: error.localizedDescription
               )
             )
           }
         }
+        .cancellable("offline-save", cancelInFlight: true)
 
       case ._saveConfirmed(let title):
         state.draft.lastSavedTitle = title
@@ -156,11 +166,17 @@ struct OfflineFirstFeature {
         state.log.append("confirmed: '\(title)'")
         return .none
 
-      case ._saveRolledBack(let previous, let reason):
-        state.draft.title = previous
-        state.draft.inFlightTitle = nil
+      case ._saveRolledBack(let previous, let failedTitle, let reason):
+        if state.draft.inFlightTitle == failedTitle {
+          state.draft.inFlightTitle = nil
+        }
         state.errorMessage = reason
-        state.log.append("rolled back to '\(previous)': \(reason)")
+        if state.draft.title == failedTitle {
+          state.draft.title = previous
+          state.log.append("rolled back to '\(previous)': \(reason)")
+        } else {
+          state.log.append("stale failure for '\(failedTitle)': \(reason)")
+        }
         return .none
       }
     }

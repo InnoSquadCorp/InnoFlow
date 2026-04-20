@@ -34,6 +34,27 @@ struct InnoFlowSampleAppFeatureTests {
     Issue.record("Expected authVersion to reach \(target) before timing out")
   }
 
+  @MainActor
+  private func waitForSleeperRegistration(
+    _ clock: ManualTestClock,
+    minimumCount: Int = 1,
+    timeout: Duration = .seconds(1)
+  ) async -> Bool {
+    let wallClock = ContinuousClock()
+    let deadline = wallClock.now.advanced(by: timeout)
+
+    while wallClock.now < deadline {
+      if await clock.sleeperCount >= minimumCount {
+        return true
+      }
+      await Task.yield()
+      try? await Task.sleep(for: .milliseconds(5))
+    }
+
+    Issue.record("Timed out waiting for sleeper registration to reach \(minimumCount)")
+    return false
+  }
+
   @Test("Basics demo records queued follow-up increment")
   @MainActor
   func basicsQueuedFollowUp() async {
@@ -366,6 +387,7 @@ struct InnoFlowSampleAppFeatureTests {
     await store.receive(._mfaChallenge("challenge-mfa-user@innosquad.com"), through: map) {
       $0.phase = .mfaRequired
       $0.challengeID = "challenge-mfa-user@innosquad.com"
+      $0.lastSubmissionStage = .mfa
     }
 
     await store.send(.setMFACode("123456")) {
@@ -380,13 +402,15 @@ struct InnoFlowSampleAppFeatureTests {
     await store.receive(._authenticated("session-mfa-123456"), through: map) {
       $0.phase = .authenticated
       $0.sessionID = "session-mfa-123456"
+      $0.challengeID = nil
+      $0.mfaCode = ""
       $0.errorMessage = nil
     }
 
     await store.assertNoMoreActions()
   }
 
-  @Test("Authentication flow fails and retry returns to submitting")
+  @Test("Authentication flow credential retry returns to submitting")
   @MainActor
   func authenticationFlowFailureThenRetry() async {
     let map:
@@ -422,13 +446,62 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
     }
 
-    // Switch to a password that will succeed on retry.
     await store.receive(._failed("Invalid credentials"), through: map) {
-      // Stays in submitting → failed because the mock service returns the same
-      // error for the same password. This asserts the retry transition itself
-      // is legal even when the result is still a failure.
       $0.phase = .failed
       $0.errorMessage = "Invalid credentials"
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("Authentication flow MFA retry stays on the MFA path")
+  @MainActor
+  func authenticationFlowMFAFailureThenRetry() async {
+    let map:
+      PhaseMap<
+        AuthenticationFlowFeature.State, AuthenticationFlowFeature.Action,
+        AuthenticationFlowFeature.State.Phase
+      > = AuthenticationFlowFeature.phaseMap
+    let store = TestStore(
+      reducer: AuthenticationFlowFeature(authService: MockAuthService()),
+      initialState: .init(
+        phase: .mfaRequired,
+        username: "mfa-user@innosquad.com",
+        password: "correct",
+        mfaCode: "000000",
+        challengeID: "challenge-mfa-user@innosquad.com",
+        sessionID: nil,
+        errorMessage: nil,
+        lastSubmissionStage: .mfa
+      )
+    )
+
+    await store.send(.submitMFA, through: map) {
+      $0.phase = .submittingMFA
+      $0.errorMessage = nil
+      $0.lastSubmissionStage = .mfa
+    }
+
+    await store.receive(._failed("MFA code rejected"), through: map) {
+      $0.phase = .failed
+      $0.errorMessage = "MFA code rejected"
+    }
+
+    await store.send(.setMFACode("123456")) {
+      $0.mfaCode = "123456"
+    }
+
+    await store.send(.retry, through: map) {
+      $0.phase = .submittingMFA
+      $0.errorMessage = nil
+    }
+
+    await store.receive(._authenticated("session-mfa-123456"), through: map) {
+      $0.phase = .authenticated
+      $0.sessionID = "session-mfa-123456"
+      $0.challengeID = nil
+      $0.mfaCode = ""
+      $0.errorMessage = nil
     }
 
     await store.assertNoMoreActions()
@@ -562,6 +635,7 @@ struct InnoFlowSampleAppFeatureTests {
     await store.receive(._saveConfirmed(title: "Edited title")) {
       $0.draft.lastSavedTitle = "Edited title"
       $0.draft.inFlightTitle = nil
+      $0.errorMessage = nil
       $0.log = [
         "edit: 'Edited title'",
         "save attempt: 'Edited title'",
@@ -597,7 +671,11 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     await store.receive(
-      ._saveRolledBack(previous: "Offline-first draft", reason: "mock-rejected")
+      ._saveRolledBack(
+        previous: "Offline-first draft",
+        failedTitle: "Broken edit",
+        reason: "mock-rejected"
+      )
     ) {
       $0.draft.title = "Offline-first draft"
       $0.draft.inFlightTitle = nil
@@ -608,6 +686,100 @@ struct InnoFlowSampleAppFeatureTests {
         "rolled back to 'Offline-first draft': mock-rejected",
       ]
     }
+  }
+
+  @Test("Offline-first saveNow cancels pending debounce and avoids duplicate saves")
+  @MainActor
+  func offlineFirstSaveNowCancelsPendingDebounce() async {
+    let clock = ManualTestClock()
+    let repository = MockDraftRepository()
+    let store = TestStore(
+      reducer: OfflineFirstFeature(repository: repository, debounceDuration: .milliseconds(100)),
+      initialState: .init(),
+      clock: clock
+    )
+
+    await store.send(.titleChanged("Edited title")) {
+      $0.draft.title = "Edited title"
+      $0.log = ["edit: 'Edited title'"]
+    }
+
+    await store.send(.saveNow)
+
+    await store.receive(._persistPendingSave) {
+      $0.draft.inFlightTitle = "Edited title"
+      $0.errorMessage = nil
+      $0.log = ["edit: 'Edited title'", "save attempt: 'Edited title'"]
+    }
+
+    await store.receive(._saveConfirmed(title: "Edited title")) {
+      $0.draft.lastSavedTitle = "Edited title"
+      $0.draft.inFlightTitle = nil
+      $0.errorMessage = nil
+      $0.log = [
+        "edit: 'Edited title'",
+        "save attempt: 'Edited title'",
+        "confirmed: 'Edited title'",
+      ]
+    }
+
+    await clock.advance(by: .milliseconds(100))
+    await store.assertNoMoreActions()
+    #expect(await repository.saveCount == 1)
+  }
+
+  @Test("Offline-first stale save failure keeps the latest local edit")
+  @MainActor
+  func offlineFirstStaleSaveFailureKeepsLatestEdit() async {
+    let clock = ManualTestClock()
+    let repository = MockDraftRepository(
+      failureMode: .alwaysReject,
+      saveDelay: .milliseconds(20)
+    )
+    let store = TestStore(
+      reducer: OfflineFirstFeature(repository: repository, debounceDuration: .milliseconds(1)),
+      initialState: .init(),
+      clock: clock
+    )
+
+    await store.send(.titleChanged("Broken edit")) {
+      $0.draft.title = "Broken edit"
+      $0.log = ["edit: 'Broken edit'"]
+    }
+
+    await store.send(.saveNow)
+
+    await store.receive(._persistPendingSave) {
+      $0.draft.inFlightTitle = "Broken edit"
+      $0.errorMessage = nil
+      $0.log = ["edit: 'Broken edit'", "save attempt: 'Broken edit'"]
+    }
+
+    await store.send(.titleChanged("Newer local edit")) {
+      $0.draft.title = "Newer local edit"
+      $0.log = ["edit: 'Broken edit'", "save attempt: 'Broken edit'", "edit: 'Newer local edit'"]
+    }
+
+    await store.receive(
+      ._saveRolledBack(
+        previous: "Offline-first draft",
+        failedTitle: "Broken edit",
+        reason: "mock-rejected"
+      )
+    ) {
+      $0.draft.inFlightTitle = nil
+      $0.errorMessage = "mock-rejected"
+      $0.log = [
+        "edit: 'Broken edit'",
+        "save attempt: 'Broken edit'",
+        "edit: 'Newer local edit'",
+        "stale failure for 'Broken edit': mock-rejected",
+      ]
+    }
+
+    #expect(store.state.draft.title == "Newer local edit")
+    #expect(store.state.draft.lastSavedTitle == "Offline-first draft")
+    await store.assertNoMoreActions()
   }
 
   // MARK: - RealtimeStreamDemo
@@ -625,20 +797,14 @@ struct InnoFlowSampleAppFeatureTests {
       $0.isSubscribed = true
     }
 
-    // Wait until the subscription actually registered a sleeper.
-    await Task.yield()
-    while await clock.sleeperCount == 0 {
-      try? await Task.sleep(for: .milliseconds(5))
-    }
+    guard await waitForSleeperRegistration(clock) else { return }
 
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(1)) {
       $0.ticks = [1]
     }
 
-    while await clock.sleeperCount == 0 {
-      try? await Task.sleep(for: .milliseconds(5))
-    }
+    guard await waitForSleeperRegistration(clock) else { return }
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(2)) {
       $0.ticks = [1, 2]
@@ -670,6 +836,38 @@ struct InnoFlowSampleAppFeatureTests {
     await clock.advance(by: .seconds(1))
     await store.assertNoMoreActions()
     #expect(store.state.ticks.isEmpty)
+  }
+
+  @Test("Realtime stream subscribe restarts the loop without duplicating tick emitters")
+  @MainActor
+  func realtimeStreamSubscribeRestartsLoop() async {
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: RealtimeStreamFeature(tickInterval: .milliseconds(100)),
+      clock: clock
+    )
+
+    await store.send(.subscribe) {
+      $0.isSubscribed = true
+    }
+    guard await waitForSleeperRegistration(clock) else { return }
+
+    await clock.advance(by: .milliseconds(100))
+    await store.receive(._tick(1)) {
+      $0.ticks = [1]
+    }
+
+    await store.send(.subscribe) {
+      $0.isSubscribed = true
+    }
+    guard await waitForSleeperRegistration(clock) else { return }
+
+    await clock.advance(by: .milliseconds(100))
+    await store.receive(._tick(1)) {
+      $0.ticks = [1, 1]
+    }
+
+    await store.assertNoMoreActions()
   }
 }
 
@@ -719,14 +917,30 @@ private struct MockArticlesService: ArticlesServiceProtocol {
 }
 
 private actor MockDraftRepository: DraftRepositoryProtocol {
-  private var shouldFail: Bool
+  enum FailureMode: Sendable {
+    case never
+    case alwaysReject
+  }
 
-  init(shouldFail: Bool = false) {
-    self.shouldFail = shouldFail
+  private let failureMode: FailureMode
+  private let saveDelay: Duration
+  private(set) var saveCount = 0
+
+  init(
+    shouldFail: Bool = false,
+    failureMode: FailureMode? = nil,
+    saveDelay: Duration = .zero
+  ) {
+    self.failureMode = failureMode ?? (shouldFail ? .alwaysReject : .never)
+    self.saveDelay = saveDelay
   }
 
   func save(id: UUID, title: String) async throws {
-    if shouldFail {
+    saveCount += 1
+    if saveDelay > .zero {
+      try await Task.sleep(for: saveDelay)
+    }
+    if failureMode == .alwaysReject {
       throw DraftRepositoryError(errorDescription: "mock-rejected")
     }
   }

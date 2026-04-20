@@ -179,7 +179,7 @@ The *clock implementation* is swapped at the `Store` / `TestStore` boundary:
 
 - Production and previews: `Store(reducer: ...)` (default `.continuous`) or
   `Store.preview(reducer: ..., clock: .continuous)`.
-- Tests: `TestStore(reducer: ..., clock: .manual(ManualTestClock()))`.
+- Tests: `let clock = ManualTestClock(); TestStore(reducer: ..., clock: clock)`.
 
 ### `EffectContext.checkCancellation`
 
@@ -218,7 +218,7 @@ func authenticationFlowSuccess() async {
 }
 ```
 
-Pattern C's convenience init (`init(authService:)`) means test code never has
+Pattern A's convenience init (`init(authService:)`) means test code never has
 to reconstruct the `Dependencies` struct by hand.
 
 ### Scenario 2 — pin the clock
@@ -227,7 +227,7 @@ to reconstruct the `Dependencies` struct by hand.
 let clock = ManualTestClock()
 let store = TestStore(
   reducer: RealtimeStreamFeature(tickInterval: .milliseconds(100)),
-  clock: .manual(clock)
+  clock: clock
 )
 await store.send(.subscribe)
 

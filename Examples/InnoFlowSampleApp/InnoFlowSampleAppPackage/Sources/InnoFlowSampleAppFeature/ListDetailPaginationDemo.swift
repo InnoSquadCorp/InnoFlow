@@ -10,7 +10,7 @@
 //     element and parent sees aggregate updates.
 //   * `store.scope(collection:id:action:)` for detail views that project a
 //     single row by id.
-//   * Queue-based `.send(._loadNextPage)` for "load next page" chaining so
+//   * Queue-based `.send(.loadNextPage)` for "load next page" chaining so
 //     pagination is driven by the store FIFO rather than reducer re-entry.
 
 import Foundation
@@ -44,7 +44,6 @@ struct ArticlesServiceError: LocalizedError, Equatable, Sendable {
 
 actor SampleArticlesService: ArticlesServiceProtocol {
   let pageCount: Int = 3
-  private let pageSize = 4
 
   func loadPage(_ page: Int, pageSize: Int) async throws -> [SampleArticle] {
     guard page >= 0, page < pageCount else { return [] }
@@ -267,9 +266,12 @@ struct ListDetailPaginationDemoView: View {
 }
 
 struct SampleArticleRowView: View {
-  let store: ScopedStore<
-    ListDetailPaginationFeature, SampleArticle, SampleArticleRowFeature.Action
-  >
+  let store:
+    ScopedStore<
+      ListDetailPaginationFeature,
+      SampleArticle,
+      SampleArticleRowFeature.Action
+    >
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
@@ -315,9 +317,12 @@ struct ListDetailPaginationDetailView: View {
   }
 
   private struct DetailContent: View {
-    let store: ScopedStore<
-      ListDetailPaginationFeature, SampleArticle, SampleArticleRowFeature.Action
-    >
+    let store:
+      ScopedStore<
+        ListDetailPaginationFeature,
+        SampleArticle,
+        SampleArticleRowFeature.Action
+      >
 
     var body: some View {
       VStack(alignment: .leading, spacing: 12) {

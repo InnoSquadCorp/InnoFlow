@@ -70,6 +70,11 @@ struct AuthenticationFlowFeature {
       case failed
     }
 
+    enum LastSubmissionStage: Equatable, Sendable {
+      case credentials
+      case mfa
+    }
+
     var phase: Phase = .idle
     @BindableField var username = ""
     @BindableField var password = ""
@@ -77,6 +82,7 @@ struct AuthenticationFlowFeature {
     var challengeID: String?
     var sessionID: String?
     var errorMessage: String?
+    var lastSubmissionStage: LastSubmissionStage = .credentials
   }
 
   enum Action: Equatable, Sendable {
@@ -126,7 +132,14 @@ struct AuthenticationFlowFeature {
         On(Action.failedCasePath, to: .failed)
       }
       From(.failed) {
-        On(.retry, to: .submitting)
+        On(.retry, targets: [.submitting, .submittingMFA]) { state in
+          switch state.lastSubmissionStage {
+          case .credentials:
+            .submitting
+          case .mfa:
+            .submittingMFA
+          }
+        }
         On(.dismissError, to: .idle)
       }
     }
@@ -153,8 +166,10 @@ struct AuthenticationFlowFeature {
         state.mfaCode = value
         return .none
 
-      case .submitCredentials, .retry:
+      case .submitCredentials:
         state.errorMessage = nil
+        state.challengeID = nil
+        state.lastSubmissionStage = .credentials
         let username = state.username
         let password = state.password
         let authService = dependencies.authService
@@ -181,6 +196,7 @@ struct AuthenticationFlowFeature {
 
       case .submitMFA:
         state.errorMessage = nil
+        state.lastSubmissionStage = .mfa
         let code = state.mfaCode
         let authService = dependencies.authService
         return .run { send, context in
@@ -199,19 +215,74 @@ struct AuthenticationFlowFeature {
         }
         .cancellable("auth-submit", cancelInFlight: true)
 
+      case .retry:
+        switch state.lastSubmissionStage {
+        case .credentials:
+          state.errorMessage = nil
+          let username = state.username
+          let password = state.password
+          let authService = dependencies.authService
+          return .run { send, context in
+            do {
+              let challenge = try await authService.submitCredentials(
+                username: username,
+                password: password
+              )
+              try await context.checkCancellation()
+              switch challenge {
+              case .authenticated(let sessionID):
+                await send(._authenticated(sessionID))
+              case .mfaRequired(let challengeID):
+                await send(._mfaChallenge(challengeID))
+              }
+            } catch is CancellationError {
+              return
+            } catch {
+              await send(._failed(error.localizedDescription))
+            }
+          }
+          .cancellable("auth-submit", cancelInFlight: true)
+
+        case .mfa:
+          state.errorMessage = nil
+          let code = state.mfaCode
+          let authService = dependencies.authService
+          return .run { send, context in
+            do {
+              let result = try await authService.submitMFA(code: code)
+              try await context.checkCancellation()
+              switch result {
+              case .authenticated(let sessionID):
+                await send(._authenticated(sessionID))
+              }
+            } catch is CancellationError {
+              return
+            } catch {
+              await send(._failed(error.localizedDescription))
+            }
+          }
+          .cancellable("auth-submit", cancelInFlight: true)
+        }
+
       case .cancelSubmission:
         return .cancel("auth-submit")
 
       case .dismissError:
         state.errorMessage = nil
+        state.challengeID = nil
+        state.mfaCode = ""
+        state.lastSubmissionStage = .credentials
         return .none
 
       case ._mfaChallenge(let challengeID):
         state.challengeID = challengeID
+        state.lastSubmissionStage = .mfa
         return .none
 
       case ._authenticated(let sessionID):
         state.sessionID = sessionID
+        state.challengeID = nil
+        state.mfaCode = ""
         state.errorMessage = nil
         return .none
 
@@ -263,7 +334,7 @@ struct AuthenticationFlowDemoView: View {
           .textFieldStyle(.roundedBorder)
           .accessibilityIdentifier("auth.password")
 
-          if store.phase == .mfaRequired || store.phase == .submittingMFA {
+          if requiresMFAInput {
             TextField(
               "MFA code",
               text: store.binding(\.$mfaCode, send: AuthenticationFlowFeature.Action.setMFACode)
@@ -329,7 +400,7 @@ struct AuthenticationFlowDemoView: View {
             "submitting -> mfaRequired | authenticated | failed",
             "mfaRequired -> submittingMFA",
             "submittingMFA -> authenticated | failed",
-            "failed -> submitting (retry) | idle (dismiss)",
+            "failed -> submitting | submittingMFA (retry) | idle (dismiss)",
           ]
         )
       }
@@ -340,6 +411,12 @@ struct AuthenticationFlowDemoView: View {
 
   private var isSubmittingPhase: Bool {
     store.phase == .submitting || store.phase == .submittingMFA
+  }
+
+  private var requiresMFAInput: Bool {
+    store.phase == .mfaRequired
+      || store.phase == .submittingMFA
+      || (store.phase == .failed && store.lastSubmissionStage == .mfa)
   }
 
   private var submitButtonTitle: String {
