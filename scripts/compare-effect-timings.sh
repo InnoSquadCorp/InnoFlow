@@ -42,8 +42,8 @@ Optional:
   --help                 Print this help
 
 Exit codes:
-  0  current within tolerance of baseline (or fewer runs, insufficient signal)
-  1  regression detected or missing dependency
+  0  current within tolerance of baseline
+  1  regression detected, current capture incomplete, or missing dependency
 
 Install jq if unavailable:
   brew install jq
@@ -105,10 +105,10 @@ case "$METRIC" in
     exit 1 ;;
 esac
 
-# Produce the metric value (nanoseconds) for a given JSONL file.
-compute_metric() {
+# Produce "<matched run count>\t<metric nanos>" for a given JSONL file.
+compute_summary() {
   local file="$1"
-  jq -s --argjson nothing null '
+  jq -rs '
     map(select(.phase == "runStarted" or .phase == "runFinished"))
     | group_by(.sequence)
     | map(select(length == 2
@@ -118,29 +118,33 @@ compute_metric() {
         ((.[] | select(.phase == "runFinished") | .timestampNanos)
          - (.[] | select(.phase == "runStarted") | .timestampNanos)))
     | . as $deltas
-    | '"$METRIC_FILTER"'
+    | [($deltas | length), ('"$METRIC_FILTER"')] | @tsv
   ' "$file"
 }
 
-BASELINE_METRIC="$(compute_metric "$BASELINE")"
-CURRENT_METRIC="$(compute_metric "$CURRENT")"
+IFS=$'\t' read -r BASELINE_MATCHED_RUNS BASELINE_METRIC <<< "$(compute_summary "$BASELINE")"
+IFS=$'\t' read -r CURRENT_MATCHED_RUNS CURRENT_METRIC <<< "$(compute_summary "$CURRENT")"
 
 # Guard against zero baseline (insufficient signal in fixture). Treat as
 # pass-through — a new fixture has to be refreshed manually.
-if [[ -z "$BASELINE_METRIC" || "$BASELINE_METRIC" == "0" ]]; then
+if [[ -z "$BASELINE_MATCHED_RUNS" || "$BASELINE_MATCHED_RUNS" == "0" ]]; then
   echo "[compare-effect-timings] baseline has no matched runs — regenerate fixture" >&2
   exit 0
+fi
+
+if [[ -z "$CURRENT_MATCHED_RUNS" || "$CURRENT_MATCHED_RUNS" == "0" ]]; then
+  echo "[compare-effect-timings] current capture has no matched runs — incomplete capture or missing runFinished events" >&2
+  exit 1
 fi
 
 # Use `awk` (POSIX, no jq math) for the ratio comparison. jq's floats are
 # IEEE-754 which is fine but `awk` keeps the script dependency light and
 # mirrors the rest of the shell math used by `principle-gates.sh`.
 RATIO="$(awk -v c="$CURRENT_METRIC" -v b="$BASELINE_METRIC" 'BEGIN { printf "%.6f", (c - b) / b }')"
-ABS_RATIO="${RATIO#-}"
 RATIO_OK="$(awk -v r="$RATIO" -v t="$TOLERANCE" 'BEGIN { print (r <= t) ? 1 : 0 }')"
 
-SUMMARY=$(printf '[compare-effect-timings] metric=%s baseline=%sns current=%sns ratio=%s tolerance=%s' \
-  "$METRIC" "$BASELINE_METRIC" "$CURRENT_METRIC" "$RATIO" "$TOLERANCE")
+SUMMARY=$(printf '[compare-effect-timings] metric=%s baselineRuns=%s currentRuns=%s baseline=%sns current=%sns ratio=%s tolerance=%s' \
+  "$METRIC" "$BASELINE_MATCHED_RUNS" "$CURRENT_MATCHED_RUNS" "$BASELINE_METRIC" "$CURRENT_METRIC" "$RATIO" "$TOLERANCE")
 
 if [[ "$RATIO_OK" == "1" ]]; then
   echo "$SUMMARY PASS"
@@ -149,11 +153,13 @@ else
   {
     echo "$SUMMARY FAIL"
     jq -n --arg metric "$METRIC" \
+      --arg baselineRuns "$BASELINE_MATCHED_RUNS" \
+      --arg currentRuns "$CURRENT_MATCHED_RUNS" \
       --arg baseline "$BASELINE_METRIC" \
       --arg current  "$CURRENT_METRIC" \
       --arg ratio    "$RATIO" \
       --arg tolerance "$TOLERANCE" \
-      '{regression: {metric: $metric, baselineNanos: $baseline, currentNanos: $current, ratio: $ratio, tolerance: $tolerance}}'
+      '{regression: {metric: $metric, baselineRuns: $baselineRuns, currentRuns: $currentRuns, baselineNanos: $baseline, currentNanos: $current, ratio: $ratio, tolerance: $tolerance}}'
   } >&2
   exit 1
 fi

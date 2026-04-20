@@ -120,6 +120,8 @@ struct CounterView: View {
 }
 ```
 
+`binding(_:to:)` is an argument-label alias for `binding(_:send:)`. Both spellings stay supported, but once both overloads exist you must keep the label explicit: `store.binding(\.$step) { .setStep($0) }` is ambiguous, while `send:` and `to:` both compile cleanly.
+
 ## Composition Surface
 
 InnoFlow 3.0.0 uses a small composition surface instead of multiple authoring styles.

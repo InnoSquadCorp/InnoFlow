@@ -121,6 +121,8 @@ Toggle(
 }
 ```
 
+As in the rest of InnoFlow, keep the binding argument label explicit here: `send:` and `to:` are both valid, but an unlabeled trailing-closure call is ambiguous once both overloads are in scope.
+
 The row projection is still a view concern. The phase contract remains at the parent feature level.
 
 ## 4. Assert the phase map and child behavior in tests

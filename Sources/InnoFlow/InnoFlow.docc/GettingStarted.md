@@ -53,6 +53,8 @@ struct CounterView: View {
 }
 ```
 
+`binding(_:to:)` is an alias for `binding(_:send:)`. Keep the label explicit — once both overloads are in scope, unlabeled trailing-closure calls like `store.binding(\.$step) { .setStep($0) }` are ambiguous.
+
 For multi-part features, compose reducers with ``Reduce``, ``CombineReducers``, ``Scope``, ``IfLet``, ``IfCaseLet``, and ``ForEachReducer`` instead of adding more authoring modes.
 Use `@BindableField` for reducer-facing value fields, and pass the projected key path (`\.$field`) into ``Store/binding(_:send:)``.
 

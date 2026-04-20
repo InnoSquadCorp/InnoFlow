@@ -48,7 +48,7 @@ struct EffectTimingBaselineGate {
       store.send(.reset)
       for _ in 0..<20 { await Task.yield() }
     }
-    for _ in 0..<50 { await Task.yield() }
+    await waitForMatchedRunPairs(count: 10, in: recorder)
 
     let currentURL = FileManager.default
       .temporaryDirectory
@@ -123,6 +123,32 @@ struct EffectTimingBaselineGate {
     }
     struct RepositoryRootNotFound: Error {}
     throw RepositoryRootNotFound()
+  }
+
+  private func waitForMatchedRunPairs(
+    count expectedCount: Int,
+    in recorder: EffectTimingRecorder,
+    maximumYields: Int = 500
+  ) async {
+    for _ in 0..<maximumYields {
+      let entries = await recorder.entries()
+      if matchedRunPairCount(in: entries) >= expectedCount {
+        return
+      }
+      await Task.yield()
+    }
+  }
+
+  private func matchedRunPairCount(in entries: [EffectTimingRecorder.Entry]) -> Int {
+    var phasesBySequence: [UInt64: Set<EffectTimingRecorder.Phase>] = [:]
+    for entry in entries where entry.phase == .runStarted || entry.phase == .runFinished {
+      phasesBySequence[entry.sequence, default: []].insert(entry.phase)
+    }
+    return phasesBySequence.values.reduce(into: 0) { count, phases in
+      if phases.contains(.runStarted) && phases.contains(.runFinished) {
+        count += 1
+      }
+    }
   }
 }
 

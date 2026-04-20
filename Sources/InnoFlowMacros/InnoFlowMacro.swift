@@ -528,7 +528,7 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       return
     }
 
-    let existingCaseNames = collectActionCaseNames(in: actionEnum)
+    let existingSetters = collectActionSetters(in: actionEnum)
 
     for field in bindableFields {
       let bareFieldName =
@@ -537,25 +537,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
         : field.name
       let expectedCaseName = "set\(bareFieldName.prefix(1).uppercased())\(bareFieldName.dropFirst())"
 
-      // Case-insensitive suffix match lets field names containing acronyms
-      // (for example `mfaCode`) match user-preferred casings like
-      // `setMFACode(_:)` without a false-positive warning. Any existing
-      // `setX` or `_setX` case whose suffix is the same (lowercased) as the
-      // bare field name is accepted. Non-`set`-prefixed cases are ignored.
-      let fieldLower = bareFieldName.lowercased()
-      let existingCaseMatches = existingCaseNames.contains { caseName in
-        let trimmed: Substring
-        if caseName.hasPrefix("_set") {
-          trimmed = caseName.dropFirst(4)
-        } else if caseName.hasPrefix("set") {
-          trimmed = caseName.dropFirst(3)
-        } else {
-          return false
-        }
-        return trimmed.lowercased() == fieldLower
-      }
-
-      if existingCaseMatches {
+      let matchingSetters = matchingActionSetters(for: bareFieldName, in: existingSetters)
+      if matchingSetters.contains(where: { setterSatisfiesBindableField($0, field: field) }) {
         continue
       }
 
@@ -563,6 +546,7 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
         field: field,
         expectedCaseName: expectedCaseName,
         actionEnum: actionEnum,
+        canAddFixIt: matchingSetters.isEmpty,
         context: context
       )
     }
@@ -632,23 +616,71 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     return nil
   }
 
-  private static func collectActionCaseNames(in actionEnum: EnumDeclSyntax) -> Set<String> {
-    var names: Set<String> = []
+  private static func collectActionSetters(in actionEnum: EnumDeclSyntax) -> [ActionSetterInfo] {
+    var setters: [ActionSetterInfo] = []
     for member in actionEnum.memberBlock.members {
       guard let enumCase = member.decl.as(EnumCaseDeclSyntax.self) else {
         continue
       }
       for element in enumCase.elements {
-        names.insert(element.name.text)
+        if let setter = actionSetterInfo(for: element) {
+          setters.append(setter)
+        }
       }
     }
-    return names
+    return setters
+  }
+
+  private static func actionSetterInfo(for element: EnumCaseElementSyntax) -> ActionSetterInfo? {
+    let caseName = element.name.text
+    let suffixLowercased: String
+    if caseName.hasPrefix("_set") {
+      suffixLowercased = String(caseName.dropFirst(4)).lowercased()
+    } else if caseName.hasPrefix("set") {
+      suffixLowercased = String(caseName.dropFirst(3)).lowercased()
+    } else {
+      return nil
+    }
+
+    let parameters = Array(element.parameterClause?.parameters ?? [])
+    let singlePayloadType = parameters.count == 1 ? parameters[0].type.trimmedDescription : nil
+    return ActionSetterInfo(
+      suffixLowercased: suffixLowercased,
+      payloadCount: parameters.count,
+      singlePayloadType: singlePayloadType
+    )
+  }
+
+  private static func matchingActionSetters(
+    for fieldName: String,
+    in setters: [ActionSetterInfo]
+  ) -> [ActionSetterInfo] {
+    let fieldLower = fieldName.lowercased()
+    return setters.filter { $0.suffixLowercased == fieldLower }
+  }
+
+  private static func setterSatisfiesBindableField(
+    _ setter: ActionSetterInfo,
+    field: BindableFieldInfo
+  ) -> Bool {
+    guard setter.payloadCount == 1 else {
+      return false
+    }
+
+    guard let fieldType = field.inferredType else {
+      // Without a trustworthy field type, accept a same-name single-payload
+      // setter and avoid guessing at a type mismatch.
+      return true
+    }
+
+    return setter.singlePayloadType == fieldType
   }
 
   private static func emitMissingBindableFieldSetterDiagnostic(
     field: BindableFieldInfo,
     expectedCaseName: String,
     actionEnum: EnumDeclSyntax,
+    canAddFixIt: Bool,
     context: some MacroExpansionContext
   ) {
     let message = BindableFieldDiagnosticMessage.missingSetter(
@@ -657,7 +689,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       valueType: field.inferredType
     )
 
-    if let inferredType = field.inferredType,
+    if canAddFixIt,
+      let inferredType = field.inferredType,
       let replacement = actionEnumWithAppendedCase(
         actionEnum,
         caseName: expectedCaseName,
@@ -818,6 +851,12 @@ private struct BindableFieldInfo {
   let node: Syntax
 }
 
+private struct ActionSetterInfo {
+  let suffixLowercased: String
+  let payloadCount: Int
+  let singlePayloadType: String?
+}
+
 extension Trivia {
   /// Returns just the indentation portion (trailing spaces/tabs) of the
   /// trivia that follows the last newline. Used to inherit enum member
@@ -969,7 +1008,7 @@ enum BindableFieldDiagnosticMessage: DiagnosticMessage {
     case .missingSetter(let field, let expectedCase, let valueType):
       let payload = valueType ?? "Value"
       return
-        "`@BindableField var \(field)` has no matching `case \(expectedCase)(\(payload))` in `Action` — `store.binding(\\.$\(field), to:)` cannot be used until one is added"
+        "`@BindableField var \(field)` has no matching `case \(expectedCase)(\(payload))` in `Action` — `store.binding(\\.$\(field), to:)` requires a single `\(payload)` payload setter"
     }
   }
 
