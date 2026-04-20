@@ -58,6 +58,10 @@ struct EffectTimingRecorderTests {
       reducer: ProbeFeature(),
       instrumentation: recorder.instrumentation()
     )
+    // Keep the store alive until the assertions finish. Under CI scheduling,
+    // ARC can release it after the final direct use (`send(.start)`), which
+    // records `effectsCancelled` from `deinit` before `runFinished` lands.
+    defer { _ = store }
 
     store.send(.start)
     // Poll the recorder's observed phases instead of relying on a fixed
@@ -85,6 +89,7 @@ struct EffectTimingRecorderTests {
       reducer: ProbeFeature(),
       instrumentation: recorder.instrumentation()
     )
+    defer { _ = store }
 
     store.send(.start)
     guard await waitForPhases(.runStarted, .runFinished, in: recorder) else {
@@ -132,6 +137,7 @@ struct EffectTimingRecorderTests {
       reducer: ProbeFeature(),
       instrumentation: combined
     )
+    defer { _ = store }
 
     store.send(.start)
     guard await waitForPhases(.runStarted, in: recorder) else {
@@ -155,6 +161,7 @@ struct EffectTimingRecorderTests {
       reducer: ProbeFeature(),
       instrumentation: recorder.instrumentation()
     )
+    defer { _ = store }
 
     store.send(.start)
     await store.cancelEffects(identifiedBy: "probe-start")
