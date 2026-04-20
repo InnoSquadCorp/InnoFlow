@@ -142,11 +142,22 @@ search_lines_excluding() {
 require_pattern_in_every_file() {
   local pattern="$1"
   shift
+  local label="docs/DEPENDENCY_PATTERNS.md"
+
+  if [[ "${1:-}" == "--label" ]]; then
+    shift
+    label="${1:-$label}"
+    shift || true
+  fi
 
   local file
   for file in "$@"; do
+    if [[ ! -f "$file" ]]; then
+      echo "[principle-gates] Failed: $file not found"
+      return 1
+    fi
     if ! search_lines "$pattern" "$file" >/dev/null; then
-      echo "[principle-gates] Failed: $file must link to docs/DEPENDENCY_PATTERNS.md"
+      echo "[principle-gates] Failed: $file must link to $label"
       return 1
     fi
   done

@@ -164,10 +164,12 @@ it through `context.sleep(for:)` — they do **not** declare a clock field in
 case .subscribe:
   state.isSubscribed = true
   return .run { send, context in
+    var counter = 0
     while true {
       try await context.sleep(for: dependencies.tickInterval)
       try await context.checkCancellation()
-      await send(._tick)
+      counter += 1
+      await send(._tick(counter))
     }
   }
   .cancellable("realtime-stream", cancelInFlight: true)
@@ -202,11 +204,25 @@ the reducer — it is not part of any feature's `Dependencies`.
 
 ```swift
 private struct MockAuthService: AuthServiceProtocol {
-  let token: String = "tok"
-  func signIn(username: String, password: String) async throws -> AuthSignInOutcome {
-    .authenticated(token: token)
+  func submitCredentials(
+    username: String,
+    password: String
+  ) async throws -> AuthServiceChallenge {
+    if username.contains("mfa") {
+      return .mfaRequired(challengeID: "challenge-\(username)")
+    }
+    if password == "wrong" {
+      throw AuthServiceError(errorDescription: "Invalid credentials")
+    }
+    return .authenticated(sessionID: "session-\(password)")
   }
-  func submitMFA(code: String) async throws -> String { token }
+
+  func submitMFA(code: String) async throws -> AuthServiceResult {
+    if code == "000000" {
+      throw AuthServiceError(errorDescription: "MFA code rejected")
+    }
+    return .authenticated(sessionID: "session-mfa-\(code)")
+  }
 }
 
 @Test

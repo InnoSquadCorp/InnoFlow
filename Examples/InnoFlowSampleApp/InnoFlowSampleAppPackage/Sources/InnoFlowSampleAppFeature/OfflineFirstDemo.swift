@@ -1,11 +1,12 @@
 // Offline-first optimistic update + debounced save.
 //
 // Two effect shapes stack here:
-//   1. `.debounce(id: ..., for:)` collapses consecutive edits into a single
-//      background save after the user stops typing.
+//   1. A manual `run + context.sleep + cancellable(id:, cancelInFlight:)`
+//      debounce collapses consecutive edits into a single background save
+//      after the user stops typing.
 //   2. Optimistic updates apply immediately to local state, and a background
-//      task emits either `_saveConfirmed` or `_saveRolledBack(previous:)` so
-//      the reducer can resolve the truth once the server responds.
+//      task emits either `_saveConfirmed` or `_saveRolledBack(...)` so the
+//      reducer can resolve the truth once the server responds.
 //
 // `PhaseMap` is intentionally absent — optimistic state is a per-item
 // concern and does not need a feature-wide phase graph.
@@ -142,6 +143,7 @@ struct OfflineFirstFeature {
         let previousTitle = draft.lastSavedTitle
         return .run { send, context in
           do {
+            try await context.checkCancellation()
             try await repository.save(id: id, title: pendingTitle)
             try await context.checkCancellation()
             await send(._saveConfirmed(title: pendingTitle))
@@ -167,15 +169,29 @@ struct OfflineFirstFeature {
         return .none
 
       case ._saveRolledBack(let previous, let failedTitle, let reason):
-        if state.draft.inFlightTitle == failedTitle {
+        let isInFlight = state.draft.inFlightTitle == failedTitle
+        let isCurrent = state.draft.title == failedTitle
+
+        if isInFlight || isCurrent {
           state.draft.inFlightTitle = nil
         }
         state.errorMessage = reason
-        if state.draft.title == failedTitle {
+
+        switch (isInFlight, isCurrent) {
+        case (true, true):
           state.draft.title = previous
-          state.log.append("rolled back to '\(previous)': \(reason)")
-        } else {
-          state.log.append("stale failure for '\(failedTitle)': \(reason)")
+          state.log.append(
+            "rolled back current in-flight '\(failedTitle)' to '\(previous)': \(reason)"
+          )
+        case (true, false):
+          state.log.append("cleared stale in-flight '\(failedTitle)': \(reason)")
+        case (false, true):
+          state.draft.title = previous
+          state.log.append(
+            "restored current '\(failedTitle)' without matching in-flight save: \(reason)"
+          )
+        case (false, false):
+          state.log.append("ignored stale rollback for '\(failedTitle)': \(reason)")
         }
         return .none
       }
@@ -235,6 +251,7 @@ struct OfflineFirstDemoView: View {
             store.send(.saveNow)
           }
           .buttonStyle(.bordered)
+          .disabled(!store.draft.isDirty)
           .accessibilityIdentifier("offline.save-now")
 
           if let errorMessage = store.errorMessage {

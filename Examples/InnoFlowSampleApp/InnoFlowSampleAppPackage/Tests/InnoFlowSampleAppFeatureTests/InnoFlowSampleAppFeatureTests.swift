@@ -683,7 +683,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.log = [
         "edit: 'Broken edit'",
         "save attempt: 'Broken edit'",
-        "rolled back to 'Offline-first draft': mock-rejected",
+        "rolled back current in-flight 'Broken edit' to 'Offline-first draft': mock-rejected",
       ]
     }
   }
@@ -692,7 +692,7 @@ struct InnoFlowSampleAppFeatureTests {
   @MainActor
   func offlineFirstSaveNowCancelsPendingDebounce() async {
     let clock = ManualTestClock()
-    let repository = MockDraftRepository()
+    let repository = MockDraftRepository(clock: clock)
     let store = TestStore(
       reducer: OfflineFirstFeature(repository: repository, debounceDuration: .milliseconds(100)),
       initialState: .init(),
@@ -734,10 +734,11 @@ struct InnoFlowSampleAppFeatureTests {
     let clock = ManualTestClock()
     let repository = MockDraftRepository(
       failureMode: .alwaysReject,
-      saveDelay: .milliseconds(20)
+      saveDelay: .milliseconds(20),
+      clock: clock
     )
     let store = TestStore(
-      reducer: OfflineFirstFeature(repository: repository, debounceDuration: .milliseconds(1)),
+      reducer: OfflineFirstFeature(repository: repository, debounceDuration: .seconds(1)),
       initialState: .init(),
       clock: clock
     )
@@ -754,11 +755,14 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
       $0.log = ["edit: 'Broken edit'", "save attempt: 'Broken edit'"]
     }
+    guard await waitForSleeperRegistration(clock) else { return }
 
     await store.send(.titleChanged("Newer local edit")) {
       $0.draft.title = "Newer local edit"
       $0.log = ["edit: 'Broken edit'", "save attempt: 'Broken edit'", "edit: 'Newer local edit'"]
     }
+
+    await clock.advance(by: .milliseconds(20))
 
     await store.receive(
       ._saveRolledBack(
@@ -773,7 +777,7 @@ struct InnoFlowSampleAppFeatureTests {
         "edit: 'Broken edit'",
         "save attempt: 'Broken edit'",
         "edit: 'Newer local edit'",
-        "stale failure for 'Broken edit': mock-rejected",
+        "cleared stale in-flight 'Broken edit': mock-rejected",
       ]
     }
 
@@ -924,21 +928,28 @@ private actor MockDraftRepository: DraftRepositoryProtocol {
 
   private let failureMode: FailureMode
   private let saveDelay: Duration
+  private let clock: ManualTestClock?
   private(set) var saveCount = 0
 
   init(
     shouldFail: Bool = false,
     failureMode: FailureMode? = nil,
-    saveDelay: Duration = .zero
+    saveDelay: Duration = .zero,
+    clock: ManualTestClock? = nil
   ) {
     self.failureMode = failureMode ?? (shouldFail ? .alwaysReject : .never)
     self.saveDelay = saveDelay
+    self.clock = clock
   }
 
   func save(id: UUID, title: String) async throws {
     saveCount += 1
     if saveDelay > .zero {
-      try await Task.sleep(for: saveDelay)
+      if let clock {
+        try await clock.sleep(for: saveDelay)
+      } else {
+        try await Task.sleep(for: saveDelay)
+      }
     }
     if failureMode == .alwaysReject {
       throw DraftRepositoryError(errorDescription: "mock-rejected")

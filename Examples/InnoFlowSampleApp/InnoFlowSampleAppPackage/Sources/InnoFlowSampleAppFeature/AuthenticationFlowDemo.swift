@@ -149,6 +149,52 @@ struct AuthenticationFlowFeature {
     phaseMap.derivedGraph
   }
 
+  private func submitCredentialsEffect(
+    username: String,
+    password: String
+  ) -> EffectTask<Action> {
+    let authService = dependencies.authService
+    return .run { send, context in
+      do {
+        let challenge = try await authService.submitCredentials(
+          username: username,
+          password: password
+        )
+        try await context.checkCancellation()
+        switch challenge {
+        case .authenticated(let sessionID):
+          await send(._authenticated(sessionID))
+        case .mfaRequired(let challengeID):
+          await send(._mfaChallenge(challengeID))
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        await send(._failed(error.localizedDescription))
+      }
+    }
+    .cancellable("auth-submit", cancelInFlight: true)
+  }
+
+  private func submitMFAEffect(code: String) -> EffectTask<Action> {
+    let authService = dependencies.authService
+    return .run { send, context in
+      do {
+        let result = try await authService.submitMFA(code: code)
+        try await context.checkCancellation()
+        switch result {
+        case .authenticated(let sessionID):
+          await send(._authenticated(sessionID))
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        await send(._failed(error.localizedDescription))
+      }
+    }
+    .cancellable("auth-submit", cancelInFlight: true)
+  }
+
   var body: some Reducer<State, Action> {
     let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
@@ -172,48 +218,13 @@ struct AuthenticationFlowFeature {
         state.lastSubmissionStage = .credentials
         let username = state.username
         let password = state.password
-        let authService = dependencies.authService
-        return .run { send, context in
-          do {
-            let challenge = try await authService.submitCredentials(
-              username: username,
-              password: password
-            )
-            try await context.checkCancellation()
-            switch challenge {
-            case .authenticated(let sessionID):
-              await send(._authenticated(sessionID))
-            case .mfaRequired(let challengeID):
-              await send(._mfaChallenge(challengeID))
-            }
-          } catch is CancellationError {
-            return
-          } catch {
-            await send(._failed(error.localizedDescription))
-          }
-        }
-        .cancellable("auth-submit", cancelInFlight: true)
+        return submitCredentialsEffect(username: username, password: password)
 
       case .submitMFA:
         state.errorMessage = nil
         state.lastSubmissionStage = .mfa
         let code = state.mfaCode
-        let authService = dependencies.authService
-        return .run { send, context in
-          do {
-            let result = try await authService.submitMFA(code: code)
-            try await context.checkCancellation()
-            switch result {
-            case .authenticated(let sessionID):
-              await send(._authenticated(sessionID))
-            }
-          } catch is CancellationError {
-            return
-          } catch {
-            await send(._failed(error.localizedDescription))
-          }
-        }
-        .cancellable("auth-submit", cancelInFlight: true)
+        return submitMFAEffect(code: code)
 
       case .retry:
         switch state.lastSubmissionStage {
@@ -221,47 +232,12 @@ struct AuthenticationFlowFeature {
           state.errorMessage = nil
           let username = state.username
           let password = state.password
-          let authService = dependencies.authService
-          return .run { send, context in
-            do {
-              let challenge = try await authService.submitCredentials(
-                username: username,
-                password: password
-              )
-              try await context.checkCancellation()
-              switch challenge {
-              case .authenticated(let sessionID):
-                await send(._authenticated(sessionID))
-              case .mfaRequired(let challengeID):
-                await send(._mfaChallenge(challengeID))
-              }
-            } catch is CancellationError {
-              return
-            } catch {
-              await send(._failed(error.localizedDescription))
-            }
-          }
-          .cancellable("auth-submit", cancelInFlight: true)
+          return submitCredentialsEffect(username: username, password: password)
 
         case .mfa:
           state.errorMessage = nil
           let code = state.mfaCode
-          let authService = dependencies.authService
-          return .run { send, context in
-            do {
-              let result = try await authService.submitMFA(code: code)
-              try await context.checkCancellation()
-              switch result {
-              case .authenticated(let sessionID):
-                await send(._authenticated(sessionID))
-              }
-            } catch is CancellationError {
-              return
-            } catch {
-              await send(._failed(error.localizedDescription))
-            }
-          }
-          .cancellable("auth-submit", cancelInFlight: true)
+          return submitMFAEffect(code: code)
         }
 
       case .cancelSubmission:
@@ -276,6 +252,8 @@ struct AuthenticationFlowFeature {
 
       case ._mfaChallenge(let challengeID):
         state.challengeID = challengeID
+        // `submitCredentials` resets `state.lastSubmissionStage` to `.credentials`,
+        // but once MFA is required we intentionally flip it to `.mfa` so retry targets that step.
         state.lastSubmissionStage = .mfa
         return .none
 
@@ -325,6 +303,7 @@ struct AuthenticationFlowDemoView: View {
             text: store.binding(\.$username, send: AuthenticationFlowFeature.Action.setUsername)
           )
           .textFieldStyle(.roundedBorder)
+          .accessibilityLabel(Text("Email"))
           .accessibilityIdentifier("auth.username")
 
           SecureField(
@@ -332,6 +311,7 @@ struct AuthenticationFlowDemoView: View {
             text: store.binding(\.$password, send: AuthenticationFlowFeature.Action.setPassword)
           )
           .textFieldStyle(.roundedBorder)
+          .accessibilityLabel(Text("Password"))
           .accessibilityIdentifier("auth.password")
 
           if requiresMFAInput {
@@ -340,6 +320,7 @@ struct AuthenticationFlowDemoView: View {
               text: store.binding(\.$mfaCode, send: AuthenticationFlowFeature.Action.setMFACode)
             )
             .textFieldStyle(.roundedBorder)
+            .accessibilityLabel(Text("MFA code"))
             .accessibilityIdentifier("auth.mfa-code")
           }
 

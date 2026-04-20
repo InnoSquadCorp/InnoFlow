@@ -128,9 +128,13 @@ struct ListDetailPaginationFeature {
         case .loadFirstPage:
           state.articles = []
           state.currentPage = -1
+          state.isLoading = false
           state.hasReachedEnd = false
           state.errorMessage = nil
-          return .send(.loadNextPage)
+          return .concatenate(
+            .cancel("list-pagination"),
+            .send(.loadNextPage)
+          )
 
         case .loadNextPage:
           guard !state.isLoading, !state.hasReachedEnd else { return .none }

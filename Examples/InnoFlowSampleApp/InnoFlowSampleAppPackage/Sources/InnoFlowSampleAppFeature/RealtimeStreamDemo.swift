@@ -54,15 +54,17 @@ struct RealtimeStreamFeature {
           var counter = 0
           while true {
             do {
+              try await context.checkCancellation()
               try await context.sleep(for: interval)
               try await context.checkCancellation()
+              counter += 1
+              await send(._tick(counter))
             } catch is CancellationError {
               return
             } catch {
+              print("RealtimeStreamFeature stream loop failed: \(error)")
               return
             }
-            counter += 1
-            await send(._tick(counter))
           }
         }
         .cancellable("realtime-stream", cancelInFlight: true)
@@ -113,6 +115,8 @@ struct RealtimeStreamDemoView: View {
               store.send(.subscribe)
             }
             .buttonStyle(.borderedProminent)
+            .accessibilityLabel(Text(store.isSubscribed ? "Restart" : "Subscribe"))
+            .accessibilityHint(Text("Start or restart realtime stream subscription"))
             .accessibilityIdentifier("realtime.subscribe")
 
             Button("Unsubscribe") {
@@ -120,12 +124,16 @@ struct RealtimeStreamDemoView: View {
             }
             .buttonStyle(.bordered)
             .disabled(!store.isSubscribed)
+            .accessibilityLabel(Text("Unsubscribe"))
+            .accessibilityHint(Text("Stop realtime stream subscription"))
             .accessibilityIdentifier("realtime.unsubscribe")
 
             Button("Clear") {
               store.send(.clearTicks)
             }
             .buttonStyle(.bordered)
+            .accessibilityLabel(Text("Clear"))
+            .accessibilityHint(Text("Clear received realtime stream ticks"))
             .accessibilityIdentifier("realtime.clear")
           }
 
