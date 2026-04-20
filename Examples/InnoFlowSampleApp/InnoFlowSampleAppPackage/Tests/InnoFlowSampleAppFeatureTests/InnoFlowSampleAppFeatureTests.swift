@@ -864,7 +864,11 @@ struct InnoFlowSampleAppFeatureTests {
     await store.send(.subscribe) {
       $0.isSubscribed = true
     }
-    guard await waitForSleeperRegistration(clock) else { return }
+    // Restarting a cancellable sleep can keep `sleeperCount` at 1 across the
+    // cancel + re-register boundary, so polling that count is not enough to
+    // prove the replacement loop is ready. Give the cooperative executor a
+    // real wall-clock slice to process the restart before advancing.
+    try? await Task.sleep(for: .milliseconds(100))
 
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(1)) {
