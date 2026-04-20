@@ -181,6 +181,7 @@ struct EffectTimingRecorderTests {
   /// Yields until the recorder has observed every phase in `phases`, up to a
   /// generous wall-clock bound. Release-mode scheduling can delay the final
   /// `runFinished` Task hop more than a fixed yield count would allow.
+  @MainActor
   private func waitForPhases(
     _ phases: EffectTimingRecorder.Phase...,
     in recorder: EffectTimingRecorder,
@@ -192,14 +193,16 @@ struct EffectTimingRecorderTests {
     let deadline = clock.now + timeout
     var lastCaptured: Set<EffectTimingRecorder.Phase> = []
     while clock.now < deadline {
-      _ = store
+      let retainedStore = store
       let entries = await recorder.entries()
+      _ = retainedStore
       let captured = Set(entries.map(\.phase))
       lastCaptured = captured
       if expected.isSubset(of: lastCaptured) {
         return true
       }
       await Task.yield()
+      _ = retainedStore
     }
     let expectedPhases = expected.map(\.rawValue).sorted().joined(separator: ", ")
     let capturedPhases = lastCaptured.map(\.rawValue).sorted().joined(separator: ", ")
@@ -209,6 +212,7 @@ struct EffectTimingRecorderTests {
     return false
   }
 
+  @MainActor
   private func waitForRunStartedCount(
     atLeast expectedCount: Int,
     in counter: RunStartedCounter,
@@ -219,12 +223,14 @@ struct EffectTimingRecorderTests {
     let deadline = clock.now + timeout
     var observedCount = 0
     while clock.now < deadline {
-      _ = store
+      let retainedStore = store
       observedCount = await counter.value
+      _ = retainedStore
       if observedCount >= expectedCount {
         return true
       }
       await Task.yield()
+      _ = retainedStore
     }
     Issue.record(
       "Timed out waiting for run-start counter >= \(expectedCount); observed \(observedCount)"
