@@ -67,7 +67,7 @@ struct EffectTimingRecorderTests {
     // Poll the recorder's observed phases instead of relying on a fixed
     // yield count; release-mode scheduling can delay when the probe run
     // fully drains.
-    guard await waitForPhases(.runStarted, .runFinished, in: recorder) else {
+    guard await waitForPhases(.runStarted, .runFinished, in: recorder, retaining: store) else {
       return
     }
 
@@ -92,7 +92,7 @@ struct EffectTimingRecorderTests {
     defer { _ = store }
 
     store.send(.start)
-    guard await waitForPhases(.runStarted, .runFinished, in: recorder) else {
+    guard await waitForPhases(.runStarted, .runFinished, in: recorder, retaining: store) else {
       return
     }
 
@@ -140,10 +140,11 @@ struct EffectTimingRecorderTests {
     defer { _ = store }
 
     store.send(.start)
-    guard await waitForPhases(.runStarted, in: recorder) else {
+    guard await waitForPhases(.runStarted, in: recorder, retaining: store) else {
       return
     }
-    guard await waitForRunStartedCount(atLeast: 1, in: userObservedActions) else {
+    guard await waitForRunStartedCount(atLeast: 1, in: userObservedActions, retaining: store)
+    else {
       return
     }
 
@@ -165,7 +166,7 @@ struct EffectTimingRecorderTests {
 
     store.send(.start)
     await store.cancelEffects(identifiedBy: "probe-start")
-    guard await waitForPhases(.effectsCancelled, in: recorder) else {
+    guard await waitForPhases(.effectsCancelled, in: recorder, retaining: store) else {
       return
     }
 
@@ -183,6 +184,7 @@ struct EffectTimingRecorderTests {
   private func waitForPhases(
     _ phases: EffectTimingRecorder.Phase...,
     in recorder: EffectTimingRecorder,
+    retaining store: Store<ProbeFeature>? = nil,
     timeout: Duration = .seconds(5)
   ) async -> Bool {
     let expected = Set(phases)
@@ -190,6 +192,7 @@ struct EffectTimingRecorderTests {
     let deadline = clock.now + timeout
     var lastCaptured: Set<EffectTimingRecorder.Phase> = []
     while clock.now < deadline {
+      _ = store
       let entries = await recorder.entries()
       let captured = Set(entries.map(\.phase))
       lastCaptured = captured
@@ -209,12 +212,14 @@ struct EffectTimingRecorderTests {
   private func waitForRunStartedCount(
     atLeast expectedCount: Int,
     in counter: RunStartedCounter,
+    retaining store: Store<ProbeFeature>? = nil,
     timeout: Duration = .seconds(5)
   ) async -> Bool {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
     var observedCount = 0
     while clock.now < deadline {
+      _ = store
       observedCount = await counter.value
       if observedCount >= expectedCount {
         return true
