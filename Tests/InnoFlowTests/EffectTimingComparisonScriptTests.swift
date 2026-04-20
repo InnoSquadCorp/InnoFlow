@@ -68,6 +68,36 @@ struct EffectTimingComparisonScriptTests {
     )
   }
 
+  @Test("Comparison script rejects tolerance values outside 0...1")
+  func comparisonScriptRejectsOutOfRangeTolerance() throws {
+    let result = try runComparisonScript(
+      baselineEntries: matchedRunEntries(durations: [100, 110, 120]),
+      currentEntries: matchedRunEntries(durations: [105, 115, 120]),
+      tolerance: "1.5"
+    )
+
+    #expect(result.terminationStatus == 1)
+    #expect(result.stderr.contains("--tolerance must be within 0..1"))
+  }
+
+  @Test("Comparison script p95 uses the ceiling index for 10-sample fixtures")
+  func comparisonScriptP95UsesCeilingIndex() throws {
+    let result = try runComparisonScript(
+      baselineEntries: matchedRunEntries(
+        durations: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100]
+      ),
+      currentEntries: matchedRunEntries(
+        durations: [100, 100, 100, 100, 100, 100, 100, 100, 100, 1_000]
+      ),
+      tolerance: "1.0"
+    )
+
+    #expect(result.terminationStatus == 1)
+    #expect(result.stderr.contains("FAIL"))
+    #expect(result.stderr.contains("\"baselineRuns\": \"10\""))
+    #expect(result.stderr.contains("\"currentRuns\": \"10\""))
+  }
+
   // MARK: - Helpers
 
   private func runComparisonScript(

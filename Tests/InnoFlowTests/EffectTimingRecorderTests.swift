@@ -57,13 +57,12 @@ struct EffectTimingRecorderTests {
     )
 
     store.send(.start)
-    // Drain pending effect work so the recorder sees both runStarted and
-    // runFinished for the probe run. `runFinished` is emitted after the
-    // effect closure returns — under release optimization that trailing
-    // task hop can be slower than the 50-yield loop we use under debug, so
-    // we poll on the recorder's own view of the event stream instead of a
-    // fixed yield count. The outer bound prevents a truly hung test.
-    await waitForPhases(.runStarted, .runFinished, in: recorder)
+    // Poll the recorder's observed phases instead of relying on a fixed
+    // yield count; release-mode scheduling can delay when the probe run
+    // fully drains.
+    guard await waitForPhases(.runStarted, .runFinished, in: recorder) else {
+      return
+    }
 
     let entries = await recorder.entries()
     let phases = entries.map(\.phase)
@@ -85,7 +84,9 @@ struct EffectTimingRecorderTests {
     )
 
     store.send(.start)
-    await waitForPhases(.runStarted, .runFinished, in: recorder)
+    guard await waitForPhases(.runStarted, .runFinished, in: recorder) else {
+      return
+    }
 
     let url = FileManager.default
       .temporaryDirectory
@@ -130,9 +131,12 @@ struct EffectTimingRecorderTests {
     )
 
     store.send(.start)
-    await waitForPhases(.runStarted, in: recorder)
-    // Give the user-supplied sink a chance to flush its own Task hop.
-    for _ in 0..<20 { await Task.yield() }
+    guard await waitForPhases(.runStarted, in: recorder) else {
+      return
+    }
+    guard await waitForRunStartedCount(atLeast: 1, in: userObservedActions) else {
+      return
+    }
 
     let observed = await userObservedActions.value
     #expect(observed >= 1)
@@ -151,7 +155,9 @@ struct EffectTimingRecorderTests {
 
     store.send(.start)
     await store.cancelEffects(identifiedBy: "probe-start")
-    await waitForPhases(.effectsCancelled, in: recorder)
+    guard await waitForPhases(.effectsCancelled, in: recorder) else {
+      return
+    }
 
     let entries = await recorder.entries()
     let cancelEntry = entries.first(where: { $0.phase == .effectsCancelled })
@@ -167,16 +173,48 @@ struct EffectTimingRecorderTests {
   private func waitForPhases(
     _ phases: EffectTimingRecorder.Phase...,
     in recorder: EffectTimingRecorder,
-    maximumYields: Int = 500
-  ) async {
+    timeout: Duration = .seconds(5)
+  ) async -> Bool {
     let expected = Set(phases)
-    for _ in 0..<maximumYields {
-      let captured = await Set(recorder.entries().map(\.phase))
-      if expected.isSubset(of: captured) {
-        return
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    var lastCaptured: Set<EffectTimingRecorder.Phase> = []
+    while clock.now < deadline {
+      let entries = await recorder.entries()
+      let captured = Set(entries.map(\.phase))
+      lastCaptured = captured
+      if expected.isSubset(of: lastCaptured) {
+        return true
       }
       await Task.yield()
     }
+    let expectedPhases = expected.map(\.rawValue).sorted().joined(separator: ", ")
+    let capturedPhases = lastCaptured.map(\.rawValue).sorted().joined(separator: ", ")
+    Issue.record(
+      "Timed out waiting for EffectTimingRecorder phases [\(expectedPhases)]; captured [\(capturedPhases)]"
+    )
+    return false
+  }
+
+  private func waitForRunStartedCount(
+    atLeast expectedCount: Int,
+    in counter: RunStartedCounter,
+    timeout: Duration = .seconds(5)
+  ) async -> Bool {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    var observedCount = 0
+    while clock.now < deadline {
+      observedCount = await counter.value
+      if observedCount >= expectedCount {
+        return true
+      }
+      await Task.yield()
+    }
+    Issue.record(
+      "Timed out waiting for run-start counter >= \(expectedCount); observed \(observedCount)"
+    )
+    return false
   }
 }
 

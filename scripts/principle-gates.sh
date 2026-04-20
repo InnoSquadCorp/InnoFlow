@@ -411,14 +411,12 @@ main() {
   # but fail under release optimization (e.g., flaky timing assertions that
   # assumed a fixed `Task.yield()` count).
   #
-  # `INNOFLOW_CHECK_EFFECT_BASELINE=1` opts the `EffectTimingBaselineGate` in
-  # for this run so release-mode scheduling regressions (the 2026-04 class of
-  # yield-count failures) are detected against
-  # `Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl` via
-  # `scripts/compare-effect-timings.sh`. The gate is silent locally and only
-  # activates under principle-gates so casual `swift test` stays noise-free.
+  # Run the full release suite without the timing baseline gate enabled. The
+  # baseline comparison uses absolute timings, so running it alongside the
+  # rest of the release suite creates cross-suite scheduler contention and can
+  # produce false regressions even when the implementation is healthy.
   RELEASE_TEST_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-test"
-  if ! INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
+  if ! swift test \
       --package-path "$ROOT_DIR" \
       --build-path "$RELEASE_TEST_BUILD_PATH" \
       -c release \
@@ -428,6 +426,26 @@ main() {
     exit 1
   fi
   rm -rf "$RELEASE_TEST_BUILD_PATH"
+
+  echo "[principle-gates] Running isolated release timing baseline gate"
+  # `INNOFLOW_CHECK_EFFECT_BASELINE=1` opts the `EffectTimingBaselineGate` in
+  # for this dedicated release-only run so release-mode scheduling regressions
+  # (the 2026-04 class of yield-count failures) are detected against
+  # `Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl` via
+  # `scripts/compare-effect-timings.sh` without unrelated suite load skewing
+  # the measured p95.
+  RELEASE_BASELINE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-baseline"
+  if ! INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
+      --package-path "$ROOT_DIR" \
+      --build-path "$RELEASE_BASELINE_BUILD_PATH" \
+      -c release \
+      -Xswiftc -warnings-as-errors \
+      --filter EffectTimingBaselineGate; then
+    echo "[principle-gates] Failed: isolated release timing baseline gate regressed"
+    rm -rf "$RELEASE_BASELINE_BUILD_PATH"
+    exit 1
+  fi
+  rm -rf "$RELEASE_BASELINE_BUILD_PATH"
 
   echo "[principle-gates] Running sample package tests"
   local sample_test_root

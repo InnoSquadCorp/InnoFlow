@@ -10,10 +10,10 @@
 // The gate is off by default because Swift Testing runs debug and release
 // suites on a variety of developer machines, where absolute run durations
 // can drift by an order of magnitude. It is opted in from
-// `scripts/principle-gates.sh`, which runs the test suite with
-// `INNOFLOW_CHECK_EFFECT_BASELINE=1` set so CI fails on genuine regressions
-// (for example the 2026-04 class of release-mode scheduling failures) but
-// local runs stay quiet.
+// `scripts/principle-gates.sh`, which runs this suite in a dedicated release
+// invocation with `INNOFLOW_CHECK_EFFECT_BASELINE=1` set so CI fails on
+// genuine regressions (for example the 2026-04 class of release-mode
+// scheduling failures) but local runs stay quiet.
 
 import Foundation
 import InnoFlow
@@ -48,7 +48,9 @@ struct EffectTimingBaselineGate {
       store.send(.reset)
       for _ in 0..<20 { await Task.yield() }
     }
-    await waitForMatchedRunPairs(count: 10, in: recorder)
+    guard await waitForMatchedRunPairs(count: 10, in: recorder) != nil else {
+      return
+    }
 
     let currentURL = FileManager.default
       .temporaryDirectory
@@ -64,20 +66,20 @@ struct EffectTimingBaselineGate {
       relativePath: "scripts/compare-effect-timings.sh"
     )
 
-    // Tolerance is intentionally loose: parallel test-suite scheduling under
-    // `swift test -c release` introduces scheduler contention that can
-    // multiply per-run latency by a large factor versus a solo run. The gate
-    // exists to catch catastrophic regressions (the 2026-04 class of release
-    // yield-count failures), not to enforce a specific absolute performance
-    // target — a 10x baseline inflation still trips the gate while normal
-    // CI variance passes cleanly.
+    // Tolerance is intentionally loose: even in the isolated release-only
+    // invocation from `principle-gates.sh`, machine-local drift can still
+    // move these timings materially. The gate exists to catch catastrophic
+    // regressions (the 2026-04 class of release yield-count failures), not to
+    // enforce a specific absolute performance target. The script contract
+    // expresses tolerance as a 0...1 relative increase, so `1.0` keeps the
+    // gate loose while still failing on multi-x baseline inflation.
     let process = Process()
     process.executableURL = scriptURL
     process.arguments = [
       "--baseline", baselineURL.path,
       "--current", currentURL.path,
       "--metric", "p95",
-      "--tolerance", "9.0",
+      "--tolerance", "1.0",
     ]
 
     let stdout = Pipe()
@@ -88,10 +90,16 @@ struct EffectTimingBaselineGate {
     try process.run()
     process.waitUntilExit()
 
-    let stdoutText = String(
-      data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    let stderrText = String(
-      data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let stdoutText =
+      String(
+        data: stdout.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+      ) ?? ""
+    let stderrText =
+      String(
+        data: stderr.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+      ) ?? ""
 
     if process.terminationStatus != 0 {
       Issue.record(
@@ -129,14 +137,22 @@ struct EffectTimingBaselineGate {
     count expectedCount: Int,
     in recorder: EffectTimingRecorder,
     maximumYields: Int = 500
-  ) async {
+  ) async -> [EffectTimingRecorder.Entry]? {
+    var lastEntries: [EffectTimingRecorder.Entry] = []
     for _ in 0..<maximumYields {
-      let entries = await recorder.entries()
-      if matchedRunPairCount(in: entries) >= expectedCount {
-        return
+      lastEntries = await recorder.entries()
+      if matchedRunPairCount(in: lastEntries) == expectedCount {
+        return lastEntries
       }
       await Task.yield()
     }
+    Issue.record(
+      """
+      Timed out waiting for \(expectedCount) matched EffectTimingRecorder run pairs.
+      Captured \(matchedRunPairCount(in: lastEntries)) matched pairs across \(lastEntries.count) entries.
+      """
+    )
+    return nil
   }
 
   private func matchedRunPairCount(in entries: [EffectTimingRecorder.Entry]) -> Int {

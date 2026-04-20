@@ -69,6 +69,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ ! "$TOLERANCE" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]]; then
+  echo "[compare-effect-timings] --tolerance must be within 0..1" >&2
+  exit 1
+fi
+
 if [[ -z "$BASELINE" || -z "$CURRENT" ]]; then
   echo "[compare-effect-timings] --baseline and --current are required" >&2
   print_help >&2
@@ -95,7 +100,7 @@ fi
 # delta and then reduce the distribution to a single number.
 case "$METRIC" in
   p95)
-    METRIC_FILTER='(($deltas | sort) as $d | if ($d | length) == 0 then 0 else $d[(($d | length - 1) * 0.95 | floor)] end)'
+    METRIC_FILTER='(($deltas | sort) as $d | if ($d | length) == 0 then 0 else $d[((($d | length) * 0.95 | ceil) - 1)] end)'
     ;;
   mean)
     METRIC_FILTER='(if ($deltas | length) == 0 then 0 else ($deltas | add) / ($deltas | length) end)'

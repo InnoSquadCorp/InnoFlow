@@ -535,7 +535,9 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
         field.name.hasPrefix("_") && field.name.count > 1
         ? String(field.name.dropFirst())
         : field.name
-      let expectedCaseName = "set\(bareFieldName.prefix(1).uppercased())\(bareFieldName.dropFirst())"
+      let capitalizedBareFieldName =
+        "\(bareFieldName.prefix(1).uppercased())\(bareFieldName.dropFirst())"
+      let expectedCaseName = "set\(capitalizedBareFieldName)"
 
       let matchingSetters = matchingActionSetters(for: bareFieldName, in: existingSetters)
       if matchingSetters.contains(where: { setterSatisfiesBindableField($0, field: field) }) {
@@ -745,7 +747,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       // not collapse onto the previous line.
       if lastItem.trailingTrivia.isEmpty {
         lastItem = lastItem.with(\.trailingTrivia, Trivia(pieces: [.newlines(1)]))
-        existingMembers = existingMembers.with(\.[existingMembers.index(before: existingMembers.endIndex)], lastItem)
+        let lastIndex = existingMembers.index(before: existingMembers.endIndex)
+        existingMembers = existingMembers.with(\.[lastIndex], lastItem)
       }
     }
 

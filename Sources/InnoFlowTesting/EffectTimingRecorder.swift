@@ -11,6 +11,7 @@
 
 import Foundation
 import InnoFlow
+import os
 
 /// Captures `StoreInstrumentation` events with monotonic nanosecond timestamps
 /// so performance regressions in effect scheduling / completion timing can be
@@ -56,9 +57,19 @@ public actor EffectTimingRecorder {
     }
   }
 
+  private struct StoredEntry: Sendable {
+    let ordering: UInt64
+    let entry: Entry
+  }
+
+  private struct StorageState: Sendable {
+    var nextOrdering: UInt64 = 0
+    var recordedEntries: [StoredEntry] = []
+  }
+
   private let clock = ContinuousClock()
   private let startedAt: ContinuousClock.Instant
-  private var recordedEntries: [Entry] = []
+  private let storage = OSAllocatedUnfairLock(initialState: StorageState())
 
   public init() {
     self.startedAt = ContinuousClock().now
@@ -66,19 +77,21 @@ public actor EffectTimingRecorder {
 
   // MARK: - Public API
 
-  /// Returns a snapshot of all entries recorded so far, ordered by insertion.
+  /// Returns a snapshot of all entries recorded so far, ordered by the
+  /// instrumentation callback sequence that captured them.
   public func entries() -> [Entry] {
-    recordedEntries
+    snapshotEntries()
   }
 
   /// Writes every recorded entry as a newline-delimited JSON stream. Existing
   /// contents of `url` are replaced.
   public func dumpJSONL(to url: URL) throws {
+    let entries = snapshotEntries()
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
 
     var payload = Data()
-    for entry in recordedEntries {
+    for entry in entries {
       let encoded = try encoder.encode(entry)
       payload.append(encoded)
       payload.append(0x0A)  // '\n'
@@ -91,11 +104,11 @@ public actor EffectTimingRecorder {
   /// `Store` event through this recorder.
   ///
   /// Each event captures its `timestampNanos` **synchronously inside the
-  /// instrumentation callback**, then enqueues an asynchronous `append` that
-  /// writes the pre-captured stamp. This keeps timing measurements faithful
-  /// to the `Store` event order even under heavy scheduler contention — the
-  /// actor hop only delays when the entry is visible, never the timestamp
-  /// it carries.
+  /// instrumentation callback**, then writes the pre-captured stamp into a
+  /// lock-backed buffer with a stable ordering token. This keeps timing
+  /// measurements faithful to the `Store` event order even under heavy
+  /// scheduler contention while making `entries()` / `dumpJSONL(to:)`
+  /// deterministic and complete.
   public nonisolated func instrumentation<Action: Sendable>() -> StoreInstrumentation<Action> {
     let recorder = self
     let startedAt = self.startedAt
@@ -105,94 +118,99 @@ public actor EffectTimingRecorder {
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
         let sequence = event.sequence ?? 0
         let effectID = event.cancellationID?.rawValue.description
-        Task {
-          await recorder.append(
-            phase: .runStarted,
-            sequence: sequence,
-            effectID: effectID,
-            actionLabel: nil,
-            timestampNanos: timestampNanos
-          )
-        }
+        recorder.record(
+          phase: .runStarted,
+          sequence: sequence,
+          effectID: effectID,
+          actionLabel: nil,
+          timestampNanos: timestampNanos
+        )
       },
       didFinishRun: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
         let sequence = event.sequence ?? 0
         let effectID = event.cancellationID?.rawValue.description
-        Task {
-          await recorder.append(
-            phase: .runFinished,
-            sequence: sequence,
-            effectID: effectID,
-            actionLabel: nil,
-            timestampNanos: timestampNanos
-          )
-        }
+        recorder.record(
+          phase: .runFinished,
+          sequence: sequence,
+          effectID: effectID,
+          actionLabel: nil,
+          timestampNanos: timestampNanos
+        )
       },
       didEmitAction: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
         let sequence = event.sequence ?? 0
         let effectID = event.cancellationID?.rawValue.description
         let label = Self.labelForAction(event.action)
-        Task {
-          await recorder.append(
-            phase: .actionEmitted,
-            sequence: sequence,
-            effectID: effectID,
-            actionLabel: label,
-            timestampNanos: timestampNanos
-          )
-        }
+        recorder.record(
+          phase: .actionEmitted,
+          sequence: sequence,
+          effectID: effectID,
+          actionLabel: label,
+          timestampNanos: timestampNanos
+        )
       },
       didDropAction: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
         let sequence = event.sequence ?? 0
         let effectID = event.cancellationID?.rawValue.description
         let label = event.action.map(Self.labelForAction)
-        Task {
-          await recorder.append(
-            phase: .actionDropped,
-            sequence: sequence,
-            effectID: effectID,
-            actionLabel: label,
-            timestampNanos: timestampNanos
-          )
-        }
+        recorder.record(
+          phase: .actionDropped,
+          sequence: sequence,
+          effectID: effectID,
+          actionLabel: label,
+          timestampNanos: timestampNanos
+        )
       },
       didCancelEffects: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
         let effectID = event.id?.rawValue.description
-        Task {
-          await recorder.append(
-            phase: .effectsCancelled,
-            sequence: event.sequence,
-            effectID: effectID,
-            actionLabel: nil,
-            timestampNanos: timestampNanos
-          )
-        }
+        recorder.record(
+          phase: .effectsCancelled,
+          sequence: event.sequence,
+          effectID: effectID,
+          actionLabel: nil,
+          timestampNanos: timestampNanos
+        )
       }
     )
   }
 
   // MARK: - Internal
 
-  func append(
+  private nonisolated func snapshotEntries() -> [Entry] {
+    storage.withLock { state in
+      state.recordedEntries
+        .sorted { lhs, rhs in lhs.ordering < rhs.ordering }
+        .map(\.entry)
+    }
+  }
+
+  private nonisolated func record(
     phase: Phase,
     sequence: UInt64,
     effectID: String?,
     actionLabel: String?,
     timestampNanos: UInt64
   ) {
-    recordedEntries.append(
-      Entry(
-        phase: phase,
-        sequence: sequence,
-        effectID: effectID,
-        actionLabel: actionLabel,
-        timestampNanos: timestampNanos
+    storage.withLock { state in
+      let ordering = state.nextOrdering
+      state.nextOrdering &+= 1
+      state.recordedEntries.append(
+        StoredEntry(
+          ordering: ordering,
+          entry: Entry(
+            phase: phase,
+            sequence: sequence,
+            effectID: effectID,
+            actionLabel: actionLabel,
+            timestampNanos: timestampNanos
+          )
+        )
       )
-    )
+    }
   }
 
   private nonisolated static func nanoseconds(from duration: Duration) -> UInt64 {
