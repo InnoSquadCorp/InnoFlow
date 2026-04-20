@@ -291,6 +291,8 @@ Use `SelectedStore` for read-only projections. Keep mutable child flows on `Scop
 
 Keep dependency ownership outside `InnoFlow` and pass constructor-time bundles into reducers.
 
+See [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for the canonical single-service / composite-bundle / framework-provided-clock patterns, the three test-substitution scenarios, and the anti-patterns InnoFlow explicitly rejects.
+
 ```swift
 import InnoFlow
 
@@ -660,12 +662,16 @@ let title = store.select(dependingOn: \.child.title) { $0.uppercased() }
 
 The single reference app is [`Examples/InnoFlowSampleApp`](./Examples/InnoFlowSampleApp).
 
-It contains four demos:
+It contains eight demos:
 
 - `Basics`
 - `Orchestration`
 - `Phase-Driven FSM`
 - `App-Boundary Navigation`
+- `Authentication Flow`
+- `List-Detail Pagination`
+- `Offline-First`
+- `Realtime Stream`
 
 This sample is the official integration reference for `InnoFlow`-only flows, explicit dependency
 bundles, and app-owned SwiftUI navigation state.
@@ -676,6 +682,10 @@ The sample hub also defines the stable accessibility identifiers used by UI smok
 - `sample.orchestration`
 - `sample.phase-driven-fsm`
 - `sample.router-composition`
+- `sample.authentication-flow`
+- `sample.list-detail-pagination`
+- `sample.offline-first`
+- `sample.realtime-stream`
 
 Launch-environment direct demo mode (`INNOFLOW_SAMPLE_DEMO`) remains available for feature-focused UI regression tests.
 

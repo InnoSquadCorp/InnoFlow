@@ -7,7 +7,7 @@ This document captures the stable framework guarantees that should not drift wit
 - InnoFlow owns business and domain transitions only.
 - The app layer owns window, scene, route, and spatial runtime concerns. On `visionOS`, immersive-space orchestration stays in the app layer.
 - Transport, reconnect, and session lifecycle stay outside InnoFlow.
-- Construction-time `Dependencies` bundles enter reducers explicitly. InnoFlow does not own the dependency graph.
+- Construction-time `Dependencies` bundles enter reducers explicitly. InnoFlow does not own the dependency graph. See [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for the canonical single-service / composite-bundle / framework-provided-clock patterns.
 
 ## Official authoring surface
 

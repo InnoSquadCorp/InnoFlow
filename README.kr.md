@@ -39,6 +39,7 @@ dependencies: [
 
 - [English README](./README.md)
 - [Architecture Contract](./ARCHITECTURE_CONTRACT.md)
+- [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
 - [Phase-Driven Modeling](./PHASE_DRIVEN_MODELING.md)
 - [Release Notes](./RELEASE_NOTES.md)
 - [Framework Evaluation](./FRAMEWORK_EVALUATION.md)

@@ -139,6 +139,30 @@ search_lines_excluding() {
   printf '%s\n' "$filtered"
 }
 
+require_pattern_in_every_file() {
+  local pattern="$1"
+  shift
+  local label="docs/DEPENDENCY_PATTERNS.md"
+
+  if [[ "${1:-}" == "--label" ]]; then
+    shift
+    label="${1:-$label}"
+    shift || true
+  fi
+
+  local file
+  for file in "$@"; do
+    if [[ ! -f "$file" ]]; then
+      echo "[principle-gates] Failed: $file not found"
+      return 1
+    fi
+    if ! search_lines "$pattern" "$file" >/dev/null; then
+      echo "[principle-gates] Failed: $file must link to $label"
+      return 1
+    fi
+  done
+}
+
 count_line_matches() {
   local pattern="$1"
   shift
@@ -294,6 +318,13 @@ main() {
   fi
   if [[ ! -f "Sources/InnoFlow/InnoFlow.docc/VisionOSIntegration.md" ]]; then
     echo "[principle-gates] Failed: VisionOSIntegration.md is missing"
+    exit 1
+  fi
+  if [[ ! -f "docs/DEPENDENCY_PATTERNS.md" ]]; then
+    echo "[principle-gates] Failed: docs/DEPENDENCY_PATTERNS.md is missing"
+    exit 1
+  fi
+  if ! require_pattern_in_every_file "docs/DEPENDENCY_PATTERNS\\.md" README.md README.kr.md README.jp.md README.cn.md ARCHITECTURE_CONTRACT.md; then
     exit 1
   fi
   README_SECTION_COUNT="$(count_line_matches '^## InnoFlow 3.0.0 direction$' README.md)"
