@@ -40,7 +40,10 @@ struct EffectTimingRecorderProbeFeature {
   }
 }
 
-@Suite("EffectTimingRecorder")
+// These tests share a fixed cancellation ID (`"probe-start"`) so the
+// cancellation-specific probe would otherwise be able to interfere with the
+// lifecycle/round-trip probes when Swift Testing runs the suite concurrently.
+@Suite("EffectTimingRecorder", .serialized)
 struct EffectTimingRecorderTests {
 
   typealias ProbeFeature = EffectTimingRecorderProbeFeature
