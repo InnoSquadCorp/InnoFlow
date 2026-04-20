@@ -300,7 +300,7 @@ struct AuthenticationFlowDemoView: View {
 
           TextField(
             "Email",
-            text: store.binding(\.$username, send: AuthenticationFlowFeature.Action.setUsername)
+            text: store.binding(\.$username, to: AuthenticationFlowFeature.Action.setUsername)
           )
           .textFieldStyle(.roundedBorder)
           .accessibilityLabel(Text("Email"))
@@ -308,7 +308,7 @@ struct AuthenticationFlowDemoView: View {
 
           SecureField(
             "Password",
-            text: store.binding(\.$password, send: AuthenticationFlowFeature.Action.setPassword)
+            text: store.binding(\.$password, to: AuthenticationFlowFeature.Action.setPassword)
           )
           .textFieldStyle(.roundedBorder)
           .accessibilityLabel(Text("Password"))
@@ -317,7 +317,7 @@ struct AuthenticationFlowDemoView: View {
           if requiresMFAInput {
             TextField(
               "MFA code",
-              text: store.binding(\.$mfaCode, send: AuthenticationFlowFeature.Action.setMFACode)
+              text: store.binding(\.$mfaCode, to: AuthenticationFlowFeature.Action.setMFACode)
             )
             .textFieldStyle(.roundedBorder)
             .accessibilityLabel(Text("MFA code"))

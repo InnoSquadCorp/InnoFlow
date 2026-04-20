@@ -202,6 +202,10 @@ main() {
   fi
 
   echo "[principle-gates] Checking binding authoring contract"
+  # `store.binding(\.$field, to: Feature.Action.setX)` is the preferred spelling;
+  # `send:` remains supported indefinitely as a semantic alias. The projected
+  # key-path check below is what the gate actually enforces — argument label is
+  # left to idiomatic judgment.
   if search_lines "BindableProperty\\(" "${DOC_AND_SAMPLE_PATHS[@]}"; then
     echo "[principle-gates] Failed: docs or canonical sample still author state with direct BindableProperty"
     exit 1
@@ -406,8 +410,19 @@ main() {
   # the release build gate above. Catches regressions where tests pass in debug
   # but fail under release optimization (e.g., flaky timing assertions that
   # assumed a fixed `Task.yield()` count).
+  #
+  # `INNOFLOW_CHECK_EFFECT_BASELINE=1` opts the `EffectTimingBaselineGate` in
+  # for this run so release-mode scheduling regressions (the 2026-04 class of
+  # yield-count failures) are detected against
+  # `Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl` via
+  # `scripts/compare-effect-timings.sh`. The gate is silent locally and only
+  # activates under principle-gates so casual `swift test` stays noise-free.
   RELEASE_TEST_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-test"
-  if ! swift test --package-path "$ROOT_DIR" --build-path "$RELEASE_TEST_BUILD_PATH" -c release -Xswiftc -warnings-as-errors; then
+  if ! INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
+      --package-path "$ROOT_DIR" \
+      --build-path "$RELEASE_TEST_BUILD_PATH" \
+      -c release \
+      -Xswiftc -warnings-as-errors; then
     echo "[principle-gates] Failed: 'swift test -c release' failed — release-mode regression"
     rm -rf "$RELEASE_TEST_BUILD_PATH"
     exit 1

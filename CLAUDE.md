@@ -24,7 +24,7 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
 2. Public feature authoring must not directly implement `func reduce(into:action:)`.
 3. Composition happens through `Reduce`, `CombineReducers`, and `Scope`.
 4. `PhaseTransitionGraph` is an opt-in topology validator, and `PhaseMap` is the canonical post-reduce phase ownership layer.
-5. Binding stays explicit through `@BindableField` (property wrapper) and `store.binding(\.$field, send:)`.
+5. Binding stays explicit through `@BindableField` (property wrapper) and `store.binding(\.$field, to:)` (or the equivalent `send:`).
 6. `BindableProperty` is a low-level storage type — never authored directly in public features.
 7. InnoFlow owns business/domain transitions only.
 

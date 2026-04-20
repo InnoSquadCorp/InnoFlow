@@ -336,7 +336,7 @@ struct ListDetailPaginationDetailView: View {
           .font(.body)
         Toggle(
           "Favorite",
-          isOn: store.binding(\.$isFavorite, send: SampleArticleRowFeature.Action.setFavorite)
+          isOn: store.binding(\.$isFavorite, to: SampleArticleRowFeature.Action.setFavorite)
         )
         .accessibilityIdentifier("list.detail.favorite-toggle")
         Spacer()

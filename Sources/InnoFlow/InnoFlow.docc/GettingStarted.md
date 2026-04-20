@@ -46,7 +46,7 @@ struct CounterView: View {
       Button("−") { store.send(.decrement) }
       Stepper(
         "Step: \(store.step)",
-        value: store.binding(\.$step, send: CounterFeature.Action.setStep)
+        value: store.binding(\.$step, to: CounterFeature.Action.setStep)
       )
     }
   }

@@ -204,7 +204,7 @@ struct PhaseDrivenFSMDemoView: View {
 
           Toggle(
             "Fail next load",
-            isOn: store.binding(\.$shouldFail, send: PhaseDrivenTodoFeature.Action.setShouldFail)
+            isOn: store.binding(\.$shouldFail, to: PhaseDrivenTodoFeature.Action.setShouldFail)
           )
           .accessibilityIdentifier("phase.fail-next-load")
           .accessibilityHint("Turns the next load request into a failed phase transition")
@@ -284,7 +284,7 @@ struct PhaseDrivenTodoRowView: View {
 
   var body: some View {
     Toggle(
-      isOn: store.binding(\.$isDone, send: PhaseDrivenTodoFeature.TodoAction.setDone)
+      isOn: store.binding(\.$isDone, to: PhaseDrivenTodoFeature.TodoAction.setDone)
     ) {
       VStack(alignment: .leading, spacing: 4) {
         Text(store.title)

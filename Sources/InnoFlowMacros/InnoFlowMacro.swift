@@ -91,6 +91,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       throw MacroError.invalidBodySignature(details: signatureIssues)
     }
 
+    diagnoseMissingBindableFieldSetters(in: structDecl, context: context)
+
     let typeName = structDecl.name.text
     let extensionDecl = try ExtensionDeclSyntax("extension \(raw: typeName): Reducer {}")
     return [extensionDecl]
@@ -137,6 +139,14 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
   {
     declaration.memberBlock.members
       .compactMap { $0.decl.as(EnumDeclSyntax.self) }
+      .first(where: { $0.name.text == typeName })
+  }
+
+  private static func findNestedStruct(named typeName: String, in declaration: StructDeclSyntax)
+    -> StructDeclSyntax?
+  {
+    declaration.memberBlock.members
+      .compactMap { $0.decl.as(StructDeclSyntax.self) }
       .first(where: { $0.name.text == typeName })
   }
 
@@ -492,6 +502,226 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       || typeName.hasSuffix("Action")
   }
 
+  // MARK: - @BindableField ↔ Action.setX 진단
+
+  /// Emits a warning + Fix-It for every `@BindableField` stored property in
+  /// `State` that lacks a matching `case set<Field>(Value)` case in `Action`.
+  ///
+  /// Only fires when the feature's State is a nested `struct` and Action is a
+  /// nested `enum`. Typealiased State / Action (for example `typealias Action
+  /// = Parent.ChildAction` in a row feature) is silently skipped — the macro
+  /// cannot inspect those stored members from the attached declaration, and
+  /// the project charter requires zero false positives.
+  private static func diagnoseMissingBindableFieldSetters(
+    in structDecl: StructDeclSyntax,
+    context: some MacroExpansionContext
+  ) {
+    guard let stateStruct = findNestedStruct(named: "State", in: structDecl) else {
+      return
+    }
+    guard let actionEnum = findNestedEnum(named: "Action", in: structDecl) else {
+      return
+    }
+
+    let bindableFields = collectBindableFields(in: stateStruct)
+    guard !bindableFields.isEmpty else {
+      return
+    }
+
+    let existingCaseNames = collectActionCaseNames(in: actionEnum)
+
+    for field in bindableFields {
+      let bareFieldName =
+        field.name.hasPrefix("_") && field.name.count > 1
+        ? String(field.name.dropFirst())
+        : field.name
+      let expectedCaseName = "set\(bareFieldName.prefix(1).uppercased())\(bareFieldName.dropFirst())"
+
+      // Case-insensitive suffix match lets field names containing acronyms
+      // (for example `mfaCode`) match user-preferred casings like
+      // `setMFACode(_:)` without a false-positive warning. Any existing
+      // `setX` or `_setX` case whose suffix is the same (lowercased) as the
+      // bare field name is accepted. Non-`set`-prefixed cases are ignored.
+      let fieldLower = bareFieldName.lowercased()
+      let existingCaseMatches = existingCaseNames.contains { caseName in
+        let trimmed: Substring
+        if caseName.hasPrefix("_set") {
+          trimmed = caseName.dropFirst(4)
+        } else if caseName.hasPrefix("set") {
+          trimmed = caseName.dropFirst(3)
+        } else {
+          return false
+        }
+        return trimmed.lowercased() == fieldLower
+      }
+
+      if existingCaseMatches {
+        continue
+      }
+
+      emitMissingBindableFieldSetterDiagnostic(
+        field: field,
+        expectedCaseName: expectedCaseName,
+        actionEnum: actionEnum,
+        context: context
+      )
+    }
+  }
+
+  private static func collectBindableFields(in stateStruct: StructDeclSyntax) -> [BindableFieldInfo]
+  {
+    var results: [BindableFieldInfo] = []
+
+    for member in stateStruct.memberBlock.members {
+      guard let variable = member.decl.as(VariableDeclSyntax.self) else {
+        continue
+      }
+      guard hasBindableFieldAttribute(variable) else {
+        continue
+      }
+
+      for binding in variable.bindings {
+        guard
+          let patternName = binding.pattern
+            .as(IdentifierPatternSyntax.self)?
+            .identifier
+            .text
+        else {
+          continue
+        }
+
+        let inferredType: String?
+        if let typeAnnotation = binding.typeAnnotation {
+          inferredType = typeAnnotation.type.trimmedDescription
+        } else if let initializerValue = binding.initializer?.value {
+          inferredType = inferLiteralType(initializerValue)
+        } else {
+          inferredType = nil
+        }
+
+        results.append(
+          BindableFieldInfo(
+            name: patternName,
+            inferredType: inferredType,
+            node: Syntax(variable)
+          )
+        )
+      }
+    }
+
+    return results
+  }
+
+  private static func hasBindableFieldAttribute(_ variable: VariableDeclSyntax) -> Bool {
+    for element in variable.attributes {
+      guard let attribute = element.as(AttributeSyntax.self) else { continue }
+      if let identifier = attribute.attributeName.as(IdentifierTypeSyntax.self),
+        identifier.name.text == "BindableField"
+      {
+        return true
+      }
+    }
+    return false
+  }
+
+  private static func inferLiteralType(_ expression: ExprSyntax) -> String? {
+    if expression.is(IntegerLiteralExprSyntax.self) { return "Int" }
+    if expression.is(FloatLiteralExprSyntax.self) { return "Double" }
+    if expression.is(StringLiteralExprSyntax.self) { return "String" }
+    if expression.is(BooleanLiteralExprSyntax.self) { return "Bool" }
+    return nil
+  }
+
+  private static func collectActionCaseNames(in actionEnum: EnumDeclSyntax) -> Set<String> {
+    var names: Set<String> = []
+    for member in actionEnum.memberBlock.members {
+      guard let enumCase = member.decl.as(EnumCaseDeclSyntax.self) else {
+        continue
+      }
+      for element in enumCase.elements {
+        names.insert(element.name.text)
+      }
+    }
+    return names
+  }
+
+  private static func emitMissingBindableFieldSetterDiagnostic(
+    field: BindableFieldInfo,
+    expectedCaseName: String,
+    actionEnum: EnumDeclSyntax,
+    context: some MacroExpansionContext
+  ) {
+    let message = BindableFieldDiagnosticMessage.missingSetter(
+      field: field.name,
+      expectedCase: expectedCaseName,
+      valueType: field.inferredType
+    )
+
+    if let inferredType = field.inferredType,
+      let replacement = actionEnumWithAppendedCase(
+        actionEnum,
+        caseName: expectedCaseName,
+        payloadType: inferredType
+      )
+    {
+      context.diagnose(
+        Diagnostic(
+          node: field.node,
+          message: message,
+          fixIt: .replace(
+            message: BindableFieldDiagnosticFixIt.addSetterCase(
+              caseName: expectedCaseName,
+              valueType: inferredType
+            ),
+            oldNode: actionEnum,
+            newNode: replacement
+          )
+        )
+      )
+    } else {
+      context.diagnose(Diagnostic(node: field.node, message: message))
+    }
+  }
+
+  private static func actionEnumWithAppendedCase(
+    _ actionEnum: EnumDeclSyntax,
+    caseName: String,
+    payloadType: String
+  ) -> EnumDeclSyntax? {
+    let newCaseSource = "case \(caseName)(\(payloadType))"
+    guard let newCaseDecl = try? EnumCaseDeclSyntax("\(raw: newCaseSource)") else {
+      return nil
+    }
+
+    var existingMembers = actionEnum.memberBlock.members
+
+    let lastMember = existingMembers.last
+    let indentation =
+      lastMember?.decl.leadingTrivia.firstIndentation ?? Trivia(pieces: [.spaces(2)])
+
+    let newMemberItem = MemberBlockItemSyntax(
+      decl: DeclSyntax(
+        newCaseDecl
+          .with(\.leadingTrivia, Trivia(pieces: [.newlines(1)]) + indentation)
+          .with(\.trailingTrivia, [])
+      )
+    )
+
+    if var lastItem = existingMembers.last {
+      // Preserve the last member's trailing newline so the appended case does
+      // not collapse onto the previous line.
+      if lastItem.trailingTrivia.isEmpty {
+        lastItem = lastItem.with(\.trailingTrivia, Trivia(pieces: [.newlines(1)]))
+        existingMembers = existingMembers.with(\.[existingMembers.index(before: existingMembers.endIndex)], lastItem)
+      }
+    }
+
+    existingMembers.append(newMemberItem)
+
+    let updatedBlock = actionEnum.memberBlock.with(\.members, existingMembers)
+    return actionEnum.with(\.memberBlock, updatedBlock)
+  }
+
   private static func bodySignatureIssues(_ variable: VariableDeclSyntax) -> [String] {
     var issues: [String] = []
     guard let binding = variable.bindings.first else {
@@ -580,6 +810,32 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
 
 private struct SynthesizedActionPathMember {
   let declaration: String
+}
+
+private struct BindableFieldInfo {
+  let name: String
+  let inferredType: String?
+  let node: Syntax
+}
+
+extension Trivia {
+  /// Returns just the indentation portion (trailing spaces/tabs) of the
+  /// trivia that follows the last newline. Used to inherit enum member
+  /// indentation when synthesising a new `case` via Fix-It.
+  fileprivate var firstIndentation: Trivia {
+    var indent: [TriviaPiece] = []
+    for piece in pieces.reversed() {
+      switch piece {
+      case .newlines, .carriageReturns, .carriageReturnLineFeeds:
+        return Trivia(pieces: indent.reversed())
+      case .spaces, .tabs:
+        indent.append(piece)
+      default:
+        indent.removeAll()
+      }
+    }
+    return Trivia(pieces: indent.reversed())
+  }
 }
 
 public struct InnoFlowActionPathsMacro: MemberMacro {
@@ -701,6 +957,48 @@ private enum InnoFlowMacroFixIt: FixItMessage {
     switch self {
     case .replaceExplicitReduce:
       return .init(domain: "InnoFlowMacro", id: "ReplaceExplicitReduce")
+    }
+  }
+}
+
+enum BindableFieldDiagnosticMessage: DiagnosticMessage {
+  case missingSetter(field: String, expectedCase: String, valueType: String?)
+
+  var message: String {
+    switch self {
+    case .missingSetter(let field, let expectedCase, let valueType):
+      let payload = valueType ?? "Value"
+      return
+        "`@BindableField var \(field)` has no matching `case \(expectedCase)(\(payload))` in `Action` — `store.binding(\\.$\(field), to:)` cannot be used until one is added"
+    }
+  }
+
+  var diagnosticID: MessageID {
+    switch self {
+    case .missingSetter:
+      return .init(domain: "InnoFlowMacro", id: "BindableFieldMissingSetter")
+    }
+  }
+
+  var severity: DiagnosticSeverity {
+    .warning
+  }
+}
+
+enum BindableFieldDiagnosticFixIt: FixItMessage {
+  case addSetterCase(caseName: String, valueType: String)
+
+  var message: String {
+    switch self {
+    case .addSetterCase(let caseName, let valueType):
+      return "Add `case \(caseName)(\(valueType))` to `Action`"
+    }
+  }
+
+  var fixItID: MessageID {
+    switch self {
+    case .addSetterCase:
+      return .init(domain: "InnoFlowMacro", id: "BindableFieldAddSetterCase")
     }
   }
 }

@@ -17,6 +17,20 @@ extension Store {
       set: { self.send(action($0)) }
     )
   }
+
+  /// Alias for ``binding(_:send:)`` that reads more naturally when passing an
+  /// enum case constructor as the action builder, for example
+  /// `store.binding(\.$step, to: Feature.Action.setStep)`.
+  ///
+  /// The `send:` overload continues to work without deprecation — the two
+  /// spellings are semantically identical and both call into the same
+  /// underlying `Binding` constructor.
+  public func binding<Value>(
+    _ keyPath: KeyPath<R.State, BindableProperty<Value>>,
+    to action: @escaping @Sendable (Value) -> R.Action
+  ) -> Binding<Value> where Value: Equatable & Sendable {
+    binding(keyPath, send: action)
+  }
 }
 
 extension ScopedStore {
@@ -29,5 +43,15 @@ extension ScopedStore {
       get: { self.state[keyPath: keyPath].value },
       set: { self.send(action($0)) }
     )
+  }
+
+  /// Alias for ``binding(_:send:)`` that reads more naturally when passing an
+  /// enum case constructor as the action builder, for example
+  /// `rowStore.binding(\.$isFavorite, to: RowFeature.Action.setFavorite)`.
+  public func binding<Value>(
+    _ keyPath: KeyPath<ChildState, BindableProperty<Value>>,
+    to action: @escaping @Sendable (Value) -> ChildAction
+  ) -> Binding<Value> where Value: Equatable & Sendable {
+    binding(keyPath, send: action)
   }
 }

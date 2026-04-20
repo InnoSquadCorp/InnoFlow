@@ -872,4 +872,283 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  // MARK: - @BindableField ↔ Action.setX 진단
+
+  @Test("@InnoFlow: @BindableField matched by Action.setX emits no diagnostics")
+  func bindableFieldMatchedBySetterPassesCleanly() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct CounterFeature {
+            struct State: Sendable {
+                @BindableField var step = 1
+            }
+            enum Action: Sendable {
+                case setStep(Int)
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in
+                    .none
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct CounterFeature {
+              struct State: Sendable {
+                  @BindableField var step = 1
+              }
+              enum Action: Sendable {
+                  case setStep(Int)
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in
+                      .none
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+
+          extension CounterFeature: Reducer {
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow warns when @BindableField has no matching Action.setX case")
+  func bindableFieldWithoutSetterWarns() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct CounterFeature {
+            struct State: Sendable {
+                @BindableField var step = 1
+            }
+            enum Action: Sendable {
+                case increment
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in
+                    .none
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct CounterFeature {
+              struct State: Sendable {
+                  @BindableField var step = 1
+              }
+              enum Action: Sendable {
+                  case increment
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in
+                      .none
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+
+          extension CounterFeature: Reducer {
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "`@BindableField var step` has no matching `case setStep(Int)` in `Action` — `store.binding(\\.$step, to:)` cannot be used until one is added",
+            line: 4,
+            column: 9,
+            severity: .warning,
+            fixIts: [
+              FixItSpec(message: "Add `case setStep(Int)` to `Action`")
+            ]
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow skips @BindableField diagnostics when Action is a typealias")
+  func typealiasedActionSkipsBindableFieldDiagnostic() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct ChildFeature {
+            struct State: Sendable {
+                @BindableField var step = 1
+            }
+            typealias Action = ParentFeature.ChildAction
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in
+                    .none
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct ChildFeature {
+              struct State: Sendable {
+                  @BindableField var step = 1
+              }
+              typealias Action = ParentFeature.ChildAction
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in
+                      .none
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+
+          extension ChildFeature: Reducer {
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow tolerates acronym casings like mfaCode ↔ setMFACode")
+  func bindableFieldAcronymCasingIsAccepted() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct AuthFeature {
+            struct State: Sendable {
+                @BindableField var mfaCode = ""
+            }
+            enum Action: Sendable {
+                case setMFACode(String)
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in
+                    .none
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct AuthFeature {
+              struct State: Sendable {
+                  @BindableField var mfaCode = ""
+              }
+              enum Action: Sendable {
+                  case setMFACode(String)
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in
+                      .none
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+
+          extension AuthFeature: Reducer {
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow warns only for @BindableField fields missing their Action.setX")
+  func bindableFieldDiagnosticIsFieldLocal() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct FormFeature {
+            struct State: Sendable {
+                @BindableField var step = 1
+                @BindableField var name = ""
+            }
+            enum Action: Sendable {
+                case setName(String)
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in
+                    .none
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct FormFeature {
+              struct State: Sendable {
+                  @BindableField var step = 1
+                  @BindableField var name = ""
+              }
+              enum Action: Sendable {
+                  case setName(String)
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in
+                      .none
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+
+          extension FormFeature: Reducer {
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "`@BindableField var step` has no matching `case setStep(Int)` in `Action` — `store.binding(\\.$step, to:)` cannot be used until one is added",
+            line: 4,
+            column: 9,
+            severity: .warning,
+            fixIts: [
+              FixItSpec(message: "Add `case setStep(Int)` to `Action`")
+            ]
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
 }
