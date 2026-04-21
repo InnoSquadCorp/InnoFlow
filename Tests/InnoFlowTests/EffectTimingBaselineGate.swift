@@ -22,6 +22,14 @@ import Testing
 
 @Suite("EffectTimingBaselineGate")
 struct EffectTimingBaselineGate {
+  private struct BaselineSnapshot: Sendable {
+    let preparedRuns: UInt64
+    let attachedRuns: UInt64
+    let finishedRuns: UInt64
+    let emissionDecisions: UInt64
+    let cancellations: UInt64
+    let didTick: Bool
+  }
 
   @Test("Effect timing p95 stays within tolerance of the committed baseline")
   @MainActor
@@ -143,7 +151,6 @@ struct EffectTimingBaselineGate {
     }
   }
 
-  @MainActor
   private func waitForRecordedProbeCycle(
     _ cycle: Int,
     in store: Store<EffectTimingBaselineProbeFeature>,
@@ -155,12 +162,12 @@ struct EffectTimingBaselineGate {
       timeout: timeout,
       description: "timing probe cycle \(cycle) to finish and record",
       condition: {
-        let metrics = await store.effectRuntimeMetrics
+        let snapshot = await baselineSnapshot(for: store)
         let entries = await recorder.entries()
-        return metrics.preparedRuns >= expectedRuns
-          && metrics.finishedRuns >= expectedRuns
+        return snapshot.preparedRuns >= expectedRuns
+          && snapshot.finishedRuns >= expectedRuns
           && matchedRunPairCount(in: entries) >= cycle
-          && store.didTick
+          && snapshot.didTick
       },
       status: {
         let entries = await recorder.entries()
@@ -172,13 +179,12 @@ struct EffectTimingBaselineGate {
     )
   }
 
-  @MainActor
   private func waitUntil(
     timeout: Duration = .seconds(15),
     pollInterval: Duration = .milliseconds(20),
     description: String,
-    condition: @escaping @MainActor () async -> Bool,
-    status: @escaping @MainActor () async -> String
+    condition: @escaping () async -> Bool,
+    status: @escaping () async -> String
   ) async -> Bool {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
@@ -194,13 +200,28 @@ struct EffectTimingBaselineGate {
   }
 
   @MainActor
+  private func baselineSnapshot(for store: Store<EffectTimingBaselineProbeFeature>) async
+    -> BaselineSnapshot
+  {
+    let metrics = await store.effectRuntimeMetrics
+    return .init(
+      preparedRuns: metrics.preparedRuns,
+      attachedRuns: metrics.attachedRuns,
+      finishedRuns: metrics.finishedRuns,
+      emissionDecisions: metrics.emissionDecisions,
+      cancellations: metrics.cancellations,
+      didTick: store.didTick
+    )
+  }
+
+  @MainActor
   private func baselineProbeStatus(
     for store: Store<EffectTimingBaselineProbeFeature>,
     matchedRunPairs: Int
   ) async -> String {
-    let metrics = await store.effectRuntimeMetrics
+    let snapshot = await baselineSnapshot(for: store)
     return
-      "prepared=\(metrics.preparedRuns) attached=\(metrics.attachedRuns) finished=\(metrics.finishedRuns) emissions=\(metrics.emissionDecisions) cancellations=\(metrics.cancellations) matchedRunPairs=\(matchedRunPairs) didTick=\(store.didTick)"
+      "prepared=\(snapshot.preparedRuns) attached=\(snapshot.attachedRuns) finished=\(snapshot.finishedRuns) emissions=\(snapshot.emissionDecisions) cancellations=\(snapshot.cancellations) matchedRunPairs=\(matchedRunPairs) didTick=\(snapshot.didTick)"
   }
 }
 

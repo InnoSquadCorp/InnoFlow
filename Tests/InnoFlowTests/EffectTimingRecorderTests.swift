@@ -48,6 +48,15 @@ struct EffectTimingRecorderTests {
 
   typealias ProbeFeature = EffectTimingRecorderProbeFeature
 
+  private struct ProbeSnapshot: Sendable {
+    let preparedRuns: UInt64
+    let attachedRuns: UInt64
+    let finishedRuns: UInt64
+    let emissionDecisions: UInt64
+    let cancellations: UInt64
+    let count: Int
+  }
+
   // MARK: - Tests
 
   @Test("Recorder captures run lifecycle events in order")
@@ -198,7 +207,6 @@ struct EffectTimingRecorderTests {
   /// Runtime metrics are the primary synchronization surface; recorder state is
   /// only used as a secondary confirmation that the timeline snapshot is ready
   /// to assert against.
-  @MainActor
   private func waitForCompletedProbeRun(
     in store: Store<ProbeFeature>,
     recorder: EffectTimingRecorder,
@@ -211,12 +219,12 @@ struct EffectTimingRecorderTests {
       timeout: timeout,
       description: "probe run \(expectedRunCount) to finish and record",
       condition: {
-        let metrics = await store.effectRuntimeMetrics
+        let snapshot = await probeSnapshot(for: store)
         let entries = await recorder.entries()
-        return metrics.preparedRuns >= expectedRuns
-          && metrics.finishedRuns >= expectedRuns
+        return snapshot.preparedRuns >= expectedRuns
+          && snapshot.finishedRuns >= expectedRuns
           && matchedRunPairCount(in: entries) >= expectedRunCount
-          && store.count >= expectedCount
+          && snapshot.count >= expectedCount
       },
       status: {
         let entries = await recorder.entries()
@@ -228,7 +236,6 @@ struct EffectTimingRecorderTests {
     )
   }
 
-  @MainActor
   private func waitForRecordedCancellation(
     in store: Store<ProbeFeature>,
     recorder: EffectTimingRecorder,
@@ -239,9 +246,9 @@ struct EffectTimingRecorderTests {
       timeout: timeout,
       description: "probe cancellation \(expectedCancellations) to record",
       condition: {
-        let metrics = await store.effectRuntimeMetrics
+        let snapshot = await probeSnapshot(for: store)
         let entries = await recorder.entries()
-        return metrics.cancellations >= expectedCancellations
+        return snapshot.cancellations >= expectedCancellations
           && entries.contains(where: { $0.phase == .effectsCancelled })
       },
       status: {
@@ -254,13 +261,12 @@ struct EffectTimingRecorderTests {
     )
   }
 
-  @MainActor
   private func waitUntil(
     timeout: Duration = .seconds(15),
     pollInterval: Duration = .milliseconds(20),
     description: String,
-    condition: @escaping @MainActor () async -> Bool,
-    status: @escaping @MainActor () async -> String
+    condition: @escaping () async -> Bool,
+    status: @escaping () async -> String
   ) async -> Bool {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
@@ -276,13 +282,26 @@ struct EffectTimingRecorderTests {
   }
 
   @MainActor
+  private func probeSnapshot(for store: Store<ProbeFeature>) async -> ProbeSnapshot {
+    let metrics = await store.effectRuntimeMetrics
+    return .init(
+      preparedRuns: metrics.preparedRuns,
+      attachedRuns: metrics.attachedRuns,
+      finishedRuns: metrics.finishedRuns,
+      emissionDecisions: metrics.emissionDecisions,
+      cancellations: metrics.cancellations,
+      count: store.count
+    )
+  }
+
+  @MainActor
   private func recorderProbeStatus(
     for store: Store<ProbeFeature>,
     matchedRunPairs: Int
   ) async -> String {
-    let metrics = await store.effectRuntimeMetrics
+    let snapshot = await probeSnapshot(for: store)
     return
-      "prepared=\(metrics.preparedRuns) attached=\(metrics.attachedRuns) finished=\(metrics.finishedRuns) emissions=\(metrics.emissionDecisions) cancellations=\(metrics.cancellations) matchedRunPairs=\(matchedRunPairs) count=\(store.count)"
+      "prepared=\(snapshot.preparedRuns) attached=\(snapshot.attachedRuns) finished=\(snapshot.finishedRuns) emissions=\(snapshot.emissionDecisions) cancellations=\(snapshot.cancellations) matchedRunPairs=\(matchedRunPairs) count=\(snapshot.count)"
   }
 
   private func matchedRunPairCount(in entries: [EffectTimingRecorder.Entry]) -> Int {
