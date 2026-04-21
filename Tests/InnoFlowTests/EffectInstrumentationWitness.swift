@@ -14,7 +14,7 @@ struct EffectInstrumentationWitnessSnapshot: Sendable {
   let matchedRunPairs: Int
 }
 
-final class EffectInstrumentationWitness: @unchecked Sendable {
+final class EffectInstrumentationWitness: Sendable {
   private struct State {
     var runStartedCount: UInt64 = 0
     var runFinishedCount: UInt64 = 0
