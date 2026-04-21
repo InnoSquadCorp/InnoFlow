@@ -178,15 +178,18 @@ struct EffectTimingRecorderTests {
 
   // MARK: - Polling helper
 
-  /// Yields until the recorder has observed every phase in `phases`, up to a
-  /// generous wall-clock bound. Release-mode scheduling can delay the final
-  /// `runFinished` Task hop more than a fixed yield count would allow.
+  /// Polls until the recorder has observed every phase in `phases`, up to a
+  /// generous wall-clock bound. Uses `Task.sleep` rather than `Task.yield`
+  /// because `Task.yield` from a `@MainActor` polling loop re-enqueues onto
+  /// the same executor fast enough that the effect's `await MainActor.run`
+  /// hop starves under CI load — progress requires real wall-clock time for
+  /// the cooperative pool to advance.
   @MainActor
   private func waitForPhases(
     _ phases: EffectTimingRecorder.Phase...,
     in recorder: EffectTimingRecorder,
     retaining store: Store<ProbeFeature>? = nil,
-    timeout: Duration = .seconds(5)
+    timeout: Duration = .seconds(15)
   ) async -> Bool {
     let expected = Set(phases)
     let clock = ContinuousClock()
@@ -201,7 +204,7 @@ struct EffectTimingRecorderTests {
       if expected.isSubset(of: lastCaptured) {
         return true
       }
-      await Task.yield()
+      try? await Task.sleep(for: .milliseconds(20))
       _ = retainedStore
     }
     let expectedPhases = expected.map(\.rawValue).sorted().joined(separator: ", ")
@@ -217,7 +220,7 @@ struct EffectTimingRecorderTests {
     atLeast expectedCount: Int,
     in counter: RunStartedCounter,
     retaining store: Store<ProbeFeature>? = nil,
-    timeout: Duration = .seconds(5)
+    timeout: Duration = .seconds(15)
   ) async -> Bool {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
@@ -229,7 +232,7 @@ struct EffectTimingRecorderTests {
       if observedCount >= expectedCount {
         return true
       }
-      await Task.yield()
+      try? await Task.sleep(for: .milliseconds(20))
       _ = retainedStore
     }
     Issue.record(
