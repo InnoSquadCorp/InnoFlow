@@ -60,12 +60,14 @@ struct EffectTimingRecorderTests {
     )
 
     store.send(.start)
-    guard await waitForCompletedProbeRun(
-      in: store,
-      recorder: recorder,
-      expectedRunCount: 1,
-      expectedCount: 1
-    ) else {
+    guard
+      await waitForCompletedProbeRun(
+        in: store,
+        recorder: recorder,
+        expectedRunCount: 1,
+        expectedCount: 1
+      )
+    else {
       return
     }
 
@@ -95,12 +97,14 @@ struct EffectTimingRecorderTests {
     )
 
     store.send(.start)
-    guard await waitForCompletedProbeRun(
-      in: store,
-      recorder: recorder,
-      expectedRunCount: 1,
-      expectedCount: 1
-    ) else {
+    guard
+      await waitForCompletedProbeRun(
+        in: store,
+        recorder: recorder,
+        expectedRunCount: 1,
+        expectedCount: 1
+      )
+    else {
       return
     }
 
@@ -147,12 +151,14 @@ struct EffectTimingRecorderTests {
     )
 
     store.send(.start)
-    guard await waitForCompletedProbeRun(
-      in: store,
-      recorder: recorder,
-      expectedRunCount: 1,
-      expectedCount: 1
-    ) else {
+    guard
+      await waitForCompletedProbeRun(
+        in: store,
+        recorder: recorder,
+        expectedRunCount: 1,
+        expectedCount: 1
+      )
+    else {
       return
     }
     guard await waitForRunStartedCount(atLeast: 1, in: userObservedActions) else {
