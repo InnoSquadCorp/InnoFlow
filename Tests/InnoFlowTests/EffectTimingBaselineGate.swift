@@ -202,6 +202,11 @@ struct EffectTimingBaselineGate {
       }
       try? await Task.sleep(for: pollInterval)
     }
+    // The final poll can overshoot the deadline under CI load even though the
+    // recorder state is already complete, so check once more before failing.
+    if await condition() {
+      return true
+    }
     let latestStatus = await status()
     Issue.record("Timed out waiting for \(description); \(latestStatus)")
     return false

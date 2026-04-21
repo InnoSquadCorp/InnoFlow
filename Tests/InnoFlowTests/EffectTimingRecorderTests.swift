@@ -298,6 +298,11 @@ struct EffectTimingRecorderTests {
       }
       try? await Task.sleep(for: pollInterval)
     }
+    // CI can satisfy the probe right after the final sleep crosses the
+    // deadline, so re-check once before recording a timeout issue.
+    if await condition() {
+      return true
+    }
     let latestStatus = await status()
     Issue.record("Timed out waiting for \(description); \(latestStatus)")
     return false
@@ -354,6 +359,10 @@ struct EffectTimingRecorderTests {
         return true
       }
       try? await Task.sleep(for: .milliseconds(20))
+    }
+    observedCount = await counter.value
+    if observedCount >= expectedCount {
+      return true
     }
     Issue.record(
       "Timed out waiting for run-start counter >= \(expectedCount); observed \(observedCount)"
