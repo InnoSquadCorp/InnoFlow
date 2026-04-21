@@ -39,18 +39,16 @@ struct EffectTimingBaselineGate {
     // Workload: 10 `.start` cycles with a short per-cycle drain. Each cycle
     // generates a runStarted/runFinished pair so the baseline distribution
     // has the same shape as the committed fixture.
-    for _ in 0..<10 {
+    for cycle in 1...10 {
       store.send(.start)
-      for _ in 0..<50 {
-        await Task.yield()
-        if store.didTick { break }
-      }
+      guard await waitForRecordedProbeCycle(cycle, in: store, recorder: recorder) else { return }
+      #expect(store.didTick)
       store.send(.reset)
-      for _ in 0..<20 { await Task.yield() }
+      #expect(!store.didTick)
     }
-    guard await waitForMatchedRunPairs(count: 10, in: recorder) != nil else {
-      return
-    }
+
+    let currentEntries = await recorder.entries()
+    #expect(matchedRunPairCount(in: currentEntries) == 10)
 
     let currentURL = FileManager.default
       .temporaryDirectory
@@ -133,28 +131,6 @@ struct EffectTimingBaselineGate {
     throw RepositoryRootNotFound()
   }
 
-  private func waitForMatchedRunPairs(
-    count expectedCount: Int,
-    in recorder: EffectTimingRecorder,
-    maximumYields: Int = 500
-  ) async -> [EffectTimingRecorder.Entry]? {
-    var lastEntries: [EffectTimingRecorder.Entry] = []
-    for _ in 0..<maximumYields {
-      lastEntries = await recorder.entries()
-      if matchedRunPairCount(in: lastEntries) == expectedCount {
-        return lastEntries
-      }
-      await Task.yield()
-    }
-    Issue.record(
-      """
-      Timed out waiting for \(expectedCount) matched EffectTimingRecorder run pairs.
-      Captured \(matchedRunPairCount(in: lastEntries)) matched pairs across \(lastEntries.count) entries.
-      """
-    )
-    return nil
-  }
-
   private func matchedRunPairCount(in entries: [EffectTimingRecorder.Entry]) -> Int {
     var phasesBySequence: [UInt64: Set<EffectTimingRecorder.Phase>] = [:]
     for entry in entries where entry.phase == .runStarted || entry.phase == .runFinished {
@@ -165,6 +141,66 @@ struct EffectTimingBaselineGate {
         count += 1
       }
     }
+  }
+
+  @MainActor
+  private func waitForRecordedProbeCycle(
+    _ cycle: Int,
+    in store: Store<EffectTimingBaselineProbeFeature>,
+    recorder: EffectTimingRecorder,
+    timeout: Duration = .seconds(15)
+  ) async -> Bool {
+    let expectedRuns = UInt64(cycle)
+    return await waitUntil(
+      timeout: timeout,
+      description: "timing probe cycle \(cycle) to finish and record",
+      condition: {
+        let metrics = await store.effectRuntimeMetrics
+        let entries = await recorder.entries()
+        return metrics.preparedRuns >= expectedRuns
+          && metrics.finishedRuns >= expectedRuns
+          && matchedRunPairCount(in: entries) >= cycle
+          && store.didTick
+      },
+      status: {
+        let entries = await recorder.entries()
+        return await baselineProbeStatus(
+          for: store,
+          matchedRunPairs: matchedRunPairCount(in: entries)
+        )
+      }
+    )
+  }
+
+  @MainActor
+  private func waitUntil(
+    timeout: Duration = .seconds(15),
+    pollInterval: Duration = .milliseconds(20),
+    description: String,
+    condition: @escaping @MainActor () async -> Bool,
+    status: @escaping @MainActor () async -> String
+  ) async -> Bool {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    while clock.now < deadline {
+      if await condition() {
+        return true
+      }
+      try? await Task.sleep(for: pollInterval)
+    }
+    let latestStatus = await status()
+    Issue.record("Timed out waiting for \(description); \(latestStatus)")
+    return false
+  }
+
+  @MainActor
+  private func baselineProbeStatus(
+    for store: Store<EffectTimingBaselineProbeFeature>,
+    matchedRunPairs: Int
+  ) async -> String {
+    let metrics = await store.effectRuntimeMetrics
+    return
+      "prepared=\(metrics.preparedRuns) attached=\(metrics.attachedRuns) finished=\(metrics.finishedRuns) emissions=\(metrics.emissionDecisions) cancellations=\(metrics.cancellations) matchedRunPairs=\(matchedRunPairs) didTick=\(store.didTick)"
   }
 }
 

@@ -58,23 +58,27 @@ struct EffectTimingRecorderTests {
       reducer: ProbeFeature(),
       instrumentation: recorder.instrumentation()
     )
-    // Keep the store alive until the assertions finish. Under CI scheduling,
-    // ARC can release it after the final direct use (`send(.start)`), which
-    // records `effectsCancelled` from `deinit` before `runFinished` lands.
-    defer { _ = store }
 
     store.send(.start)
-    // Poll the recorder's observed phases instead of relying on a fixed
-    // yield count; release-mode scheduling can delay when the probe run
-    // fully drains.
-    guard await waitForPhases(.runStarted, .runFinished, in: recorder, retaining: store) else {
+    guard await waitForCompletedProbeRun(
+      in: store,
+      recorder: recorder,
+      expectedRunCount: 1,
+      expectedCount: 1
+    ) else {
       return
     }
 
+    #expect(store.count == 1)
     let entries = await recorder.entries()
     let phases = entries.map(\.phase)
-    #expect(phases.contains(.runStarted))
-    #expect(phases.contains(.runFinished))
+    let startedIndex = phases.firstIndex(of: .runStarted)
+    let finishedIndex = phases.firstIndex(of: .runFinished)
+    #expect(startedIndex != nil)
+    #expect(finishedIndex != nil)
+    if let startedIndex, let finishedIndex {
+      #expect(startedIndex < finishedIndex)
+    }
 
     // Timestamps must be monotonically non-decreasing.
     let stamps = entries.map(\.timestampNanos)
@@ -89,10 +93,14 @@ struct EffectTimingRecorderTests {
       reducer: ProbeFeature(),
       instrumentation: recorder.instrumentation()
     )
-    defer { _ = store }
 
     store.send(.start)
-    guard await waitForPhases(.runStarted, .runFinished, in: recorder, retaining: store) else {
+    guard await waitForCompletedProbeRun(
+      in: store,
+      recorder: recorder,
+      expectedRunCount: 1,
+      expectedCount: 1
+    ) else {
       return
     }
 
@@ -137,17 +145,21 @@ struct EffectTimingRecorderTests {
       reducer: ProbeFeature(),
       instrumentation: combined
     )
-    defer { _ = store }
 
     store.send(.start)
-    guard await waitForPhases(.runStarted, in: recorder, retaining: store) else {
+    guard await waitForCompletedProbeRun(
+      in: store,
+      recorder: recorder,
+      expectedRunCount: 1,
+      expectedCount: 1
+    ) else {
       return
     }
-    guard await waitForRunStartedCount(atLeast: 1, in: userObservedActions, retaining: store)
-    else {
+    guard await waitForRunStartedCount(atLeast: 1, in: userObservedActions) else {
       return
     }
 
+    #expect(store.count == 1)
     let observed = await userObservedActions.value
     #expect(observed >= 1)
     let entries = await recorder.entries()
@@ -162,11 +174,10 @@ struct EffectTimingRecorderTests {
       reducer: ProbeFeature(),
       instrumentation: recorder.instrumentation()
     )
-    defer { _ = store }
 
     store.send(.start)
     await store.cancelEffects(identifiedBy: "probe-start")
-    guard await waitForPhases(.effectsCancelled, in: recorder, retaining: store) else {
+    guard await waitForRecordedCancellation(in: store, recorder: recorder) else {
       return
     }
 
@@ -178,62 +189,123 @@ struct EffectTimingRecorderTests {
 
   // MARK: - Polling helper
 
-  /// Polls until the recorder has observed every phase in `phases`, up to a
-  /// generous wall-clock bound. Uses `Task.sleep` rather than `Task.yield`
-  /// because `Task.yield` from a `@MainActor` polling loop re-enqueues onto
-  /// the same executor fast enough that the effect's `await MainActor.run`
-  /// hop starves under CI load — progress requires real wall-clock time for
-  /// the cooperative pool to advance.
+  /// Runtime metrics are the primary synchronization surface; recorder state is
+  /// only used as a secondary confirmation that the timeline snapshot is ready
+  /// to assert against.
   @MainActor
-  private func waitForPhases(
-    _ phases: EffectTimingRecorder.Phase...,
-    in recorder: EffectTimingRecorder,
-    retaining store: Store<ProbeFeature>? = nil,
+  private func waitForCompletedProbeRun(
+    in store: Store<ProbeFeature>,
+    recorder: EffectTimingRecorder,
+    expectedRunCount: Int,
+    expectedCount: Int,
     timeout: Duration = .seconds(15)
   ) async -> Bool {
-    let expected = Set(phases)
+    let expectedRuns = UInt64(expectedRunCount)
+    return await waitUntil(
+      timeout: timeout,
+      description: "probe run \(expectedRunCount) to finish and record",
+      condition: {
+        let metrics = await store.effectRuntimeMetrics
+        let entries = await recorder.entries()
+        return metrics.preparedRuns >= expectedRuns
+          && metrics.finishedRuns >= expectedRuns
+          && matchedRunPairCount(in: entries) >= expectedRunCount
+          && store.count >= expectedCount
+      },
+      status: {
+        let entries = await recorder.entries()
+        return await recorderProbeStatus(
+          for: store,
+          matchedRunPairs: matchedRunPairCount(in: entries)
+        )
+      }
+    )
+  }
+
+  @MainActor
+  private func waitForRecordedCancellation(
+    in store: Store<ProbeFeature>,
+    recorder: EffectTimingRecorder,
+    expectedCancellations: UInt64 = 1,
+    timeout: Duration = .seconds(15)
+  ) async -> Bool {
+    await waitUntil(
+      timeout: timeout,
+      description: "probe cancellation \(expectedCancellations) to record",
+      condition: {
+        let metrics = await store.effectRuntimeMetrics
+        let entries = await recorder.entries()
+        return metrics.cancellations >= expectedCancellations
+          && entries.contains(where: { $0.phase == .effectsCancelled })
+      },
+      status: {
+        let entries = await recorder.entries()
+        return await recorderProbeStatus(
+          for: store,
+          matchedRunPairs: matchedRunPairCount(in: entries)
+        )
+      }
+    )
+  }
+
+  @MainActor
+  private func waitUntil(
+    timeout: Duration = .seconds(15),
+    pollInterval: Duration = .milliseconds(20),
+    description: String,
+    condition: @escaping @MainActor () async -> Bool,
+    status: @escaping @MainActor () async -> String
+  ) async -> Bool {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
-    var lastCaptured: Set<EffectTimingRecorder.Phase> = []
     while clock.now < deadline {
-      let retainedStore = store
-      let entries = await recorder.entries()
-      _ = retainedStore
-      let captured = Set(entries.map(\.phase))
-      lastCaptured = captured
-      if expected.isSubset(of: lastCaptured) {
+      if await condition() {
         return true
       }
-      try? await Task.sleep(for: .milliseconds(20))
-      _ = retainedStore
+      try? await Task.sleep(for: pollInterval)
     }
-    let expectedPhases = expected.map(\.rawValue).sorted().joined(separator: ", ")
-    let capturedPhases = lastCaptured.map(\.rawValue).sorted().joined(separator: ", ")
-    Issue.record(
-      "Timed out waiting for EffectTimingRecorder phases [\(expectedPhases)]; captured [\(capturedPhases)]"
-    )
+    let latestStatus = await status()
+    Issue.record("Timed out waiting for \(description); \(latestStatus)")
     return false
+  }
+
+  @MainActor
+  private func recorderProbeStatus(
+    for store: Store<ProbeFeature>,
+    matchedRunPairs: Int
+  ) async -> String {
+    let metrics = await store.effectRuntimeMetrics
+    return
+      "prepared=\(metrics.preparedRuns) attached=\(metrics.attachedRuns) finished=\(metrics.finishedRuns) emissions=\(metrics.emissionDecisions) cancellations=\(metrics.cancellations) matchedRunPairs=\(matchedRunPairs) count=\(store.count)"
+  }
+
+  private func matchedRunPairCount(in entries: [EffectTimingRecorder.Entry]) -> Int {
+    var phasesBySequence: [UInt64: Set<EffectTimingRecorder.Phase>] = [:]
+    for entry in entries where entry.phase == .runStarted || entry.phase == .runFinished {
+      phasesBySequence[entry.sequence, default: []].insert(entry.phase)
+    }
+    return phasesBySequence.values.reduce(into: 0) { count, phases in
+      if phases.contains(.runStarted) && phases.contains(.runFinished) {
+        count += 1
+      }
+    }
   }
 
   @MainActor
   private func waitForRunStartedCount(
     atLeast expectedCount: Int,
     in counter: RunStartedCounter,
-    retaining store: Store<ProbeFeature>? = nil,
     timeout: Duration = .seconds(15)
   ) async -> Bool {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
     var observedCount = 0
     while clock.now < deadline {
-      let retainedStore = store
       observedCount = await counter.value
-      _ = retainedStore
       if observedCount >= expectedCount {
         return true
       }
       try? await Task.sleep(for: .milliseconds(20))
-      _ = retainedStore
     }
     Issue.record(
       "Timed out waiting for run-start counter >= \(expectedCount); observed \(observedCount)"
