@@ -98,6 +98,20 @@ struct EffectTimingComparisonScriptTests {
     #expect(result.stderr.contains("\"currentRuns\": \"10\""))
   }
 
+  @Test("Comparison script supports mean metric comparisons")
+  func comparisonScriptSupportsMeanMetric() throws {
+    let result = try runComparisonScript(
+      baselineEntries: matchedRunEntries(durations: [100, 100, 100]),
+      currentEntries: matchedRunEntries(durations: [150, 150, 150]),
+      metric: "mean",
+      tolerance: "0.60"
+    )
+
+    #expect(result.terminationStatus == 0)
+    #expect(result.stdout.contains("metric=mean"))
+    #expect(result.stdout.contains("PASS"))
+  }
+
   // MARK: - Helpers
 
   private func runComparisonScript(

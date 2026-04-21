@@ -31,7 +31,7 @@ struct EffectTimingBaselineGate {
     let didTick: Bool
   }
 
-  @Test("Effect timing p95 stays within tolerance of the committed baseline")
+  @Test("Effect timing mean stays within tolerance of the committed baseline")
   @MainActor
   func currentTimingsStayWithinBaselineTolerance() async throws {
     guard ProcessInfo.processInfo.environment["INNOFLOW_CHECK_EFFECT_BASELINE"] == "1" else {
@@ -81,15 +81,19 @@ struct EffectTimingBaselineGate {
     // invocation from `principle-gates.sh`, machine-local drift can still
     // move these timings materially. The gate exists to catch catastrophic
     // regressions (the 2026-04 class of release yield-count failures), not to
-    // enforce a specific absolute performance target. The script contract
-    // expresses tolerance as a 0...1 relative increase, so `1.0` keeps the
-    // gate loose while still failing on multi-x baseline inflation.
+    // enforce a specific absolute performance target.
+    //
+    // The standalone script still supports `p95`, and its direct contract
+    // tests cover the percentile ceiling behavior. This release-only gate uses
+    // `mean` instead because the current 10-run workload makes `p95` collapse
+    // to the single slowest run, which proved too sensitive to one-off GitHub
+    // Actions runner jitter.
     let process = Process()
     process.executableURL = scriptURL
     process.arguments = [
       "--baseline", baselineURL.path,
       "--current", currentURL.path,
-      "--metric", "p95",
+      "--metric", "mean",
       "--tolerance", "1.0",
     ]
 
