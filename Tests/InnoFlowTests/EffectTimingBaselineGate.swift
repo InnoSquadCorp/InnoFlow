@@ -39,9 +39,13 @@ struct EffectTimingBaselineGate {
     }
 
     let recorder = EffectTimingRecorder()
+    let witness = EffectInstrumentationWitness()
     let store = Store(
       reducer: EffectTimingBaselineProbeFeature(),
-      instrumentation: recorder.instrumentation()
+      instrumentation: .combined(
+        recorder.instrumentation() as StoreInstrumentation<EffectTimingBaselineProbeFeature.Action>,
+        witness.instrumentation()
+      )
     )
 
     // Workload: 10 `.start` cycles with a short per-cycle drain. Each cycle
@@ -49,7 +53,8 @@ struct EffectTimingBaselineGate {
     // has the same shape as the committed fixture.
     for cycle in 1...10 {
       store.send(.start)
-      guard await waitForRecordedProbeCycle(cycle, in: store, recorder: recorder) else { return }
+      guard await waitForRecordedProbeCycle(cycle, in: store, recorder: recorder, witness: witness)
+      else { return }
       #expect(store.didTick)
       store.send(.reset)
       #expect(!store.didTick)
@@ -155,6 +160,7 @@ struct EffectTimingBaselineGate {
     _ cycle: Int,
     in store: Store<EffectTimingBaselineProbeFeature>,
     recorder: EffectTimingRecorder,
+    witness: EffectInstrumentationWitness,
     timeout: Duration = .seconds(15)
   ) async -> Bool {
     let expectedRuns = UInt64(cycle)
@@ -163,17 +169,19 @@ struct EffectTimingBaselineGate {
       description: "timing probe cycle \(cycle) to finish and record",
       condition: {
         let snapshot = await baselineSnapshot(for: store)
-        let entries = await recorder.entries()
+        let witnessSnapshot = witness.snapshot()
         return snapshot.preparedRuns >= expectedRuns
           && snapshot.finishedRuns >= expectedRuns
-          && matchedRunPairCount(in: entries) >= cycle
+          && witnessSnapshot.matchedRunPairs >= cycle
           && snapshot.didTick
       },
       status: {
         let entries = await recorder.entries()
+        let witnessSnapshot = witness.snapshot()
         return await baselineProbeStatus(
           for: store,
-          matchedRunPairs: matchedRunPairCount(in: entries)
+          witnessSnapshot: witnessSnapshot,
+          recordedRunPairs: matchedRunPairCount(in: entries)
         )
       }
     )
@@ -217,11 +225,12 @@ struct EffectTimingBaselineGate {
   @MainActor
   private func baselineProbeStatus(
     for store: Store<EffectTimingBaselineProbeFeature>,
-    matchedRunPairs: Int
+    witnessSnapshot: EffectInstrumentationWitnessSnapshot,
+    recordedRunPairs: Int
   ) async -> String {
     let snapshot = await baselineSnapshot(for: store)
     return
-      "prepared=\(snapshot.preparedRuns) attached=\(snapshot.attachedRuns) finished=\(snapshot.finishedRuns) emissions=\(snapshot.emissionDecisions) cancellations=\(snapshot.cancellations) matchedRunPairs=\(matchedRunPairs) didTick=\(snapshot.didTick)"
+      "prepared=\(snapshot.preparedRuns) attached=\(snapshot.attachedRuns) finished=\(snapshot.finishedRuns) emissions=\(snapshot.emissionDecisions) cancellations=\(snapshot.cancellations) witnessStarts=\(witnessSnapshot.runStartedCount) witnessFinishes=\(witnessSnapshot.runFinishedCount) witnessCancellations=\(witnessSnapshot.cancellationCount) witnessRunPairs=\(witnessSnapshot.matchedRunPairs) recorderRunPairs=\(recordedRunPairs) didTick=\(snapshot.didTick)"
   }
 }
 
