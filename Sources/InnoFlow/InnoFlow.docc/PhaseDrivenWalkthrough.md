@@ -115,11 +115,13 @@ This keeps the parent feature in charge of ownership while allowing row-level bi
 
 ```swift
 Toggle(
-  isOn: store.binding(\.$isDone, send: PhaseDrivenTodoFeature.TodoAction.setDone)
+  isOn: store.binding(\.$isDone, to: PhaseDrivenTodoFeature.TodoAction.setDone)
 ) {
   Text(store.title)
 }
 ```
+
+As in the rest of InnoFlow, keep the binding argument label explicit here: `send:` and `to:` are both valid, but an unlabeled trailing-closure call is ambiguous once both overloads are in scope.
 
 The row projection is still a view concern. The phase contract remains at the parent feature level.
 

@@ -176,7 +176,7 @@ private struct RouterLoginRootView: View {
             "Email",
             text: coordinator.loginStore.binding(
               \.$username,
-              send: RouterLoginFeature.Action.setUsername
+              to: RouterLoginFeature.Action.setUsername
             )
           )
           .textFieldStyle(.roundedBorder)

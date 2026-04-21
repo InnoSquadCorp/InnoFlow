@@ -113,12 +113,14 @@ struct CounterView: View {
 
       Stepper(
         "Step: \(store.step)",
-        value: store.binding(\.$step, send: CounterFeature.Action.setStep)
+        value: store.binding(\.$step, to: CounterFeature.Action.setStep)
       )
     }
   }
 }
 ```
+
+`binding(_:to:)` is an argument-label alias for `binding(_:send:)`. Both spellings stay supported, but once both overloads exist you must keep the label explicit: `store.binding(\.$step) { .setStep($0) }` is ambiguous, while `send:` and `to:` both compile cleanly.
 
 ## Composition Surface
 

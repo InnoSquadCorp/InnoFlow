@@ -97,7 +97,7 @@ struct BasicsDemoView: View {
 
         Stepper(
           "Step",
-          value: store.binding(\.$step, send: BasicsFeature.Action.setStep),
+          value: store.binding(\.$step, to: BasicsFeature.Action.setStep),
           in: 1...10
         )
         .accessibilityHint("Adjusts how much each increment or decrement changes the count")
