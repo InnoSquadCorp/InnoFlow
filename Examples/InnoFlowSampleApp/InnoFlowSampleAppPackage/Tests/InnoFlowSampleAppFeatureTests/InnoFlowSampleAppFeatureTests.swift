@@ -1117,7 +1117,9 @@ struct InnoFlowSampleAppFeatureTests {
       .error(error),
       taskState: .reconnecting,
       closeCode: nil,
-      autoReconnectEnabled: true
+      autoReconnectEnabled: true,
+      reconnectCount: 1,
+      maxReconnectAttempts: 5
     )
 
     #expect(mapped == .reconnecting(String(describing: error)))
@@ -1129,7 +1131,9 @@ struct InnoFlowSampleAppFeatureTests {
       .disconnected(nil),
       taskState: .disconnected,
       closeCode: URLSessionWebSocketTask.CloseCode(rawValue: 1011),
-      autoReconnectEnabled: true
+      autoReconnectEnabled: true,
+      reconnectCount: 1,
+      maxReconnectAttempts: 5
     )
 
     #expect(mapped == .reconnecting("Socket disconnected."))
@@ -1141,7 +1145,9 @@ struct InnoFlowSampleAppFeatureTests {
       .disconnected(nil),
       taskState: .disconnected,
       closeCode: URLSessionWebSocketTask.CloseCode(rawValue: 1008),
-      autoReconnectEnabled: true
+      autoReconnectEnabled: true,
+      reconnectCount: 1,
+      maxReconnectAttempts: 5
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
@@ -1153,7 +1159,37 @@ struct InnoFlowSampleAppFeatureTests {
       .disconnected(nil),
       taskState: .disconnected,
       closeCode: nil,
-      autoReconnectEnabled: true
+      autoReconnectEnabled: true,
+      reconnectCount: 1,
+      maxReconnectAttempts: 5
+    )
+
+    #expect(mapped == .disconnected("Socket disconnected."))
+  }
+
+  @Test("Bidirectional websocket live mapper keeps exhausted retry budgets disconnected")
+  func bidirectionalWebSocketLiveMapperKeepsExhaustedRetryBudgetDisconnected() {
+    let mapped = BidirectionalSocketLiveEventMapper.map(
+      .disconnected(nil),
+      taskState: .disconnected,
+      closeCode: URLSessionWebSocketTask.CloseCode(rawValue: 1011),
+      autoReconnectEnabled: true,
+      reconnectCount: 5,
+      maxReconnectAttempts: 5
+    )
+
+    #expect(mapped == .disconnected("Socket disconnected."))
+  }
+
+  @Test("Bidirectional websocket live mapper keeps auto-reconnect disabled peer closes disconnected")
+  func bidirectionalWebSocketLiveMapperKeepsAutoReconnectDisabledPeerCloseDisconnected() {
+    let mapped = BidirectionalSocketLiveEventMapper.map(
+      .disconnected(nil),
+      taskState: .disconnected,
+      closeCode: URLSessionWebSocketTask.CloseCode(rawValue: 1011),
+      autoReconnectEnabled: false,
+      reconnectCount: 1,
+      maxReconnectAttempts: 5
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))

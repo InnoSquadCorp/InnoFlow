@@ -113,8 +113,8 @@ Attach InnoFlow to a transport library like this:
 - `URLSession`: an injected service or adapter performs requests and emits
   reducer actions with parsed domain results.
 - `InnoNetworkWebSocket`: a sample-only adapter owns the socket task, event
-  stream, retryable peer-close classification, reconnect trigger, and
-  `send(_:)`; the reducer only sees domain actions such as `.connectTapped`,
+  stream, retryable peer-close classification, reconnect trigger, retry budget,
+  and `send(_:)`; the reducer only sees domain actions such as `.connectTapped`,
   `._messageReceived`, or `._connectionLost`.
 - SSE / gRPC / MQTT: the coordinator or adapter bridges protocol events into
   reducer actions; reducers never become the transport state machine.
@@ -180,7 +180,8 @@ struct ChatFeature {
 - Do not put raw websocket task state, ping/pong management, or reconnect
   counters into the reducer unless they are true business state.
 - Do not classify retryable peer closes inside the reducer; keep that policy in
-  the adapter boundary and emit a business-facing reconnecting event.
+  the adapter boundary and emit a business-facing reconnecting event only when
+  the adapter still has reconnect budget remaining.
 - Do not let `PhaseMap` become a transport/session lifecycle graph.
 - Do not spread protocol error decoding across multiple reducers; keep it in
   the adapter boundary and send domain actions inward.

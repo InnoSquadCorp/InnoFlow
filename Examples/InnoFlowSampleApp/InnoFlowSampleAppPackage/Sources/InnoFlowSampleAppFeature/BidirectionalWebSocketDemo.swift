@@ -102,7 +102,9 @@ enum BidirectionalSocketLiveEventMapper {
     _ event: WebSocketEvent,
     taskState: WebSocketState,
     closeCode: URLSessionWebSocketTask.CloseCode?,
-    autoReconnectEnabled: Bool
+    autoReconnectEnabled: Bool,
+    reconnectCount: Int,
+    maxReconnectAttempts: Int
   ) -> BidirectionalSocketTransportEvent? {
     switch event {
     case .connected(let subprotocol):
@@ -110,7 +112,10 @@ enum BidirectionalSocketLiveEventMapper {
 
     case .disconnected(let error):
       let reason = describeDisconnect(error)
-      if autoReconnectEnabled, isRetryablePeerClose(closeCode) {
+      if autoReconnectEnabled,
+        isRetryablePeerClose(closeCode),
+        reconnectCount < maxReconnectAttempts
+      {
         return .reconnecting(reason)
       }
       return .disconnected(reason)
@@ -154,6 +159,7 @@ actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
   private let manager: WebSocketManager
   private let url: URL
   private let subprotocols: [String]?
+  private let maxReconnectAttempts: Int
   private var task: WebSocketTask?
 
   init(
@@ -163,6 +169,7 @@ actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
   ) {
     self.url = url
     self.subprotocols = subprotocols
+    self.maxReconnectAttempts = configuration.maxReconnectAttempts
     self.manager = WebSocketManager(configuration: configuration)
   }
 
@@ -222,7 +229,9 @@ actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
       event,
       taskState: await task.state,
       closeCode: await task.closeCode,
-      autoReconnectEnabled: await task.autoReconnectEnabled
+      autoReconnectEnabled: await task.autoReconnectEnabled,
+      reconnectCount: await task.reconnectCount,
+      maxReconnectAttempts: maxReconnectAttempts
     )
   }
 }

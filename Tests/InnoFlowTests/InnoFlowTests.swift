@@ -2784,9 +2784,10 @@ struct CompileContractTests {
 
     #expect(result.status != 0)
     let diagnostics = result.normalizedOutput
-    #expect(diagnostics.localizedCaseInsensitiveContains("no exact matches in call"))
-    #expect(diagnostics.contains("expected: '(_:send:)'"))
-    #expect(diagnostics.contains("expected: '(_:to:)'"))
+    #expect(diagnostics.contains("'binding' is unavailable"))
+    #expect(diagnostics.contains("binding(_:send:)"))
+    #expect(diagnostics.contains("binding(_:to:)"))
+    #expect(diagnostics.contains("intentional 3.x migration break"))
   }
 
   @Test("ScopedStore.binding rejects unlabeled trailing-closure calls with explicit label guidance")
@@ -2902,9 +2903,10 @@ struct CompileContractTests {
 
     #expect(result.status != 0)
     let diagnostics = result.normalizedOutput
-    #expect(diagnostics.localizedCaseInsensitiveContains("no exact matches in call"))
-    #expect(diagnostics.contains("expected: '(_:send:)'"))
-    #expect(diagnostics.contains("expected: '(_:to:)'"))
+    #expect(diagnostics.contains("'binding' is unavailable"))
+    #expect(diagnostics.contains("binding(_:send:)"))
+    #expect(diagnostics.contains("binding(_:to:)"))
+    #expect(diagnostics.contains("intentional 3.x migration break"))
   }
 
   @Test("Scope/IfLet/IfCaseLet reject public closure-based action lifting at compile time")
@@ -5351,31 +5353,29 @@ struct StoreTests {
     // and parallel test load, a single `Task.yield()` between spawn and advance
     // is not reliable. Wait up to 200 yields for each Task to register before
     // proceeding.
-    Task {
+    let firstSleeper = Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(1)
     }
-    for _ in 0..<200 {
-      if await clock.sleeperCount == 1 { break }
-      await Task.yield()
-    }
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
+      }
+    )
 
-    Task {
+    let secondSleeper = Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(2)
     }
-    for _ in 0..<200 {
-      if await clock.sleeperCount == 2 { break }
-      await Task.yield()
-    }
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 2
+      }
+    )
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<200 {
-      if await probe.snapshot() == [1, 2] {
-        break
-      }
-      await Task.yield()
-    }
+    _ = await firstSleeper.result
+    _ = await secondSleeper.result
 
     #expect(await probe.snapshot() == [1, 2])
   }
@@ -5401,12 +5401,11 @@ struct StoreTests {
     _ = await task.result
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<10 {
-      if await probe.snapshot() == [-1] {
-        break
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await probe.snapshot() == [-1]
       }
-      await Task.yield()
-    }
+    )
 
     #expect(await probe.snapshot() == [-1])
   }
@@ -6962,6 +6961,26 @@ private func waitUntil(
     }
     try? await Task.sleep(for: pollInterval)
   }
+}
+
+private func waitUntilAsync(
+  timeout: Duration = .seconds(2),
+  pollInterval: Duration = .milliseconds(20),
+  settleIterations: Int = 16,
+  condition: @escaping @Sendable () async -> Bool
+) async -> Bool {
+  let clock = ContinuousClock()
+  let deadline = clock.now.advanced(by: timeout)
+
+  while clock.now < deadline {
+    if await condition() {
+      return true
+    }
+    await drainAsyncWork(iterations: settleIterations)
+    try? await Task.sleep(for: pollInterval)
+  }
+
+  return await condition()
 }
 
 @MainActor
