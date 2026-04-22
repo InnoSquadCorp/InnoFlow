@@ -1,4 +1,5 @@
 import XCTest
+import InnoFlowSampleAppFeature
 
 final class InnoFlowSampleAppUITests: XCTestCase {
   override func setUpWithError() throws {
@@ -47,17 +48,19 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   func testDemoHubShowsCanonicalSamples() throws {
     let app = launchApp()
 
-    XCTAssertTrue(app.buttons["sample.basics"].waitForExistence(timeout: 2))
-    XCTAssertTrue(app.buttons["sample.orchestration"].waitForExistence(timeout: 2))
-    XCTAssertTrue(app.buttons["sample.phase-driven-fsm"].waitForExistence(timeout: 2))
-    XCTAssertTrue(app.buttons["sample.router-composition"].waitForExistence(timeout: 2))
+    for demo in SampleDemo.catalog {
+      XCTAssertTrue(
+        app.buttons[demo.accessibilityIdentifier].waitForExistence(timeout: 2),
+        "Expected hub button \(demo.accessibilityIdentifier)"
+      )
+    }
   }
 
   @MainActor
   func testDemoHubNavigatesToRouterCompositionFlow() throws {
     let app = launchApp(environment: ["INNOFLOW_ROUTER_PENDING_DETAIL_ID": "invoice-42"])
 
-    openDemoFromHub("sample.router-composition", in: app)
+    openDemoFromHub(SampleDemo.routerComposition.metadata.accessibilityIdentifier, in: app)
     tapButton(
       "router.sign-in", in: app,
       failureMessage: "Expected router sign-in button after hub navigation")
@@ -70,7 +73,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   func testDemoHubNavigatesToPhaseDrivenRecoveryFlow() throws {
     let app = launchApp()
 
-    openDemoFromHub("sample.phase-driven-fsm", in: app)
+    openDemoFromHub(SampleDemo.phaseDrivenFSM.metadata.accessibilityIdentifier, in: app)
 
     XCTAssertTrue(app.switches["phase.fail-next-load"].waitForExistence(timeout: 2))
 
@@ -126,5 +129,55 @@ final class InnoFlowSampleAppUITests: XCTestCase {
 
     app.buttons["phase.load-todos"].tap()
     XCTAssertTrue(app.staticTexts["Document legal transitions"].waitForExistence(timeout: 4))
+  }
+
+  @MainActor
+  func testFormValidationDemoSubmitsAndResets() throws {
+    let app = launchApp(environment: ["INNOFLOW_SAMPLE_DEMO": "form-validation"])
+
+    let fullName = app.textFields["form.full-name"]
+    XCTAssertTrue(fullName.waitForExistence(timeout: 2))
+    fullName.tap()
+    fullName.typeText("Ada Lovelace")
+
+    let email = app.textFields["form.email"]
+    email.tap()
+    email.typeText("ada@innosquad.com")
+
+    let confirmEmail = app.textFields["form.confirm-email"]
+    confirmEmail.tap()
+    confirmEmail.typeText("ada@innosquad.com")
+
+    let terms = app.switches["form.accept-terms"]
+    if let value = terms.value as? String, value == "0" {
+      terms.tap()
+    }
+
+    app.buttons["form.submit"].tap()
+    XCTAssertTrue(app.staticTexts["form.success"].waitForExistence(timeout: 2))
+
+    app.buttons["form.reset"].tap()
+    XCTAssertFalse(app.staticTexts["form.success"].waitForExistence(timeout: 1))
+  }
+
+  @MainActor
+  func testBidirectionalWebSocketDemoEchoesScriptedMessages() throws {
+    let app = launchApp(environment: ["INNOFLOW_SAMPLE_DEMO": "bidirectional-websocket"])
+
+    XCTAssertTrue(app.buttons["websocket.connect"].waitForExistence(timeout: 2))
+    app.buttons["websocket.connect"].tap()
+
+    let messageField = app.textFields["websocket.message"]
+    XCTAssertTrue(messageField.waitForExistence(timeout: 2))
+    messageField.tap()
+    messageField.typeText("hello")
+
+    app.buttons["websocket.send"].tap()
+    XCTAssertTrue(app.staticTexts["websocket.transcript"].waitForExistence(timeout: 2))
+    XCTAssertTrue(app.staticTexts["websocket.transcript"].label.contains("echo: hello"))
+
+    app.buttons["websocket.disconnect"].tap()
+    XCTAssertTrue(app.staticTexts["websocket.status"].waitForExistence(timeout: 2))
+    XCTAssertEqual(app.staticTexts["websocket.status"].label, "Disconnected")
   }
 }
