@@ -1,0 +1,89 @@
+// MARK: - EffectTimingBaselineSupportTests.swift
+// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// Copyright © 2025 InnoSquad. All rights reserved.
+
+import Foundation
+import InnoFlowTesting
+import Testing
+
+@Suite("EffectTiming baseline support")
+struct EffectTimingBaselineSupportTests {
+
+  @Test("Matched run pair counting ignores incomplete sequences")
+  func matchedRunPairCountingIgnoresIncompleteSequences() {
+    let entries: [EffectTimingRecorder.Entry] = [
+      .init(
+        phase: .runStarted,
+        sequence: 1,
+        effectID: nil,
+        actionLabel: nil,
+        timestampNanos: 100
+      ),
+      .init(
+        phase: .runFinished,
+        sequence: 1,
+        effectID: nil,
+        actionLabel: nil,
+        timestampNanos: 200
+      ),
+      .init(
+        phase: .runStarted,
+        sequence: 2,
+        effectID: nil,
+        actionLabel: nil,
+        timestampNanos: 300
+      ),
+      .init(
+        phase: .actionEmitted,
+        sequence: 2,
+        effectID: nil,
+        actionLabel: "tick",
+        timestampNanos: 350
+      ),
+    ]
+
+    #expect(matchedRunPairCount(in: entries) == 1)
+  }
+
+  @Test("Repository helper resolves the committed baseline fixture")
+  func repositoryHelperResolvesBaselineFixture() throws {
+    let baselineURL = try effectTimingRepositoryFileURL(
+      relativePath: EffectTimingBaselineContract.baselineFixtureRelativePath
+    )
+
+    #expect(FileManager.default.fileExists(atPath: baselineURL.path))
+    #expect(baselineURL.path.hasSuffix("EffectTimings.baseline.jsonl"))
+  }
+
+  @Test("Effect timing wait helper polls until the condition becomes true")
+  func waitHelperPollsUntilConditionSucceeds() async {
+    let flag = TestFlag()
+
+    Task {
+      try? await Task.sleep(for: .milliseconds(60))
+      await flag.markReady()
+    }
+
+    let succeeded = await waitForEffectTimingCondition(
+      timeout: .seconds(1),
+      pollInterval: .milliseconds(10),
+      description: "test flag to become ready",
+      condition: {
+        await flag.isReady
+      },
+      status: {
+        "ready=\(await flag.isReady)"
+      }
+    )
+
+    #expect(succeeded)
+  }
+}
+
+private actor TestFlag {
+  private(set) var isReady = false
+
+  func markReady() {
+    isReady = true
+  }
+}

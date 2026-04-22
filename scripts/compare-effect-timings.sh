@@ -6,13 +6,15 @@
 # The recorder captures `runStarted` / `runFinished` events with a monotonic
 # `timestampNanos` stamp. For every matched pair (same `sequence`), this
 # script computes the run duration, aggregates the distribution, and compares
-# the chosen metric (p95 by default) against the baseline distribution.
+# the chosen metric (p95 by default, mean for the release gate) against the
+# baseline distribution.
 #
-# A failure exits 1 with the regression delta printed on stderr. A pass
-# exits 0 with a one-line summary on stdout. No metric is absolute —
-# thresholds are relative so the same baseline survives CI runner churn.
+# A regression exits 1 with the delta printed on stderr. Usage errors,
+# malformed JSONL, and incomplete captures exit 2. A pass exits 0 with a
+# one-line summary on stdout. No metric is absolute — thresholds are
+# relative so the same baseline survives CI runner churn.
 #
-# Requires `jq`. If missing, prints an install hint and exits 1.
+# Requires `jq`. If missing, prints an install hint and exits 2.
 #
 # Usage:
 #   ./scripts/compare-effect-timings.sh \
@@ -20,9 +22,16 @@
 #     --current  /tmp/current.jsonl \
 #     [--metric p95] \
 #     [--tolerance 0.10]
+#
+# Regenerate the committed baseline fixture:
+#   INNOFLOW_WRITE_EFFECT_BASELINE=Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl \
+#   swift test --package-path . --build-path .build-effect-baseline-refresh \
+#     -c release -Xswiftc -warnings-as-errors --filter EffectTimingBaselineGate
 
 set -euo pipefail
 
+EXIT_REGRESSION=1
+EXIT_ERROR=2
 METRIC="p95"
 TOLERANCE="0.10"
 BASELINE=""
@@ -43,10 +52,20 @@ Optional:
 
 Exit codes:
   0  current within tolerance of baseline
-  1  regression detected, current capture incomplete, or missing dependency
+  1  metric regression detected
+  2  usage error, malformed data, incomplete capture, or missing dependency
 
 Install jq if unavailable:
   brew install jq
+
+Regenerate the committed baseline fixture from the repository root:
+  INNOFLOW_WRITE_EFFECT_BASELINE=Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl \
+  swift test --package-path . --build-path .build-effect-baseline-refresh \
+    -c release -Xswiftc -warnings-as-errors --filter EffectTimingBaselineGate
+
+Notes:
+  The standalone script supports both p95 and mean.
+  The dedicated release gate uses mean to reduce CI runner jitter sensitivity.
 HELP
 }
 
@@ -65,34 +84,34 @@ while [[ $# -gt 0 ]]; do
     *)
       echo "[compare-effect-timings] unknown argument: $1" >&2
       print_help >&2
-      exit 1 ;;
+      exit "$EXIT_ERROR" ;;
   esac
 done
 
 if [[ ! "$TOLERANCE" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]]; then
   echo "[compare-effect-timings] --tolerance must be within 0..1" >&2
-  exit 1
+  exit "$EXIT_ERROR"
 fi
 
 if [[ -z "$BASELINE" || -z "$CURRENT" ]]; then
   echo "[compare-effect-timings] --baseline and --current are required" >&2
   print_help >&2
-  exit 1
+  exit "$EXIT_ERROR"
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "[compare-effect-timings] 'jq' is required. Install with: brew install jq" >&2
-  exit 1
+  exit "$EXIT_ERROR"
 fi
 
 if [[ ! -f "$BASELINE" ]]; then
   echo "[compare-effect-timings] baseline file not found: $BASELINE" >&2
-  exit 1
+  exit "$EXIT_ERROR"
 fi
 
 if [[ ! -f "$CURRENT" ]]; then
   echo "[compare-effect-timings] current file not found: $CURRENT" >&2
-  exit 1
+  exit "$EXIT_ERROR"
 fi
 
 # Build the jq filter for the requested metric. For matched run pairs
@@ -107,13 +126,16 @@ case "$METRIC" in
     ;;
   *)
     echo "[compare-effect-timings] unknown metric: $METRIC (expected p95 or mean)" >&2
-    exit 1 ;;
+    exit "$EXIT_ERROR" ;;
 esac
 
 # Produce "<matched run count>\t<metric nanos>" for a given JSONL file.
 compute_summary() {
   local file="$1"
-  jq -rs '
+  local output
+  local status=0
+  output="$(
+    jq -rs '
     map(select(.phase == "runStarted" or .phase == "runFinished"))
     | group_by(.sequence)
     | map(select(length == 2
@@ -124,22 +146,31 @@ compute_summary() {
          - (.[] | select(.phase == "runStarted") | .timestampNanos)))
     | . as $deltas
     | [($deltas | length), ('"$METRIC_FILTER"')] | @tsv
-  ' "$file"
+  ' "$file" 2>&1
+  )" || status=$?
+
+  if [[ "$status" != "0" ]]; then
+    printf '%s\n' "$output" >&2
+    echo "[compare-effect-timings] failed to parse recorder JSONL: $file" >&2
+    exit "$EXIT_ERROR"
+  fi
+
+  printf '%s\n' "$output"
 }
 
 IFS=$'\t' read -r BASELINE_MATCHED_RUNS BASELINE_METRIC <<< "$(compute_summary "$BASELINE")"
 IFS=$'\t' read -r CURRENT_MATCHED_RUNS CURRENT_METRIC <<< "$(compute_summary "$CURRENT")"
 
-# Guard against zero baseline (insufficient signal in fixture). Treat as
-# pass-through — a new fixture has to be refreshed manually.
+# Guard against zero baseline (insufficient signal in fixture). Treat as a
+# hard failure so maintainers refresh the committed fixture deliberately.
 if [[ -z "$BASELINE_MATCHED_RUNS" || "$BASELINE_MATCHED_RUNS" == "0" ]]; then
-  echo "[compare-effect-timings] baseline has no matched runs — regenerate fixture" >&2
-  exit 0
+  echo "[compare-effect-timings] baseline has no matched runs — fixture is invalid; regenerate baseline" >&2
+  exit "$EXIT_ERROR"
 fi
 
 if [[ -z "$CURRENT_MATCHED_RUNS" || "$CURRENT_MATCHED_RUNS" == "0" ]]; then
   echo "[compare-effect-timings] current capture has no matched runs — incomplete capture or missing runFinished events" >&2
-  exit 1
+  exit "$EXIT_ERROR"
 fi
 
 # Use `awk` (POSIX, no jq math) for the ratio comparison. jq's floats are
@@ -166,5 +197,5 @@ else
       --arg tolerance "$TOLERANCE" \
       '{regression: {metric: $metric, baselineRuns: $baselineRuns, currentRuns: $currentRuns, baselineNanos: $baseline, currentNanos: $current, ratio: $ratio, tolerance: $tolerance}}'
   } >&2
-  exit 1
+  exit "$EXIT_REGRESSION"
 fi

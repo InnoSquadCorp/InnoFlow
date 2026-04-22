@@ -1,0 +1,5 @@
+{"iterations":5000,"perIterationNanos":53,"totalNanos":260583,"label":"construct-only N=2"}
+{"totalNanos":288417,"label":"construct-only N=8","iterations":5000,"perIterationNanos":58}
+{"iterations":2000,"perIterationNanos":84,"totalNanos":167416,"label":"construct-only N=32"}
+{"totalNanos":16373250,"label":"dispatch N=8 × 10k","iterations":10000,"perIterationNanos":1638}
+{"iterations":10000,"perIterationNanos":7219,"totalNanos":72186375,"label":"dispatch N=32 × 10k"}

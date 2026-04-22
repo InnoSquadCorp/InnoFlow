@@ -233,7 +233,7 @@ struct EffectTimingRecorderTests {
     timeout: Duration = .seconds(15)
   ) async -> Bool {
     let expectedRuns = UInt64(expectedRunCount)
-    return await waitUntil(
+    return await waitForEffectTimingCondition(
       timeout: timeout,
       description: "probe run \(expectedRunCount) to finish and record",
       condition: {
@@ -263,7 +263,7 @@ struct EffectTimingRecorderTests {
     expectedCancellations: UInt64 = 1,
     timeout: Duration = .seconds(15)
   ) async -> Bool {
-    await waitUntil(
+    await waitForEffectTimingCondition(
       timeout: timeout,
       description: "probe cancellation \(expectedCancellations) to record",
       condition: {
@@ -281,31 +281,6 @@ struct EffectTimingRecorderTests {
         )
       }
     )
-  }
-
-  private func waitUntil(
-    timeout: Duration = .seconds(15),
-    pollInterval: Duration = .milliseconds(20),
-    description: String,
-    condition: @escaping () async -> Bool,
-    status: @escaping () async -> String
-  ) async -> Bool {
-    let clock = ContinuousClock()
-    let deadline = clock.now + timeout
-    while clock.now < deadline {
-      if await condition() {
-        return true
-      }
-      try? await Task.sleep(for: pollInterval)
-    }
-    // CI can satisfy the probe right after the final sleep crosses the
-    // deadline, so re-check once before recording a timeout issue.
-    if await condition() {
-      return true
-    }
-    let latestStatus = await status()
-    Issue.record("Timed out waiting for \(description); \(latestStatus)")
-    return false
   }
 
   @MainActor
@@ -330,18 +305,6 @@ struct EffectTimingRecorderTests {
     let snapshot = await probeSnapshot(for: store)
     return
       "prepared=\(snapshot.preparedRuns) attached=\(snapshot.attachedRuns) finished=\(snapshot.finishedRuns) emissions=\(snapshot.emissionDecisions) cancellations=\(snapshot.cancellations) witnessStarts=\(witnessSnapshot.runStartedCount) witnessFinishes=\(witnessSnapshot.runFinishedCount) witnessCancellations=\(witnessSnapshot.cancellationCount) witnessRunPairs=\(witnessSnapshot.matchedRunPairs) recorderRunPairs=\(recordedRunPairs) count=\(snapshot.count)"
-  }
-
-  private func matchedRunPairCount(in entries: [EffectTimingRecorder.Entry]) -> Int {
-    var phasesBySequence: [UInt64: Set<EffectTimingRecorder.Phase>] = [:]
-    for entry in entries where entry.phase == .runStarted || entry.phase == .runFinished {
-      phasesBySequence[entry.sequence, default: []].insert(entry.phase)
-    }
-    return phasesBySequence.values.reduce(into: 0) { count, phases in
-      if phases.contains(.runStarted) && phases.contains(.runFinished) {
-        count += 1
-      }
-    }
   }
 
   @MainActor
