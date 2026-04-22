@@ -24,7 +24,7 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
 2. Public feature authoring must not directly implement `func reduce(into:action:)`.
 3. Composition happens through `Reduce`, `CombineReducers`, and `Scope`.
 4. `PhaseTransitionGraph` is an opt-in topology validator, and `PhaseMap` is the canonical post-reduce phase ownership layer.
-5. Binding stays explicit through `@BindableField` (property wrapper) and `store.binding(\.$field, to:)` (or the equivalent `send:`), and binding calls must keep that label explicit because unlabeled trailing-closure forms are ambiguous once both overloads exist.
+5. Binding stays explicit through `@BindableField` (property wrapper) and `store.binding(\.$field, to:)` (or the equivalent `send:`), and binding calls must keep that label explicit because unlabeled forms are an intentional 3.x migration break once both overloads exist. Swift surfaces trailing-closure spellings as an explicit-label ambiguity and parenthesized unlabeled spellings as no-exact-matches calls.
 6. `BindableProperty` is a low-level storage type — never authored directly in public features.
 7. InnoFlow owns business/domain transitions only.
 
@@ -266,7 +266,10 @@ InnoFlow/
 │   │   ├── Store.swift                  # main actor state owner + action queue entry point
 │   │   ├── StoreEffectBridge.swift      # store/runtime bridge
 │   │   ├── EffectRuntime.swift          # actor runtime bookkeeping
-│   │   ├── StoreSupport.swift           # queue, observer registry, caches, throttle support
+│   │   ├── StoreActionQueue.swift       # queued action drain support
+│   │   ├── ProjectionObserverRegistry.swift
+│   │   ├── StoreCaches.swift
+│   │   ├── StoreLifetimeToken.swift
 │   │   ├── ScopedStore.swift            # child projections + collection scoping
 │   │   ├── SelectedStore.swift          # derived read models + dependency-aware refresh
 │   │   ├── Store+SwiftUIBindings.swift  # binding surface

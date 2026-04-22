@@ -12,6 +12,11 @@ It is intentionally narrow:
 - InnoDI owns construction-time lifecycle.
 - `PhaseMap` remains partial by default; unmatched phase/action pairs are legal no-ops unless tests opt into stricter validation.
 
+For the cross-library ownership matrix behind those bullets, see
+[`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md). For dependency injection
+patterns at those boundaries, see
+[`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md).
+
 ## Recommended pattern
 
 ```swift

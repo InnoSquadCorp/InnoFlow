@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CANONICAL_ROOT_DIR=""
+
+cd "$ROOT_DIR"
 
 HAS_RG=0
 RG_BIN=""
@@ -177,6 +179,71 @@ count_line_matches() {
   printf '%s\n' "$output" | sed '/^$/d' | wc -l | tr -d ' '
 }
 
+verify_doc_parity_contract() {
+  local contract_path="docs/contracts/doc-parity.json"
+
+  if [[ ! -f "$contract_path" ]]; then
+    echo "[principle-gates] Failed: $contract_path is missing"
+    return 1
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "[principle-gates] Failed: jq is required to evaluate $contract_path"
+    return 1
+  fi
+
+  local item
+  local file
+  local label
+  local pattern
+  while IFS= read -r item; do
+    file="$(jq -r '.file' <<<"$item")"
+    label="$(jq -r '.label' <<<"$item")"
+    pattern="$(jq -r '.pattern' <<<"$item")"
+    if [[ ! -f "$file" ]]; then
+      echo "[principle-gates] Failed: $file not found"
+      return 1
+    fi
+    if ! search_lines "$pattern" "$file" >/dev/null; then
+      echo "[principle-gates] Failed: $file must include $label"
+      return 1
+    fi
+  done < <(jq -c '.requiredPatterns[]' "$contract_path")
+
+  local expected_count
+  local actual_count
+  while IFS= read -r item; do
+    file="$(jq -r '.file' <<<"$item")"
+    label="$(jq -r '.label' <<<"$item")"
+    pattern="$(jq -r '.pattern' <<<"$item")"
+    expected_count="$(jq -r '.count' <<<"$item")"
+    if [[ ! -f "$file" ]]; then
+      echo "[principle-gates] Failed: $file not found"
+      return 1
+    fi
+    actual_count="$(count_line_matches "$pattern" "$file")"
+    if [[ "$actual_count" != "$expected_count" ]]; then
+      echo "[principle-gates] Failed: expected $file to contain exactly $expected_count '$label' section(s)"
+      return 1
+    fi
+  done < <(jq -c '.sectionCounts[]' "$contract_path")
+
+  local sample_id
+  while IFS= read -r item; do
+    file="$(jq -r '.file' <<<"$item")"
+    if [[ ! -f "$file" ]]; then
+      echo "[principle-gates] Failed: $file not found"
+      return 1
+    fi
+    while IFS= read -r sample_id; do
+      if ! search_lines "$sample_id" "$file" >/dev/null; then
+        echo "[principle-gates] Failed: $file must mention sample identifier $sample_id"
+        return 1
+      fi
+    done < <(jq -r '.values[]' <<<"$item")
+  done < <(jq -c '.sampleIdentifiers[]' "$contract_path")
+}
+
 main() {
   initialize_search_backend
   trap cleanup_temp_dirs EXIT
@@ -271,6 +338,20 @@ main() {
   fi
 
   echo "[principle-gates] Checking canonical sample app only"
+  local sample_root_view="Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature/InnoFlowSampleAppRootView.swift"
+  local sample_catalog="Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature/SampleCatalog.swift"
+  local -a canonical_sample_ids=(
+    'sample\.basics'
+    'sample\.orchestration'
+    'sample\.phase-driven-fsm'
+    'sample\.router-composition'
+    'sample\.authentication-flow'
+    'sample\.list-detail-pagination'
+    'sample\.offline-first'
+    'sample\.realtime-stream'
+    'sample\.form-validation'
+    'sample\.bidirectional-websocket'
+  )
   if [[ -d "Examples/CounterApp" || -d "Examples/TodoApp" ]]; then
     echo "[principle-gates] Failed: legacy example apps still exist"
     exit 1
@@ -283,10 +364,10 @@ main() {
     echo "[principle-gates] Failed: canonical docs or sample still reference removed bridge/extra libraries"
     exit 1
   fi
-  search_lines 'sample\.basics' Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature/InnoFlowSampleAppRootView.swift >/dev/null
-  search_lines 'sample\.orchestration' Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature/InnoFlowSampleAppRootView.swift >/dev/null
-  search_lines 'sample\.phase-driven-fsm' Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature/InnoFlowSampleAppRootView.swift >/dev/null
-  search_lines 'sample\.router-composition' Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature/InnoFlowSampleAppRootView.swift >/dev/null
+  local sample_id
+  for sample_id in "${canonical_sample_ids[@]}"; do
+    search_lines "$sample_id" "$sample_root_view" "$sample_catalog" >/dev/null
+  done
 
   echo "[principle-gates] Checking ownership boundary drift in sample sources"
   if search_lines_excluding "RouteStack|NavigationPath|NavigationStore|Navigator" "RouterCompositionDemo|InnoFlowSampleAppRootView" Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources; then
@@ -294,8 +375,8 @@ main() {
     exit 1
   fi
 
-  if search_lines "WebSocket|reconnect|retry policy|transport lifecycle|session lifecycle" Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources; then
-    echo "[principle-gates] Failed: network transport ownership leaked into the sample reducers"
+  if search_lines_excluding "import InnoNetworkWebSocket|WebSocketManager|WebSocketEvent|WebSocketTask|reconnect|retry policy|transport lifecycle|session lifecycle" "BidirectionalWebSocketDemo|InnoFlowSampleAppRootView|SampleCatalog" Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources; then
+    echo "[principle-gates] Failed: network transport ownership leaked outside the explicitly labeled cross-framework demo"
     exit 1
   fi
 
@@ -328,28 +409,11 @@ main() {
     echo "[principle-gates] Failed: docs/DEPENDENCY_PATTERNS.md is missing"
     exit 1
   fi
-  if ! require_pattern_in_every_file "docs/DEPENDENCY_PATTERNS\\.md" README.md README.kr.md README.jp.md README.cn.md ARCHITECTURE_CONTRACT.md; then
+  if [[ ! -f "docs/CROSS_FRAMEWORK.md" ]]; then
+    echo "[principle-gates] Failed: docs/CROSS_FRAMEWORK.md is missing"
     exit 1
   fi
-  README_SECTION_COUNT="$(count_line_matches '^## InnoFlow 3.0.0 direction$' README.md)"
-  CONTRACT_SECTION_COUNT="$(count_line_matches '^# Architecture Contract$' ARCHITECTURE_CONTRACT.md)"
-  GETTING_STARTED_SECTION_COUNT="$(count_line_matches '^# Getting Started$' Sources/InnoFlow/InnoFlow.docc/GettingStarted.md)"
-  PHASE_SECTION_COUNT="$(count_line_matches '^# Phase-Driven Modeling$' Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md)"
-
-  if [[ "$README_SECTION_COUNT" != "1" ]]; then
-    echo "[principle-gates] Failed: expected README to contain exactly one 'InnoFlow 3.0.0 direction' section"
-    exit 1
-  fi
-  if [[ "$CONTRACT_SECTION_COUNT" != "1" ]]; then
-    echo "[principle-gates] Failed: expected one Architecture Contract top-level section"
-    exit 1
-  fi
-  if [[ "$GETTING_STARTED_SECTION_COUNT" != "1" ]]; then
-    echo "[principle-gates] Failed: expected one Getting Started top-level section"
-    exit 1
-  fi
-  if [[ "$PHASE_SECTION_COUNT" != "1" ]]; then
-    echo "[principle-gates] Failed: expected one Phase-Driven Modeling top-level section"
+  if ! verify_doc_parity_contract; then
     exit 1
   fi
 
@@ -385,6 +449,19 @@ main() {
   echo "[principle-gates] Checking @unchecked Sendable removal"
   if search_lines "@unchecked Sendable" Sources Tests Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests; then
     echo "[principle-gates] Failed: @unchecked Sendable usage found"
+    exit 1
+  fi
+
+  echo "[principle-gates] Checking macro maintainability split"
+  local macro_entry="Sources/InnoFlowMacros/InnoFlowMacro.swift"
+  if search_lines "@BindableField|diagnoseMissingBindableFieldSetters|BindableFieldDiagnostic" "$macro_entry"; then
+    echo "[principle-gates] Failed: bindable-field diagnostics leaked back into $macro_entry"
+    exit 1
+  fi
+  local macro_entry_loc
+  macro_entry_loc="$(wc -l < "$macro_entry" | tr -d ' ')"
+  if [[ "$macro_entry_loc" -gt 300 ]]; then
+    echo "[principle-gates] Failed: $macro_entry must stay under 300 lines (found $macro_entry_loc)"
     exit 1
   fi
 
@@ -433,7 +510,7 @@ main() {
   # (the 2026-04 class of yield-count failures) are detected against
   # `Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl` via
   # `scripts/compare-effect-timings.sh` without unrelated suite load skewing
-  # the measured p95.
+  # the measured mean.
   RELEASE_BASELINE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-baseline"
   if ! INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
       --package-path "$ROOT_DIR" \

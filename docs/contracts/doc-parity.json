@@ -1,0 +1,187 @@
+{
+  "requiredPatterns": [
+    {
+      "file": "README.md",
+      "label": "docs/DEPENDENCY_PATTERNS.md",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.md",
+      "label": "docs/CROSS_FRAMEWORK.md",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.kr.md",
+      "label": "docs/DEPENDENCY_PATTERNS.md",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.kr.md",
+      "label": "docs/CROSS_FRAMEWORK.md",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.jp.md",
+      "label": "docs/DEPENDENCY_PATTERNS.md",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.jp.md",
+      "label": "docs/CROSS_FRAMEWORK.md",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.cn.md",
+      "label": "docs/DEPENDENCY_PATTERNS.md",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.cn.md",
+      "label": "docs/CROSS_FRAMEWORK.md",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "ARCHITECTURE_CONTRACT.md",
+      "label": "docs/DEPENDENCY_PATTERNS.md",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "ARCHITECTURE_CONTRACT.md",
+      "label": "docs/CROSS_FRAMEWORK.md",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "PHASE_DRIVEN_MODELING.md",
+      "label": "docs/DEPENDENCY_PATTERNS.md",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "PHASE_DRIVEN_MODELING.md",
+      "label": "docs/CROSS_FRAMEWORK.md",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "Examples/InnoFlowSampleApp/README.md",
+      "label": "docs/DEPENDENCY_PATTERNS.md",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "Examples/InnoFlowSampleApp/README.md",
+      "label": "docs/CROSS_FRAMEWORK.md",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "Sources/InnoFlow/InnoFlow.docc/InnoFlow.md",
+      "label": "docs/DEPENDENCY_PATTERNS.md",
+      "pattern": "DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "Sources/InnoFlow/InnoFlow.docc/InnoFlow.md",
+      "label": "docs/CROSS_FRAMEWORK.md",
+      "pattern": "CROSS_FRAMEWORK\\.md"
+    }
+  ],
+  "sectionCounts": [
+    {
+      "file": "README.md",
+      "label": "InnoFlow 3.0.0 direction",
+      "pattern": "^## InnoFlow 3\\.0\\.0 direction$",
+      "count": 1
+    },
+    {
+      "file": "ARCHITECTURE_CONTRACT.md",
+      "label": "Architecture Contract",
+      "pattern": "^# Architecture Contract$",
+      "count": 1
+    },
+    {
+      "file": "Sources/InnoFlow/InnoFlow.docc/GettingStarted.md",
+      "label": "Getting Started",
+      "pattern": "^# Getting Started$",
+      "count": 1
+    },
+    {
+      "file": "Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md",
+      "label": "Phase-Driven Modeling",
+      "pattern": "^# Phase-Driven Modeling$",
+      "count": 1
+    }
+  ],
+  "sampleIdentifiers": [
+    {
+      "file": "README.md",
+      "values": [
+        "sample.basics",
+        "sample.orchestration",
+        "sample.phase-driven-fsm",
+        "sample.router-composition",
+        "sample.authentication-flow",
+        "sample.list-detail-pagination",
+        "sample.offline-first",
+        "sample.realtime-stream",
+        "sample.form-validation",
+        "sample.bidirectional-websocket"
+      ]
+    },
+    {
+      "file": "README.kr.md",
+      "values": [
+        "sample.basics",
+        "sample.orchestration",
+        "sample.phase-driven-fsm",
+        "sample.router-composition",
+        "sample.authentication-flow",
+        "sample.list-detail-pagination",
+        "sample.offline-first",
+        "sample.realtime-stream",
+        "sample.form-validation",
+        "sample.bidirectional-websocket"
+      ]
+    },
+    {
+      "file": "README.jp.md",
+      "values": [
+        "sample.basics",
+        "sample.orchestration",
+        "sample.phase-driven-fsm",
+        "sample.router-composition",
+        "sample.authentication-flow",
+        "sample.list-detail-pagination",
+        "sample.offline-first",
+        "sample.realtime-stream",
+        "sample.form-validation",
+        "sample.bidirectional-websocket"
+      ]
+    },
+    {
+      "file": "README.cn.md",
+      "values": [
+        "sample.basics",
+        "sample.orchestration",
+        "sample.phase-driven-fsm",
+        "sample.router-composition",
+        "sample.authentication-flow",
+        "sample.list-detail-pagination",
+        "sample.offline-first",
+        "sample.realtime-stream",
+        "sample.form-validation",
+        "sample.bidirectional-websocket"
+      ]
+    },
+    {
+      "file": "Examples/InnoFlowSampleApp/README.md",
+      "values": [
+        "sample.basics",
+        "sample.orchestration",
+        "sample.phase-driven-fsm",
+        "sample.router-composition",
+        "sample.authentication-flow",
+        "sample.list-detail-pagination",
+        "sample.offline-first",
+        "sample.realtime-stream",
+        "sample.form-validation",
+        "sample.bidirectional-websocket"
+      ]
+    }
+  ]
+}
