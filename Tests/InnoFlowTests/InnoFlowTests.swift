@@ -2705,6 +2705,208 @@ struct CompileContractTests {
       "expected @BindableField projected key path to typecheck, got: \(result.normalizedOutput)")
   }
 
+  @Test("Store.binding rejects unlabeled trailing-closure calls with explicit label guidance")
+  func bindingRejectsUnlabeledTrailingClosureAtCompileTime() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct BindableFeature: Reducer {
+          struct State: Sendable, DefaultInitializable {
+              @BindableField var step = 1
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: BindableFeature(), initialState: .init())
+          _ = store.binding(\\.$step) { .setStep($0) }
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0)
+    let diagnostics = result.normalizedOutput
+    #expect(diagnostics.localizedCaseInsensitiveContains("ambiguous use of 'binding'"))
+    #expect(diagnostics.contains("binding(_:send:)"))
+    #expect(diagnostics.contains("binding(_:to:)"))
+  }
+
+  @Test("Store.binding rejects parenthesized unlabeled calls with explicit label guidance")
+  func bindingRejectsParenthesizedUnlabeledCallAtCompileTime() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct BindableFeature: Reducer {
+          struct State: Sendable, DefaultInitializable {
+              @BindableField var step = 1
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: BindableFeature(), initialState: .init())
+          _ = store.binding(\\.$step, { .setStep($0) })
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0)
+    let diagnostics = result.normalizedOutput
+    #expect(diagnostics.localizedCaseInsensitiveContains("no exact matches in call"))
+    #expect(diagnostics.contains("expected: '(_:send:)'"))
+    #expect(diagnostics.contains("expected: '(_:to:)'"))
+  }
+
+  @Test("ScopedStore.binding rejects unlabeled trailing-closure calls with explicit label guidance")
+  func scopedBindingRejectsUnlabeledTrailingClosureAtCompileTime() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct ParentFeature: Reducer {
+          struct Child: Equatable, Sendable {
+              @BindableField var step = 1
+          }
+
+          struct State: Sendable, DefaultInitializable {
+              var child = Child()
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case child(ChildAction)
+
+              static let childCasePath = CasePath<Self, ChildAction>(
+                  embed: Action.child,
+                  extract: { action in
+                      guard case .child(let childAction) = action else { return nil }
+                      return childAction
+                  }
+              )
+          }
+
+          enum ChildAction: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: ParentFeature(), initialState: .init())
+          let scoped = store.scope(state: \\.child, action: ParentFeature.Action.childCasePath)
+          _ = scoped.binding(\\.$step) { .setStep($0) }
+      }
+      """
+
+      let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0)
+    let diagnostics = result.normalizedOutput
+    #expect(diagnostics.localizedCaseInsensitiveContains("ambiguous use of 'binding'"))
+    #expect(diagnostics.contains("binding(_:send:)"))
+    #expect(diagnostics.contains("binding(_:to:)"))
+  }
+
+  @Test("ScopedStore.binding rejects parenthesized unlabeled calls with explicit label guidance")
+  func scopedBindingRejectsParenthesizedUnlabeledCallAtCompileTime() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct ParentFeature: Reducer {
+          struct Child: Equatable, Sendable {
+              @BindableField var step = 1
+          }
+
+          struct State: Sendable, DefaultInitializable {
+              var child = Child()
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case child(ChildAction)
+
+              static let childCasePath = CasePath<Self, ChildAction>(
+                  embed: Action.child,
+                  extract: { action in
+                      guard case .child(let childAction) = action else { return nil }
+                      return childAction
+                  }
+              )
+          }
+
+          enum ChildAction: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: ParentFeature(), initialState: .init())
+          let scoped = store.scope(state: \\.child, action: ParentFeature.Action.childCasePath)
+          _ = scoped.binding(\\.$step, { .setStep($0) })
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0)
+    let diagnostics = result.normalizedOutput
+    #expect(diagnostics.localizedCaseInsensitiveContains("no exact matches in call"))
+    #expect(diagnostics.contains("expected: '(_:send:)'"))
+    #expect(diagnostics.contains("expected: '(_:to:)'"))
+  }
+
   @Test("Scope/IfLet/IfCaseLet reject public closure-based action lifting at compile time")
   func reducerCompositionRejectsClosureActionLiftingAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
@@ -7295,7 +7497,10 @@ private func runConditionalReducerReleaseHarness(
     "StoreClock.swift",
     "StoreEffectBridge.swift",
     "StoreInstrumentation.swift",
-    "StoreSupport.swift",
+    "StoreLifetimeToken.swift",
+    "ProjectionObserverRegistry.swift",
+    "StoreActionQueue.swift",
+    "StoreCaches.swift",
   ]
   .map { packageRoot.appendingPathComponent("Sources/InnoFlow/\($0)").path }
 
