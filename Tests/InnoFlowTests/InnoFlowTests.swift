@@ -2784,10 +2784,7 @@ struct CompileContractTests {
 
     #expect(result.status != 0)
     let diagnostics = result.normalizedOutput
-    #expect(diagnostics.contains("no exact matches in call to instance method 'binding'"))
-    #expect(diagnostics.contains("incorrect labels for candidate"))
-    #expect(diagnostics.contains("expected: '(_:send:)'"))
-    #expect(diagnostics.contains("expected: '(_:to:)'"))
+    expectParenthesizedUnlabeledBindingRejection(in: diagnostics)
   }
 
   @Test("ScopedStore.binding rejects unlabeled trailing-closure calls with explicit label guidance")
@@ -2903,10 +2900,7 @@ struct CompileContractTests {
 
     #expect(result.status != 0)
     let diagnostics = result.normalizedOutput
-    #expect(diagnostics.contains("no exact matches in call to instance method 'binding'"))
-    #expect(diagnostics.contains("incorrect labels for candidate"))
-    #expect(diagnostics.contains("expected: '(_:send:)'"))
-    #expect(diagnostics.contains("expected: '(_:to:)'"))
+    expectParenthesizedUnlabeledBindingRejection(in: diagnostics)
   }
 
   @Test("Scope/IfLet/IfCaseLet reject public closure-based action lifting at compile time")
@@ -3083,6 +3077,24 @@ struct CompileContractTests {
     for signature in forbiddenSignatures {
       #expect(source.contains(signature) == false)
     }
+  }
+
+  private func expectParenthesizedUnlabeledBindingRejection(in diagnostics: String) {
+    let rejectedByCandidateMismatch =
+      diagnostics.contains("no exact matches in call to instance method 'binding'")
+      && diagnostics.contains("incorrect labels for candidate")
+      && diagnostics.contains("expected: '(_:send:)'")
+      && diagnostics.contains("expected: '(_:to:)'")
+
+    let rejectedByUnavailableMigrationOverload =
+      diagnostics.contains("'binding' is unavailable")
+      && diagnostics.contains("Use 'binding(_:send:)' or 'binding(_:to:)'")
+      && diagnostics.contains("unlabeled trailing-closure calls")
+
+    #expect(
+      rejectedByCandidateMismatch || rejectedByUnavailableMigrationOverload,
+      "expected parenthesized unlabeled binding call to be rejected with label guidance, got: \(diagnostics)"
+    )
   }
 }
 

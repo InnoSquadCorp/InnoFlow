@@ -59,20 +59,15 @@ struct EffectTimingBaselineSupportTests {
   func waitHelperPollsUntilConditionSucceeds() async {
     let flag = TestFlag()
 
-    Task {
-      try? await Task.sleep(for: .milliseconds(60))
-      await flag.markReady()
-    }
-
     let succeeded = await waitForEffectTimingCondition(
       timeout: .seconds(1),
       pollInterval: .milliseconds(10),
       description: "test flag to become ready",
       condition: {
-        await flag.isReady
+        await flag.pollUntilReady()
       },
       status: {
-        "ready=\(await flag.isReady)"
+        await flag.status
       }
     )
 
@@ -81,9 +76,14 @@ struct EffectTimingBaselineSupportTests {
 }
 
 private actor TestFlag {
-  private(set) var isReady = false
+  private var pollCount = 0
 
-  func markReady() {
-    isReady = true
+  var status: String {
+    "pollCount=\(pollCount)"
+  }
+
+  func pollUntilReady() -> Bool {
+    pollCount += 1
+    return pollCount >= 2
   }
 }
