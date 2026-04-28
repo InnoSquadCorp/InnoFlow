@@ -1164,6 +1164,56 @@ struct IfCaseLetFeature {
   }
 }
 
+@InnoFlow(phaseManaged: true)
+struct PhaseManagedFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    enum Phase: Hashable, Sendable {
+      case idle
+      case loading
+      case loaded
+      case failed
+    }
+
+    var phase: Phase = .idle
+    var output: String?
+    var errorMessage: String?
+  }
+
+  enum Action: Equatable, Sendable {
+    case load
+    case _loaded(String)
+    case _failed(String)
+  }
+
+  static var phaseMap: PhaseMap<State, Action, State.Phase> {
+    PhaseMap(\State.phase) {
+      From(.idle) {
+        On(.load, to: .loading)
+      }
+      From(.loading) {
+        On(Action.loadedCasePath, to: .loaded)
+        On(Action.failedCasePath, to: .failed)
+      }
+    }
+  }
+
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .load:
+        state.errorMessage = nil
+        return .none
+      case ._loaded(let output):
+        state.output = output
+        return .none
+      case ._failed(let message):
+        state.errorMessage = message
+        return .none
+      }
+    }
+  }
+}
+
 struct InstrumentationFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var log: [String] = []
@@ -4270,6 +4320,31 @@ struct StoreTests {
     #expect(probe.events.contains("start:instrumented-delayed"))
     #expect(probe.events.contains("emit:received(\"delayed\")"))
     #expect(probe.events.contains("finish:instrumented-delayed"))
+  }
+
+  @Test(
+    "@InnoFlow(phaseManaged: true) auto-applies static phaseMap inside the synthesized reducer"
+  )
+  func phaseManagedMacroAutoAppliesPhaseMap() {
+    let feature = PhaseManagedFeature()
+    var state = PhaseManagedFeature.State()
+
+    #expect(state.phase == .idle)
+
+    _ = feature.reduce(into: &state, action: .load)
+    #expect(state.phase == .loading)
+    #expect(state.errorMessage == nil)
+
+    _ = feature.reduce(into: &state, action: ._loaded("ok"))
+    #expect(state.phase == .loaded)
+    #expect(state.output == "ok")
+
+    _ = feature.reduce(into: &state, action: ._failed("boom"))
+    // The phase map only declares loading -> failed, so a failed action
+    // received in the loaded phase is a legal no-op. The body still
+    // updates non-phase state.
+    #expect(state.phase == .loaded)
+    #expect(state.errorMessage == "boom")
   }
 
   @Test("StoreInstrumentation.signpost preserves runtime behavior")

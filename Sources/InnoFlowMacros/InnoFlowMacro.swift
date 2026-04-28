@@ -40,6 +40,18 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       return []
     }
 
+    if isPhaseManaged(node: node) {
+      return [
+        DeclSyntax(
+          """
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+            body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
+          }
+          """
+        )
+      ]
+    }
+
     return [
       DeclSyntax(
         """
@@ -49,6 +61,22 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
         """
       )
     ]
+  }
+
+  /// Returns `true` when the `@InnoFlow` attribute carries
+  /// `phaseManaged: true`. The argument turns the macro into the
+  /// phase-managed form, where the synthesized `reduce(into:action:)`
+  /// automatically wraps the declared `body` in `.phaseMap(Self.phaseMap)`.
+  fileprivate static func isPhaseManaged(node: AttributeSyntax) -> Bool {
+    guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else {
+      return false
+    }
+    for argument in arguments where argument.label?.text == "phaseManaged" {
+      if let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+        return boolLiteral.literal.text == "true"
+      }
+    }
+    return false
   }
 
   public static func expansion(
