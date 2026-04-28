@@ -46,6 +46,21 @@ The framework handles this race explicitly:
   at init time, and reading `ScopedStore.id` when the stable identifier type
   does not match the child state's `Identifiable.ID`.
 
+Callers that need to react to a released parent without consulting the cached
+fallback can use the explicit accessors:
+
+- `ScopedStore.isAlive` and `SelectedStore.isAlive` report whether the
+  projection is still backed by a live parent and active observer state.
+- `ScopedStore.optionalState` and `SelectedStore.optionalValue` return `nil`
+  in the same situations where `state`/`value` would emit a debug assertion
+  and a cached fallback. They are the contract-compliant way to ask
+  "is this projection still meaningful?" from a release-tolerant call site
+  and treat `nil` as "regenerate the projection."
+
+These accessors do not change the cached-read or no-op-write semantics above;
+they expose the same lifecycle signal to callers that prefer to branch on
+liveness rather than rely on the cached snapshot.
+
 This contract applies to single-child `Scope`, collection `ForEachReducer`
 children, and derived `SelectedStore` projections alike.
 

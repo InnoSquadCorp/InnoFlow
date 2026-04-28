@@ -49,6 +49,30 @@ public final class SelectedStore<Value: Equatable & Sendable> {
     return cachedValue
   }
 
+  /// Whether this selection is still backed by a live source projection.
+  ///
+  /// Returns `false` once the parent store or scoped store backing this
+  /// selection has been released, or once the selection has been marked
+  /// inactive because its source collection entry was removed. Callers
+  /// can consult this before reading `value` to avoid the cached-fallback
+  /// path documented in the lifecycle contract.
+  public var isAlive: Bool {
+    parentObject != nil && isActive
+  }
+
+  /// A read accessor that reports a released parent or inactive selection
+  /// as `nil` instead of returning the last cached value.
+  ///
+  /// `value` keeps the existing cached-read contract for SwiftUI observer
+  /// races. `optionalValue` is the explicit form: callers that need to
+  /// distinguish "value is fresh" from "parent is gone" without hitting a
+  /// debug assertion or a release-time stale read should consult this
+  /// property and treat `nil` as "regenerate the selection."
+  public var optionalValue: Value? {
+    guard isAlive else { return nil }
+    return cachedValue
+  }
+
   init(
     initialValue: Value,
     parentObject: AnyObject,

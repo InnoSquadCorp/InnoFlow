@@ -3290,6 +3290,53 @@ struct StoreTests {
     #expect(scoped.step == 7)
   }
 
+  @Test("ScopedStore.isAlive and optionalState are true/non-nil while parent is alive")
+  func scopedStoreLifecycleAccessorsWhileAlive() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+
+    #expect(scoped.isAlive == true)
+    #expect(scoped.optionalState != nil)
+    #expect(scoped.optionalState?.step == 1)
+  }
+
+  @Test("ScopedStore.optionalState surfaces released parent as nil without asserting")
+  func scopedStoreOptionalStateAfterParentRelease() {
+    let scoped: ScopedStore<
+      ScopedBindableChildFeature,
+      ScopedBindableChildFeature.Child,
+      ScopedBindableChildFeature.ChildAction
+    > = {
+      let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+      return store.scope(
+        state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    }()
+
+    #expect(scoped.isAlive == false)
+    #expect(scoped.optionalState == nil)
+  }
+
+  @Test("SelectedStore.isAlive and optionalValue are true/non-nil while parent is alive")
+  func selectedStoreLifecycleAccessorsWhileAlive() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let selected = store.select(\.child.step)
+
+    #expect(selected.isAlive == true)
+    #expect(selected.optionalValue == 1)
+  }
+
+  @Test("SelectedStore.optionalValue surfaces released parent as nil without asserting")
+  func selectedStoreOptionalValueAfterParentRelease() {
+    let selected: SelectedStore<Int> = {
+      let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+      return store.select(\.child.step)
+    }()
+
+    #expect(selected.isAlive == false)
+    #expect(selected.optionalValue == nil)
+  }
+
   @Test("Store.select preserves SelectedStore identity across repeated calls")
   func selectedStoreCachingPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
