@@ -28,7 +28,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     failureMessage: String
   ) {
     let button = app.buttons[identifier]
-    if waitForElement(button, in: app) {
+    if waitForElement(button, in: app, requireHittable: true) {
       button.tap()
       return
     }
@@ -41,20 +41,39 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     _ element: XCUIElement,
     in app: XCUIApplication,
     timeout: TimeInterval = 2,
-    scrollAttempts: Int = 4
+    scrollAttempts: Int = 4,
+    requireHittable: Bool = false
   ) -> Bool {
-    if element.waitForExistence(timeout: timeout) {
+    if element.waitForExistence(timeout: timeout),
+      waitForElementReadiness(element, timeout: 1, requireHittable: requireHittable)
+    {
       return true
     }
 
     for _ in 0..<scrollAttempts {
       app.swipeUp()
-      if element.waitForExistence(timeout: 1) {
+      if element.waitForExistence(timeout: 1),
+        waitForElementReadiness(element, timeout: 1, requireHittable: requireHittable)
+      {
         return true
       }
     }
 
     return false
+  }
+
+  @MainActor
+  private func waitForElementReadiness(
+    _ element: XCUIElement,
+    timeout: TimeInterval,
+    requireHittable: Bool
+  ) -> Bool {
+    guard requireHittable else { return true }
+    if element.isHittable { return true }
+
+    let predicate = NSPredicate(format: "hittable == true")
+    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+    return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
   }
 
   @MainActor
@@ -82,7 +101,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
 
     for demo in SampleDemo.catalog {
       XCTAssertTrue(
-        waitForElement(app.buttons[demo.accessibilityIdentifier], in: app),
+        waitForElement(app.buttons[demo.accessibilityIdentifier], in: app, requireHittable: true),
         "Expected hub button \(demo.accessibilityIdentifier)"
       )
     }
@@ -182,7 +201,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     dismissKeyboard(in: app)
 
     let terms = app.switches["form.accept-terms"]
-    XCTAssertTrue(waitForElement(terms, in: app))
+    XCTAssertTrue(waitForElement(terms, in: app, requireHittable: true))
     if let value = terms.value as? String, value == "0" {
       terms.tap()
     }
@@ -198,23 +217,31 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   func testBidirectionalWebSocketDemoEchoesScriptedMessages() throws {
     let app = launchApp(environment: ["INNOFLOW_SAMPLE_DEMO": "bidirectional-websocket"])
 
-    XCTAssertTrue(app.buttons["websocket.connect"].waitForExistence(timeout: 2))
-    app.buttons["websocket.connect"].tap()
+    tapButton(
+      "websocket.connect", in: app,
+      failureMessage: "Expected websocket connect button")
 
     let messageField = app.textFields["websocket.message"]
     XCTAssertTrue(messageField.waitForExistence(timeout: 2))
     messageField.tap()
     messageField.typeText("hello")
 
-    app.buttons["websocket.send"].tap()
+    tapButton(
+      "websocket.send", in: app,
+      failureMessage: "Expected websocket send button")
     let transcript = app.staticTexts["websocket.transcript"]
     let echoPredicate = NSPredicate(format: "label CONTAINS %@", "echo: hello")
     expectation(for: echoPredicate, evaluatedWith: transcript)
     waitForExpectations(timeout: 2)
     XCTAssertTrue(transcript.label.contains("echo: hello"))
 
-    app.buttons["websocket.disconnect"].tap()
-    XCTAssertTrue(app.staticTexts["websocket.status"].waitForExistence(timeout: 2))
-    XCTAssertEqual(app.staticTexts["websocket.status"].label, "Disconnected")
+    tapButton(
+      "websocket.disconnect", in: app,
+      failureMessage: "Expected websocket disconnect button")
+    let status = app.staticTexts["websocket.status"]
+    let disconnectedPredicate = NSPredicate(format: "label == %@", "Disconnected")
+    expectation(for: disconnectedPredicate, evaluatedWith: status)
+    waitForExpectations(timeout: 2)
+    XCTAssertEqual(status.label, "Disconnected")
   }
 }

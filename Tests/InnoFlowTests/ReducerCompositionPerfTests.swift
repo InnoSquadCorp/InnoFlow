@@ -233,11 +233,15 @@ private func seededConstructNode(baseSeed: UInt64, offset: UInt64) -> PerfBenchC
 private func consumeConstructedReducer<T>(_ value: T) {
   var copy = value
   withUnsafeBytes(of: &copy) { rawBuffer in
-    var checksum: UInt64 = 0xCBF2_9CE4_8422_2325
-    for byte in rawBuffer {
-      checksum ^= UInt64(byte)
-      checksum &*= 1_099_511_628_211
-    }
+    let first = rawBuffer.first.map(UInt64.init) ?? 0
+    let middle = rawBuffer.isEmpty ? 0 : UInt64(rawBuffer[rawBuffer.count / 2])
+    let last = rawBuffer.last.map(UInt64.init) ?? 0
+    let checksum =
+      0xCBF2_9CE4_8422_2325
+      ^ UInt64(rawBuffer.count)
+      ^ (first << 8)
+      ^ (middle << 16)
+      ^ (last << 24)
     reducerConstructionBenchmarkSink ^= checksum
   }
 }

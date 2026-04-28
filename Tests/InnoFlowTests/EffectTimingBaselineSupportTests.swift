@@ -73,6 +73,24 @@ struct EffectTimingBaselineSupportTests {
 
     #expect(succeeded)
   }
+
+  @Test("Effect timing wait helper returns promptly when cancelled")
+  func waitHelperReturnsFalseWhenCancelled() async {
+    let task = Task {
+      await waitForEffectTimingCondition(
+        timeout: .seconds(5),
+        pollInterval: .seconds(1),
+        description: "cancelled wait",
+        condition: { false },
+        status: { "still waiting" }
+      )
+    }
+
+    task.cancel()
+    let succeeded = await task.value
+
+    #expect(!succeeded)
+  }
 }
 
 private actor TestFlag {

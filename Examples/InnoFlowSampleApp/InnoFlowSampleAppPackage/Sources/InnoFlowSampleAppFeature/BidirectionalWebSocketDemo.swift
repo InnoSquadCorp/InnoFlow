@@ -10,14 +10,14 @@ import InnoFlow
 import InnoNetworkWebSocket
 import SwiftUI
 
-protocol BidirectionalSocketClient: Sendable {
+public protocol BidirectionalSocketClient: Sendable {
   func connect() async -> AsyncStream<BidirectionalSocketTransportEvent>
   func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent>
   func disconnect() async
   func send(text: String) async throws -> [BidirectionalSocketTransportEvent]
 }
 
-enum BidirectionalSocketTransportEvent: Equatable, Sendable {
+public enum BidirectionalSocketTransportEvent: Equatable, Sendable {
   case connected(String?)
   case disconnected(String)
   case reconnecting(String)
@@ -34,6 +34,45 @@ private enum ScriptedBidirectionalSocketError: LocalizedError, Equatable, Sendab
     case .notConnected:
       "Connect the sample transport before sending a message."
     }
+  }
+}
+
+public struct BidirectionalWebSocketDemoDependencies: Sendable {
+  public static let defaultIntegrationNote =
+    "Default sample transport is scripted for deterministic UI tests. Swap the dependency to InnoNetworkBidirectionalSocketClient at the app boundary to talk to a live websocket backend that keeps adapter-owned auto-retry enabled and surfaces reconnecting state for retryable transport failures and peer closes."
+
+  public let socketClient: any BidirectionalSocketClient
+  public let integrationNote: String
+
+  public init(
+    socketClient: any BidirectionalSocketClient,
+    integrationNote: String
+  ) {
+    self.socketClient = socketClient
+    self.integrationNote = integrationNote
+  }
+
+  public static var scripted: Self {
+    .init(
+      socketClient: ScriptedBidirectionalSocketClient(),
+      integrationNote: Self.defaultIntegrationNote
+    )
+  }
+
+  public static func live(
+    url: URL,
+    subprotocols: [String]? = nil,
+    configuration: WebSocketConfiguration = .safeDefaults(),
+    integrationNote: String = Self.defaultIntegrationNote
+  ) -> Self {
+    .init(
+      socketClient: InnoNetworkBidirectionalSocketClient(
+        url: url,
+        subprotocols: subprotocols,
+        configuration: configuration
+      ),
+      integrationNote: integrationNote
+    )
   }
 }
 
@@ -94,17 +133,10 @@ private enum LiveBidirectionalSocketClientError: LocalizedError, Sendable {
 }
 
 enum BidirectionalSocketLiveEventMapper {
-  // Keep this retryable close-code mirror in sync with
-  // InnoNetworkWebSocket.WebSocketCloseDisposition.classifyPeerClose.
-  private static let retryablePeerCloseCodes: Set<Int> = [1001, 1006, 1011, 1012, 1013, 1015]
-
   static func map(
     _ event: WebSocketEvent,
     taskState: WebSocketState,
-    closeCode: URLSessionWebSocketTask.CloseCode?,
-    autoReconnectEnabled: Bool,
-    reconnectCount: Int,
-    maxReconnectAttempts: Int
+    willRetry: Bool
   ) -> BidirectionalSocketTransportEvent? {
     switch event {
     case .connected(let subprotocol):
@@ -112,10 +144,7 @@ enum BidirectionalSocketLiveEventMapper {
 
     case .disconnected(let error):
       let reason = describeDisconnect(error)
-      if autoReconnectEnabled,
-        isRetryablePeerClose(closeCode),
-        reconnectCount < maxReconnectAttempts
-      {
+      if willRetry {
         return .reconnecting(reason)
       }
       return .disconnected(reason)
@@ -142,12 +171,6 @@ enum BidirectionalSocketLiveEventMapper {
     }
   }
 
-  private static func isRetryablePeerClose(_ closeCode: URLSessionWebSocketTask.CloseCode?) -> Bool
-  {
-    guard let closeCode else { return false }
-    return retryablePeerCloseCodes.contains(Int(closeCode.rawValue))
-  }
-
   private static func describeDisconnect(_ error: WebSocketError?) -> String {
     if let error {
       return String(describing: error)
@@ -156,14 +179,18 @@ enum BidirectionalSocketLiveEventMapper {
   }
 }
 
-actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
+public actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
+  // Keep this retryable close-code mirror in sync with
+  // InnoNetworkWebSocket.WebSocketCloseDisposition.classifyPeerClose.
+  private static let retryablePeerCloseCodes: Set<Int> = [1001, 1006, 1011, 1012, 1013, 1015]
+
   private let manager: WebSocketManager
   private let url: URL
   private let subprotocols: [String]?
   private let maxReconnectAttempts: Int
   private var task: WebSocketTask?
 
-  init(
+  public init(
     url: URL,
     subprotocols: [String]? = nil,
     configuration: WebSocketConfiguration = .safeDefaults()
@@ -174,7 +201,7 @@ actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
     self.manager = WebSocketManager(configuration: configuration)
   }
 
-  func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+  public func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
     if let task {
       await manager.disconnect(task)
       self.task = nil
@@ -185,7 +212,7 @@ actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
     return await relayStream(for: task)
   }
 
-  func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+  public func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
     if let task {
       await manager.retry(task)
       return await relayStream(for: task)
@@ -193,13 +220,13 @@ actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
     return await connect()
   }
 
-  func disconnect() async {
+  public func disconnect() async {
     guard let task else { return }
     await manager.disconnect(task)
     self.task = nil
   }
 
-  func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
+  public func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
     guard let task else { throw LiveBidirectionalSocketClientError.notConnected }
     try await manager.send(task, string: text)
     return [.sent(text)]
@@ -231,14 +258,22 @@ actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
     _ event: WebSocketEvent,
     for task: WebSocketTask
   ) async -> BidirectionalSocketTransportEvent? {
-    BidirectionalSocketLiveEventMapper.map(
+    let closeCode = await task.closeCode
+    return BidirectionalSocketLiveEventMapper.map(
       event,
       taskState: await task.state,
-      closeCode: await task.closeCode,
-      autoReconnectEnabled: await task.autoReconnectEnabled,
-      reconnectCount: await task.reconnectCount,
-      maxReconnectAttempts: maxReconnectAttempts
+      willRetry: await transportWillRetryPeerClose(closeCode: closeCode, for: task)
     )
+  }
+
+  private func transportWillRetryPeerClose(
+    closeCode: URLSessionWebSocketTask.CloseCode?,
+    for task: WebSocketTask
+  ) async -> Bool {
+    guard await task.autoReconnectEnabled else { return false }
+    guard let closeCode else { return false }
+    guard Self.retryablePeerCloseCodes.contains(Int(closeCode.rawValue)) else { return false }
+    return await task.reconnectCount < maxReconnectAttempts
   }
 }
 
@@ -273,6 +308,7 @@ struct BidirectionalWebSocketFeature {
     case disconnectTapped
     case sendTapped
     case clearTranscript
+    case _sendSucceeded
     case _transportEvent(BidirectionalSocketTransportEvent)
   }
 
@@ -282,8 +318,7 @@ struct BidirectionalWebSocketFeature {
   }
 
   private static let streamCancellationID: EffectID = "bidirectional-websocket-stream"
-  static let defaultIntegrationNote =
-    "Default sample transport is scripted for deterministic UI tests. Swap the dependency to InnoNetworkBidirectionalSocketClient at the app boundary to talk to a live websocket backend that keeps adapter-owned auto-retry enabled and surfaces reconnecting state for retryable transport failures and peer closes."
+  static let defaultIntegrationNote = BidirectionalWebSocketDemoDependencies.defaultIntegrationNote
 
   let dependencies: Dependencies
 
@@ -294,6 +329,15 @@ struct BidirectionalWebSocketFeature {
     )
   ) {
     self.dependencies = dependencies
+  }
+
+  init(demoDependencies: BidirectionalWebSocketDemoDependencies) {
+    self.init(
+      dependencies: .init(
+        socketClient: demoDependencies.socketClient,
+        integrationNote: demoDependencies.integrationNote
+      )
+    )
   }
 
   init(
@@ -344,11 +388,11 @@ struct BidirectionalWebSocketFeature {
       case .sendTapped:
         let text = state.draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return .none }
-        state.draftMessage = ""
         let socketClient = dependencies.socketClient
         return .run { send, _ in
           do {
             let transportEvents = try await socketClient.send(text: text)
+            await send(._sendSucceeded)
             for event in transportEvents {
               await send(._transportEvent(event))
             }
@@ -359,6 +403,10 @@ struct BidirectionalWebSocketFeature {
 
       case .clearTranscript:
         state.transcript = []
+        return .none
+
+      case ._sendSucceeded:
+        state.draftMessage = ""
         return .none
 
       case ._transportEvent(let event):
@@ -437,7 +485,29 @@ struct BidirectionalWebSocketFeature {
 }
 
 struct BidirectionalWebSocketDemoView: View {
-  @State private var store = Store(reducer: BidirectionalWebSocketFeature())
+  @State private var store: Store<BidirectionalWebSocketFeature>
+  private let integrationNote: String
+
+  @MainActor
+  init(
+    dependencies: BidirectionalWebSocketDemoDependencies = .scripted
+  ) {
+    self.init(
+      store: Store(
+        reducer: BidirectionalWebSocketFeature(demoDependencies: dependencies)
+      ),
+      integrationNote: dependencies.integrationNote
+    )
+  }
+
+  @MainActor
+  init(
+    store: Store<BidirectionalWebSocketFeature>,
+    integrationNote: String
+  ) {
+    _store = State(initialValue: store)
+    self.integrationNote = integrationNote
+  }
 
   var body: some View {
     ScrollView {
@@ -450,7 +520,7 @@ struct BidirectionalWebSocketDemoView: View {
 
         DemoCard(
           title: "Transport ownership",
-          summary: BidirectionalWebSocketFeature.defaultIntegrationNote
+          summary: integrationNote
         )
 
         VStack(alignment: .leading, spacing: 12) {

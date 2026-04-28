@@ -5,6 +5,8 @@
 // Contract tests for `scripts/compare-reducer-composition-perf.sh`.
 
 import Foundation
+import InnoFlow
+import InnoFlowTesting
 import Testing
 
 @Suite("Reducer composition perf comparison script")
@@ -57,6 +59,31 @@ struct ReducerCompositionPerfComparisonScriptTests {
     #expect(result.stderr.contains("missing benchmark"))
   }
 
+  @Test("Reducer perf comparison fails clearly when an option value is missing")
+  func reducerPerfComparisonFailsForMissingOptionValue() throws {
+    let result = try runRawComparisonScript(arguments: ["--baseline"])
+
+    #expect(result.terminationStatus == 1)
+    #expect(result.stderr.contains("missing value for --baseline"))
+  }
+
+  @Test("Reducer perf comparison fails when per-iteration metric is malformed")
+  func reducerPerfComparisonFailsForMalformedPerIterationMetric() throws {
+    let result = try runComparisonScript(
+      baselineEntries: [
+        [
+          "iterations": 1_000,
+          "label": "construct-only N=2",
+          "totalNanos": 100_000,
+        ]
+      ],
+      currentEntries: [entry(label: "construct-only N=2", perIterationNanos: 100)]
+    )
+
+    #expect(result.terminationStatus == 1)
+    #expect(result.stderr.contains("baseline perIterationNanos must be numeric"))
+  }
+
   @Test("Reducer perf comparison help documents local benchmark export")
   func reducerPerfComparisonHelpDocumentsLocalExport() throws {
     let process = Process()
@@ -89,6 +116,8 @@ struct ReducerCompositionPerfComparisonScriptTests {
     currentEntries: [[String: Any]],
     tolerance: String = "0.25"
   ) throws -> ScriptResult {
+    try requireJQ()
+
     let temporaryDirectory = FileManager.default.temporaryDirectory
       .appendingPathComponent("reducer-perf-script-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(
@@ -134,6 +163,50 @@ struct ReducerCompositionPerfComparisonScriptTests {
     )
   }
 
+  private func runRawComparisonScript(arguments: [String]) throws -> ScriptResult {
+    let process = Process()
+    process.executableURL = try repositoryFileURL(
+      relativePath: "scripts/compare-reducer-composition-perf.sh"
+    )
+    process.arguments = arguments
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    try process.run()
+    process.waitUntilExit()
+
+    return ScriptResult(
+      terminationStatus: process.terminationStatus,
+      stdout: String(
+        data: stdout.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+      ) ?? "",
+      stderr: String(
+        data: stderr.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+      ) ?? ""
+    )
+  }
+
+  private func requireJQ() throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["jq", "--version"]
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = output
+
+    try process.run()
+    process.waitUntilExit()
+
+    guard process.terminationStatus == 0 else {
+      throw ScriptDependencyError.missingJQ
+    }
+  }
+
   private func writeJSONL(entries: [[String: Any]], to url: URL) throws {
     var payload = Data()
     for entry in entries {
@@ -166,6 +239,14 @@ struct ReducerCompositionPerfComparisonScriptTests {
     }
     struct RepositoryRootNotFound: Error {}
     throw RepositoryRootNotFound()
+  }
+}
+
+private enum ScriptDependencyError: Error, CustomStringConvertible {
+  case missingJQ
+
+  var description: String {
+    "'jq' is required to run reducer perf comparison script tests. Install with: brew install jq"
   }
 }
 

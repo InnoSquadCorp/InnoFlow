@@ -3,6 +3,8 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
+import InnoFlow
+import InnoFlowTesting
 import Testing
 
 @Suite("EffectTiming trend script")

@@ -65,16 +65,26 @@ func waitForEffectTimingCondition(
   let clock = ContinuousClock()
   let deadline = clock.now + timeout
   while clock.now < deadline {
+    if Task.isCancelled { return false }
     if await condition() {
       return true
     }
-    try? await Task.sleep(for: pollInterval)
+    do {
+      try await Task.sleep(for: pollInterval)
+    } catch is CancellationError {
+      return false
+    } catch {
+      Issue.record("Unexpected sleep failure while waiting for \(description): \(error)")
+      return false
+    }
   }
 
+  if Task.isCancelled { return false }
   if await condition() {
     return true
   }
 
+  if Task.isCancelled { return false }
   let latestStatus = await status()
   Issue.record("Timed out waiting for \(description); \(latestStatus)")
   return false

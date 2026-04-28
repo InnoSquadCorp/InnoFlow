@@ -975,7 +975,8 @@ struct InnoFlowSampleAppFeatureTests {
     await store.send(.setDraftMessage("hello")) {
       $0.draftMessage = "hello"
     }
-    await store.send(.sendTapped) {
+    await store.send(.sendTapped)
+    await store.receive(._sendSucceeded) {
       $0.draftMessage = ""
     }
     await store.receive(._transportEvent(.sent("hello"))) {
@@ -998,6 +999,37 @@ struct InnoFlowSampleAppFeatureTests {
       $0.connectionState = .disconnected
       $0.statusNote = "Disconnected by sample action"
       $0.canReconnect = true
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("Bidirectional websocket preserves the draft when send fails")
+  @MainActor
+  func bidirectionalWebSocketPreservesDraftOnSendFailure() async {
+    let store = TestStore(
+      reducer: BidirectionalWebSocketFeature(
+        socketClient: ThrowingSendBidirectionalSocketClient(),
+        integrationNote: "Test transport"
+      ),
+      initialState: .init(
+        draftMessage: "retry me",
+        connectionState: .connected,
+        statusNote: "Connected",
+        transcript: [],
+        lastError: nil,
+        canReconnect: false
+      )
+    )
+
+    await store.send(.sendTapped)
+    await store.receive(._transportEvent(.transportFailure("mock send failure"))) {
+      $0.connectionState = .disconnected
+      $0.statusNote = "Transport error"
+      $0.draftMessage = "retry me"
+      $0.lastError = "mock send failure"
+      $0.canReconnect = true
+      $0.transcript = ["system: transport error mock send failure"]
     }
 
     await store.assertNoMoreActions()
@@ -1116,10 +1148,7 @@ struct InnoFlowSampleAppFeatureTests {
     let mapped = BidirectionalSocketLiveEventMapper.map(
       .error(error),
       taskState: .reconnecting,
-      closeCode: nil,
-      autoReconnectEnabled: true,
-      reconnectCount: 1,
-      maxReconnectAttempts: 5
+      willRetry: true
     )
 
     #expect(mapped == .reconnecting(String(describing: error)))
@@ -1130,10 +1159,7 @@ struct InnoFlowSampleAppFeatureTests {
     let mapped = BidirectionalSocketLiveEventMapper.map(
       .disconnected(nil),
       taskState: .disconnected,
-      closeCode: URLSessionWebSocketTask.CloseCode(rawValue: 1011),
-      autoReconnectEnabled: true,
-      reconnectCount: 1,
-      maxReconnectAttempts: 5
+      willRetry: true
     )
 
     #expect(mapped == .reconnecting("Socket disconnected."))
@@ -1144,10 +1170,7 @@ struct InnoFlowSampleAppFeatureTests {
     let mapped = BidirectionalSocketLiveEventMapper.map(
       .disconnected(nil),
       taskState: .disconnected,
-      closeCode: URLSessionWebSocketTask.CloseCode(rawValue: 1008),
-      autoReconnectEnabled: true,
-      reconnectCount: 1,
-      maxReconnectAttempts: 5
+      willRetry: false
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
@@ -1158,10 +1181,7 @@ struct InnoFlowSampleAppFeatureTests {
     let mapped = BidirectionalSocketLiveEventMapper.map(
       .disconnected(nil),
       taskState: .disconnected,
-      closeCode: nil,
-      autoReconnectEnabled: true,
-      reconnectCount: 1,
-      maxReconnectAttempts: 5
+      willRetry: false
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
@@ -1172,10 +1192,7 @@ struct InnoFlowSampleAppFeatureTests {
     let mapped = BidirectionalSocketLiveEventMapper.map(
       .disconnected(nil),
       taskState: .disconnected,
-      closeCode: URLSessionWebSocketTask.CloseCode(rawValue: 1011),
-      autoReconnectEnabled: true,
-      reconnectCount: 5,
-      maxReconnectAttempts: 5
+      willRetry: false
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
@@ -1187,10 +1204,7 @@ struct InnoFlowSampleAppFeatureTests {
     let mapped = BidirectionalSocketLiveEventMapper.map(
       .disconnected(nil),
       taskState: .disconnected,
-      closeCode: URLSessionWebSocketTask.CloseCode(rawValue: 1011),
-      autoReconnectEnabled: false,
-      reconnectCount: 1,
-      maxReconnectAttempts: 5
+      willRetry: false
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
@@ -1346,5 +1360,30 @@ private actor ReconnectingBidirectionalSocketClient: BidirectionalSocketClient {
 
   func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
     [.sent(text)]
+  }
+}
+
+private actor ThrowingSendBidirectionalSocketClient: BidirectionalSocketClient {
+  func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    AsyncStream { continuation in
+      continuation.yield(.connected("sample-echo"))
+      continuation.finish()
+    }
+  }
+
+  func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    await connect()
+  }
+
+  func disconnect() async {}
+
+  func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
+    throw MockSendFailure()
+  }
+}
+
+private struct MockSendFailure: LocalizedError {
+  var errorDescription: String? {
+    "mock send failure"
   }
 }

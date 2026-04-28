@@ -4,9 +4,14 @@ public struct InnoFlowSampleAppRootView: View {
   private let launchDemo = ProcessInfo.processInfo.environment["INNOFLOW_SAMPLE_DEMO"].flatMap(
     SampleDemo.init(launchToken:)
   )
+  private let bidirectionalWebSocketDependencies: BidirectionalWebSocketDemoDependencies
   @State private var presentedModalDemo: SampleDemo?
 
-  public init() {}
+  public init(
+    bidirectionalWebSocketDependencies: BidirectionalWebSocketDemoDependencies = .scripted
+  ) {
+    self.bidirectionalWebSocketDependencies = bidirectionalWebSocketDependencies
+  }
 
   public var body: some View {
     Group {
@@ -40,7 +45,7 @@ public struct InnoFlowSampleAppRootView: View {
     case .formValidation:
       FormValidationDemoView()
     case .bidirectionalWebSocket:
-      BidirectionalWebSocketDemoView()
+      BidirectionalWebSocketDemoView(dependencies: bidirectionalWebSocketDependencies)
     }
   }
 

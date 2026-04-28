@@ -33,13 +33,27 @@ This tool is local-only by design. It does not participate in CI or
 HELP
 }
 
+require_option_value() {
+  local option="$1"
+  local value="${2:-}"
+
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "[compare-reducer-composition-perf] missing value for $option" >&2
+    print_help >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --baseline)
+      require_option_value "$1" "${2:-}"
       BASELINE="$2"; shift 2 ;;
     --current)
+      require_option_value "$1" "${2:-}"
       CURRENT="$2"; shift 2 ;;
     --tolerance)
+      require_option_value "$1" "${2:-}"
       TOLERANCE="$2"; shift 2 ;;
     --help|-h)
       print_help; exit 0 ;;
@@ -94,6 +108,24 @@ require_unique_labels() {
 require_unique_labels "$BASELINE"
 require_unique_labels "$CURRENT"
 
+read_per_iteration_nanos() {
+  local file="$1"
+  local label="$2"
+  local role="$3"
+  local value
+
+  if ! value="$(jq -re --arg label "$label" '
+    select(.label == $label)
+    | .perIterationNanos
+    | select(type == "number")
+  ' "$file")"; then
+    echo "[compare-reducer-composition-perf] $role perIterationNanos must be numeric for $label" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$value"
+}
+
 BASELINE_LABELS=()
 while IFS= read -r label; do
   BASELINE_LABELS[${#BASELINE_LABELS[@]}]="$label"
@@ -121,8 +153,8 @@ done
 overall_ok=1
 
 for label in "${BASELINE_LABELS[@]}"; do
-  baseline_value="$(jq -r --arg label "$label" 'select(.label == $label) | .perIterationNanos' "$BASELINE")"
-  current_value="$(jq -r --arg label "$label" 'select(.label == $label) | .perIterationNanos' "$CURRENT")"
+  baseline_value="$(read_per_iteration_nanos "$BASELINE" "$label" "baseline")"
+  current_value="$(read_per_iteration_nanos "$CURRENT" "$label" "current")"
 
   if [[ "$baseline_value" == "0" ]]; then
     echo "[compare-reducer-composition-perf] baseline perIterationNanos is zero for $label" >&2
