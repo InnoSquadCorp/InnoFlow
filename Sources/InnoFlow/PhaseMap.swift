@@ -5,6 +5,28 @@
 import Foundation
 
 /// A declarative phase transition specification applied after a base reducer runs.
+///
+/// ## Resolution complexity
+///
+/// Per dispatched action, the post-reduce decorator does:
+///
+/// 1. An `O(1)` lookup of the source phase's rule list via the precomputed
+///    `rulesBySourcePhase` dictionary.
+/// 2. A linear walk over the declared transitions for that source phase
+///    until a matcher returns a payload. Walk length is bounded by the number
+///    of `On(...)` declarations under the corresponding `From(...)`.
+///
+/// Total work per action is therefore `O(transitions in matched phase)`, not
+/// `O(total transitions)`. Adding more phases does not increase per-action
+/// cost; only adding more `On(...)` rules under a single `From(...)` does.
+///
+/// Baseline measurements (release configuration, see
+/// `Tests/InnoFlowTests/PhaseMapPerfTests.swift`) place dispatch at well
+/// under one microsecond even for 64-phase fixtures with 5 transitions per
+/// phase. A future per-phase transition index that collapses the linear walk
+/// to a single hash lookup would require a `Hashable` constraint on `Action`
+/// and an explicit opt-in `PhaseMap` shape; it is intentionally deferred until
+/// real workloads show the linear walk is on the hot path.
 public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Sendable> {
   package let phaseKeyPath: WritableKeyPath<State, Phase>
   package let rules: [PhaseRule<State, Action, Phase>]
