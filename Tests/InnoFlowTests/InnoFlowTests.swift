@@ -3337,6 +3337,72 @@ struct StoreTests {
     #expect(selected.optionalValue == nil)
   }
 
+  @Test("Store.select(dependingOnAll:) tracks an arbitrary number of explicit dependency slices")
+  func selectedStoreDependingOnAllVariadic() async {
+    struct VariadicState: Equatable, Sendable, DefaultInitializable {
+      var a: Int = 1
+      var b: Int = 2
+      var c: Int = 3
+      var d: Int = 4
+      var e: Int = 5
+      var f: Int = 6
+      var g: Int = 7
+      var h: Int = 8
+    }
+
+    enum VariadicAction: Equatable, Sendable {
+      case bumpG
+      case bumpUntracked
+    }
+
+    struct VariadicReducer: Reducer {
+      typealias State = VariadicState
+      typealias Action = VariadicAction
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        switch action {
+        case .bumpG:
+          state.g &+= 1
+          return .none
+        case .bumpUntracked:
+          // No tracked field is updated; selected store should not refresh.
+          return .none
+        }
+      }
+    }
+
+    let store = Store(reducer: VariadicReducer(), initialState: .init())
+    let selected = store.select(
+      dependingOnAll:
+        \VariadicState.a,
+        \VariadicState.b,
+        \VariadicState.c,
+        \VariadicState.d,
+        \VariadicState.e,
+        \VariadicState.f,
+        \VariadicState.g,
+        \VariadicState.h
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int) -> Int in
+      a + b + c + d + e + f + g + h
+    }
+
+    let baselineSum = 36
+    #expect(selected.value == baselineSum)
+
+    let initialStats = store.projectionObserverStats
+
+    store.send(.bumpUntracked)
+    try? await Task.sleep(for: .milliseconds(20))
+    let afterUntrackedStats = store.projectionObserverStats
+
+    #expect(afterUntrackedStats.refreshedObservers == initialStats.refreshedObservers)
+    #expect(selected.value == baselineSum)
+
+    store.send(.bumpG)
+    try? await Task.sleep(for: .milliseconds(20))
+    #expect(selected.value == baselineSum + 1)
+  }
+
   @Test("Store.select preserves SelectedStore identity across repeated calls")
   func selectedStoreCachingPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())

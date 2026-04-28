@@ -125,6 +125,12 @@ private func selectionDependencyRegistration<Snapshot, Dependency: Equatable>(
 private func selectionDependencyRegistrations<Snapshot>(
   _ registrations: ProjectionDependencyRegistration<Snapshot>...
 ) -> ProjectionObserverRegistration<Snapshot> {
+  selectionDependencyRegistrations(fromArray: registrations)
+}
+
+private func selectionDependencyRegistrations<Snapshot>(
+  fromArray registrations: [ProjectionDependencyRegistration<Snapshot>]
+) -> ProjectionObserverRegistration<Snapshot> {
   guard !registrations.isEmpty else {
     return .alwaysRefresh
   }
@@ -514,6 +520,47 @@ extension Store {
           self.state[keyPath: fifthDependency],
           self.state[keyPath: sixthDependency]
         )
+      }
+    )
+  }
+
+  /// Variadic selection: declares an arbitrary number of explicit
+  /// dependency key paths through Swift parameter packs and projects them
+  /// into a derived value.
+  ///
+  /// The fixed-arity `select(dependingOn:)` overloads (1- through 6-field)
+  /// remain the recommended form for the common cases; this overload is
+  /// the type-safe escape hatch for projections that legitimately depend
+  /// on more than six fields, where the closure-only `select(_:)` form
+  /// would otherwise force `.alwaysRefresh` and re-evaluate on every
+  /// parent action.
+  ///
+  /// Use a distinct `dependingOnAll:` argument label rather than overloading
+  /// the existing `dependingOn:` to keep the fixed-arity tuple overloads
+  /// unambiguous at call sites where one through six dependencies are
+  /// passed as a tuple literal.
+  public func select<each Dep: Equatable & Sendable, Value: Equatable & Sendable>(
+    dependingOnAll dependencies: repeat KeyPath<R.State, each Dep>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ transform: @escaping @Sendable (repeat each Dep) -> Value
+  ) -> SelectedStore<Value> {
+    let callsite = selectionCallsite(fileID: fileID, line: line)
+
+    let initial = transform(repeat state[keyPath: each dependencies])
+
+    var registrations: [ProjectionDependencyRegistration<R.State>] = []
+    for keyPath in repeat each dependencies {
+      registrations.append(selectionDependencyRegistration(keyPath))
+    }
+
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: initial,
+      registration: selectionDependencyRegistrations(fromArray: registrations),
+      valueResolver: { [weak self] in
+        guard let self else { return nil }
+        return transform(repeat self.state[keyPath: each dependencies])
       }
     )
   }
