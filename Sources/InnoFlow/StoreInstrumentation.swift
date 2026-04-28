@@ -4,6 +4,29 @@
 
 import Foundation
 import OSLog
+import os
+
+/// Thread-safe slot registry used to pair `runStarted` and `runFinished`
+/// callbacks for the signpost adapter. Signpost interval state values must
+/// be carried verbatim from begin to end, so the registry stores them inside
+/// an `OSAllocatedUnfairLock` slot keyed by the run's UUID token. The
+/// callbacks are synchronous fire-and-forget from the store runtime's
+/// perspective, so the lock is uncontended in the common case.
+final class OSSignpostIntervalStateRegistry: Sendable {
+  private let lock = OSAllocatedUnfairLock<[UUID: OSSignpostIntervalState]>(initialState: [:])
+
+  func store(_ state: OSSignpostIntervalState, for token: UUID) {
+    lock.withLock { storage in
+      storage[token] = state
+    }
+  }
+
+  func take(token: UUID) -> OSSignpostIntervalState? {
+    lock.withLock { storage in
+      storage.removeValue(forKey: token)
+    }
+  }
+}
 
 /// Why a produced action was dropped before re-entering the store queue.
 public enum ActionDropReason: Sendable, Equatable {
@@ -139,6 +162,59 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
         for instrumentation in instrumentations {
           instrumentation.didCancelEffects(event)
         }
+      }
+    )
+  }
+
+  /// Bridges store instrumentation to `OSSignposter`, surfacing run lifecycle
+  /// inside Instruments without changing reducer or effect semantics.
+  ///
+  /// Each `.runStarted` event opens an interval signpost named after the
+  /// supplied `name`, identified by the run's UUID token. The matching
+  /// `.runFinished` event closes the same interval. Action emissions and
+  /// cancellations are surfaced as `emitEvent` signposts on the same name
+  /// so they appear inline with the interval in Instruments' timeline.
+  ///
+  /// Pair with the existing `.osLog(logger:)` adapter through `.combined(...)`
+  /// when you want both Console-readable output and signpost-driven Instruments
+  /// traces from the same store.
+  public static func signpost(
+    signposter: OSSignposter,
+    name: StaticString = "InnoFlow.run",
+    includeActions: Bool = true
+  ) -> Self {
+    let intervalStates = OSSignpostIntervalStateRegistry()
+
+    return .init(
+      didStartRun: { event in
+        let state = signposter.beginInterval(name, id: signposter.makeSignpostID())
+        intervalStates.store(state, for: event.token)
+      },
+      didFinishRun: { event in
+        guard let state = intervalStates.take(token: event.token) else { return }
+        signposter.endInterval(name, state)
+      },
+      didEmitAction: { event in
+        let actionDescription =
+          includeActions ? String(describing: event.action) : "<redacted>"
+        signposter.emitEvent(
+          name,
+          "emit \(actionDescription)"
+        )
+      },
+      didDropAction: { event in
+        let actionDescription = event.action.map(String.init(describing:)) ?? "<none>"
+        let renderedAction = includeActions ? actionDescription : "<redacted>"
+        signposter.emitEvent(
+          name,
+          "drop \(renderedAction) reason=\(String(describing: event.reason))"
+        )
+      },
+      didCancelEffects: { event in
+        signposter.emitEvent(
+          name,
+          "cancel id=\(String(describing: event.id))"
+        )
       }
     )
   }

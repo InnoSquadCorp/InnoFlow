@@ -109,7 +109,7 @@ advanced, polling `await clock.sleeperCount == N` is the safe marker.
 
 ## Instrumentation
 
-- `StoreInstrumentation.sink`, `.osLog`, and `.combined` are the official instrumentation surfaces.
+- `StoreInstrumentation.sink`, `.osLog`, `.signpost`, and `.combined` are the official instrumentation surfaces. `.signpost(signposter:name:)` brings the run lifecycle into Instruments without an external dependency; pair it with `.osLog(logger:)` through `.combined(...)` to keep both Console output and signpost-driven traces from the same store.
 - External metrics backends such as `swift-metrics`, Datadog, or Prometheus should integrate through those sinks instead of changing reducer semantics.
 
 ## Accessibility and sample contract

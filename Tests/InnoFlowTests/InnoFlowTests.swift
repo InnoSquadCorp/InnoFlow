@@ -4206,6 +4206,30 @@ struct StoreTests {
     #expect(probe.events.contains("finish:instrumented-delayed"))
   }
 
+  @Test("StoreInstrumentation.signpost preserves runtime behavior")
+  func storeInstrumentationSignpostFactory() async {
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "StoreInstrumentation")
+    let store = Store(
+      reducer: AsyncFeature(),
+      initialState: .init(),
+      instrumentation: .signpost(signposter: signposter)
+    )
+
+    store.send(.load)
+
+    let timeoutClock = ContinuousClock()
+    let deadline = timeoutClock.now.advanced(by: .seconds(2))
+    while timeoutClock.now < deadline {
+      if store.value == "Hello, InnoFlow v2" {
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+
+    #expect(store.value == "Hello, InnoFlow v2")
+    #expect(store.isLoading == false)
+  }
+
   @Test("StoreInstrumentation.osLog preserves runtime behavior")
   func storeInstrumentationOSLogFactory() async {
     let logger = Logger(subsystem: "InnoFlowTests", category: "StoreInstrumentation")
