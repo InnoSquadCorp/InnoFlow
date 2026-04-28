@@ -35,15 +35,16 @@ canonical_root_for_sample_package_tests() {
     rsync -a \
       --delete \
       --exclude '.build' \
-      --exclude '.build-principle-gates-release' \
+      --exclude '.build-*' \
       --exclude '.git' \
+      --exclude 'Repro' \
       "$ROOT_DIR/" "$CANONICAL_ROOT_DIR/"
   else
     ditto "$ROOT_DIR" "$CANONICAL_ROOT_DIR"
+    find "$CANONICAL_ROOT_DIR" -maxdepth 1 -type d -name '.build*' -exec rm -rf {} +
     rm -rf \
-      "$CANONICAL_ROOT_DIR/.build" \
-      "$CANONICAL_ROOT_DIR/.build-principle-gates-release" \
-      "$CANONICAL_ROOT_DIR/.git"
+      "$CANONICAL_ROOT_DIR/.git" \
+      "$CANONICAL_ROOT_DIR/Repro"
   fi
 
   printf '%s\n' "$CANONICAL_ROOT_DIR"

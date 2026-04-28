@@ -33,6 +33,26 @@ If you change the framework surface or architectural rules, update all of these 
 
 The repository should fail fast if the new rule is violated.
 
+## Package layout
+
+InnoFlow is intentionally split across three Swift packages so the core
+library does not carry the build cost of the canonical sample or the
+Swift-compiler reproducer:
+
+- `./Package.swift` — core library, macros, and `InnoFlowTesting`. This is
+  what consumers depend on.
+- `./Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.swift` —
+  the canonical sample app feature module. Lives behind its own package so
+  sample-only changes do not invalidate consumer build caches.
+- `./Repro/SILCrashRepro/Package.swift` — minimal reproducer for the
+  Swift 6.3 SIL inliner regression tracked in `CHANGELOG.md`. Not exercised
+  by CI; only used when re-validating the toolchain workaround.
+
+The split is what `scripts/principle-gates.sh` enforces: it builds and tests
+the core package, then separately exercises the sample package and the
+canonical sample Xcode project. CI mirrors that separation by running core
+package tests and sample package tests in parallel jobs.
+
 ## Validation
 
 Run all of these before proposing the change:

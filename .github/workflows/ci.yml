@@ -27,7 +27,7 @@ jobs:
           swift format lint --strict --recursive Sources Tests Examples
 
   tests:
-    name: Package Tests
+    name: Package Tests (Core)
     runs-on: macos-26
     needs: lint
 
@@ -41,6 +41,17 @@ jobs:
         run: |
           set -eo pipefail
           swift test --package-path "$GITHUB_WORKSPACE" -Xswiftc -warnings-as-errors
+
+  sample-tests:
+    name: Package Tests (Sample)
+    runs-on: macos-26
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Show Xcode version
+        run: xcodebuild -version
 
       - name: Run sample package tests
         run: |
@@ -75,7 +86,7 @@ jobs:
   principle-gates:
     name: Principle Gates
     runs-on: macos-26
-    needs: [tests, package-builds]
+    needs: [tests, sample-tests, package-builds]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -91,7 +102,7 @@ jobs:
   sample-package-builds:
     name: Sample Package Build (visionOS)
     runs-on: macos-26
-    needs: tests
+    needs: sample-tests
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
