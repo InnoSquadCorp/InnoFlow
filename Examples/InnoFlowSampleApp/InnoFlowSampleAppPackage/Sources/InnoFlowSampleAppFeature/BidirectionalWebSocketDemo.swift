@@ -142,7 +142,8 @@ enum BidirectionalSocketLiveEventMapper {
     }
   }
 
-  private static func isRetryablePeerClose(_ closeCode: URLSessionWebSocketTask.CloseCode?) -> Bool {
+  private static func isRetryablePeerClose(_ closeCode: URLSessionWebSocketTask.CloseCode?) -> Bool
+  {
     guard let closeCode else { return false }
     return retryablePeerCloseCodes.contains(Int(closeCode.rawValue))
   }
@@ -174,6 +175,11 @@ actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
   }
 
   func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    if let task {
+      await manager.disconnect(task)
+      self.task = nil
+    }
+
     let task = await manager.connect(url: url, subprotocols: subprotocols)
     self.task = task
     return await relayStream(for: task)
@@ -464,7 +470,8 @@ struct BidirectionalWebSocketDemoView: View {
 
           TextField(
             "Message",
-            text: store.binding(\.$draftMessage, to: BidirectionalWebSocketFeature.Action.setDraftMessage)
+            text: store.binding(
+              \.$draftMessage, to: BidirectionalWebSocketFeature.Action.setDraftMessage)
           )
           .textFieldStyle(.roundedBorder)
           .autocorrectionDisabled()

@@ -131,7 +131,7 @@ protocol ChatTransport: Sendable {
   func events() -> AsyncStream<ChatTransportEvent>
 }
 
-enum ChatTransportEvent: Sendable {
+enum ChatTransportEvent: Equatable, Sendable {
   case connected
   case disconnected
   case message(String)
@@ -139,6 +139,11 @@ enum ChatTransportEvent: Sendable {
 
 @InnoFlow
 struct ChatFeature {
+  struct State: Equatable, Sendable {
+    var isConnected = false
+    var messages: [String] = []
+  }
+
   struct Dependencies: Sendable {
     let transport: any ChatTransport
   }

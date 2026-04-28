@@ -179,6 +179,42 @@ count_line_matches() {
   printf '%s\n' "$output" | sed '/^$/d' | wc -l | tr -d ' '
 }
 
+validate_doc_parity_contract_shape() {
+  local contract_path="$1"
+
+  jq -e '
+    def non_empty_array($name):
+      has($name) and (.[$name] | type == "array") and (.[$name] | length > 0);
+    def typed_field($name; $kind):
+      has($name) and (.[$name] | type == $kind);
+
+    non_empty_array("requiredPatterns")
+    and non_empty_array("sectionCounts")
+    and non_empty_array("sampleIdentifiers")
+    and all(
+      .requiredPatterns[];
+      typed_field("file"; "string")
+      and typed_field("label"; "string")
+      and typed_field("pattern"; "string")
+    )
+    and all(
+      .sectionCounts[];
+      typed_field("file"; "string")
+      and typed_field("label"; "string")
+      and typed_field("pattern"; "string")
+      and typed_field("count"; "number")
+    )
+    and all(
+      .sampleIdentifiers[];
+      typed_field("file"; "string")
+      and has("values")
+      and (.values | type == "array")
+      and (.values | length > 0)
+      and all(.values[]; type == "string")
+    )
+  ' "$contract_path" >/dev/null
+}
+
 verify_doc_parity_contract() {
   local contract_path="docs/contracts/doc-parity.json"
 
@@ -189,6 +225,11 @@ verify_doc_parity_contract() {
 
   if ! command -v jq >/dev/null 2>&1; then
     echo "[principle-gates] Failed: jq is required to evaluate $contract_path"
+    return 1
+  fi
+
+  if ! validate_doc_parity_contract_shape "$contract_path"; then
+    echo "[principle-gates] Failed: $contract_path has an invalid contract shape"
     return 1
   fi
 
@@ -236,7 +277,7 @@ verify_doc_parity_contract() {
       return 1
     fi
     while IFS= read -r sample_id; do
-      if ! search_lines "$sample_id" "$file" >/dev/null; then
+      if ! grep -F -q -- "$sample_id" "$file"; then
         echo "[principle-gates] Failed: $file must mention sample identifier $sample_id"
         return 1
       fi

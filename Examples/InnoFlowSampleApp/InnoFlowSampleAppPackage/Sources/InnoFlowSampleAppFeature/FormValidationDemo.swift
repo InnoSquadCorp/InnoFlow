@@ -70,7 +70,7 @@ struct FormValidationFeature {
 
         let summary = "\(state.fullName) <\(state.email)>"
         state.submittedSummary = summary
-        state.diagnostics.append("submitted form for \(summary)")
+        state.diagnostics.append("submitted form successfully")
         return .none
 
       case .reset:
@@ -195,10 +195,12 @@ struct FormValidationDemoView: View {
                 .accessibilityIdentifier("form.validation-summary")
             }
           } else {
-            Text(store.hasAttemptedSubmit ? "Form is ready to submit." : "Submit to run validation.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-              .accessibilityIdentifier("form.validation-summary")
+            Text(
+              store.hasAttemptedSubmit ? "Form is ready to submit." : "Submit to run validation."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("form.validation-summary")
           }
 
           if let summary = store.submittedSummary {

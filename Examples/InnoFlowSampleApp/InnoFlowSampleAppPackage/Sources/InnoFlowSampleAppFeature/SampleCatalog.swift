@@ -195,7 +195,8 @@ public enum SampleDemo: String, CaseIterable, Identifiable, Hashable, Sendable {
       return .init(
         demo: self,
         title: "Form Validation",
-        subtitle: "Multiple bindable fields, cross-field validation, and submit-or-reset ownership.",
+        subtitle:
+          "Multiple bindable fields, cross-field validation, and submit-or-reset ownership.",
         category: .flow,
         boundaryTag: .core,
         launchTokens: ["form-validation", "formValidation", "sample.form-validation"],

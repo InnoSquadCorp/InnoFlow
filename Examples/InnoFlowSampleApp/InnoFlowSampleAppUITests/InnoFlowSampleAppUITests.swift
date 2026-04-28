@@ -1,5 +1,5 @@
-import XCTest
 import InnoFlowSampleAppFeature
+import XCTest
 
 final class InnoFlowSampleAppUITests: XCTestCase {
   override func setUpWithError() throws {
@@ -28,20 +28,52 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     failureMessage: String
   ) {
     let button = app.buttons[identifier]
-    if button.waitForExistence(timeout: 2) {
+    if waitForElement(button, in: app) {
       button.tap()
       return
     }
 
-    for _ in 0..<4 {
+    XCTFail(failureMessage)
+  }
+
+  @MainActor
+  private func waitForElement(
+    _ element: XCUIElement,
+    in app: XCUIApplication,
+    timeout: TimeInterval = 2,
+    scrollAttempts: Int = 4
+  ) -> Bool {
+    if element.waitForExistence(timeout: timeout) {
+      return true
+    }
+
+    for _ in 0..<scrollAttempts {
       app.swipeUp()
-      if button.waitForExistence(timeout: 1) {
-        button.tap()
-        return
+      if element.waitForExistence(timeout: 1) {
+        return true
       }
     }
 
-    XCTFail(failureMessage)
+    return false
+  }
+
+  @MainActor
+  private func dismissKeyboard(in app: XCUIApplication) {
+    guard app.keyboards.element.exists else { return }
+
+    let returnKey = app.keyboards.buttons["Return"]
+    if returnKey.exists {
+      returnKey.tap()
+      return
+    }
+
+    let doneKey = app.keyboards.buttons["Done"]
+    if doneKey.exists {
+      doneKey.tap()
+      return
+    }
+
+    app.swipeDown()
   }
 
   @MainActor
@@ -50,7 +82,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
 
     for demo in SampleDemo.catalog {
       XCTAssertTrue(
-        app.buttons[demo.accessibilityIdentifier].waitForExistence(timeout: 2),
+        waitForElement(app.buttons[demo.accessibilityIdentifier], in: app),
         "Expected hub button \(demo.accessibilityIdentifier)"
       )
     }
@@ -147,16 +179,18 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     let confirmEmail = app.textFields["form.confirm-email"]
     confirmEmail.tap()
     confirmEmail.typeText("ada@innosquad.com")
+    dismissKeyboard(in: app)
 
     let terms = app.switches["form.accept-terms"]
+    XCTAssertTrue(waitForElement(terms, in: app))
     if let value = terms.value as? String, value == "0" {
       terms.tap()
     }
 
-    app.buttons["form.submit"].tap()
-    XCTAssertTrue(app.staticTexts["form.success"].waitForExistence(timeout: 2))
+    tapButton("form.submit", in: app, failureMessage: "Expected form submit button")
+    XCTAssertTrue(waitForElement(app.staticTexts["form.success"], in: app))
 
-    app.buttons["form.reset"].tap()
+    tapButton("form.reset", in: app, failureMessage: "Expected form reset button")
     XCTAssertFalse(app.staticTexts["form.success"].waitForExistence(timeout: 1))
   }
 
@@ -173,8 +207,11 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     messageField.typeText("hello")
 
     app.buttons["websocket.send"].tap()
-    XCTAssertTrue(app.staticTexts["websocket.transcript"].waitForExistence(timeout: 2))
-    XCTAssertTrue(app.staticTexts["websocket.transcript"].label.contains("echo: hello"))
+    let transcript = app.staticTexts["websocket.transcript"]
+    let echoPredicate = NSPredicate(format: "label CONTAINS %@", "echo: hello")
+    expectation(for: echoPredicate, evaluatedWith: transcript)
+    waitForExpectations(timeout: 2)
+    XCTAssertTrue(transcript.label.contains("echo: hello"))
 
     app.buttons["websocket.disconnect"].tap()
     XCTAssertTrue(app.staticTexts["websocket.status"].waitForExistence(timeout: 2))

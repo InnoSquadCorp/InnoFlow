@@ -46,7 +46,8 @@ extension Store {
   @available(
     *,
     unavailable,
-    message: "Use 'binding(_:send:)' or 'binding(_:to:)' — unlabeled trailing-closure calls are an intentional 3.x migration break."
+    message:
+      "Use 'binding(_:send:)' or 'binding(_:to:)' — unlabeled trailing-closure calls are an intentional 3.x migration break."
   )
   public func binding<Value>(
     _ keyPath: KeyPath<R.State, BindableProperty<Value>>,
@@ -91,7 +92,8 @@ extension ScopedStore {
   @available(
     *,
     unavailable,
-    message: "Use 'binding(_:send:)' or 'binding(_:to:)' — unlabeled trailing-closure calls are an intentional 3.x migration break."
+    message:
+      "Use 'binding(_:send:)' or 'binding(_:to:)' — unlabeled trailing-closure calls are an intentional 3.x migration break."
   )
   public func binding<Value>(
     _ keyPath: KeyPath<ChildState, BindableProperty<Value>>,

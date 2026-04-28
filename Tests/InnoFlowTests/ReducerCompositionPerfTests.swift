@@ -64,7 +64,7 @@ private struct PerfBenchConstructNode: Reducer {
 }
 
 private nonisolated(unsafe) var reducerConstructionBenchmarkSink: UInt64 = 0
-private nonisolated(unsafe) var reducerConstructionSeed: UInt64 = 0xCBF29CE484222325
+private nonisolated(unsafe) var reducerConstructionSeed: UInt64 = 0xCBF2_9CE4_8422_2325
 
 // MARK: - Measurement helpers
 
@@ -218,14 +218,14 @@ private func repositoryRelativeOrAbsoluteFileURL(
 @inline(never)
 @_optimize(none)
 private func nextConstructionSeed() -> UInt64 {
-  reducerConstructionSeed = reducerConstructionSeed &* 2862933555777941757 &+ 3037000493
+  reducerConstructionSeed = reducerConstructionSeed &* 2_862_933_555_777_941_757 &+ 3_037_000_493
   return reducerConstructionSeed
 }
 
 @inline(never)
 @_optimize(none)
 private func seededConstructNode(baseSeed: UInt64, offset: UInt64) -> PerfBenchConstructNode {
-  PerfBenchConstructNode(seed: baseSeed &+ (offset &* 0x9E3779B97F4A7C15))
+  PerfBenchConstructNode(seed: baseSeed &+ (offset &* 0x9E37_79B9_7F4A_7C15))
 }
 
 @inline(never)
@@ -233,10 +233,10 @@ private func seededConstructNode(baseSeed: UInt64, offset: UInt64) -> PerfBenchC
 private func consumeConstructedReducer<T>(_ value: T) {
   var copy = value
   withUnsafeBytes(of: &copy) { rawBuffer in
-    var checksum: UInt64 = 0xCBF29CE484222325
+    var checksum: UInt64 = 0xCBF2_9CE4_8422_2325
     for byte in rawBuffer {
       checksum ^= UInt64(byte)
-      checksum &*= 1099511628211
+      checksum &*= 1_099_511_628_211
     }
     reducerConstructionBenchmarkSink ^= checksum
   }

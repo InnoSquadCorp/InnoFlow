@@ -71,10 +71,11 @@ struct ReducerCompositionPerfComparisonScriptTests {
     try process.run()
     process.waitUntilExit()
 
-    let stdoutText = String(
-      data: stdout.fileHandleForReading.readDataToEndOfFile(),
-      encoding: .utf8
-    ) ?? ""
+    let stdoutText =
+      String(
+        data: stdout.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+      ) ?? ""
 
     #expect(process.terminationStatus == 0)
     #expect(stdoutText.contains("INNOFLOW_REDUCER_PERF_OUTPUT=/tmp/reducer-composition-perf.jsonl"))

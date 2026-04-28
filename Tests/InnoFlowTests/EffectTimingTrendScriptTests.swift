@@ -62,10 +62,11 @@ struct EffectTimingTrendScriptTests {
     try process.run()
     process.waitUntilExit()
 
-    let stdoutText = String(
-      data: stdout.fileHandleForReading.readDataToEndOfFile(),
-      encoding: .utf8
-    ) ?? ""
+    let stdoutText =
+      String(
+        data: stdout.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+      ) ?? ""
 
     #expect(process.terminationStatus == 0)
     #expect(stdoutText.contains("mean"))

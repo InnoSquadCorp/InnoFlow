@@ -927,7 +927,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
     await store.send(.submit) {
       $0.validationMessages = []
-      $0.diagnostics = ["submitted form for Ada Lovelace <ada@innosquad.com>"]
+      $0.diagnostics = ["submitted form successfully"]
       $0.submittedSummary = "Ada Lovelace <ada@innosquad.com>"
       $0.hasAttemptedSubmit = true
     }
@@ -938,7 +938,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.acceptsTerms = false
       $0.validationMessages = []
       $0.diagnostics = [
-        "submitted form for Ada Lovelace <ada@innosquad.com>",
+        "submitted form successfully",
         "reset form",
       ]
       $0.submittedSummary = nil
@@ -1181,7 +1181,8 @@ struct InnoFlowSampleAppFeatureTests {
     #expect(mapped == .disconnected("Socket disconnected."))
   }
 
-  @Test("Bidirectional websocket live mapper keeps auto-reconnect disabled peer closes disconnected")
+  @Test(
+    "Bidirectional websocket live mapper keeps auto-reconnect disabled peer closes disconnected")
   func bidirectionalWebSocketLiveMapperKeepsAutoReconnectDisabledPeerCloseDisconnected() {
     let mapped = BidirectionalSocketLiveEventMapper.map(
       .disconnected(nil),

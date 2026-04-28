@@ -139,10 +139,11 @@ struct EffectTimingComparisonScriptTests {
     try process.run()
     process.waitUntilExit()
 
-    let stdoutText = String(
-      data: stdout.fileHandleForReading.readDataToEndOfFile(),
-      encoding: .utf8
-    ) ?? ""
+    let stdoutText =
+      String(
+        data: stdout.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+      ) ?? ""
 
     #expect(process.terminationStatus == 0)
     #expect(
@@ -151,7 +152,9 @@ struct EffectTimingComparisonScriptTests {
     )
     #expect(stdoutText.contains("EffectTimingBaselineGate"))
     #expect(stdoutText.contains("1  metric regression detected"))
-    #expect(stdoutText.contains("2  usage error, malformed data, incomplete capture, or missing dependency"))
+    #expect(
+      stdoutText.contains(
+        "2  usage error, malformed data, incomplete capture, or missing dependency"))
   }
 
   // MARK: - Helpers
@@ -224,7 +227,8 @@ struct EffectTimingComparisonScriptTests {
   private func jsonlPayload(entries: [[String: Any]]) -> String {
     var payload = Data()
     for entry in entries {
-      payload.append((try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys])) ?? Data())
+      payload.append(
+        (try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys])) ?? Data())
       payload.append(0x0A)
     }
     return String(data: payload, encoding: .utf8) ?? ""

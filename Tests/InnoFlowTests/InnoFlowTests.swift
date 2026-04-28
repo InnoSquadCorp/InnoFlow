@@ -2840,7 +2840,7 @@ struct CompileContractTests {
       }
       """
 
-      let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
 
     #expect(result.status != 0)
     let diagnostics = result.normalizedOutput
@@ -5344,20 +5344,19 @@ struct StoreTests {
   }
 
   @Test("ManualTestClock resumes same-deadline sleepers in insertion order")
-  func manualTestClockResumesSameDeadlineSleepersInInsertionOrder() async {
+  func manualTestClockResumesSameDeadlineSleepersInInsertionOrder() async throws {
     let clock = ManualTestClock()
     let probe = OrderedIntProbe()
 
     // Spawn two sleepers that hit the same deadline. The sleepers must be
     // registered with the clock before we advance — under release optimization
     // and parallel test load, a single `Task.yield()` between spawn and advance
-    // is not reliable. Wait up to 200 yields for each Task to register before
-    // proceeding.
+    // is not reliable. Require each Task to register before proceeding.
     let firstSleeper = Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(1)
     }
-    #expect(
+    try #require(
       await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
         await clock.sleeperCount == 1
       }
@@ -5367,7 +5366,7 @@ struct StoreTests {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(2)
     }
-    #expect(
+    try #require(
       await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
         await clock.sleeperCount == 2
       }

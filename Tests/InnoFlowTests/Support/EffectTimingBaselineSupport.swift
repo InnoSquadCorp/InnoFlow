@@ -10,7 +10,8 @@ enum EffectTimingBaselineContract {
   static let runCount = 10
   static let gateMetric = "mean"
   static let gateTolerance = "1.0"
-  static let baselineFixtureRelativePath = "Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl"
+  static let baselineFixtureRelativePath =
+    "Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl"
   static let baselineMetadataRelativePath =
     "Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.meta.json"
   static let refreshBuildPath = ".build-effect-baseline-refresh"
