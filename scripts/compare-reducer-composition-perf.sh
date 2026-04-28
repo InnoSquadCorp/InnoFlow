@@ -94,8 +94,15 @@ require_unique_labels() {
 require_unique_labels "$BASELINE"
 require_unique_labels "$CURRENT"
 
-mapfile -t BASELINE_LABELS < <(jq -r '.label' "$BASELINE")
-mapfile -t CURRENT_LABELS < <(jq -r '.label' "$CURRENT")
+BASELINE_LABELS=()
+while IFS= read -r label; do
+  BASELINE_LABELS[${#BASELINE_LABELS[@]}]="$label"
+done < <(jq -r '.label' "$BASELINE")
+
+CURRENT_LABELS=()
+while IFS= read -r label; do
+  CURRENT_LABELS[${#CURRENT_LABELS[@]}]="$label"
+done < <(jq -r '.label' "$CURRENT")
 
 for label in "${BASELINE_LABELS[@]}"; do
   if ! jq -e --arg label "$label" 'select(.label == $label)' "$CURRENT" >/dev/null; then

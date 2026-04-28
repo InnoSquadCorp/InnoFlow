@@ -2784,10 +2784,10 @@ struct CompileContractTests {
 
     #expect(result.status != 0)
     let diagnostics = result.normalizedOutput
-    #expect(diagnostics.contains("'binding' is unavailable"))
-    #expect(diagnostics.contains("binding(_:send:)"))
-    #expect(diagnostics.contains("binding(_:to:)"))
-    #expect(diagnostics.contains("intentional 3.x migration break"))
+    #expect(diagnostics.contains("no exact matches in call to instance method 'binding'"))
+    #expect(diagnostics.contains("incorrect labels for candidate"))
+    #expect(diagnostics.contains("expected: '(_:send:)'"))
+    #expect(diagnostics.contains("expected: '(_:to:)'"))
   }
 
   @Test("ScopedStore.binding rejects unlabeled trailing-closure calls with explicit label guidance")
@@ -2903,10 +2903,10 @@ struct CompileContractTests {
 
     #expect(result.status != 0)
     let diagnostics = result.normalizedOutput
-    #expect(diagnostics.contains("'binding' is unavailable"))
-    #expect(diagnostics.contains("binding(_:send:)"))
-    #expect(diagnostics.contains("binding(_:to:)"))
-    #expect(diagnostics.contains("intentional 3.x migration break"))
+    #expect(diagnostics.contains("no exact matches in call to instance method 'binding'"))
+    #expect(diagnostics.contains("incorrect labels for candidate"))
+    #expect(diagnostics.contains("expected: '(_:send:)'"))
+    #expect(diagnostics.contains("expected: '(_:to:)'"))
   }
 
   @Test("Scope/IfLet/IfCaseLet reject public closure-based action lifting at compile time")
@@ -5473,17 +5473,20 @@ struct StoreTests {
     // via `Task { ... }` still need scheduler turns to reach their first await.
     // Release optimization eliminates some scheduling boundaries, so a fixed
     // yield count is fragile — poll for the observable condition instead.
-    for _ in 0..<200 {
-      if store.state.log == ["started"] { break }
-      await Task.yield()
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+      store.state.log == ["started"]
     }
 
     #expect(store.state.log == ["started"])
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
+      }
+    )
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<200 {
-      if store.state.log == ["started", "finished"] { break }
-      await Task.yield()
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+      store.state.log == ["started", "finished"]
     }
 
     #expect(store.state.log == ["started", "finished"])
