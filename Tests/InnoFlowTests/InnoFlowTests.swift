@@ -386,12 +386,12 @@ struct MergeOrderingFeature: Reducer {
     switch action {
     case .start:
       return .merge(
-        .run { send in
-          try? await Task.sleep(for: .milliseconds(30))
+        .run { send, context in
+          try? await context.sleep(for: .milliseconds(30))
           await send(._emitted("slow"))
         },
-        .run { send in
-          try? await Task.sleep(for: .milliseconds(5))
+        .run { send, context in
+          try? await context.sleep(for: .milliseconds(5))
           await send(._emitted("fast"))
         }
       )
@@ -2269,14 +2269,23 @@ struct EffectTaskTests {
   }
 
   @Test("EffectTask.merge emits in child completion order rather than declaration order")
-  func effectMergeUsesCompletionOrder() async {
-    let store = TestStore(reducer: MergeOrderingFeature(), initialState: .init())
+  func effectMergeUsesCompletionOrder() async throws {
+    let clock = ManualTestClock()
+    let store = TestStore(reducer: MergeOrderingFeature(), initialState: .init(), clock: clock)
 
     await store.send(.start)
 
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 2
+      }
+    )
+    await clock.advance(by: .milliseconds(5))
     await store.receive(._emitted("fast")) {
       $0.emitted = ["fast"]
     }
+
+    await clock.advance(by: .milliseconds(25))
     await store.receive(._emitted("slow")) {
       $0.emitted = ["fast", "slow"]
     }
