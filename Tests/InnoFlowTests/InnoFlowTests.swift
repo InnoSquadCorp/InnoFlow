@@ -6366,6 +6366,33 @@ struct TestStoreTests {
     #expect(report.missingTriggers.isEmpty)
   }
 
+  @Test("PhaseMap testing helper asserts clean coverage for expected triggers")
+  func phaseMapTestingHelperAssertsCoverage() {
+    let report = assertPhaseMapCovers(
+      PhaseMapHarness.phaseMap,
+      expectedTriggersByPhase: [
+        .idle: [
+          .action(.load)
+        ],
+        .loading: [
+          .casePath(PhaseMapHarness.loadedCasePath, label: "loaded", sample: [1, 2, 3]),
+          .casePath(PhaseMapHarness.failedCasePath, label: "failed", sample: "boom"),
+        ],
+        .failed: [
+          .casePath(
+            PhaseMapHarness.replaceAndDismissCasePath,
+            label: "replaceAndDismiss",
+            sample: [7]
+          ),
+          .casePath(PhaseMapHarness.maybeRecoverCasePath, label: "maybeRecover", sample: true),
+        ],
+      ]
+    )
+
+    #expect(report.isEmpty)
+    #expect(report.missingTriggers.isEmpty)
+  }
+
   @Test(
     "PhaseMap opt-in validation reports missing triggers while runtime semantics stay partial-by-default"
   )
