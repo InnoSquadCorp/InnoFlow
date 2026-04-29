@@ -283,6 +283,18 @@ final class ObservationProbe: Sendable {
   }
 }
 
+final class SelectionTransformProbe: Sendable {
+  private let countLock = OSAllocatedUnfairLock<Int>(initialState: 0)
+
+  var count: Int {
+    countLock.withLock { $0 }
+  }
+
+  func record() {
+    countLock.withLock { $0 += 1 }
+  }
+}
+
 final class InstrumentationProbe: Sendable {
   private let eventsLock = OSAllocatedUnfairLock<[String]>(initialState: [])
 
@@ -3436,6 +3448,70 @@ struct StoreTests {
     #expect(selected.value == baselineSum + 1)
   }
 
+  @Test("Store.select(dependingOnAll:) preserves cached identity without eager recomputation")
+  func selectedStoreDependingOnAllPreservesIdentityWithoutEagerInitialValue() {
+    struct VariadicState: Equatable, Sendable, DefaultInitializable {
+      var a: Int = 1
+      var b: Int = 2
+      var c: Int = 3
+      var d: Int = 4
+      var e: Int = 5
+      var f: Int = 6
+      var g: Int = 7
+    }
+
+    enum VariadicAction: Equatable, Sendable {
+      case noop
+    }
+
+    struct VariadicReducer: Reducer {
+      typealias State = VariadicState
+      typealias Action = VariadicAction
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        .none
+      }
+    }
+
+    let store = Store(reducer: VariadicReducer(), initialState: .init())
+    let probe = SelectionTransformProbe()
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      dependingOnAll:
+        \VariadicState.a,
+      \VariadicState.b,
+      \VariadicState.c,
+      \VariadicState.d,
+      \VariadicState.e,
+      \VariadicState.f,
+      \VariadicState.g,
+      fileID: #fileID,
+      line: callsiteLine
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
+      probe.record()
+      return a + b + c + d + e + f + g
+    }
+    let second = store.select(
+      dependingOnAll:
+        \VariadicState.a,
+      \VariadicState.b,
+      \VariadicState.c,
+      \VariadicState.d,
+      \VariadicState.e,
+      \VariadicState.f,
+      \VariadicState.g,
+      fileID: #fileID,
+      line: callsiteLine
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
+      probe.record()
+      return a + b + c + d + e + f + g
+    }
+
+    #expect(first === second)
+    #expect(first.value == 28)
+    #expect(probe.count == 1)
+  }
+
   @Test("Store.select preserves SelectedStore identity across repeated calls")
   func selectedStoreCachingPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -4091,6 +4167,87 @@ struct StoreTests {
     }
     #expect(probe.count == 1)
     #expect(selected.value == baselineSum + 1)
+  }
+
+  @Test("ScopedStore.select(dependingOnAll:) preserves cached identity without eager recomputation")
+  func scopedSelectedStoreDependingOnAllPreservesIdentityWithoutEagerInitialValue() {
+    struct VariadicParentFeature: Reducer {
+      struct Child: Equatable, Sendable {
+        var a = 1
+        var b = 2
+        var c = 3
+        var d = 4
+        var e = 5
+        var f = 6
+        var g = 7
+      }
+
+      struct State: Equatable, Sendable, DefaultInitializable {
+        var child = Child()
+      }
+
+      enum Action: Equatable, Sendable {
+        case child(ChildAction)
+
+        static let childCasePath = CasePath<Self, ChildAction>(
+          embed: { .child($0) },
+          extract: {
+            guard case .child(let action) = $0 else { return nil }
+            return action
+          }
+        )
+      }
+
+      enum ChildAction: Equatable, Sendable {
+        case noop
+      }
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        .none
+      }
+    }
+
+    let store = Store(reducer: VariadicParentFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child,
+      action: VariadicParentFeature.Action.childCasePath
+    )
+    let probe = SelectionTransformProbe()
+    let callsiteLine: UInt = #line
+    let first = scoped.select(
+      dependingOnAll:
+        \VariadicParentFeature.Child.a,
+      \VariadicParentFeature.Child.b,
+      \VariadicParentFeature.Child.c,
+      \VariadicParentFeature.Child.d,
+      \VariadicParentFeature.Child.e,
+      \VariadicParentFeature.Child.f,
+      \VariadicParentFeature.Child.g,
+      fileID: #fileID,
+      line: callsiteLine
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
+      probe.record()
+      return a + b + c + d + e + f + g
+    }
+    let second = scoped.select(
+      dependingOnAll:
+        \VariadicParentFeature.Child.a,
+      \VariadicParentFeature.Child.b,
+      \VariadicParentFeature.Child.c,
+      \VariadicParentFeature.Child.d,
+      \VariadicParentFeature.Child.e,
+      \VariadicParentFeature.Child.f,
+      \VariadicParentFeature.Child.g,
+      fileID: #fileID,
+      line: callsiteLine
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
+      probe.record()
+      return a + b + c + d + e + f + g
+    }
+
+    #expect(first === second)
+    #expect(first.value == 28)
+    #expect(probe.count == 1)
   }
 
   @Test("Collection-scoped stores preserve identity across repeated calls")

@@ -547,8 +547,6 @@ extension Store {
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line)
 
-    let initial = transform(repeat state[keyPath: each dependencies])
-
     var registrations: [ProjectionDependencyRegistration<R.State>] = []
     for keyPath in repeat each dependencies {
       registrations.append(selectionDependencyRegistration(keyPath))
@@ -556,7 +554,7 @@ extension Store {
 
     return cachedSelectedStore(
       callsite: callsite,
-      initialValue: initial,
+      initialValue: transform(repeat state[keyPath: each dependencies]),
       registration: selectionDependencyRegistrations(fromArray: registrations),
       valueResolver: { [weak self] in
         guard let self else { return nil }
@@ -973,8 +971,6 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let callsite = SelectionCallsite(fileID: fileID.description, line: line)
 
-    let initial = transform(repeat state[keyPath: each dependencies])
-
     var registrations: [ProjectionDependencyRegistration<ChildState>] = []
     for keyPath in repeat each dependencies {
       registrations.append(selectionDependencyRegistration(keyPath))
@@ -982,7 +978,7 @@ extension ScopedStore {
 
     return cachedSelectedStore(
       callsite: callsite,
-      initialValue: initial,
+      initialValue: transform(repeat state[keyPath: each dependencies]),
       registration: selectionDependencyRegistrations(fromArray: registrations),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
