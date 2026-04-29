@@ -24,7 +24,7 @@ InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.2")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "4.0.0")
 ]
 ```
 
@@ -106,7 +106,7 @@ Stepper(
 - `IfLet`: optional child state
 - `IfCaseLet`: enum-backed child state
 - `ForEachReducer`: collection child state
-- `SelectedStore`: 읽기 전용 파생 모델. 1~3개 key path 기반이면 `dependingOn:` 오버로드를 우선 사용
+- `SelectedStore`: 읽기 전용 파생 모델. 1~6개 명시적 key path는 `dependingOn:` 오버로드를, 더 큰 명시적 dependency set은 `select(dependingOnAll:)`을 사용하며, dependency를 선언할 수 없을 때 `select { ... }`는 always-refresh fallback입니다
 
 ## 샘플 카탈로그
 
@@ -144,4 +144,4 @@ Stepper(
 - legal transition이 feature contract의 일부일 때
 - reducer 내부에 `state.phase = ...`가 여러 branch에 흩어져 있을 때
 
-반대로 strict totality enforcement, `SelectedStore` 4+ dependency 최적화, optional metrics package 같은 항목은 현재 코어 요구사항이 아니라 조건부 roadmap입니다.
+반대로 strict totality enforcement, optional metrics package 같은 항목은 현재 코어 요구사항이 아니라 조건부 roadmap입니다.

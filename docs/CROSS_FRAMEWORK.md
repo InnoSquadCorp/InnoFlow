@@ -171,7 +171,14 @@ struct ChatFeature {
       case .disconnectTapped:
         return .run { _, _ in await dependencies.transport.disconnect() }
       case .sendTapped(let text):
-        return .run { _, _ in try await dependencies.transport.send(text: text) }
+        let transport = dependencies.transport
+        return .run { _, _ in
+          do {
+            try await transport.send(text: text)
+          } catch {
+            return
+          }
+        }
       case ._transportEvent:
         return .none
       }

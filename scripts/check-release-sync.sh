@@ -5,12 +5,7 @@ ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 cd "$ROOT_DIR"
 
-latest_release_version() {
-  if [[ -n "${INNOFLOW_RELEASE_VERSION:-}" ]]; then
-    printf '%s\n' "${INNOFLOW_RELEASE_VERSION#v}"
-    return
-  fi
-
+latest_tag_version() {
   if git rev-parse --git-dir >/dev/null 2>&1; then
     local latest_tag
     latest_tag="$(
@@ -24,7 +19,9 @@ latest_release_version() {
       return
     fi
   fi
+}
 
+release_notes_version() {
   awk '
     /^## [0-9]+\.[0-9]+\.[0-9]+ Release$/ {
       sub(/^## /, "")
@@ -33,6 +30,22 @@ latest_release_version() {
       exit
     }
   ' RELEASE_NOTES.md
+}
+
+latest_release_version() {
+  if [[ -n "${INNOFLOW_RELEASE_VERSION:-}" ]]; then
+    printf '%s\n' "${INNOFLOW_RELEASE_VERSION#v}"
+    return
+  fi
+
+  local release_notes_version
+  release_notes_version="$(release_notes_version || true)"
+  if [[ -n "$release_notes_version" ]]; then
+    printf '%s\n' "$release_notes_version"
+    return
+  fi
+
+  latest_tag_version
 }
 
 require_pattern() {
@@ -60,10 +73,12 @@ fi
 
 escaped_version="${version//./\\.}"
 
-require_pattern \
-  README.md \
-  "from: \"${escaped_version}\"" \
-  "SwiftPM install version ${version}"
+for readme in README.md README.kr.md README.jp.md README.cn.md; do
+  require_pattern \
+    "$readme" \
+    "from: \"${escaped_version}\"" \
+    "SwiftPM install version ${version}"
+done
 
 require_pattern \
   RELEASE_NOTES.md \
@@ -74,5 +89,50 @@ require_pattern \
   CHANGELOG.md \
   "^## \\[${escaped_version}\\] - " \
   "changelog section for ${version}"
+
+require_pattern \
+  MIGRATION.md \
+  "^## ${escaped_version}$" \
+  "migration section for ${version}"
+
+require_pattern \
+  RELEASING.md \
+  "Current stable public release target: \`${escaped_version}\`" \
+  "release target ${version}"
+
+require_pattern \
+  ARCHITECTURE_CONTRACT.md \
+  "one through six explicit state slices" \
+  "SelectedStore fixed-arity selection contract"
+
+require_pattern \
+  ARCHITECTURE_CONTRACT.md \
+  "select\\(dependingOnAll:\\)" \
+  "SelectedStore dependingOnAll contract"
+
+require_pattern \
+  ARCHITECTURE_CONTRACT.md \
+  "always-refresh fallback" \
+  "SelectedStore closure fallback contract"
+
+require_pattern \
+  README.md \
+  "one through six explicit.*select\\(dependingOnAll:\\).*always-refresh fallback" \
+  "English SelectedStore selection guidance"
+
+require_pattern \
+  README.kr.md \
+  "1~6개.*select\\(dependingOnAll:\\).*always-refresh fallback" \
+  "Korean SelectedStore selection guidance"
+
+require_pattern \
+  README.jp.md \
+  "1〜6 個.*select\\(dependingOnAll:\\).*always-refresh fallback" \
+  "Japanese SelectedStore selection guidance"
+
+require_pattern \
+  README.cn.md \
+  "1 到 6 个.*select\\(dependingOnAll:\\).*always-refresh fallback" \
+  "Chinese SelectedStore selection guidance"
 
 echo "[check-release-sync] OK: release surface matches ${version}"
