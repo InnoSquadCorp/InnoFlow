@@ -135,12 +135,13 @@ compute_summary() {
   local output
   local status=0
   output="$(
-    jq -rs '
-    map(select(.phase == "runStarted" or .phase == "runFinished"))
-    | group_by(.sequence)
-    | map(select(length == 2
-        and any(.[]; .phase == "runStarted")
-        and any(.[]; .phase == "runFinished")))
+	    jq -rs '
+	    map(select(.phase == "runStarted" or .phase == "runFinished"))
+	    | sort_by(.sequence)
+	    | group_by(.sequence)
+	    | map(select(length == 2
+	        and any(.[]; .phase == "runStarted")
+	        and any(.[]; .phase == "runFinished")))
     | map(
         ((.[] | select(.phase == "runFinished") | .timestampNanos)
          - (.[] | select(.phase == "runStarted") | .timestampNanos)))
@@ -165,6 +166,11 @@ IFS=$'\t' read -r CURRENT_MATCHED_RUNS CURRENT_METRIC <<< "$(compute_summary "$C
 # hard failure so maintainers refresh the committed fixture deliberately.
 if [[ -z "$BASELINE_MATCHED_RUNS" || "$BASELINE_MATCHED_RUNS" == "0" ]]; then
   echo "[compare-effect-timings] baseline has no matched runs — fixture is invalid; regenerate baseline" >&2
+  exit "$EXIT_ERROR"
+fi
+
+if [[ -z "$BASELINE_METRIC" || "$BASELINE_METRIC" == "0" ]]; then
+  echo "[compare-effect-timings] baseline metric is zero — fixture has insufficient timing signal; regenerate baseline" >&2
   exit "$EXIT_ERROR"
 fi
 

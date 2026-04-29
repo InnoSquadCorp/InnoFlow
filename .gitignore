@@ -47,6 +47,7 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
+.build-*/
 
 # CocoaPods
 #
@@ -106,4 +107,3 @@ iOSInjectionProject/
 
 # DocC Documentation Build
 docs-build/
-

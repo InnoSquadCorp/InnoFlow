@@ -15,11 +15,16 @@ struct EffectInstrumentationWitnessSnapshot: Sendable {
 }
 
 final class EffectInstrumentationWitness: Sendable {
-  private struct State {
+  private enum RunKey: Hashable, Sendable {
+    case sequence(UInt64)
+    case token(UUID)
+  }
+
+  private struct State: Sendable {
     var runStartedCount: UInt64 = 0
     var runFinishedCount: UInt64 = 0
     var cancellationCount: UInt64 = 0
-    var phaseMaskBySequence: [UInt64: UInt8] = [:]
+    var phaseMaskByRunKey: [RunKey: UInt8] = [:]
   }
 
   private static let runStartedMask: UInt8 = 1 << 0
@@ -31,10 +36,10 @@ final class EffectInstrumentationWitness: Sendable {
     .sink { [self] event in
       switch event {
       case .runStarted(let runEvent):
-        recordRunStarted(sequence: runEvent.sequence ?? 0)
+        recordRunStarted(key: runKey(for: runEvent))
 
       case .runFinished(let runEvent):
-        recordRunFinished(sequence: runEvent.sequence ?? 0)
+        recordRunFinished(key: runKey(for: runEvent))
 
       case .effectsCancelled:
         recordCancellation()
@@ -47,7 +52,7 @@ final class EffectInstrumentationWitness: Sendable {
 
   func snapshot() -> EffectInstrumentationWitnessSnapshot {
     state.withLock { state in
-      let matchedRunPairs = state.phaseMaskBySequence.values.reduce(into: 0) { count, phaseMask in
+      let matchedRunPairs = state.phaseMaskByRunKey.values.reduce(into: 0) { count, phaseMask in
         if phaseMask & Self.runStartedMask != 0 && phaseMask & Self.runFinishedMask != 0 {
           count += 1
         }
@@ -61,17 +66,17 @@ final class EffectInstrumentationWitness: Sendable {
     }
   }
 
-  private func recordRunStarted(sequence: UInt64) {
+  private func recordRunStarted(key: RunKey) {
     state.withLock { state in
       state.runStartedCount &+= 1
-      state.phaseMaskBySequence[sequence, default: 0] |= Self.runStartedMask
+      state.phaseMaskByRunKey[key, default: 0] |= Self.runStartedMask
     }
   }
 
-  private func recordRunFinished(sequence: UInt64) {
+  private func recordRunFinished(key: RunKey) {
     state.withLock { state in
       state.runFinishedCount &+= 1
-      state.phaseMaskBySequence[sequence, default: 0] |= Self.runFinishedMask
+      state.phaseMaskByRunKey[key, default: 0] |= Self.runFinishedMask
     }
   }
 
@@ -79,5 +84,12 @@ final class EffectInstrumentationWitness: Sendable {
     state.withLock { state in
       state.cancellationCount &+= 1
     }
+  }
+
+  private func runKey<Action>(for event: StoreInstrumentation<Action>.RunEvent) -> RunKey {
+    if let sequence = event.sequence {
+      return .sequence(sequence)
+    }
+    return .token(event.token)
   }
 }

@@ -121,7 +121,7 @@ Toggle(
 }
 ```
 
-As in the rest of InnoFlow, keep the binding argument label explicit here: `send:` and `to:` are both valid, and unlabeled calls are an intentional 3.x migration break. Swift currently reports the trailing-closure spelling with explicit-label ambiguity notes, and the parenthesized unlabeled form as a no-exact-matches call that points back to those labeled forms.
+As in the rest of InnoFlow, prefer explicit binding argument labels here: `send:` and `to:` are both valid. Existing trailing-closure calls continue to resolve to `send:` for source compatibility.
 
 The row projection is still a view concern. The phase contract remains at the parent feature level.
 

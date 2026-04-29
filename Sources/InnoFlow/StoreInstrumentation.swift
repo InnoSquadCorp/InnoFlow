@@ -178,28 +178,40 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   /// Pair with the existing `.osLog(logger:)` adapter through `.combined(...)`
   /// when you want both Console-readable output and signpost-driven Instruments
   /// traces from the same store.
+  ///
+  /// Action payloads are redacted by default because `String(describing:)` can
+  /// expose user data in Instruments traces. Opt in with `includeActions: true`
+  /// only for local debugging sessions where payload visibility is intentional.
   public static func signpost(
     signposter: OSSignposter,
     name: StaticString = "InnoFlow.run",
-    includeActions: Bool = true
+    includeActions: Bool = false
   ) -> Self {
     let intervalStates = OSSignpostIntervalStateRegistry()
 
     return .init(
       didStartRun: { event in
-        let state = signposter.beginInterval(name, id: signposter.makeSignpostID())
+        let state = signposter.beginInterval(
+          name,
+          id: signposter.makeSignpostID(),
+          "token=\(event.token.uuidString) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+        )
         intervalStates.store(state, for: event.token)
       },
       didFinishRun: { event in
         guard let state = intervalStates.take(token: event.token) else { return }
-        signposter.endInterval(name, state)
+        signposter.endInterval(
+          name,
+          state,
+          "token=\(event.token.uuidString) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+        )
       },
       didEmitAction: { event in
         let actionDescription =
           includeActions ? String(describing: event.action) : "<redacted>"
         signposter.emitEvent(
           name,
-          "emit \(actionDescription)"
+          "emit action=\(actionDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
       didDropAction: { event in
@@ -207,13 +219,13 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
         let renderedAction = includeActions ? actionDescription : "<redacted>"
         signposter.emitEvent(
           name,
-          "drop \(renderedAction) reason=\(String(describing: event.reason))"
+          "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
       didCancelEffects: { event in
         signposter.emitEvent(
           name,
-          "cancel id=\(String(describing: event.id))"
+          "cancel id=\(String(describing: event.id)) sequence=\(event.sequence)"
         )
       }
     )

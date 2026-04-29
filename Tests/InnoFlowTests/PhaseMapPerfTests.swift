@@ -45,6 +45,47 @@ private enum PhaseMapPerfAction: Equatable, Sendable {
   case advance(from: Int, to: Int)
 }
 
+struct PhaseMapPerfScenario: Sendable, CustomStringConvertible {
+  let label: String
+  let phaseCount: Int
+  let transitionsPerPhase: Int
+  let transitionOffset: Int
+  let iterations: Int
+
+  var description: String { label }
+}
+
+let phaseMapPerfScenarios: [PhaseMapPerfScenario] = [
+  .init(
+    label: "small (4 phases × 3 transitions)",
+    phaseCount: 4,
+    transitionsPerPhase: 3,
+    transitionOffset: 1,
+    iterations: 10_000
+  ),
+  .init(
+    label: "medium (16 phases × 5 transitions)",
+    phaseCount: 16,
+    transitionsPerPhase: 5,
+    transitionOffset: 1,
+    iterations: 10_000
+  ),
+  .init(
+    label: "large (64 phases × 5 transitions)",
+    phaseCount: 64,
+    transitionsPerPhase: 5,
+    transitionOffset: 1,
+    iterations: 10_000
+  ),
+  .init(
+    label: "large last-of-5 (64 phases × 5 transitions)",
+    phaseCount: 64,
+    transitionsPerPhase: 5,
+    transitionOffset: 5,
+    iterations: 10_000
+  ),
+]
+
 private struct PhaseMapPerfBaseReducer: Reducer {
   typealias State = PhaseMapPerfState
   typealias Action = PhaseMapPerfAction
@@ -116,94 +157,23 @@ private func measureBlock(
 @Suite(.serialized)
 struct PerfPhaseMapDispatch {
 
-  @Test func _perf_phaseMap_dispatch_small_4x3() async throws {
+  @Test("PhaseMap dispatch benchmark", arguments: phaseMapPerfScenarios)
+  func _perf_phaseMap_dispatch(scenario: PhaseMapPerfScenario) async throws {
     guard isPhaseMapPerfBenchmarkEnabled else { return }
 
-    let phaseCount = 4
-    let transitionsPerPhase = 3
+    let phaseCount = scenario.phaseCount
+    let transitionsPerPhase = scenario.transitionsPerPhase
     let reducer = PhaseMapPerfBaseReducer().phaseMap(
       makeRingPhaseMap(phaseCount: phaseCount, transitionsPerPhase: transitionsPerPhase)
     )
     var state = PhaseMapPerfState()
 
     let result = measureBlock(
-      label: "phaseMap dispatch small (4 phases × 3 transitions)",
-      iterations: 10_000
+      label: "phaseMap dispatch \(scenario.label)",
+      iterations: scenario.iterations
     ) {
       let from = state.phase
-      let to = (from + 1) % phaseCount
-      _ = reducer.reduce(into: &state, action: .advance(from: from, to: to))
-    }
-    print(result.formatted())
-    #expect(state.bumps > 0)
-  }
-
-  @Test func _perf_phaseMap_dispatch_medium_16x5() async throws {
-    guard isPhaseMapPerfBenchmarkEnabled else { return }
-
-    let phaseCount = 16
-    let transitionsPerPhase = 5
-    let reducer = PhaseMapPerfBaseReducer().phaseMap(
-      makeRingPhaseMap(phaseCount: phaseCount, transitionsPerPhase: transitionsPerPhase)
-    )
-    var state = PhaseMapPerfState()
-
-    let result = measureBlock(
-      label: "phaseMap dispatch medium (16 phases × 5 transitions)",
-      iterations: 10_000
-    ) {
-      let from = state.phase
-      let to = (from + 1) % phaseCount
-      _ = reducer.reduce(into: &state, action: .advance(from: from, to: to))
-    }
-    print(result.formatted())
-    #expect(state.bumps > 0)
-  }
-
-  @Test func _perf_phaseMap_dispatch_large_64x5() async throws {
-    guard isPhaseMapPerfBenchmarkEnabled else { return }
-
-    let phaseCount = 64
-    let transitionsPerPhase = 5
-    let reducer = PhaseMapPerfBaseReducer().phaseMap(
-      makeRingPhaseMap(phaseCount: phaseCount, transitionsPerPhase: transitionsPerPhase)
-    )
-    var state = PhaseMapPerfState()
-
-    let result = measureBlock(
-      label: "phaseMap dispatch large (64 phases × 5 transitions)",
-      iterations: 10_000
-    ) {
-      let from = state.phase
-      let to = (from + 1) % phaseCount
-      _ = reducer.reduce(into: &state, action: .advance(from: from, to: to))
-    }
-    print(result.formatted())
-    #expect(state.bumps > 0)
-  }
-
-  /// Worst-case-ish dispatch: the matching transition is the last one declared
-  /// in the source phase. Linear scan over `transitionsPerPhase` always
-  /// inspects every earlier transition before finding the match. A future
-  /// per-phase transition index would collapse this to a single hash lookup.
-  @Test func _perf_phaseMap_dispatch_large_lastTransition_64x5() async throws {
-    guard isPhaseMapPerfBenchmarkEnabled else { return }
-
-    let phaseCount = 64
-    let transitionsPerPhase = 5
-    let reducer = PhaseMapPerfBaseReducer().phaseMap(
-      makeRingPhaseMap(phaseCount: phaseCount, transitionsPerPhase: transitionsPerPhase)
-    )
-    var state = PhaseMapPerfState()
-
-    let result = measureBlock(
-      label: "phaseMap dispatch large last-of-5 (64 phases × 5 transitions)",
-      iterations: 10_000
-    ) {
-      let from = state.phase
-      // Always pick the last declared transition in the current phase so
-      // every iteration walks through 4 non-matching transitions first.
-      let to = (from + transitionsPerPhase) % phaseCount
+      let to = (from + scenario.transitionOffset) % phaseCount
       _ = reducer.reduce(into: &state, action: .advance(from: from, to: to))
     }
     print(result.formatted())

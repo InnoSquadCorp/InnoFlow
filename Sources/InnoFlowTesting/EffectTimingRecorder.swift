@@ -57,14 +57,10 @@ public actor EffectTimingRecorder {
     }
   }
 
-  private struct StoredEntry: Sendable {
-    let ordering: UInt64
-    let entry: Entry
-  }
-
   private struct StorageState: Sendable {
-    var nextOrdering: UInt64 = 0
-    var recordedEntries: [StoredEntry] = []
+    var nextFallbackSequence: UInt64 = 1 << 63
+    var fallbackSequenceByRunToken: [UUID: UInt64] = [:]
+    var recordedEntries: [Entry] = []
   }
 
   private let clock = ContinuousClock()
@@ -77,8 +73,8 @@ public actor EffectTimingRecorder {
 
   // MARK: - Public API
 
-  /// Returns a snapshot of all entries recorded so far, ordered by the
-  /// instrumentation callback sequence that captured them.
+  /// Returns a snapshot of all entries recorded so far, in the append order
+  /// captured by the synchronous instrumentation callbacks.
   public func entries() -> [Entry] {
     snapshotEntries()
   }
@@ -116,11 +112,11 @@ public actor EffectTimingRecorder {
     return StoreInstrumentation<Action>(
       didStartRun: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let sequence = event.sequence ?? 0
         let effectID = event.cancellationID?.rawValue.description
         recorder.record(
           phase: .runStarted,
-          sequence: sequence,
+          sequence: event.sequence,
+          runToken: event.token,
           effectID: effectID,
           actionLabel: nil,
           timestampNanos: timestampNanos
@@ -128,11 +124,11 @@ public actor EffectTimingRecorder {
       },
       didFinishRun: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let sequence = event.sequence ?? 0
         let effectID = event.cancellationID?.rawValue.description
         recorder.record(
           phase: .runFinished,
-          sequence: sequence,
+          sequence: event.sequence,
+          runToken: event.token,
           effectID: effectID,
           actionLabel: nil,
           timestampNanos: timestampNanos
@@ -140,12 +136,11 @@ public actor EffectTimingRecorder {
       },
       didEmitAction: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let sequence = event.sequence ?? 0
         let effectID = event.cancellationID?.rawValue.description
         let label = Self.labelForAction(event.action)
         recorder.record(
           phase: .actionEmitted,
-          sequence: sequence,
+          sequence: event.sequence,
           effectID: effectID,
           actionLabel: label,
           timestampNanos: timestampNanos
@@ -153,12 +148,11 @@ public actor EffectTimingRecorder {
       },
       didDropAction: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let sequence = event.sequence ?? 0
         let effectID = event.cancellationID?.rawValue.description
         let label = event.action.map(Self.labelForAction)
         recorder.record(
           phase: .actionDropped,
-          sequence: sequence,
+          sequence: event.sequence,
           effectID: effectID,
           actionLabel: label,
           timestampNanos: timestampNanos
@@ -183,34 +177,65 @@ public actor EffectTimingRecorder {
   private nonisolated func snapshotEntries() -> [Entry] {
     storage.withLock { state in
       state.recordedEntries
-        .sorted { lhs, rhs in lhs.ordering < rhs.ordering }
-        .map(\.entry)
     }
   }
 
   private nonisolated func record(
     phase: Phase,
-    sequence: UInt64,
+    sequence: UInt64?,
+    runToken: UUID? = nil,
     effectID: String?,
     actionLabel: String?,
     timestampNanos: UInt64
   ) {
     storage.withLock { state in
-      let ordering = state.nextOrdering
-      state.nextOrdering &+= 1
+      let resolvedSequence = resolvedSequence(
+        explicitSequence: sequence,
+        runToken: runToken,
+        phase: phase,
+        state: &state
+      )
       state.recordedEntries.append(
-        StoredEntry(
-          ordering: ordering,
-          entry: Entry(
-            phase: phase,
-            sequence: sequence,
-            effectID: effectID,
-            actionLabel: actionLabel,
-            timestampNanos: timestampNanos
-          )
+        Entry(
+          phase: phase,
+          sequence: resolvedSequence,
+          effectID: effectID,
+          actionLabel: actionLabel,
+          timestampNanos: timestampNanos
         )
       )
     }
+  }
+
+  private nonisolated func resolvedSequence(
+    explicitSequence: UInt64?,
+    runToken: UUID?,
+    phase: Phase,
+    state: inout StorageState
+  ) -> UInt64 {
+    if let explicitSequence {
+      return explicitSequence
+    }
+
+    guard let runToken else {
+      defer { state.nextFallbackSequence &+= 1 }
+      return state.nextFallbackSequence
+    }
+
+    let sequence =
+      state.fallbackSequenceByRunToken[runToken]
+      ?? {
+        let sequence = state.nextFallbackSequence
+        state.nextFallbackSequence &+= 1
+        state.fallbackSequenceByRunToken[runToken] = sequence
+        return sequence
+      }()
+
+    if phase == .runFinished {
+      state.fallbackSequenceByRunToken.removeValue(forKey: runToken)
+    }
+
+    return sequence
   }
 
   private nonisolated static func nanoseconds(from duration: Duration) -> UInt64 {

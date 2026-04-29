@@ -872,50 +872,66 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  // MARK: - @BindableField ↔ Action.setX 진단
-
-  @Test("@InnoFlow: @BindableField matched by Action.setX emits no diagnostics")
-  func bindableFieldMatchedBySetterPassesCleanly() throws {
+  @Test("@InnoFlow(phaseManaged:) wraps body in static phaseMap")
+  func phaseManagedAuthoringAddsPhaseMapWrapper() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
         """
-        @InnoFlow
-        struct CounterFeature {
+        @InnoFlow(phaseManaged: true)
+        struct PhaseManagedFeature {
             struct State: Sendable {
-                @BindableField var step = 1
+                enum Phase: Hashable, Sendable {
+                    case idle
+                    case loading
+                }
+                var phase: Phase = .idle
             }
             enum Action: Sendable {
-                case setStep(Int)
+                case load
             }
-
-            var body: some Reducer<State, Action> {
-                Reduce { state, action in
-                    .none
+            static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                PhaseMap(\\State.phase) {
+                    From(.idle) {
+                        On(.load, to: .loading)
+                    }
+                    From(.loading) {}
                 }
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
             }
         }
         """,
         expandedSource: """
-          struct CounterFeature {
+          struct PhaseManagedFeature {
               struct State: Sendable {
-                  @BindableField var step = 1
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                      case loading
+                  }
+                  var phase: Phase = .idle
               }
               enum Action: Sendable {
-                  case setStep(Int)
+                  case load
               }
-
-              var body: some Reducer<State, Action> {
-                  Reduce { state, action in
-                      .none
+              static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  PhaseMap(\\State.phase) {
+                      From(.idle) {
+                          On(.load, to: .loading)
+                      }
+                      From(.loading) {}
                   }
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
               }
 
               func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-                body.reduce(into: &state, action: action)
+                body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
               }
           }
 
-          extension CounterFeature: Reducer {
+          extension PhaseManagedFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -925,60 +941,49 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow warns when @BindableField has no matching Action.setX case")
-  func bindableFieldWithoutSetterWarns() throws {
+  @Test("@InnoFlow(phaseManaged:) requires static phaseMap")
+  func phaseManagedRequiresStaticPhaseMap() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
         """
-        @InnoFlow
-        struct CounterFeature {
+        @InnoFlow(phaseManaged: true)
+        struct MissingPhaseMapFeature {
             struct State: Sendable {
-                @BindableField var step = 1
+                enum Phase: Hashable, Sendable {
+                    case idle
+                }
+                var phase: Phase = .idle
             }
             enum Action: Sendable {
-                case increment
+                case load
             }
-
             var body: some Reducer<State, Action> {
-                Reduce { state, action in
-                    .none
-                }
+                Reduce { state, action in .none }
             }
         }
         """,
         expandedSource: """
-          struct CounterFeature {
+          struct MissingPhaseMapFeature {
               struct State: Sendable {
-                  @BindableField var step = 1
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                  }
+                  var phase: Phase = .idle
               }
               enum Action: Sendable {
-                  case increment
+                  case load
               }
-
               var body: some Reducer<State, Action> {
-                  Reduce { state, action in
-                      .none
-                  }
+                  Reduce { state, action in .none }
               }
-
-              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-                body.reduce(into: &state, action: action)
-              }
-          }
-
-          extension CounterFeature: Reducer {
           }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
-              "`@BindableField var step` has no matching `case setStep(Int)` in `Action` — `store.binding(\\.$step, to:)` requires a single `Int` payload setter",
-            line: 4,
-            column: 9,
-            severity: .warning,
-            fixIts: [
-              FixItSpec(message: "Add `case setStep(Int)` to `Action`")
-            ]
+              "@InnoFlow(phaseManaged: true) requires a static `phaseMap` property so the macro can synthesize `body.phaseMap(Self.phaseMap)`",
+            line: 1,
+            column: 1
           )
         ],
         macros: testMacros
@@ -988,220 +993,61 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow skips @BindableField diagnostics when Action is a typealias")
-  func typealiasedActionSkipsBindableFieldDiagnostic() throws {
+  @Test("@InnoFlow(phaseManaged:) rejects explicit body phaseMap wrapping")
+  func phaseManagedRejectsExplicitBodyPhaseMap() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
         """
-        @InnoFlow
-        struct ChildFeature {
+        @InnoFlow(phaseManaged: true)
+        struct ExplicitPhaseMapFeature {
             struct State: Sendable {
-                @BindableField var step = 1
-            }
-            typealias Action = ParentFeature.ChildAction
-
-            var body: some Reducer<State, Action> {
-                Reduce { state, action in
-                    .none
+                enum Phase: Hashable, Sendable {
+                    case idle
                 }
-            }
-        }
-        """,
-        expandedSource: """
-          struct ChildFeature {
-              struct State: Sendable {
-                  @BindableField var step = 1
-              }
-              typealias Action = ParentFeature.ChildAction
-
-              var body: some Reducer<State, Action> {
-                  Reduce { state, action in
-                      .none
-                  }
-              }
-
-              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-                body.reduce(into: &state, action: action)
-              }
-          }
-
-          extension ChildFeature: Reducer {
-          }
-          """,
-        macros: testMacros
-      )
-    #else
-      Issue.record("Macros are only supported when running tests for the host platform")
-    #endif
-  }
-
-  @Test("@InnoFlow tolerates acronym casings like mfaCode ↔ setMFACode")
-  func bindableFieldAcronymCasingIsAccepted() throws {
-    #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
-        """
-        @InnoFlow
-        struct AuthFeature {
-            struct State: Sendable {
-                @BindableField var mfaCode = ""
+                var phase: Phase = .idle
             }
             enum Action: Sendable {
-                case setMFACode(String)
+                case load
             }
-
-            var body: some Reducer<State, Action> {
-                Reduce { state, action in
-                    .none
+            static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                PhaseMap(\\State.phase) {
+                    From(.idle) {}
                 }
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+                    .phaseMap(Self.phaseMap)
             }
         }
         """,
         expandedSource: """
-          struct AuthFeature {
+          struct ExplicitPhaseMapFeature {
               struct State: Sendable {
-                  @BindableField var mfaCode = ""
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                  }
+                  var phase: Phase = .idle
               }
               enum Action: Sendable {
-                  case setMFACode(String)
+                  case load
               }
-
-              var body: some Reducer<State, Action> {
-                  Reduce { state, action in
-                      .none
+              static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  PhaseMap(\\State.phase) {
+                      From(.idle) {}
                   }
               }
-
-              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-                body.reduce(into: &state, action: action)
-              }
-          }
-
-          extension AuthFeature: Reducer {
-          }
-          """,
-        macros: testMacros
-      )
-    #else
-      Issue.record("Macros are only supported when running tests for the host platform")
-    #endif
-  }
-
-  @Test("@InnoFlow warns when Action.setX exists but takes the wrong payload type")
-  func bindableFieldSetterPayloadTypeMismatchWarnsWithoutFixIt() throws {
-    #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
-        """
-        @InnoFlow
-        struct CounterFeature {
-            struct State: Sendable {
-                @BindableField var step = 1
-            }
-            enum Action: Sendable {
-                case setStep(String)
-            }
-
-            var body: some Reducer<State, Action> {
-                Reduce { state, action in
-                    .none
-                }
-            }
-        }
-        """,
-        expandedSource: """
-          struct CounterFeature {
-              struct State: Sendable {
-                  @BindableField var step = 1
-              }
-              enum Action: Sendable {
-                  case setStep(String)
-              }
-
               var body: some Reducer<State, Action> {
-                  Reduce { state, action in
-                      .none
-                  }
+                  Reduce { state, action in .none }
+                      .phaseMap(Self.phaseMap)
               }
-
-              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-                body.reduce(into: &state, action: action)
-              }
-          }
-
-          extension CounterFeature: Reducer {
           }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
-              "`@BindableField var step` has no matching `case setStep(Int)` in `Action` — `store.binding(\\.$step, to:)` requires a single `Int` payload setter",
-            line: 4,
-            column: 9,
-            severity: .warning
-          )
-        ],
-        macros: testMacros
-      )
-    #else
-      Issue.record("Macros are only supported when running tests for the host platform")
-    #endif
-  }
-
-  @Test("@InnoFlow warns only for @BindableField fields missing their Action.setX")
-  func bindableFieldDiagnosticIsFieldLocal() throws {
-    #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
-        """
-        @InnoFlow
-        struct FormFeature {
-            struct State: Sendable {
-                @BindableField var step = 1
-                @BindableField var name = ""
-            }
-            enum Action: Sendable {
-                case setName(String)
-            }
-
-            var body: some Reducer<State, Action> {
-                Reduce { state, action in
-                    .none
-                }
-            }
-        }
-        """,
-        expandedSource: """
-          struct FormFeature {
-              struct State: Sendable {
-                  @BindableField var step = 1
-                  @BindableField var name = ""
-              }
-              enum Action: Sendable {
-                  case setName(String)
-              }
-
-              var body: some Reducer<State, Action> {
-                  Reduce { state, action in
-                      .none
-                  }
-              }
-
-              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-                body.reduce(into: &state, action: action)
-              }
-          }
-
-          extension FormFeature: Reducer {
-          }
-          """,
-        diagnostics: [
-          DiagnosticSpec(
-            message:
-              "`@BindableField var step` has no matching `case setStep(Int)` in `Action` — `store.binding(\\.$step, to:)` requires a single `Int` payload setter",
-            line: 4,
-            column: 9,
-            severity: .warning,
-            fixIts: [
-              FixItSpec(message: "Add `case setStep(Int)` to `Action`")
-            ]
+              "@InnoFlow(phaseManaged: true) synthesizes `body.phaseMap(Self.phaseMap)` automatically; remove the explicit `.phaseMap(...)` call from `body` or disable phaseManaged",
+            line: 1,
+            column: 1
           )
         ],
         macros: testMacros
@@ -1214,7 +1060,7 @@ struct InnoFlowMacrosTests {
   @Test(
     "@InnoFlow(phaseManaged:) wraps reduce with phaseMap and warns on unreferenced phase cases"
   )
-  func phaseManagedTotalityWarnsOnUnreferencedCases() throws {
+  func phaseManagedWarnsWhenPhaseCaseIsNeverReferencedFromPhaseMap() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
         """
@@ -1279,7 +1125,7 @@ struct InnoFlowMacrosTests {
           DiagnosticSpec(
             message:
               "`Phase.orphan` is declared but never referenced from the static `phaseMap` — add a `From(.orphan) { ... }` rule, an `On(..., to: .orphan)` target, or remove the case if it is unused",
-            line: 6,
+            line: 7,
             column: 18,
             severity: .warning
           )

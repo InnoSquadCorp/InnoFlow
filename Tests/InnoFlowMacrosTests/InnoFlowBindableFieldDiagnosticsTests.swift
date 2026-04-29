@@ -223,6 +223,59 @@ struct InnoFlowBindableFieldDiagnosticsTests {
     #endif
   }
 
+  @Test("@InnoFlow accepts same-name @BindableField setters when payload spelling uses typealiases")
+  func bindableFieldSetterPayloadTypealiasSpellingIsAccepted() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct ProfileFeature {
+            typealias DisplayName = String
+            struct State: Sendable {
+                @BindableField var name: DisplayName = ""
+            }
+            enum Action: Sendable {
+                case setName(String)
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in
+                    .none
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct ProfileFeature {
+              typealias DisplayName = String
+              struct State: Sendable {
+                  @BindableField var name: DisplayName = ""
+              }
+              enum Action: Sendable {
+                  case setName(String)
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in
+                      .none
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+
+          extension ProfileFeature: Reducer {
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow warns when Action.setX exists but takes the wrong payload type")
   func bindableFieldSetterPayloadTypeMismatchWarnsWithoutFixIt() throws {
     #if canImport(InnoFlowMacros)
