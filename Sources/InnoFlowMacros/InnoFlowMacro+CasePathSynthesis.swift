@@ -80,6 +80,19 @@ extension InnoFlowMacro {
       parameter.secondName == nil,
       parameter.firstName == nil || parameter.firstName?.text == "_"
     {
+      // Optional payloads still synthesize a CasePath for backward
+      // compatibility, but emit a note because the resulting `extract` always
+      // unwraps a non-nil child action — `.case(nil)` round-trips as `nil`,
+      // which is rarely what feature authors intend.
+      if parameter.type.is(OptionalTypeSyntax.self) {
+        context.diagnose(
+          Diagnostic(
+            node: Syntax(element.name),
+            message: InnoFlowActionPathsMessage.optionalPayloadNote(caseName: caseName)
+          )
+        )
+      }
+
       let memberName = "\(generatedActionPathBaseName(from: caseName))CasePath"
       guard
         diagnoseGeneratedActionPathCollisionIfNeeded(
@@ -107,6 +120,23 @@ extension InnoFlowMacro {
           )
           """
       )
+    }
+
+    if parameters.count == 1,
+      let parameter = parameters.first,
+      let labelToken = parameter.firstName,
+      labelToken.text != "_"
+    {
+      context.diagnose(
+        Diagnostic(
+          node: Syntax(element.name),
+          message: InnoFlowActionPathsMessage.labeledPayloadNote(
+            caseName: caseName,
+            label: labelToken.text
+          )
+        )
+      )
+      return nil
     }
 
     if parameters.count == 2,
@@ -143,6 +173,15 @@ extension InnoFlowMacro {
             }
           )
           """
+      )
+    }
+
+    if parameters.count >= 2 {
+      context.diagnose(
+        Diagnostic(
+          node: Syntax(element.name),
+          message: InnoFlowActionPathsMessage.multiPayloadNote(caseName: caseName)
+        )
       )
     }
 
@@ -185,12 +224,24 @@ private struct SynthesizedActionPathMember {
 
 enum InnoFlowActionPathsMessage: DiagnosticMessage {
   case leadingUnderscoreCollision
+  case optionalPayloadNote(caseName: String)
+  case labeledPayloadNote(caseName: String, label: String)
+  case multiPayloadNote(caseName: String)
 
   var message: String {
     switch self {
     case .leadingUnderscoreCollision:
       return
         "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case"
+    case .optionalPayloadNote(let caseName):
+      return
+        "case `\(caseName)` has an optional payload; the synthesized CasePath still works but `.\(caseName)(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path"
+    case .labeledPayloadNote(let caseName, let label):
+      return
+        "case `\(caseName)` has a labeled payload (`\(label):`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `\(caseName)CasePath` manually"
+    case .multiPayloadNote(let caseName):
+      return
+        "case `\(caseName)` has multiple payload parameters; CasePath synthesis only handles unlabeled single payloads and `id:action:` collection routes. Declare a static path manually if you need one"
     }
   }
 
@@ -198,10 +249,21 @@ enum InnoFlowActionPathsMessage: DiagnosticMessage {
     switch self {
     case .leadingUnderscoreCollision:
       return .init(domain: "InnoFlowMacro", id: "LeadingUnderscoreCollision")
+    case .optionalPayloadNote:
+      return .init(domain: "InnoFlowMacro", id: "OptionalPayloadActionPathSkipped")
+    case .labeledPayloadNote:
+      return .init(domain: "InnoFlowMacro", id: "LabeledPayloadActionPathSkipped")
+    case .multiPayloadNote:
+      return .init(domain: "InnoFlowMacro", id: "MultiPayloadActionPathSkipped")
     }
   }
 
   var severity: DiagnosticSeverity {
-    .error
+    switch self {
+    case .leadingUnderscoreCollision:
+      return .error
+    case .optionalPayloadNote, .labeledPayloadNote, .multiPayloadNote:
+      return .note
+    }
   }
 }

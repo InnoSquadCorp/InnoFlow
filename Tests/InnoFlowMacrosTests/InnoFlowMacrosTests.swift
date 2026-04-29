@@ -332,7 +332,7 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow does not synthesize case paths for labeled single-parameter cases")
+  @Test("@InnoFlow notes labeled single-parameter cases instead of silently skipping them")
   func labeledSingleParameterCaseDoesNotSynthesizeActionPath() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
@@ -372,6 +372,15 @@ struct InnoFlowMacrosTests {
           }
           extension LabeledActionFeature: Reducer {}
           """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "case `child` has a labeled payload (`action:`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `childCasePath` manually",
+            line: 5,
+            column: 14,
+            severity: .note
+          )
+        ],
         macros: testMacros
       )
     #else
@@ -379,7 +388,7 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow does not synthesize case paths for multi-parameter cases")
+  @Test("@InnoFlow notes multi-parameter cases instead of silently skipping them")
   func multiParameterCaseDoesNotSynthesizeActionPath() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
@@ -419,6 +428,82 @@ struct InnoFlowMacrosTests {
           }
           extension MultiParameterActionFeature: Reducer {}
           """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "case `child` has multiple payload parameters; CasePath synthesis only handles unlabeled single payloads and `id:action:` collection routes. Declare a static path manually if you need one",
+            line: 5,
+            column: 14,
+            severity: .note
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow notes optional payload cases while still synthesizing a CasePath")
+  func optionalPayloadCaseEmitsNote() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct OptionalPayloadFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                case child(ChildAction?)
+            }
+            enum ChildAction: Sendable {
+                case start
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct OptionalPayloadFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  case child(ChildAction?)
+              }
+              enum ChildAction: Sendable {
+                  case start
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension OptionalPayloadFeature: Reducer {}
+          extension OptionalPayloadFeature.Action {
+            static let childCasePath = CasePath<Self, ChildAction?>(
+              embed: { childAction in
+                .child(childAction)
+              },
+              extract: { action in
+                guard case .child(let childAction) = action else { return nil }
+                return childAction
+              }
+            )
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path",
+            line: 5,
+            column: 14,
+            severity: .note
+          )
+        ],
         macros: testMacros
       )
     #else
