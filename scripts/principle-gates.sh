@@ -361,11 +361,11 @@ main() {
   fi
 
   echo "[principle-gates] Checking Markdown .run throwing snippets"
-  if search_multiline '\.run[[:space:]]*\{[^\n]*\bin[[:space:]]+try[[:space:]]+await' "${MARKDOWN_DOC_PATHS[@]}"; then
+  if search_multiline '\.run[[:space:]]*\{[^\n}]*\bin(?![ \t]+do[ \t]*\{)[^\n}]*try[ \t]+await' "${MARKDOWN_DOC_PATHS[@]}"; then
     echo "[principle-gates] Failed: Markdown docs must wrap throwing .run work in do/catch"
     exit 1
   fi
-  if search_multiline '\.run[[:space:]]*\{[^\n]*\bin[[:space:]]*\n[[:space:]]*try[[:space:]]+await' "${MARKDOWN_DOC_PATHS[@]}"; then
+  if search_multiline '\.run[[:space:]]*\{[^\n}]*\bin[ \t]*\n(?![ \t]*do[ \t]*\{)(?:(?!\n[ \t]*do[ \t]*\{)[^}])*try[ \t]+await' "${MARKDOWN_DOC_PATHS[@]}"; then
     echo "[principle-gates] Failed: Markdown docs must wrap throwing .run work in do/catch"
     exit 1
   fi
