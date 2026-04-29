@@ -35,8 +35,8 @@ does not model immersive transitions directly.
 ## View-state guidance
 
 - Use `SelectedStore` when a visionOS view needs an expensive read-only projection.
-- Prefer `select(dependingOn:..., transform:)` when the view state comes from one to three explicit
-  slices.
+- Prefer `select(dependingOn:..., transform:)` when the view state comes from one to six explicit
+  slices, and use `select(dependingOnAll:)` when a larger explicit dependency set is justified.
 - Use `Store.preview(...)` inside `#Preview` so preview setup stays explicit and platform-local.
 
 ## Accessibility and layout

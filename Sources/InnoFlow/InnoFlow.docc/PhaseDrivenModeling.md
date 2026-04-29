@@ -15,7 +15,7 @@ import InnoFlow
 ## Model the phase in state
 
 ```swift
-@InnoFlow
+@InnoFlow(phaseManaged: true)
 struct ItemsFeature {
   struct State: Equatable, Sendable, DefaultInitializable {
     enum Phase: Hashable, Sendable {
@@ -59,11 +59,10 @@ struct ItemsFeature {
   }
 
   var body: some Reducer<State, Action> {
-    let phaseMap: PhaseMap<State, Action, State.Phase> = Self.phaseMap
-
-    return Reduce { state, action in
+    Reduce { state, action in
       switch action {
       case .load:
+        state.errorMessage = nil
         return .none
       case ._loaded(let items):
         state.items = items
@@ -73,7 +72,6 @@ struct ItemsFeature {
         return .none
       }
     }
-    .phaseMap(phaseMap)
   }
 }
 ```
@@ -103,6 +101,7 @@ Rules:
 - Same-phase actions are ignored by the phase layer.
 - `PhaseMap` remains partial by default. Unmatched phase/action pairs are legal no-ops unless tests opt into stricter validation.
 - Illegal transitions and undeclared dynamic targets assert in debug builds.
+- `@InnoFlow(phaseManaged: true)` applies `Self.phaseMap` automatically and warns for Phase cases never referenced by name from the static phase map.
 - `PhaseTransitionGraph` is a topology validation tool, not a general state-machine runtime.
 - Prefer `On(CasePath, ...)` when payload drives the phase decision, `On(.equatableAction, ...)`
   for simple phase events, and keep `On(where:)` as an escape hatch.
@@ -132,15 +131,16 @@ assertValidGraph(
 )
 ```
 
-Use `PhaseMap` for runtime phase ownership and `validationReport(...)` or `assertValidGraph(...)`
-for static graph topology checks. `validatePhaseTransitions(...)` remains available for backwards
-compatibility.
+Use `PhaseMap` for runtime phase ownership, `assertValidGraph(...)` for static graph topology
+checks, and `assertPhaseMapCovers(...)` for explicit trigger coverage. `validatePhaseTransitions(...)`
+remains available for backwards compatibility.
 
 If you want stronger trigger coverage without changing runtime behavior, validate explicit expected
 triggers in tests:
 
 ```swift
-let totalityReport = ItemsFeature.phaseMap.validationReport(
+let totalityReport = assertPhaseMapCovers(
+  ItemsFeature.phaseMap,
   expectedTriggersByPhase: [
     .idle: [.action(.load)],
     .loading: [
@@ -152,6 +152,10 @@ let totalityReport = ItemsFeature.phaseMap.validationReport(
 
 precondition(totalityReport.isEmpty)
 ```
+
+The phase-managed compile-time warning is intentionally name-based. It catches declared Phase
+cases that never appear in the static `phaseMap`, but it does not prove graph reachability,
+predicate exhaustiveness, or guard target completeness.
 
 ## When to use it
 

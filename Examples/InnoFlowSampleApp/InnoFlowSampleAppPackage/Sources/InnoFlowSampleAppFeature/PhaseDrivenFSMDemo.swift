@@ -36,7 +36,7 @@ actor SampleTodoService: SampleTodoServiceProtocol {
   }
 }
 
-@InnoFlow
+@InnoFlow(phaseManaged: true)
 struct PhaseDrivenTodoFeature {
   struct Dependencies: Sendable {
     let todoService: any SampleTodoServiceProtocol
@@ -109,9 +109,7 @@ struct PhaseDrivenTodoFeature {
   }
 
   var body: some Reducer<State, Action> {
-    let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
-
-    return CombineReducers {
+    CombineReducers {
       Reduce { state, action in
         switch action {
         case .loadTodos:
@@ -160,7 +158,6 @@ struct PhaseDrivenTodoFeature {
         reducer: PhaseDrivenTodoRowFeature()
       )
     }
-    .phaseMap(map)
   }
 }
 
@@ -180,6 +177,7 @@ struct PhaseDrivenTodoRowFeature {
   }
 }
 
+@MainActor
 struct PhaseDrivenFSMDemoView: View {
   @State private var store = Store(reducer: PhaseDrivenTodoFeature())
 
@@ -189,7 +187,7 @@ struct PhaseDrivenFSMDemoView: View {
         DemoCard(
           title: "What this demonstrates",
           summary:
-            "A business lifecycle modeled with `PhaseMap`: `idle -> loading -> loaded|failed`. Transport and navigation transitions stay outside this phase layer."
+            "A business lifecycle modeled with `@InnoFlow(phaseManaged: true)` and `PhaseMap`: `idle -> loading -> loaded|failed`. Transport and navigation transitions stay outside this phase layer."
         )
 
         VStack(alignment: .leading, spacing: 12) {
@@ -245,7 +243,9 @@ struct PhaseDrivenFSMDemoView: View {
             "loading -> loaded",
             "loading -> failed",
             "loaded -> loading",
-            "failed -> idle or loading",
+            "failed -> loading",
+            "failed -> idle (dismiss with no todos)",
+            "failed -> loaded (dismiss with existing todos)",
           ]
         )
 
@@ -279,6 +279,7 @@ struct PhaseDrivenFSMDemoView: View {
   }
 }
 
+@MainActor
 struct PhaseDrivenTodoRowView: View {
   let store: ScopedStore<PhaseDrivenTodoFeature, SampleTodo, PhaseDrivenTodoFeature.TodoAction>
 

@@ -283,6 +283,18 @@ final class ObservationProbe: Sendable {
   }
 }
 
+final class SelectionTransformProbe: Sendable {
+  private let countLock = OSAllocatedUnfairLock<Int>(initialState: 0)
+
+  var count: Int {
+    countLock.withLock { $0 }
+  }
+
+  func record() {
+    countLock.withLock { $0 += 1 }
+  }
+}
+
 final class InstrumentationProbe: Sendable {
   private let eventsLock = OSAllocatedUnfairLock<[String]>(initialState: [])
 
@@ -374,12 +386,12 @@ struct MergeOrderingFeature: Reducer {
     switch action {
     case .start:
       return .merge(
-        .run { send in
-          try? await Task.sleep(for: .milliseconds(30))
+        .run { send, context in
+          try? await context.sleep(for: .milliseconds(30))
           await send(._emitted("slow"))
         },
-        .run { send in
-          try? await Task.sleep(for: .milliseconds(5))
+        .run { send, context in
+          try? await context.sleep(for: .milliseconds(5))
           await send(._emitted("fast"))
         }
       )
@@ -2257,14 +2269,23 @@ struct EffectTaskTests {
   }
 
   @Test("EffectTask.merge emits in child completion order rather than declaration order")
-  func effectMergeUsesCompletionOrder() async {
-    let store = TestStore(reducer: MergeOrderingFeature(), initialState: .init())
+  func effectMergeUsesCompletionOrder() async throws {
+    let clock = ManualTestClock()
+    let store = TestStore(reducer: MergeOrderingFeature(), initialState: .init(), clock: clock)
 
     await store.send(.start)
 
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 2
+      }
+    )
+    await clock.advance(by: .milliseconds(5))
     await store.receive(._emitted("fast")) {
       $0.emitted = ["fast"]
     }
+
+    await clock.advance(by: .milliseconds(25))
     await store.receive(._emitted("slow")) {
       $0.emitted = ["fast", "slow"]
     }
@@ -3430,10 +3451,75 @@ struct StoreTests {
     let afterUntrackedStats = store.projectionObserverStats
 
     #expect(afterUntrackedStats.refreshedObservers == initialStats.refreshedObservers)
+    #expect(afterUntrackedStats.evaluatedObservers == initialStats.evaluatedObservers)
     #expect(selected.value == baselineSum)
 
     store.send(.bumpG)
     #expect(selected.value == baselineSum + 1)
+  }
+
+  @Test("Store.select(dependingOnAll:) preserves cached identity without eager recomputation")
+  func selectedStoreDependingOnAllPreservesIdentityWithoutEagerInitialValue() {
+    struct VariadicState: Equatable, Sendable, DefaultInitializable {
+      var a: Int = 1
+      var b: Int = 2
+      var c: Int = 3
+      var d: Int = 4
+      var e: Int = 5
+      var f: Int = 6
+      var g: Int = 7
+    }
+
+    enum VariadicAction: Equatable, Sendable {
+      case noop
+    }
+
+    struct VariadicReducer: Reducer {
+      typealias State = VariadicState
+      typealias Action = VariadicAction
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        .none
+      }
+    }
+
+    let store = Store(reducer: VariadicReducer(), initialState: .init())
+    let probe = SelectionTransformProbe()
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      dependingOnAll:
+        \VariadicState.a,
+      \VariadicState.b,
+      \VariadicState.c,
+      \VariadicState.d,
+      \VariadicState.e,
+      \VariadicState.f,
+      \VariadicState.g,
+      fileID: #fileID,
+      line: callsiteLine
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
+      probe.record()
+      return a + b + c + d + e + f + g
+    }
+    let second = store.select(
+      dependingOnAll:
+        \VariadicState.a,
+      \VariadicState.b,
+      \VariadicState.c,
+      \VariadicState.d,
+      \VariadicState.e,
+      \VariadicState.f,
+      \VariadicState.g,
+      fileID: #fileID,
+      line: callsiteLine
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
+      probe.record()
+      return a + b + c + d + e + f + g
+    }
+
+    #expect(first === second)
+    #expect(first.value == 28)
+    #expect(probe.count == 1)
   }
 
   @Test("Store.select preserves SelectedStore identity across repeated calls")
@@ -3997,6 +4083,180 @@ struct StoreTests {
     let afterTrackedMutation = store.projectionObserverStats
     store.send(.setUnrelated(9))
     await waitForProjectionRefreshPass(store, after: afterTrackedMutation)
+    #expect(probe.count == 1)
+  }
+
+  @Test("ScopedStore.select(dependingOnAll:) tracks an arbitrary number of child slices")
+  func scopedSelectedStoreDependingOnAllVariadic() async {
+    struct VariadicParentFeature: Reducer {
+      struct Child: Equatable, Sendable {
+        var a = 1
+        var b = 2
+        var c = 3
+        var d = 4
+        var e = 5
+        var f = 6
+        var g = 7
+        var h = 8
+      }
+
+      struct State: Equatable, Sendable, DefaultInitializable {
+        var child = Child()
+        var unrelated = 0
+      }
+
+      enum Action: Equatable, Sendable {
+        case child(ChildAction)
+        case bumpUnrelated
+
+        static let childCasePath = CasePath<Self, ChildAction>(
+          embed: { .child($0) },
+          extract: {
+            guard case .child(let action) = $0 else { return nil }
+            return action
+          }
+        )
+      }
+
+      enum ChildAction: Equatable, Sendable {
+        case bumpG
+      }
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        switch action {
+        case .child(.bumpG):
+          state.child.g &+= 1
+          return .none
+        case .bumpUnrelated:
+          state.unrelated &+= 1
+          return .none
+        }
+      }
+    }
+
+    let store = Store(reducer: VariadicParentFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child,
+      action: VariadicParentFeature.Action.childCasePath
+    )
+    let selected = scoped.select(
+      dependingOnAll:
+        \VariadicParentFeature.Child.a,
+      \VariadicParentFeature.Child.b,
+      \VariadicParentFeature.Child.c,
+      \VariadicParentFeature.Child.d,
+      \VariadicParentFeature.Child.e,
+      \VariadicParentFeature.Child.f,
+      \VariadicParentFeature.Child.g,
+      \VariadicParentFeature.Child.h
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int) -> Int in
+      a + b + c + d + e + f + g + h
+    }
+    let probe = ObservationProbe()
+
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
+
+    let baselineSum = 36
+    #expect(selected.value == baselineSum)
+
+    let initialStats = store.projectionObserverStats
+    store.send(.bumpUnrelated)
+    await waitForProjectionRefreshPass(store, after: initialStats)
+    #expect(probe.count == 0)
+    #expect(selected.value == baselineSum)
+
+    scoped.send(.bumpG)
+    await waitUntil {
+      probe.count == 1 && selected.value == baselineSum + 1
+    }
+    #expect(probe.count == 1)
+    #expect(selected.value == baselineSum + 1)
+  }
+
+  @Test("ScopedStore.select(dependingOnAll:) preserves cached identity without eager recomputation")
+  func scopedSelectedStoreDependingOnAllPreservesIdentityWithoutEagerInitialValue() {
+    struct VariadicParentFeature: Reducer {
+      struct Child: Equatable, Sendable {
+        var a = 1
+        var b = 2
+        var c = 3
+        var d = 4
+        var e = 5
+        var f = 6
+        var g = 7
+      }
+
+      struct State: Equatable, Sendable, DefaultInitializable {
+        var child = Child()
+      }
+
+      enum Action: Equatable, Sendable {
+        case child(ChildAction)
+
+        static let childCasePath = CasePath<Self, ChildAction>(
+          embed: { .child($0) },
+          extract: {
+            guard case .child(let action) = $0 else { return nil }
+            return action
+          }
+        )
+      }
+
+      enum ChildAction: Equatable, Sendable {
+        case noop
+      }
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        .none
+      }
+    }
+
+    let store = Store(reducer: VariadicParentFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child,
+      action: VariadicParentFeature.Action.childCasePath
+    )
+    let probe = SelectionTransformProbe()
+    let callsiteLine: UInt = #line
+    let first = scoped.select(
+      dependingOnAll:
+        \VariadicParentFeature.Child.a,
+      \VariadicParentFeature.Child.b,
+      \VariadicParentFeature.Child.c,
+      \VariadicParentFeature.Child.d,
+      \VariadicParentFeature.Child.e,
+      \VariadicParentFeature.Child.f,
+      \VariadicParentFeature.Child.g,
+      fileID: #fileID,
+      line: callsiteLine
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
+      probe.record()
+      return a + b + c + d + e + f + g
+    }
+    let second = scoped.select(
+      dependingOnAll:
+        \VariadicParentFeature.Child.a,
+      \VariadicParentFeature.Child.b,
+      \VariadicParentFeature.Child.c,
+      \VariadicParentFeature.Child.d,
+      \VariadicParentFeature.Child.e,
+      \VariadicParentFeature.Child.f,
+      \VariadicParentFeature.Child.g,
+      fileID: #fileID,
+      line: callsiteLine
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
+      probe.record()
+      return a + b + c + d + e + f + g
+    }
+
+    #expect(first === second)
+    #expect(first.value == 28)
     #expect(probe.count == 1)
   }
 
@@ -6264,6 +6524,33 @@ struct TestStoreTests {
         .failed: [
           .casePath(
             PhaseMapHarness.replaceAndDismissCasePath, label: "replaceAndDismiss", sample: [7]),
+          .casePath(PhaseMapHarness.maybeRecoverCasePath, label: "maybeRecover", sample: true),
+        ],
+      ]
+    )
+
+    #expect(report.isEmpty)
+    #expect(report.missingTriggers.isEmpty)
+  }
+
+  @Test("PhaseMap testing helper asserts clean coverage for expected triggers")
+  func phaseMapTestingHelperAssertsCoverage() {
+    let report = assertPhaseMapCovers(
+      PhaseMapHarness.phaseMap,
+      expectedTriggersByPhase: [
+        .idle: [
+          .action(.load)
+        ],
+        .loading: [
+          .casePath(PhaseMapHarness.loadedCasePath, label: "loaded", sample: [1, 2, 3]),
+          .casePath(PhaseMapHarness.failedCasePath, label: "failed", sample: "boom"),
+        ],
+        .failed: [
+          .casePath(
+            PhaseMapHarness.replaceAndDismissCasePath,
+            label: "replaceAndDismiss",
+            sample: [7]
+          ),
           .casePath(PhaseMapHarness.maybeRecoverCasePath, label: "maybeRecover", sample: true),
         ],
       ]

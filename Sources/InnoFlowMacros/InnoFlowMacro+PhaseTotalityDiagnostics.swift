@@ -119,22 +119,19 @@ extension InnoFlowMacro {
   }
 
   private static func collectMemberAccessNames(in node: some SyntaxProtocol) -> Set<String> {
-    let collector = MemberAccessNameCollector()
-    collector.walk(node)
-    return collector.names
-  }
-}
-
-private final class MemberAccessNameCollector: SyntaxVisitor {
-  var names: Set<String> = []
-
-  init() {
-    super.init(viewMode: .sourceAccurate)
+    var names: Set<String> = []
+    collectMemberAccessNames(in: Syntax(node), into: &names)
+    return names
   }
 
-  override func visit(_ node: MemberAccessExprSyntax) -> SyntaxVisitorContinueKind {
-    names.insert(node.declName.baseName.text)
-    return .visitChildren
+  private static func collectMemberAccessNames(in node: Syntax, into names: inout Set<String>) {
+    if let memberAccess = node.as(MemberAccessExprSyntax.self) {
+      names.insert(memberAccess.declName.baseName.text)
+    }
+
+    for child in node.children(viewMode: .sourceAccurate) {
+      collectMemberAccessNames(in: child, into: &names)
+    }
   }
 }
 

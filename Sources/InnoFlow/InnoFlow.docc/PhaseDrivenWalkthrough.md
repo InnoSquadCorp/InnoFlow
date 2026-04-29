@@ -39,13 +39,12 @@ windows, or session lifecycle.
 
 ## 2. Keep the reducer phase-focused
 
-The sample reducer uses a `Reduce` body plus `PhaseMap` as a post-reduce decorator:
+The sample reducer uses `@InnoFlow(phaseManaged: true)` so the macro applies the static
+`phaseMap` as a post-reduce decorator:
 
 ```swift
 var body: some Reducer<State, Action> {
-  let phaseMap: PhaseMap<State, Action, State.Phase> = Self.phaseMap
-
-  return Reduce { state, action in
+  Reduce { state, action in
     switch action {
     case .loadTodos:
       state.errorMessage = nil
@@ -78,14 +77,13 @@ var body: some Reducer<State, Action> {
       return .none
     }
   }
-  .phaseMap(phaseMap)
 }
 ```
 
 The important split is:
 
 - `Reduce` owns non-phase state mutation and effect kickoff.
-- `PhaseMap` owns how actions move the feature between legal phases.
+- The phase-managed macro applies `Self.phaseMap`; `PhaseMap` owns how actions move the feature between legal phases.
 - `phaseGraph = phaseMap.derivedGraph` keeps the topology contract visible for tests and docs.
 - `.run` stays a domain effect, not a state-machine runtime, and uses `EffectContext` for deterministic delays.
 - Prefer `CasePath`-based `On(...)` rules first, `Equatable` actions second, and keep `On(where:)`
@@ -178,7 +176,8 @@ If your team wants stronger trigger coverage without changing runtime semantics,
 PhaseMap validation pass:
 
 ```swift
-let totalityReport = PhaseDrivenTodoFeature.phaseMap.validationReport(
+let totalityReport = assertPhaseMapCovers(
+  PhaseDrivenTodoFeature.phaseMap,
   expectedTriggersByPhase: [
     .idle: [.action(.loadTodos)],
     .loading: [
