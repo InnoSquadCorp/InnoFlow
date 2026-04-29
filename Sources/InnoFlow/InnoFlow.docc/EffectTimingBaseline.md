@@ -12,6 +12,8 @@ fresh JSONL capture, and compares that capture to the committed baseline with
 That release gate is intentionally catastrophic-only. Use
 `scripts/report-effect-timing-trend.sh` when you want stricter, non-blocking
 mean and p95 reporting for maintainer review.
+For the broader maintainer policy on when to refresh or interpret baselines,
+see `docs/PERFORMANCE_BASELINES.md`.
 
 This article explains:
 
@@ -183,3 +185,4 @@ To print both signals without turning them into a blocker:
 - <doc:PhaseDrivenModeling>
 - [Cross-Framework Boundaries](https://github.com/InnoSquadCorp/InnoFlow/blob/main/docs/CROSS_FRAMEWORK.md)
 - [Dependency Patterns](https://github.com/InnoSquadCorp/InnoFlow/blob/main/docs/DEPENDENCY_PATTERNS.md)
+- [Performance Baselines](https://github.com/InnoSquadCorp/InnoFlow/blob/main/docs/PERFORMANCE_BASELINES.md)

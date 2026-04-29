@@ -34,9 +34,9 @@ Conditional child composition stays explicit:
 
 For read-only derived values, use ``SelectedStore`` so large SwiftUI views can observe an `Equatable`
 projection without pulling an entire mutable child scope into the view tree. When that projection
-comes from one to three explicit state slices, prefer `select(dependingOn:..., transform:)`; plain
-`select { ... }` remains the always-refresh fallback because general closures do not expose their
-dependencies.
+comes from one to six explicit state slices, prefer `select(dependingOn:..., transform:)`. Use
+`select(dependingOnAll:)` for larger explicit dependency sets. Plain `select { ... }` remains the
+always-refresh fallback because general closures do not expose their dependencies.
 
 Time-sensitive `.run` effects should use ``EffectContext``. That keeps `StoreClock` in control of
 debounce/throttle operators and explicit delays inside the effect body.

@@ -117,3 +117,19 @@ reasons in option 2.
 - a future option-2-style reachability analyzer would slot in next to this
   diagnostic without changing the runtime contract; this ADR records the
   current choice as the smallest analysis that catches the dominant hazard
+
+## Static Analysis Limits
+
+The diagnostic is a syntactic hint, not a proof system.
+
+- It checks whether each Phase case name is referenced from the static
+  `phaseMap` declaration.
+- It does not prove graph reachability from an initial phase.
+- It does not evaluate `On(where:)` predicates.
+- It does not prove that a dynamic `resolve` closure can return every
+  declared target.
+- It does not change `PhaseMap` runtime semantics; unmatched actions remain
+  legal no-ops unless tests opt into stricter coverage.
+
+Use `assertValidGraph(...)` for topology checks and `assertPhaseMapCovers(...)`
+for explicit trigger coverage in tests.

@@ -27,6 +27,10 @@ Boundary references:
 
 - [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
 - [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
+- [`docs/MIGRATION_3_1.md`](docs/MIGRATION_3_1.md) for adopting the 3.1 projection, phase, and instrumentation additions
+- [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md) for `.sink`, `.osLog`, `.signpost`, and `.combined` examples
+- [`docs/PERFORMANCE_BASELINES.md`](docs/PERFORMANCE_BASELINES.md) for maintainer baseline policy
+- [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for TCA, ReactorKit, ReSwift, and SwiftRex positioning
 
 For stable framework guarantees that should not drift with scorecards or line counts, see
 [`ARCHITECTURE_CONTRACT.md`](./ARCHITECTURE_CONTRACT.md).
@@ -269,7 +273,7 @@ let summary = store.select { state in
 Text(summary.title)
 ```
 
-When the derived value depends on one to three explicit slices of state, prefer the
+When the derived value depends on one to six explicit slices of state, prefer the
 dependency-annotated overload so InnoFlow can keep the selection on a selective-refresh bucket:
 
 ```swift
@@ -287,10 +291,21 @@ let badge = store.select(dependingOn: (\.profile, \.permissions)) { profile, per
 }
 ```
 
+For projections that legitimately depend on more than six slices, use
+`select(dependingOnAll:)` to keep explicit dependency tracking without falling back to
+always-refresh selection:
+
+```swift
+let summary = store.select(
+  dependingOnAll: \.a, \.b, \.c, \.d, \.e, \.f, \.g
+) { a, b, c, d, e, f, g in
+  Summary(a, b, c, d, e, f, g)
+}
+```
+
 `select { state in ... }` remains available as an always-refresh fallback because InnoFlow cannot
-infer which fields a general closure reads. Use it when the closure truly needs multiple parts of
-state, or introduce a dedicated derived property in state when you need the optimized path for four
-or more inputs.
+infer which fields a general closure reads. Use it when the dependency cannot be expressed as
+typed key paths or when always-refresh behavior is intentional.
 
 Use `SelectedStore` for read-only projections. Keep mutable child flows on `ScopedStore`.
 
@@ -415,9 +430,9 @@ async cleanup. Long-running work should call `checkCancellation()` around suspen
 if it needs prompt shutdown.
 
 Operational logging stays lightweight on purpose. Use `StoreInstrumentation.osLog(...)` for a
-default log sink, or fan out vendor-specific counters and traces through
-`StoreInstrumentation.sink(...)` and `combined(...)`. That is the intended extension point for
-Datadog, Prometheus bridges, or `swift-metrics` wrappers:
+default log sink, `StoreInstrumentation.signpost(...)` for Instruments timelines, or fan out
+vendor-specific counters and traces through `StoreInstrumentation.sink(...)` and `combined(...)`.
+That is the intended extension point for Datadog, Prometheus bridges, or `swift-metrics` wrappers:
 
 ```swift
 let instrumentation: StoreInstrumentation<Feature.Action> = .combined(
@@ -441,6 +456,7 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .combined(
 
 If a team standardizes on one backend later, prefer an optional ecosystem package such as
 `InnoFlowMetrics` over adding vendor dependencies to the core package graph.
+For concrete adapter examples, see [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md).
 
 ### Ordering contract
 
@@ -459,7 +475,7 @@ and exposes `derivedGraph` so the same contract remains available as a `PhaseTra
 For a full sample-backed walkthrough, see [`PhaseDrivenWalkthrough.md`](./Sources/InnoFlow/InnoFlow.docc/PhaseDrivenWalkthrough.md).
 
 ```swift
-@InnoFlow
+@InnoFlow(phaseManaged: true)
 struct ProfileFeature {
   struct State: Equatable, Sendable, DefaultInitializable {
     enum Phase: Hashable, Sendable {
@@ -500,9 +516,7 @@ struct ProfileFeature {
   }
 
   var body: some Reducer<State, Action> {
-    let phaseMap: PhaseMap<State, Action, State.Phase> = Self.phaseMap
-
-    return Reduce { state, action in
+    Reduce { state, action in
       switch action {
       case .load:
         state.errorMessage = nil
@@ -515,7 +529,6 @@ struct ProfileFeature {
         return .none
       }
     }
-    .phaseMap(phaseMap)
   }
 }
 ```
@@ -537,6 +550,7 @@ Design rationale:
 - `PhaseTransitionGraph` stays focused on static topology checks such as reachability, unknown successors, and terminal validation.
 - `PhaseMap` owns runtime phase movement and conditional resolution after the reducer has finished mutating non-phase state.
 - Guard-bearing graph metadata remains intentionally out of scope.
+- `@InnoFlow(phaseManaged: true)` is a compile-time authoring convenience. Its unreferenced-case warning is name-based and does not prove reachability or predicate exhaustiveness.
 
 If you need the reasoning behind those boundaries, see
 [ADR-phase-transition-guards](./docs/adr/ADR-phase-transition-guards.md),
@@ -559,7 +573,8 @@ If a team wants stricter trigger coverage without changing runtime behavior, add
 validation pass in tests:
 
 ```swift
-let totalityReport = ProfileFeature.phaseMap.validationReport(
+let totalityReport = assertPhaseMapCovers(
+  ProfileFeature.phaseMap,
   expectedTriggersByPhase: [
     .idle: [.action(.load)],
     .loading: [
@@ -569,7 +584,7 @@ let totalityReport = ProfileFeature.phaseMap.validationReport(
   ]
 )
 
-precondition(totalityReport.isEmpty)
+#expect(totalityReport.isEmpty)
 ```
 
 This helper validates only the triggers you explicitly declare. It does not change `PhaseMap`
@@ -657,8 +672,8 @@ let status = store.select(\.phase)
 #expect(status.value == .idle)
 ```
 
-If the read model is derived from one to three explicit `Equatable` slices, prefer the
-dependency-annotated form:
+If the read model is derived from one to six explicit `Equatable` slices, prefer the
+dependency-annotated form; use `select(dependingOnAll:)` for larger explicit sets:
 
 ```swift
 let title = store.select(dependingOn: \.child.title) { $0.uppercased() }
@@ -673,7 +688,7 @@ It contains ten demos:
 
 - `Basics`
 - `Orchestration`
-- `Phase-Driven FSM`
+- `Phase-Driven FSM` (`@InnoFlow(phaseManaged: true)` + `PhaseMap`)
 - `App-Boundary Navigation`
 - `Authentication Flow`
 - `List-Detail Pagination`
@@ -709,7 +724,7 @@ Launch-environment direct demo mode (`INNOFLOW_SAMPLE_DEMO`) remains available f
 - Add explicit VoiceOver labels and hints when button text or dense layouts do not fully describe the action.
 - Prioritize explicit accessibility metadata on demo hub rows, modal dismiss actions, and long-running or destructive controls where context can be ambiguous in VoiceOver.
 - Prefer system controls and Dynamic Type-friendly layouts over custom fixed-size controls.
-- Use `SelectedStore` only for expensive read-only derived values. Prefer `select(dependingOn:..., transform:)` when the value comes from one to three explicit state slices, and treat plain `select { ... }` as the always-refresh fallback. Keep mutable child flows on `ScopedStore`.
+- Use `SelectedStore` only for expensive read-only derived values. Prefer `select(dependingOn:..., transform:)` for one through six explicit state slices, `select(dependingOnAll:)` for larger explicit dependency sets, and plain `select { ... }` only as the always-refresh fallback. Keep mutable child flows on `ScopedStore`.
 - Use `Store.preview(...)` as the default path for preview and accessibility review passes so preview-only setup never changes production store wiring.
 
 ## Cross-framework notes
@@ -731,21 +746,18 @@ redesign.
 - **PhaseMap strict totality enforcement** — `PhaseMap` is intentionally partial by default and
   unmatched actions remain legal no-ops. Stronger enforcement remains a future design decision,
   not a current runtime contract.
-- **Derived-state optimization beyond 3 explicit slices** — `select(dependingOn:transform:)`
-  currently covers one to three explicit `Equatable` slices. `4+`-dependency optimization and
-  opaque expensive selector memoization remain trigger-based backlog items and should only open
-  when repeated real-world patterns and hot-path profiling justify them.
-- **Optional metrics ecosystem package** — `StoreInstrumentation.sink(...)`, `.osLog(...)`, and
-  `.combined(...)` are the supported extension points today. If a standard backend emerges, an
+- **Opaque selector memoization** — explicit key-path dependencies are covered by fixed-arity
+  overloads through six slices and `select(dependingOnAll:)` beyond that. Memoizing arbitrary
+  closure selectors remains future work because general closures do not expose their read set.
+- **Optional metrics ecosystem package** — `StoreInstrumentation.sink(...)`, `.osLog(...)`,
+  `.signpost(...)`, and `.combined(...)` are the supported extension points today. If a standard backend emerges, an
   optional `InnoFlowMetrics`-style package can sit on top without changing the core graph.
 - **PhaseMap adoption expansion** — `PhaseMap` is the canonical path for phase-heavy features, but
   further migration should follow real feature demand rather than sample-driven expansion.
 - **Accessibility and documentation polish** — sample/docs coverage can continue to improve, but
   this is product polish rather than a missing core capability.
-- **SelectedStore API surface reduction** — the 1/2/3-dependency overloads on both `Store` and
-  `ScopedStore` can be unified via Swift parameter packs once the feature stabilizes.
-- **StoreSupport file organization** — six independent types live in a single file. Per-type
-  extraction improves navigability without changing module boundaries.
+- **Scoped phase examples** — the canonical sample now covers phase-managed authoring; additional
+  payment, permission, or onboarding examples should be added when real product flows need them.
 
 ## Development
 

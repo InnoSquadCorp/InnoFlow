@@ -46,14 +46,14 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 | **`PhaseMap` DSL** | `From` / `On` result builders mirror the SwiftUI `body` authoring style |
 | **Six `On` overloads** | Equatable action / `CasePath` / predicate × fixed target / guard, with progressive disclosure |
 | **Payload-aware guards** | `CasePath`-based `On` closures receive associated values in a type-safe way |
-| **Post-reduce decorator** | `.phaseMap(...)` mirrors the SwiftUI view-modifier pattern |
+| **Post-reduce decorator** | `.phaseMap(...)` remains explicit, while `@InnoFlow(phaseManaged: true)` applies `Self.phaseMap` automatically |
 | **`derivedGraph` reuse** | `PhaseMap` automatically derives `PhaseTransitionGraph`, reusing existing validation and testing APIs |
 | **Totality validation** | Phase-specific expected triggers are validated through a structured report |
-| **Three-tier selection API** | Dedicated 1/2/3 dependency overloads plus opaque closure fallback |
+| **Selection API** | Dedicated 1-through-6 dependency overloads, `dependingOnAll:` for larger explicit sets, and opaque closure fallback |
 | **Binding contract** | Projected key-path bindings stay type-safe and explicit |
 | **Preview ergonomics** | `Store.preview()` includes clock and instrumentation defaults for SwiftUI previews |
 
-**Deduction (-0.8):** (1) `SelectedStore` still keeps overload duplication. (2) There is no shorter dedicated sugar for leaf payload cases beyond canonical `CasePath` authoring.
+**Deduction (-0.8):** (1) `SelectedStore` still keeps fixed-arity overload duplication for the common cases. (2) There is no shorter dedicated sugar for leaf payload cases beyond canonical `CasePath` authoring.
 
 ---
 
@@ -94,11 +94,11 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 | **`EffectID` hashing** | Cached `normalizedValue` keeps hashing O(1) |
 | **Collection offset cache** | `CollectionScopeOffsetBox` + revision tracking keep lookup O(1) |
 | **Dependency-bucket refresh** | `hasChanged` predicates avoid unnecessary refresh work |
-| **`PhaseMap` rule lookup** | Linear traversal is acceptable because most features keep phase rules under 10 |
+| **`PhaseMap` rule lookup** | Source phase lookup is O(1), then rules are walked only for the matched phase |
 | **Lazy-map flattening** | `eagerMap` uses a loop rather than recursive wrapper growth |
 | **Auto-compaction** | Threshold + periodic compaction keep observer registries bounded |
 
-**Deduction (-1.4):** (1) 4+ dependency selection memoization remains a trigger-based backlog item. (2) `PhaseMap` lookup is O(rules × transitions), although a hash-indexed source-phase table is only justified if feature scale grows materially.
+**Deduction (-1.0):** Opaque closure selector memoization remains intentionally unsupported because general closures do not expose a typed read set. A per-phase transition index would require new `Action: Hashable` constraints and still needs real hot-path evidence.
 
 ---
 
@@ -274,11 +274,11 @@ No score change.
 |------|------------|
 | **`@BindableField`** | Property wrapper + projected value stay explicit and typed |
 | **`ScopedStore`** | Read-only scoped projection |
-| **`SelectedStore`** | Derived selection optimized for 1–3 explicit dependencies |
+| **`SelectedStore`** | Derived selection optimized for one through six explicit dependencies plus `dependingOnAll:` |
 | **`PhaseMap` ownership** | Introduces state-field ownership as a first-class concept |
 | **Callsite caching** | `SelectionCache` and `CollectionScopeCache` keep projections efficient |
 
-**Deduction (-0.8):** 4+ dependency optimization remains intentionally backlog-driven.
+**Deduction (-0.5):** Arbitrary closure selector memoization remains intentionally backlog-driven.
 
 ---
 
@@ -289,7 +289,7 @@ No score change.
 | **Five platforms** | iOS 18, macOS 15, tvOS 18, watchOS 11, visionOS 2 are all covered in CI |
 | **Animation bridge** | `EffectAnimation -> withAnimation` stays explicit |
 | **Preview ergonomics** | `Store.preview()` improves SwiftUI preview callsites |
-| **Instrumentation surface** | `.osLog()`, `.sink()`, `.combined()` offer practical extension points |
+| **Instrumentation surface** | `.osLog()`, `.sink()`, `.signpost()`, `.combined()` offer practical extension points |
 | **Accessibility** | Canonical sample includes labels/hints and principle gates enforce documentation |
 | **visionOS** | `VisionOSIntegration.md` plus CI visionOS build coverage and sample package support |
 | **UI automation** | Canonical sample UI smoke tests run through accessibility identifiers |
@@ -344,8 +344,8 @@ No score change.
 
 | Item | Trigger Condition |
 |------|-------------------|
-| `SelectedStore` 4+ dependency / opaque selector optimization | repeated real-world usage + profiling evidence |
-| store support file split | contributor onboarding friction |
+| Opaque selector memoization | repeated real-world usage + profiling evidence |
+| Dedicated payment / permission phase examples | real product flows that need more phase-heavy sample coverage |
 
 **Evaluation note:** These are not current defects. They are intentionally deferred backlog items that should open only when actual usage justifies them.
 

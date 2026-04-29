@@ -62,7 +62,7 @@ Use `@BindableField` for reducer-facing value fields, and pass the projected key
 - Use ``IfLet`` when child state is optional.
 - Use ``IfCaseLet`` when child state lives behind an enum case.
 - Use ``ForEachReducer`` when child state is a collection of `Identifiable` rows.
-- Use ``SelectedStore`` when a view needs a read-only derived value that should refresh only when the selected `Equatable` output changes. Prefer `select(dependingOn:..., transform:)` when that value comes from one to three explicit state slices, and keep plain `select { ... }` for always-refresh fallback cases where the dependency cannot be expressed as one to three key paths.
+- Use ``SelectedStore`` when a view needs a read-only derived value that should refresh only when the selected `Equatable` output changes. Prefer `select(dependingOn:..., transform:)` when that value comes from one to six explicit state slices, use `select(dependingOnAll:)` for larger explicit dependency sets, and keep plain `select { ... }` for always-refresh fallback cases where the dependency cannot be expressed as key paths.
 
 If a feature needs constructor-time services, define an explicit nested `Dependencies` bundle and
 pass it from the app/coordinator layer instead of relying on reducer-side global lookup. That keeps
