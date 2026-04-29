@@ -460,7 +460,19 @@ main() {
   fi
 
   echo "[principle-gates] Checking release surface sync"
-  scripts/check-release-sync.sh
+  release_sync_output=""
+  release_sync_status=0
+  release_sync_output="$(scripts/check-release-sync.sh 2>&1)" || release_sync_status=$?
+  if [[ "$release_sync_status" -ne 0 ]]; then
+    if [[ -n "$release_sync_output" ]]; then
+      printf '%s\n' "$release_sync_output" >&2
+    fi
+    echo "[principle-gates] CHECK-RELEASE-SYNC FAILED" >&2
+    exit "$release_sync_status"
+  fi
+  if [[ -n "$release_sync_output" ]]; then
+    printf '%s\n' "$release_sync_output"
+  fi
 
   echo "[principle-gates] Checking guidance for selections, effect context, and SwiftUI integration"
   search_lines "SelectedStore" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null

@@ -177,6 +177,7 @@ struct PhaseDrivenTodoRowFeature {
   }
 }
 
+@MainActor
 struct PhaseDrivenFSMDemoView: View {
   @State private var store = Store(reducer: PhaseDrivenTodoFeature())
 
@@ -242,7 +243,9 @@ struct PhaseDrivenFSMDemoView: View {
             "loading -> loaded",
             "loading -> failed",
             "loaded -> loading",
-            "failed -> idle or loading",
+            "failed -> loading",
+            "failed -> idle (dismiss with no todos)",
+            "failed -> loaded (dismiss with existing todos)",
           ]
         )
 
@@ -276,6 +279,7 @@ struct PhaseDrivenFSMDemoView: View {
   }
 }
 
+@MainActor
 struct PhaseDrivenTodoRowView: View {
   let store: ScopedStore<PhaseDrivenTodoFeature, SampleTodo, PhaseDrivenTodoFeature.TodoAction>
 

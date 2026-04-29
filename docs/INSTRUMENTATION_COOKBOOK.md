@@ -8,10 +8,58 @@ logging, tracing, or metrics backend owned by the app.
 
 ```swift
 actor EventBuffer<Action: Sendable> {
+  enum Timeout: Error {
+    case timedOut
+  }
+
   private(set) var events: [StoreInstrumentationEvent<Action>] = []
+  private var nextWaiterID = 0
+  private var waiters:
+    [Int: (count: Int, continuation: CheckedContinuation<[StoreInstrumentationEvent<Action>], Error>)] = [:]
 
   func append(_ event: StoreInstrumentationEvent<Action>) {
     events.append(event)
+    resumeReadyWaiters()
+  }
+
+  func waitForEvents(
+    count: Int,
+    timeout: Duration = .seconds(1)
+  ) async throws -> [StoreInstrumentationEvent<Action>] {
+    if events.count >= count {
+      return events
+    }
+
+    let waiterID = nextWaiterID
+    nextWaiterID += 1
+
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        waiters[waiterID] = (count, continuation)
+        Task {
+          try await Task.sleep(for: timeout)
+          await failWaiter(waiterID, with: Timeout.timedOut)
+        }
+      }
+    } onCancel: {
+      Task {
+        await failWaiter(waiterID, with: CancellationError())
+      }
+    }
+  }
+
+  private func resumeReadyWaiters() {
+    let readyWaiterIDs = waiters
+      .filter { events.count >= $0.value.count }
+      .map(\.key)
+
+    for waiterID in readyWaiterIDs {
+      waiters.removeValue(forKey: waiterID)?.continuation.resume(returning: events)
+    }
+  }
+
+  private func failWaiter(_ waiterID: Int, with error: Error) {
+    waiters.removeValue(forKey: waiterID)?.continuation.resume(throwing: error)
   }
 }
 
@@ -23,9 +71,15 @@ let store = Store(
     Task { await buffer.append(event) }
   }
 )
+
+store.send(.load)
+let events = try await buffer.waitForEvents(count: 2)
+#expect(events.count == 2)
 ```
 
-Use `.sink` when tests or diagnostics need the raw event stream.
+Use `.sink` when tests or diagnostics need the raw event stream, and wait on
+the buffer instead of sleeping so assertions only run after the async sink has
+observed the expected events.
 
 ## Write OSLog Entries
 

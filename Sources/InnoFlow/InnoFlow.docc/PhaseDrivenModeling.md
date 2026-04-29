@@ -62,6 +62,7 @@ struct ItemsFeature {
     Reduce { state, action in
       switch action {
       case .load:
+        state.errorMessage = nil
         return .none
       case ._loaded(let items):
         state.items = items

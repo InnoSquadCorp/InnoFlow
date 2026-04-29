@@ -3442,6 +3442,7 @@ struct StoreTests {
     let afterUntrackedStats = store.projectionObserverStats
 
     #expect(afterUntrackedStats.refreshedObservers == initialStats.refreshedObservers)
+    #expect(afterUntrackedStats.evaluatedObservers == initialStats.evaluatedObservers)
     #expect(selected.value == baselineSum)
 
     store.send(.bumpG)

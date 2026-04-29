@@ -13,7 +13,12 @@ latest_release_version() {
 
   if git rev-parse --git-dir >/dev/null 2>&1; then
     local latest_tag
-    latest_tag="$(git tag --list '[0-9]*' --sort=-v:refname | head -n 1)"
+    latest_tag="$(
+      git tag --list --sort=-v:refname \
+        | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+        | head -n 1 \
+        || true
+    )"
     if [[ -n "$latest_tag" ]]; then
       printf '%s\n' "${latest_tag#v}"
       return
