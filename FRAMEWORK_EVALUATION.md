@@ -1,11 +1,12 @@
-# InnoFlow 3.0.0 Framework Evaluation (Clean-Slate v6.1)
+# InnoFlow 4.0.0 Framework Evaluation (Release-Readiness v7.0)
 
 English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EVALUATION.jp.md) | [简体中文](./FRAMEWORK_EVALUATION.cn.md)
 
-> **Evaluation date:** 2026-03-18 (code sync: 2026-03-18)  
-> **Target version:** InnoFlow 3.0.0 (`PhaseMap` + totality validation)  
-> **Scoring axes:** Programming (40%) · CS theory (25%) · SwiftUI philosophy (35%)  
-> **Evidence base:** canonical sample, README + 5 DocC articles, 177+14 core `@Test`, 7 CI jobs (5-platform matrix), principle gates, and 3 ADRs reviewed directly
+> **Evaluation date:** 2026-04-29
+> **Target version:** InnoFlow 4.0.0 contract surface
+> **Repository snapshot:** `3.0.3-8-g3b77300` on `main`
+> **Scoring axes:** Programming (40%) · CS theory (25%) · SwiftUI philosophy (35%)
+> **Evidence base:** README + localized README, DocC articles, `ARCHITECTURE_CONTRACT.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`, 279 core `@Test` declarations, 37 sample-package `@Test` declarations, 10 canonical sample demos, release build validation, release-sync checks, and principle-gate policy reviewed directly
 
 ---
 
@@ -15,7 +16,7 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 2. [CS Theory (25%)](#ii-cs-theory-weight-25)
 3. [SwiftUI Philosophy (35%)](#iii-swiftui-philosophy-weight-35)
 4. [Overall Score](#iv-overall-score)
-5. [What Changed Since the Previous Evaluation](#v-what-changed-since-the-previous-evaluation)
+5. [What Changed Since v6.1](#v-what-changed-since-v61)
 6. [Remaining Work](#vi-remaining-work)
 7. [Cumulative Improvement Log](#vii-cumulative-improvement-log)
 
@@ -23,100 +24,99 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 
 ## I. Programming (Weight 40%)
 
-### 1. Architecture Design — 9.7 / 10
+### 1. Architecture Design — 9.8 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Single protocol contract** | `Reducer<State, Action>` with one `reduce(into:action:)` entry point; all composition builds on top of it |
-| **Strategy + Interpreter** | `EffectWalker<D>` + `EffectDriver` cleanly separate `Store` and `TestStore` behavior |
-| **Three-layer runtime** | `Store -> StoreEffectBridge -> EffectRuntime(actor)` with explicit `MainActor/MainActor/Actor` boundaries |
-| **Projection model** | `ScopedStore` + `SelectedStore` with cached snapshots and dependency-bucket refresh |
-| **Macro-enforced surface** | `@InnoFlow` validation, synthesized `CasePath` / `CollectionActionPath`, and targeted Fix-Its |
-| **Declarative FSM** | `PhaseMap` + `PhaseMappedReducer` separate phase ownership as a post-reduce decorator and restore illegal direct mutations |
-| **Contract documentation** | `ARCHITECTURE_CONTRACT.md` + 3 ADRs, with principle gates enforcing both presence and wording in CI |
+| **Single protocol contract** | `Reducer<State, Action>` remains the one runtime contract; official authoring is `var body: some Reducer<State, Action>` |
+| **Strategy + interpreter** | `EffectWalker<D>` + `EffectDriver` keep runtime and test-store interpretation separated |
+| **Three-layer runtime** | `Store -> StoreEffectBridge -> EffectRuntime(actor)` keeps UI mutation, store-local bookkeeping, and cancellable task state distinct |
+| **Projection model** | `ScopedStore` + `SelectedStore` use cached snapshots, dependency buckets, and explicit lifecycle accessors |
+| **Lifecycle contract** | Released-parent and inactive-projection races now return cached reads / no-op writes in release builds while debug builds assert |
+| **Macro-enforced surface** | `@InnoFlow` validates body-based authoring, synthesizes case paths, diagnoses `@BindableField` setter drift, and supports `phaseManaged: true` |
+| **Contract documentation** | `ARCHITECTURE_CONTRACT.md`, ADRs, release notes, and principle gates now describe the stable 4.0.0 boundary set |
 
-**Deduction (-0.3):** `PhaseMap` remains opt-in by design.
+**Deduction (-0.2):** 4.0.0 is a contract and documentation rebaseline, but the local repository snapshot is still ahead of the latest checked tag. The implementation is release-ready; final publication still depends on the actual `4.0.0` tag and release workflow.
 
 ---
 
-### 2. API Design — 9.2 / 10
+### 2. API Design — 9.4 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **`PhaseMap` DSL** | `From` / `On` result builders mirror the SwiftUI `body` authoring style |
-| **Six `On` overloads** | Equatable action / `CasePath` / predicate × fixed target / guard, with progressive disclosure |
-| **Payload-aware guards** | `CasePath`-based `On` closures receive associated values in a type-safe way |
-| **Post-reduce decorator** | `.phaseMap(...)` remains explicit, while `@InnoFlow(phaseManaged: true)` applies `Self.phaseMap` automatically |
-| **`derivedGraph` reuse** | `PhaseMap` automatically derives `PhaseTransitionGraph`, reusing existing validation and testing APIs |
-| **Totality validation** | Phase-specific expected triggers are validated through a structured report |
-| **Selection API** | Dedicated 1-through-6 dependency overloads, `dependingOnAll:` for larger explicit sets, and opaque closure fallback |
-| **Binding contract** | Projected key-path bindings stay type-safe and explicit |
-| **Preview ergonomics** | `Store.preview()` includes clock and instrumentation defaults for SwiftUI previews |
+| **Composition surface** | `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer` form the documented public composition set |
+| **`PhaseMap` DSL** | `From` / `On` builders mirror SwiftUI-style declaration while keeping phase ownership explicit |
+| **Phase-managed macro** | `@InnoFlow(phaseManaged: true)` removes the need to remember a manual `.phaseMap(Self.phaseMap)` wrapper |
+| **Action routing** | Generated `CasePath` / `CollectionActionPath` values keep scoping public APIs typed and closure-free |
+| **Selection API** | Fixed-arity `select(dependingOn:)` covers one through six explicit slices, `select(dependingOnAll:)` covers larger explicit dependency sets, and plain `select { ... }` remains the always-refresh fallback |
+| **Scoped selection parity** | `ScopedStore.select(dependingOnAll:)` now mirrors the root-store API for large child read models |
+| **Binding contract** | `@BindableField` + projected key paths keep bindings explicit; `binding(_:to:)` improves enum-case callsites without breaking `send:` |
+| **Instrumentation factories** | `.sink`, `.osLog`, `.signpost`, and `.combined` are all official extension points |
 
-**Deduction (-0.8):** (1) `SelectedStore` still keeps fixed-arity overload duplication for the common cases. (2) There is no shorter dedicated sugar for leaf payload cases beyond canonical `CasePath` authoring.
+**Deduction (-0.6):** The common 1-through-6 `SelectedStore` overloads still create some API and implementation duplication, and payload-case sugar beyond canonical `CasePath` authoring remains intentionally minimal.
 
 ---
 
-### 3. Code Quality — 9.2 / 10
+### 3. Code Quality — 9.4 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **File distribution** | Responsibilities are split by concern; `PhaseMap` itself is separated into spec, wrapper, testing helper, and validation report |
-| **`ActionMatcher`** | Strong core abstraction with a single `match(_:) -> Payload?` contract |
-| **Naming clarity** | `PhaseMappedReducer`, `AnyPhaseTransition`, `PhaseRuleBuilder`, `PhaseMapExpectedTrigger` all communicate role clearly |
-| **`package` access control** | Internal transition types stay scoped to the package surface |
-| **`@unchecked Sendable`** | Principle gates enforce zero uses in shipped source |
-| **Principle gates** | CI enforces contract docs, ADR presence, `PhaseMap` docs, accessibility docs, underscore-stripped action path naming, visionOS docs, and ownership boundaries |
+| **File distribution** | Core store, effect bridge, runtime, caches, composition, phase modeling, instrumentation, and macros are split by concern |
+| **Builder implementation** | `ReducerBuilder` preserves concrete composition types for optimizer visibility while principle gates keep internal wrapper types out of docs and samples |
+| **Macro maintainability** | Bindable-field and phase-totality diagnostics are split out of the macro entry file and guarded by file-size / leakage checks |
+| **`ActionMatcher`** | A compact `match(_:) -> Payload?` abstraction underpins payload-aware `PhaseMap` transitions |
+| **Sendability discipline** | Principle gates enforce zero `@unchecked Sendable` in shipped source, tests, and sample package source |
+| **Release workaround isolation** | The Swift 6.3 release-optimizer workaround is localized to isolated `deinit` paths and documented as a toolchain workaround |
 
-**Deduction (-0.8):** Store support helpers still need clear file boundaries and low-friction ownership. This is an organizational concern rather than a functional problem.
+**Deduction (-0.6):** The localized `@_optimize(none)` workaround is acceptable for release readiness, but it should be retested and removed when the relevant Swift optimizer crash is fixed.
 
 ---
 
-### 4. Error Handling — 9.2 / 10
+### 4. Error Handling & Lifecycle — 9.4 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Triple cancellation checks** | `Task.isCancelled` + emission decision + `lifetime.isReleased` |
-| **Zombie-effect prevention** | `StoreLifetimeToken` + `weak self` + emission gating |
-| **Stale projection contract** | `preconditionFailure` plus subprocess crash tests |
-| **Phase ownership violation detection** | `PhaseMappedReducer` catches direct base reducer phase mutation, asserts, and restores `previousPhase` |
-| **Guard target violation** | Returning a phase outside `declaredTargets` asserts and cancels the phase update |
-| **Four drop reasons** | `ActionDropReason` integrates with instrumentation |
+| **Triple cancellation checks** | `Task.isCancelled`, runtime emission decisions, and store lifetime checks all gate effect emissions |
+| **Zombie-effect prevention** | `StoreLifetimeToken`, weak store captures, and explicit drop reasons prevent late effects from mutating released stores |
+| **Projection lifecycle contract** | `ScopedStore.state`, `ScopedStore.send`, collection-scoped projections, and `SelectedStore.value` have release-mode coverage for cached-read / no-op semantics |
+| **Debug visibility** | Release-tolerant lifecycle races still surface through debug assertions so they do not become silent development mistakes |
+| **Crash contracts** | Programmer errors such as invalid initial scopes, wrong collection identity, direct `PhaseMap` phase mutation, and undeclared phase targets are exercised through subprocess tests |
+| **Instrumentation** | Action emissions, drops, cancellations, and run lifecycle events are visible through sink/log/signpost APIs |
 
-**Deduction (-0.8):** There is still no explicit `UInt64` wraparound assertion. This remains a practical non-issue.
+**Deduction (-0.6):** Cancellation remains cooperative by design. Uncooperative effects are contained at emission boundaries, but the framework cannot stop arbitrary external work without caller cooperation.
 
 ---
 
-### 5. Performance — 8.6 / 10
+### 5. Performance — 8.9 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **`EffectID` hashing** | Cached `normalizedValue` keeps hashing O(1) |
-| **Collection offset cache** | `CollectionScopeOffsetBox` + revision tracking keep lookup O(1) |
-| **Dependency-bucket refresh** | `hasChanged` predicates avoid unnecessary refresh work |
-| **`PhaseMap` rule lookup** | Source phase lookup is O(1), then rules are walked only for the matched phase |
-| **Lazy-map flattening** | `eagerMap` uses a loop rather than recursive wrapper growth |
-| **Auto-compaction** | Threshold + periodic compaction keep observer registries bounded |
+| **Reducer composition** | Concrete builder chains avoid the older nested-closure collapse and improve construction benchmarks |
+| **`EffectID` hashing** | Static-string IDs cache a normalized string for O(1) hashing behavior |
+| **Collection offset cache** | `CollectionScopeOffsetBox` + revision tracking keep common collection-scoped lookup paths O(1) |
+| **Dependency-bucket refresh** | Key-path dependency buckets avoid re-evaluating unrelated `SelectedStore` projections |
+| **`dependingOnAll:`** | Parameter-pack selection keeps large explicit read models selective instead of falling back to always-refresh recomputation |
+| **`PhaseMap` lookup** | Per-action resolution uses O(1) source-phase lookup plus a linear walk over only that source phase's transitions |
+| **Effect timing baseline** | Principle gates include a dedicated release-only effect timing baseline check to catch catastrophic scheduling regressions |
 
-**Deduction (-1.0):** Opaque closure selector memoization remains intentionally unsupported because general closures do not expose a typed read set. A per-phase transition index would require new `Action: Hashable` constraints and still needs real hot-path evidence.
+**Deduction (-1.1):** Opaque closure selector memoization remains intentionally unsupported because general closures do not expose a typed read set. A per-phase transition index still needs real workload evidence before adding `Action: Hashable` pressure or extra API shape.
 
 ---
 
-### 6. Testing — 9.8 / 10
+### 6. Testing & Validation — 9.9 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **177+14 `@Test`** | 177 core + 14 macro tests; 200 total when sample-package tests are included |
-| **`PhaseMap` coverage** | Covers basic/payload transitions, unmatched action/phase, guard logic with post-reduce state, ordering, direct-mutation crashes, undeclared-target diagnostics, release-like restore, `On(where:)`, and totality validation reports |
-| **Deterministic time** | `ManualTestClock` integrated with `EffectContext.sleep` |
-| **Algebraic laws** | Functor identity/composition and Monoid identity/associativity are tested |
-| **Compile-time contracts** | `swiftc -typecheck` subprocess tests lock macro contracts |
-| **Crash contracts** | `preconditionFailure` paths are exercised in subprocess tests |
-| **`PhaseMap+Testing`** | `send/receive(through:)` delegates to `derivedGraph` automatically |
-| **UI smoke tests** | CI validates the canonical sample through accessibility identifiers |
-| **visionOS build** | CI verifies the sample package’s visionOS target |
+| **Core tests** | 279 core `@Test` declarations across runtime, projection, phase, macro, instrumentation, performance, and subprocess contract suites |
+| **Sample tests** | 37 sample-package `@Test` declarations exercise the canonical demos through `TestStore` and real sample features |
+| **Canonical sample count** | 10 documented demos: basics, orchestration, phase-driven FSM, app-boundary navigation, authentication, pagination, offline-first, realtime stream, form validation, and bidirectional websocket |
+| **Release build** | `swift build -c release` is a required principle-gate step and was validated for the current snapshot |
+| **Release tests** | Principle gates include full release-mode tests plus an isolated release timing baseline gate |
+| **Compile contracts** | `swiftc -typecheck` subprocess tests lock binding, effect ID, scoping, and macro contract failures |
+| **Crash / release subprocesses** | Debug crash contracts and release-like tolerant lifecycle contracts are both covered |
+| **CI surface** | Lint, core tests, sample tests, five-platform package builds, principle gates, sample visionOS build, sample app build, and UI smoke tests are all represented in workflow policy |
 
-**Deduction (-0.2):** There is still room for narrower edge-case stress coverage, such as more multi-phase chains and guard-returns-`nil` compositions.
+**Deduction (-0.1):** The full principle gate remains intentionally heavy. That is the right release bar, but day-to-day local validation still relies on narrower test slices.
 
 ---
 
@@ -124,90 +124,90 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 
 | Item | Score |
 |------|-------|
-| Architecture Design | 9.7 |
-| API Design | 9.2 |
-| Code Quality | 9.2 |
-| Error Handling | 9.2 |
-| Performance | 8.6 |
-| Testing | 9.8 |
-| **Subtotal (equal weight)** | **9.28** |
+| Architecture Design | 9.8 |
+| API Design | 9.4 |
+| Code Quality | 9.4 |
+| Error Handling & Lifecycle | 9.4 |
+| Performance | 8.9 |
+| Testing & Validation | 9.9 |
+| **Subtotal (equal weight)** | **9.47** |
 
 ---
 
 ## II. CS Theory (Weight 25%)
 
-### 1. Type Theory — 9.1 / 10
+### 1. Type Theory — 9.2 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Phantom types** | `CasePath<Root, Value>` and `CollectionActionPath<Root, ID, ChildAction>` |
-| **Associated-type contract** | `Reducer` requires `State: Sendable` and `Action: Sendable` |
-| **Existential avoidance** | The macro rejects `any Reducer` and enforces `some Reducer<State, Action>` |
-| **`ActionMatcher<Action, Payload>`** | Two-parameter abstraction keeps payload typing intact and infers `CasePath` values naturally |
-| **`PhaseMap` generics** | `PhaseMap<State, Action, Phase>` statically tracks phase/state/action relationships |
-| **`PhaseMapExpectedTrigger<Action>`** | `.action()`, `.casePath()`, and `.predicate()` factories keep trigger declarations typed |
+| **Associated-type contract** | `Reducer` statically binds `State` and `Action`, both `Sendable` |
+| **Opaque reducer authoring** | The macro rejects `any Reducer` and requires `some Reducer<State, Action>` for feature bodies |
+| **Typed action paths** | `CasePath<Root, Value>` and `CollectionActionPath<Root, ID, ChildAction>` preserve payload and identity typing |
+| **Parameter-pack selection** | `select(dependingOnAll:)` uses Swift parameter packs to express arbitrary explicit dependency sets without erasing dependency value types |
+| **`ActionMatcher<Action, Payload>`** | Payload-aware phase matching keeps the input alphabet structurally typed |
+| **`PhaseMap` generics** | `PhaseMap<State, Action, Phase>` statically tracks the owned phase field, reducer action, and phase domain |
 
-**Deduction (-0.9):** `Reducer` itself is intentionally not `Sendable`, and `AnyPhaseTransition` type-erases payloads internally. Neither is a practical issue for the public API.
+**Deduction (-0.8):** `Reducer` itself is intentionally not `Sendable`, and some phase internals type-erase payloads after the public typed boundary. This is pragmatic, but not theoretically perfect.
 
 ---
 
-### 2. Category Theory / FP — 9.1 / 10
+### 2. Category Theory / FP — 9.2 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Free Monad** | `EffectTask.Operation` is an indirect enum and therefore a pure data structure |
-| **Functor laws** | `map(id) == id` and `map(f).map(g) == map(f∘g)` are tested |
+| **Free effect model** | `EffectTask.Operation` is a pure indirect enum interpreted later by a driver |
+| **Functor laws** | `EffectTask.map` identity and composition behavior is tested |
 | **Monoid laws** | `.none` identity and `concatenate` associativity are tested |
-| **Natural transformation** | `EffectTask.map` composes lazily through `lazyMap` |
-| **Post-reduce decorator** | `PhaseMappedReducer` behaves as a reducer-to-reducer endofunctor |
+| **Reducer composition** | Concrete builder output preserves declaration order and grouping semantics |
+| **Post-reduce decorator** | `PhaseMappedReducer` remains a reducer-to-reducer transformation that owns one state field |
 
-**Deduction (-0.9):** `lazyMap` still guarantees behavioral equivalence rather than full structural equivalence.
-
----
-
-### 3. Automata / FSM — 8.7 / 10
-
-| Item | Evaluation |
-|------|------------|
-| **`PhaseTransitionGraph`** | O(1) adjacency lookup, BFS reachability, and 5 structured validation issues |
-| **`PhaseMap` DSL** | `From` / `On` builders model declarative transition functions cleanly |
-| **Guard conditions** | `resolve` closures make transitions state-dependent in a Mealy-like way |
-| **Payload-aware matching** | `ActionMatcher<Action, Payload>` structurally decomposes the input alphabet |
-| **`derivedGraph`** | Analysis artifacts are derived directly from the declaration |
-| **Post-reduce semantics** | Phase is decided after the base reducer runs, aligning with state-dependent transition logic |
-| **Totality validation** | Phase-specific expected triggers are validated through a structured report, while ADRs document partial-by-default semantics |
-
-**Improvement vs. v5 (+0.2):** The previous “no totality support” deduction is now partially resolved through opt-in test-time validation. It is not compile-time exhaustive, but it does catch missing expected triggers.
-
-**Deduction (-1.3):** (1) NFA / epsilon-transition modeling is out of scope. (2) Compile-time totality enforcement is still intentionally unsupported.
+**Deduction (-0.8):** `lazyMap` and release-oriented effect scheduling guarantee behavioral equivalence rather than structural equivalence of every intermediate representation.
 
 ---
 
-### 4. Concurrency Theory — 9.0 / 10
+### 3. Automata / FSM — 9.0 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Lamport-style sequencing** | Monotonic `UInt64` tokens gate cancellation boundaries |
-| **Two-actor model** | `MainActor Store` + `EffectRuntime` actor |
-| **Barrier synchronization** | `RunStartGate` coordinates task start order |
-| **Triple cancellation** | `Task.isCancelled` + emission decision + lifetime check |
-| **Lock-backed lifetime token** | `StoreLifetimeToken` uses `OSAllocatedUnfairLock` |
+| **`PhaseTransitionGraph`** | O(1) adjacency lookup, reachability checks, terminal validation, and structured reports |
+| **`PhaseMap` DSL** | `From` / `On` builders model a declarative transition function over source phase and action matcher |
+| **Post-reduce semantics** | Phase resolution sees the reducer's updated state, which fits state-dependent transitions |
+| **Guard conditions** | Dynamic target resolution is constrained by declared target sets and tested for nil / same-phase behavior |
+| **`derivedGraph`** | Static topology checks are derived from the same declaration used at runtime |
+| **Totality validation** | Runtime remains partial by default, while `validationReport` and `assertPhaseMapCovers` support opt-in expected-trigger coverage |
+| **Macro totality diagnostic** | `@InnoFlow(phaseManaged: true)` warns about phase cases that never appear in `phaseMap` declarations |
 
-No score change.
+**Deduction (-1.0):** Totality is still author-declared and opt-in. The framework does not attempt full compile-time graph reachability or NFA / epsilon-transition modeling.
 
 ---
 
-### 5. Data Structures & Algorithms — 8.7 / 10
+### 4. Concurrency Theory — 9.2 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Bidirectional maps** | `tokensByID ↔ idByToken` stay O(1) |
-| **Adjacency map** | `PhaseTransitionGraph` stores `[Phase: Set<Phase>]` |
-| **Offset cache** | `CollectionScopeOffsetBox` + revision tracking |
-| **`PhaseMap` rule resolution** | Linear, deterministic, and first-match-wins |
-| **`derivedGraph` construction** | O(rules × transitions), calculated once and reusable |
+| **Actor split** | `MainActor Store` and `EffectRuntime` actor keep UI state and task bookkeeping in separate isolation domains |
+| **Sequencing** | Monotonic `UInt64` sequences gate cancellation and emission boundaries |
+| **Barrier synchronization** | `RunStartGate` coordinates task registration before operation bodies begin |
+| **Manual clock** | `ManualTestClock.sleeperCount` lets tests wait for actual suspension points instead of fixed yield counts |
+| **Release scheduling contract** | `Store.send(_:)` now documents that effects are scheduled, not necessarily started, after synchronous state draining |
+| **Timing regression gate** | A release-only effect timing baseline catches the class of scheduler regressions that debug-only tests can miss |
 
-**Deduction (-1.3):** (1) Source-phase lookup could become O(1) with a hash-indexed table if rule counts ever grow materially. (2) `Mirror`-based diffing is still O(n·depth), although it is test-only infrastructure.
+**Deduction (-0.8):** The runtime intentionally uses unstructured tasks for effect bodies. The contract is well documented and tested, but it remains a trade-off versus fully structured task ownership.
+
+---
+
+### 5. Data Structures & Algorithms — 8.9 / 10
+
+| Item | Evaluation |
+|------|------------|
+| **Token maps** | `tokensByID` and `idByToken` maintain bidirectional cancellable-run lookup |
+| **Projection registries** | Dependency-bucket refresh and periodic compaction keep observer work bounded |
+| **Selection cache** | Callsite and value-type keyed selected-store caching preserves identity across repeated calls |
+| **Collection scope cache** | Stable IDs, offset boxes, and revision tracking optimize common row-projection paths |
+| **Phase indexing** | `rulesBySourcePhase` avoids scanning unrelated source phases |
+| **Diffing** | TestStore diff rendering is intentionally test-only and line-limited for diagnostics |
+
+**Deduction (-1.1):** Some hot-path improvements remain evidence-gated: opaque selector memoization, a phase transition index, and deeper diff optimization should wait for workload data.
 
 ---
 
@@ -215,86 +215,88 @@ No score change.
 
 | Item | Score |
 |------|-------|
-| Type Theory | 9.1 |
-| Category Theory / FP | 9.1 |
-| Automata / FSM | 8.7 |
-| Concurrency Theory | 9.0 |
-| Data Structures & Algorithms | 8.7 |
-| **Subtotal (equal weight)** | **8.92** |
+| Type Theory | 9.2 |
+| Category Theory / FP | 9.2 |
+| Automata / FSM | 9.0 |
+| Concurrency Theory | 9.2 |
+| Data Structures & Algorithms | 8.9 |
+| **Subtotal (equal weight)** | **9.10** |
 
 ---
 
 ## III. SwiftUI Philosophy (Weight 35%)
 
-### 1. Declarative Paradigm — 9.7 / 10
+### 1. Declarative Paradigm — 9.8 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Result builders** | `ReducerBuilder`, `PhaseRuleBuilder`, and `PhaseTransitionRuleBuilder` are all first-class |
-| **`body` symmetry** | `var body: some Reducer<State, Action>` matches the SwiftUI mental model directly |
-| **`PhaseMap` DSL** | `From` / `On` authoring stays declarative and compositional |
-| **Modifier chain** | `.phaseMap(...)` behaves like a view modifier for reducers |
-| **Effect DSL** | `.run`, `.cancellable()`, `.debounce()`, and friends stay chainable and explicit |
+| **Body-based authoring** | Official feature authoring mirrors SwiftUI's `body` shape |
+| **Result builders** | Reducer and phase builders keep feature declarations readable and composable |
+| **Phase-managed macro** | `@InnoFlow(phaseManaged: true)` keeps phase ownership declarative at the feature boundary |
+| **Modifier-style semantics** | `.phaseMap(...)`, `.cancellable`, `.debounce`, `.throttle`, and `.animation` remain chainable and explicit |
+| **Dependency bundles** | Construction-time dependencies stay plain Swift values instead of hidden service locators |
 
-**Deduction (-0.3):** `ForEachReducer` still contains imperative offset bookkeeping internally.
+**Deduction (-0.2):** Some internals, especially collection scoping, still require imperative offset/cache bookkeeping to make the declarative surface efficient.
 
 ---
 
-### 2. Reactive Data Flow — 9.2 / 10
+### 2. Reactive Data Flow — 9.4 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **`@Observable`** | `Store`, `ScopedStore`, and `SelectedStore` all participate in observation |
-| **Unidirectional flow** | `Action -> Reducer -> State -> View` remains crisp |
-| **Phase ownership** | `PhaseMap` owns the phase key path and restores illegal direct writes |
-| **Dependency-based refresh** | Only changed buckets are reevaluated |
-| **Binding contract** | Projected key paths keep SwiftUI-style explicit bindings |
+| **`@Observable`** | `Store`, `ScopedStore`, and `SelectedStore` participate directly in Swift Observation |
+| **Unidirectional flow** | `Action -> Reducer -> State -> View` stays explicit |
+| **Phase ownership** | `PhaseMap` owns one phase key path and prevents direct reducer mutation from escaping |
+| **Projection lifecycle** | SwiftUI observer races are now bounded to cached snapshots in release builds instead of process aborts |
+| **Selective invalidation** | Key-path and parameter-pack dependencies avoid unnecessary view refreshes |
+| **Binding surface** | Projected key paths make bindable fields visible in state definitions and action routing |
 
-**Deduction (-0.8):** `.alwaysRefresh` fallback still exists for opaque closure selectors.
+**Deduction (-0.6):** Closure-only selectors still always refresh because arbitrary closures cannot advertise their read set.
 
 ---
 
-### 3. Composition Model — 9.4 / 10
+### 3. Composition Model — 9.5 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Six core composition primitives** | `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer` |
-| **`PhaseMap` decorator** | Adds a new composition axis without changing base reducer semantics |
-| **`CasePath` integration** | `IfCaseLet` and `Scope` use `CasePath`-based public initializers |
-| **`ActionMatcher` reuse** | `PhaseMap` reuses the same structural routing ideas already present in the framework |
-| **Effect lifting** | `Effect.map` preserves cancellation / debounce / throttle semantics across child reducers |
+| **Six composition primitives** | The documented set is small enough to learn and broad enough for optional, enum, and collection child features |
+| **Generated routing** | Macro-generated action paths reduce boilerplate without introducing runtime reflection |
+| **Effect lifting** | `EffectTask.map` preserves cancellation, debounce, throttle, and run semantics across child reducers |
+| **Scoped test projection** | Parent `TestStore` projections keep child tests tied to real parent reducer behavior |
+| **Cross-framework boundary** | Navigation, transport, and dependency graph ownership stay outside InnoFlow by contract |
 
-**Deduction (-0.6):** `CollectionActionPath` and `CasePath` remain separate types, and `PhaseMap` still applies only at the top-level reducer boundary.
+**Deduction (-0.5):** `CollectionActionPath` and `CasePath` remain separate public concepts, and phase decoration still belongs at explicit reducer boundaries.
 
 ---
 
-### 4. State Management — 9.2 / 10
+### 4. State Management — 9.4 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **`@BindableField`** | Property wrapper + projected value stay explicit and typed |
-| **`ScopedStore`** | Read-only scoped projection |
-| **`SelectedStore`** | Derived selection optimized for one through six explicit dependencies plus `dependingOnAll:` |
-| **`PhaseMap` ownership** | Introduces state-field ownership as a first-class concept |
-| **Callsite caching** | `SelectionCache` and `CollectionScopeCache` keep projections efficient |
+| **`@BindableField`** | Field-level binding is explicit and diagnostic-backed |
+| **`ScopedStore`** | Child views receive read-only projected state plus typed action forwarding |
+| **`SelectedStore`** | Expensive derived read models are cached, equatable, and dependency-aware |
+| **`dependingOnAll:`** | Larger read models no longer have to choose between six-field arity limits and always-refresh fallback |
+| **Lifecycle accessors** | `isAlive`, `optionalState`, and `optionalValue` let callers branch on projection liveness without triggering debug assertions |
+| **Preview stores** | `Store.preview(...)` standardizes preview-only clock and instrumentation defaults |
 
-**Deduction (-0.5):** Arbitrary closure selector memoization remains intentionally backlog-driven.
+**Deduction (-0.6):** Mutable child flows still require `ScopedStore`; `SelectedStore` intentionally stays read-only and does not attempt a writable derived-state model.
 
 ---
 
-### 5. Platform Integration — 9.0 / 10
+### 5. Platform Integration — 9.3 / 10
 
 | Item | Evaluation |
 |------|------------|
-| **Five platforms** | iOS 18, macOS 15, tvOS 18, watchOS 11, visionOS 2 are all covered in CI |
-| **Animation bridge** | `EffectAnimation -> withAnimation` stays explicit |
-| **Preview ergonomics** | `Store.preview()` improves SwiftUI preview callsites |
-| **Instrumentation surface** | `.osLog()`, `.sink()`, `.signpost()`, `.combined()` offer practical extension points |
-| **Accessibility** | Canonical sample includes labels/hints and principle gates enforce documentation |
-| **visionOS** | `VisionOSIntegration.md` plus CI visionOS build coverage and sample package support |
-| **UI automation** | Canonical sample UI smoke tests run through accessibility identifiers |
+| **Five platforms** | Package policy covers iOS, macOS, tvOS, watchOS, and visionOS |
+| **Release build** | Release build and release-mode tests are now part of the principle-gate contract |
+| **Animation bridge** | `EffectAnimation` keeps SwiftUI animation handoff explicit |
+| **Instrumentation** | `.signpost` integrates with Instruments timelines, `.osLog` covers Console, `.sink` supports custom adapters, and `.combined` fans out events |
+| **Accessibility** | Canonical sample docs and UI smoke tests use stable accessibility identifiers |
+| **visionOS boundary** | `VisionOSIntegration.md` documents that spatial runtime and immersive orchestration stay in the app layer |
+| **Canonical sample** | Ten demos cover common product flows without pulling navigation, network, or DI ownership into the core framework |
 
-**Deduction (-1.0):** There is still no official `swift-metrics` adapter package, and there is no dedicated immersive/spatial sample beyond documentation guidance.
+**Deduction (-0.7):** There is still no official `swift-metrics` adapter package and no dedicated immersive/spatial sample beyond boundary documentation.
 
 ---
 
@@ -302,12 +304,12 @@ No score change.
 
 | Item | Score |
 |------|-------|
-| Declarative Paradigm | 9.7 |
-| Reactive Data Flow | 9.2 |
-| Composition Model | 9.4 |
-| State Management | 9.2 |
-| Platform Integration | 9.0 |
-| **Subtotal (equal weight)** | **9.30** |
+| Declarative Paradigm | 9.8 |
+| Reactive Data Flow | 9.4 |
+| Composition Model | 9.5 |
+| State Management | 9.4 |
+| Platform Integration | 9.3 |
+| **Subtotal (equal weight)** | **9.48** |
 
 ---
 
@@ -315,47 +317,59 @@ No score change.
 
 | Axis | Score | Weight | Weighted Score |
 |------|-------|--------|----------------|
-| Programming | 9.28 | 40% | 3.712 |
-| CS Theory | 8.92 | 25% | 2.230 |
-| SwiftUI Philosophy | 9.30 | 35% | 3.255 |
-| **Total** | | **100%** | **9.20 / 10** |
+| Programming | 9.47 | 40% | 3.788 |
+| CS Theory | 9.10 | 25% | 2.275 |
+| SwiftUI Philosophy | 9.48 | 35% | 3.318 |
+| **Total** | | **100%** | **9.38 / 10** |
 
-### Grade: Production Ready+ (92.0 / 100)
+### Grade: Production Ready+ (93.8 / 100)
+
+This score evaluates the implementation and documentation contract in the current repository snapshot. It does not assert that the public `4.0.0` tag already exists; tag publication remains a release-process gate.
 
 ---
 
-## V. What Changed Since the Previous Evaluation
+## V. What Changed Since v6.1
 
-| Item | v5 (9.14) | v6.1 (9.20) | Delta | Reason |
-|------|-----------|-------------|-------|--------|
-| Code Quality | 9.1 | 9.2 | +0.1 | Principle gates, `ARCHITECTURE_CONTRACT`, and 3 ADRs are now CI-enforced |
-| Testing | 9.6 | 9.8 | +0.2 | `PhaseMap` edge-case coverage, UI smoke tests, and visionOS build checks |
-| Composition Model | 9.2 | 9.4 | +0.2 | Previous `IfCaseLet` deduction was factually incorrect; public API is `CasePath`-based |
-| **Automata / FSM** | **8.5** | **8.7** | **+0.2** | **`PhaseMap` totality validation + `ADR-phase-map-totality-validation`** |
-| **Platform Integration** | **8.8** | **9.0** | **+0.2** | **visionOS CI, `VisionOSIntegration.md`, UI smoke tests, and `Store.preview()`** |
+| Item | v6.1 | v7.0 | Delta | Reason |
+|------|------|------|-------|--------|
+| Architecture Design | 9.7 | 9.8 | +0.1 | Projection lifecycle contract and release-mode tolerant semantics are now documented and tested |
+| API Design | 9.2 | 9.4 | +0.2 | `Store` and `ScopedStore` now expose `select(dependingOnAll:)`; `binding(_:to:)` and signpost instrumentation are documented |
+| Code Quality | 9.2 | 9.4 | +0.2 | Macro diagnostics are split, builder internals are gated, and release-workaround scope is explicit |
+| Error Handling & Lifecycle | 9.2 | 9.4 | +0.2 | Cached-read / no-op write lifecycle behavior has release-like subprocess coverage |
+| Performance | 8.6 | 8.9 | +0.3 | Reducer builder specialization, `dependingOnAll:`, and release timing baseline policy improve practical performance confidence |
+| Testing & Validation | 9.8 | 9.9 | +0.1 | Current evidence is 279 core tests, 37 sample tests, release build, release tests, and sample validation policy |
+| Automata / FSM | 8.7 | 9.0 | +0.3 | Phase-managed macro diagnostics complement opt-in runtime totality validation |
+| Platform Integration | 9.0 | 9.3 | +0.3 | Signpost instrumentation, ten-demo canonical sample, and release build/test gates improve Apple-platform readiness |
 
-**Nature of this update:** v6.1 mainly improves evaluation accuracy. Some previous deductions overstated testing gaps or described an outdated public surface.
+**Nature of this update:** v7.0 is a current-state refresh, not a theoretical redesign. Most gains come from release-readiness hardening, documentation-contract alignment, sample breadth, and validation coverage.
 
 ---
 
 ## VI. Remaining Work
 
+### P1 — Release Publication Gate
+
+| Item | Trigger Condition |
+|------|-------------------|
+| Publish or retarget the `4.0.0` install surface | The README and localized README now point to `from: "4.0.0"` while the checked local tag list still ends at `3.0.3`; either publish the tag before public consumption or keep install snippets on the latest published tag until release |
+| Harden release-sync semantics | `scripts/check-release-sync.sh` should distinguish "release notes prepared" from "tag published" unless a deliberate pre-release override is set |
+
 ### P2 — Conditional Backlog
 
 | Item | Trigger Condition |
 |------|-------------------|
-| Opaque selector memoization | repeated real-world usage + profiling evidence |
-| Dedicated payment / permission phase examples | real product flows that need more phase-heavy sample coverage |
+| Opaque selector memoization | repeated real-world usage plus profiling evidence that always-refresh closure selectors are too expensive |
+| Per-phase transition index | actual phase-heavy workloads show the per-source linear `On` walk on a hot path |
+| Official metrics adapter package | enough users need first-party `swift-metrics`, Datadog, or Prometheus bindings beyond `.sink` |
+| Dedicated immersive/spatial sample | a real product flow needs runnable visionOS orchestration examples beyond ownership-boundary docs |
 
-**Evaluation note:** These are not current defects. They are intentionally deferred backlog items that should open only when actual usage justifies them.
-
-### P3 — Lower Priority
+### P3 — Polish
 
 | Item | Note |
 |------|------|
-| Official `swift-metrics` adapter | `.sink()` already enables lightweight integration |
-| Dedicated immersive/spatial sample | `VisionOSIntegration.md` documents ownership boundaries, but there is no dedicated sample yet |
-| `PhaseMap` authoring polish | helper ideas remain optional until real repetition appears |
+| Release workaround retirement | Retest the localized `@_optimize(none)` workaround on Swift toolchain bumps |
+| Framework comparison refresh cadence | Keep `docs/FRAMEWORK_COMPARISON.md` aligned with the 4.0.0 evaluation and current ecosystem positioning |
+| Localized evaluation docs | This English file is canonical; localized evaluation companions should be refreshed after the 4.0.0 scorecard stabilizes |
 
 ---
 
@@ -372,11 +386,11 @@ No score change.
 
 - `@InnoFlow` macro synthesis for `CasePath` / `CollectionActionPath`
 - Built-in `IfLet` / `IfCaseLet`
-- `StoreInstrumentation` with 5 hooks and 4 drop reasons
+- `StoreInstrumentation` with lifecycle hooks and action drop reasons
 - `ManualTestClock`
 - O(1) collection offset cache
 - Functor / Monoid law tests
-- Multi-platform CI (macOS, iOS, tvOS, watchOS)
+- Multi-platform CI
 
 ### v3 -> v4 (8.48 -> 8.93)
 
@@ -388,29 +402,40 @@ No score change.
 
 ### v4 -> v5 (8.93 -> 9.14)
 
-- **`PhaseMap<State, Action, Phase>`** for declarative phase ownership
-- **`ActionMatcher<Action, Payload>`** for payload-aware action matching
-- **`PhaseMappedReducer`** as a post-reduce decorator with mutation restore
-- **`PhaseMap` DSL** with `From` / `On` builders and six `On` overloads
-- **`derivedGraph`** automatic derivation
-- **`PhaseMap+Testing`** conveniences
+- `PhaseMap<State, Action, Phase>` for declarative phase ownership
+- `ActionMatcher<Action, Payload>` for payload-aware action matching
+- `PhaseMappedReducer` as a post-reduce decorator with mutation restore
+- `PhaseMap` DSL with `From` / `On` builders
+- `derivedGraph` automatic derivation
+- `PhaseMap+Testing` conveniences
 - Canonical sample migration to `PhaseMap`
 
 ### v5 -> v6.1 (9.14 -> 9.20)
 
-- **`PhaseMap` totality validation** via `validationReport`, `PhaseMapExpectedTrigger`, and `PhaseMapValidationReport`
-- **Two new ADRs**: declarative `PhaseMap` and `PhaseMap` totality validation
-- **`ARCHITECTURE_CONTRACT.md`** enforced in CI
-- **`VisionOSIntegration.md`** for visionOS ownership guidance
-- **Expanded CI** with visionOS package builds and canonical sample UI smoke tests
-- **Expanded principle gates** for accessibility, visionOS, `PhaseMap` docs, and underscore-stripped action-path naming
-- **`Store.preview()`** ergonomics for previews
-- **`PhaseMap` edge-case tests** for direct mutation crashes, undeclared targets, ordering, and `On(where:)`
-- 177+14 core tests reached
-- **v6.1 evaluation correction:** removed outdated deductions around `PhaseMap` testing and `IfCaseLet` API shape
+- `PhaseMap` totality validation through `validationReport`, `PhaseMapExpectedTrigger`, and `PhaseMapValidationReport`
+- ADRs for declarative `PhaseMap` and phase totality validation
+- `ARCHITECTURE_CONTRACT.md` enforced in CI
+- `VisionOSIntegration.md` for visionOS ownership guidance
+- Expanded CI with visionOS package builds and canonical sample UI smoke tests
+- Expanded principle gates for accessibility, visionOS, `PhaseMap` docs, and underscore-stripped action-path naming
+- `Store.preview()` ergonomics for previews
+- `PhaseMap` edge-case tests for direct mutation crashes, undeclared targets, ordering, and `On(where:)`
+
+### v6.1 -> v7.0 / 4.0.0 (9.20 -> 9.38)
+
+- 4.0.0 contract and documentation rebaseline
+- 279 core tests and 37 sample-package tests reflected in the scorecard
+- Ten-demo canonical sample catalog reflected in the evaluation evidence
+- Release build, release-mode test, and isolated release timing baseline policy added to validation evidence
+- `Store.select(dependingOnAll:)` and `ScopedStore.select(dependingOnAll:)` for larger explicit read-model dependency sets
+- Projection lifecycle contract for `ScopedStore` and `SelectedStore`, including `isAlive`, `optionalState`, and `optionalValue`
+- Release-mode subprocess coverage for projection cached-read / no-op-write behavior
+- `StoreInstrumentation.signpost(...)` plus `.combined(...)` as official Instruments-friendly instrumentation
+- `@InnoFlow(phaseManaged: true)` and phase totality diagnostics reflected in API and theory scoring
+- Reducer-builder specialization and associated performance policy reflected in performance scoring
 
 ---
 
 ### Conclusion
 
-InnoFlow 3.0.0 remains **Production Ready+ at 9.20 / 10 (92.0 / 100)**. The latest iteration primarily tightened contracts, expanded platform/documentation coverage, and corrected prior evaluation drift rather than reopening core architecture. The remaining work is mostly conditional backlog and ecosystem polish, not structural framework repair.
+InnoFlow 4.0.0 is **Production Ready+ at 9.38 / 10 (93.8 / 100)** for the implementation and contract surface currently on `main`. The major remaining work is release-process alignment: the install snippets and release notes now describe `4.0.0`, so the public tag and release-sync semantics must match before users are pointed at that version.
