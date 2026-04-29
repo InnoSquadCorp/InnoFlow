@@ -19,13 +19,15 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(path: "../../../")
+    .package(name: "InnoFlow", path: "../../../"),
+    .package(url: "https://github.com/InnoSquadCorp/InnoNetwork.git", from: "3.1.0"),
   ],
   targets: [
     .target(
       name: "InnoFlowSampleAppFeature",
       dependencies: [
-        .product(name: "InnoFlow", package: "InnoFlow")
+        .product(name: "InnoFlow", package: "InnoFlow"),
+        .product(name: "InnoNetworkWebSocket", package: "InnoNetwork"),
       ]
     ),
     .testTarget(

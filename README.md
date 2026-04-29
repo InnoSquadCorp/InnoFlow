@@ -23,6 +23,11 @@ Cross-framework ownership stays explicit:
 - Transport and session lifecycle stay outside InnoFlow.
 - Construction-time dependency graphs stay outside InnoFlow and enter reducers as explicit bundles.
 
+Boundary references:
+
+- [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
+- [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
+
 For stable framework guarantees that should not drift with scorecards or line counts, see
 [`ARCHITECTURE_CONTRACT.md`](./ARCHITECTURE_CONTRACT.md).
 
@@ -120,7 +125,7 @@ struct CounterView: View {
 }
 ```
 
-`binding(_:to:)` is an argument-label alias for `binding(_:send:)`. Both spellings stay supported, but once both overloads exist you must keep the label explicit: `store.binding(\.$step) { .setStep($0) }` is ambiguous, while `send:` and `to:` both compile cleanly.
+`binding(_:to:)` is an argument-label alias for `binding(_:send:)`. Both spellings stay supported, but unlabeled calls are now an intentional 3.x migration break. In practice Swift diagnoses the trailing-closure spelling `store.binding(\.$step) { .setStep($0) }` as an explicit-label ambiguity and the parenthesized unlabeled spelling as a no-exact-matches call with the same `send:` / `to:` guidance. Use `send:` or `to:` explicitly.
 
 ## Composition Surface
 
@@ -664,7 +669,7 @@ let title = store.select(dependingOn: \.child.title) { $0.uppercased() }
 
 The single reference app is [`Examples/InnoFlowSampleApp`](./Examples/InnoFlowSampleApp).
 
-It contains eight demos:
+It contains ten demos:
 
 - `Basics`
 - `Orchestration`
@@ -674,9 +679,12 @@ It contains eight demos:
 - `List-Detail Pagination`
 - `Offline-First`
 - `Realtime Stream`
+- `Form Validation`
+- `Bidirectional WebSocket`
 
 This sample is the official integration reference for `InnoFlow`-only flows, explicit dependency
-bundles, and app-owned SwiftUI navigation state.
+bundles, app-owned SwiftUI navigation state, and explicitly labeled cross-framework transport
+integration.
 
 The sample hub also defines the stable accessibility identifiers used by UI smoke tests:
 
@@ -688,6 +696,8 @@ The sample hub also defines the stable accessibility identifiers used by UI smok
 - `sample.list-detail-pagination`
 - `sample.offline-first`
 - `sample.realtime-stream`
+- `sample.form-validation`
+- `sample.bidirectional-websocket`
 
 Launch-environment direct demo mode (`INNOFLOW_SAMPLE_DEMO`) remains available for feature-focused UI regression tests.
 
@@ -708,6 +718,10 @@ Launch-environment direct demo mode (`INNOFLOW_SAMPLE_DEMO`) remains available f
 - Do not duplicate concrete route stacks inside feature state.
 - Reducers emit business intent; the app layer owns navigation state and dependency construction.
 - Retry, reconnect, websocket, and transport/session lifecycle stay outside `PhaseTransitionGraph`.
+- Use [`docs/CROSS_FRAMEWORK.md`](./docs/CROSS_FRAMEWORK.md) as the single ownership guide for
+  navigation, transport, and DI boundaries.
+- Use [`docs/DEPENDENCY_PATTERNS.md`](./docs/DEPENDENCY_PATTERNS.md) when the question is
+  specifically about reducer-facing `Dependencies` bundles.
 
 ## Roadmap
 

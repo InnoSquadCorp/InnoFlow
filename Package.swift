@@ -56,6 +56,9 @@ let package = Package(
             dependencies: [
                 "InnoFlow",
                 "InnoFlowTesting",
+            ],
+            resources: [
+                .copy("Fixtures")
             ]
         ),
         .testTarget(

@@ -2705,6 +2705,204 @@ struct CompileContractTests {
       "expected @BindableField projected key path to typecheck, got: \(result.normalizedOutput)")
   }
 
+  @Test("Store.binding rejects unlabeled trailing-closure calls with explicit label guidance")
+  func bindingRejectsUnlabeledTrailingClosureAtCompileTime() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct BindableFeature: Reducer {
+          struct State: Sendable, DefaultInitializable {
+              @BindableField var step = 1
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: BindableFeature(), initialState: .init())
+          _ = store.binding(\\.$step) { .setStep($0) }
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0)
+    let diagnostics = result.normalizedOutput
+    #expect(diagnostics.localizedCaseInsensitiveContains("ambiguous use of 'binding'"))
+    #expect(diagnostics.contains("binding(_:send:)"))
+    #expect(diagnostics.contains("binding(_:to:)"))
+  }
+
+  @Test("Store.binding rejects parenthesized unlabeled calls with explicit label guidance")
+  func bindingRejectsParenthesizedUnlabeledCallAtCompileTime() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct BindableFeature: Reducer {
+          struct State: Sendable, DefaultInitializable {
+              @BindableField var step = 1
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: BindableFeature(), initialState: .init())
+          _ = store.binding(\\.$step, { .setStep($0) })
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0)
+    let diagnostics = result.normalizedOutput
+    expectParenthesizedUnlabeledBindingRejection(in: diagnostics)
+  }
+
+  @Test("ScopedStore.binding rejects unlabeled trailing-closure calls with explicit label guidance")
+  func scopedBindingRejectsUnlabeledTrailingClosureAtCompileTime() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct ParentFeature: Reducer {
+          struct Child: Equatable, Sendable {
+              @BindableField var step = 1
+          }
+
+          struct State: Sendable, DefaultInitializable {
+              var child = Child()
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case child(ChildAction)
+
+              static let childCasePath = CasePath<Self, ChildAction>(
+                  embed: Action.child,
+                  extract: { action in
+                      guard case .child(let childAction) = action else { return nil }
+                      return childAction
+                  }
+              )
+          }
+
+          enum ChildAction: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: ParentFeature(), initialState: .init())
+          let scoped = store.scope(state: \\.child, action: ParentFeature.Action.childCasePath)
+          _ = scoped.binding(\\.$step) { .setStep($0) }
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0)
+    let diagnostics = result.normalizedOutput
+    #expect(diagnostics.localizedCaseInsensitiveContains("ambiguous use of 'binding'"))
+    #expect(diagnostics.contains("binding(_:send:)"))
+    #expect(diagnostics.contains("binding(_:to:)"))
+  }
+
+  @Test("ScopedStore.binding rejects parenthesized unlabeled calls with explicit label guidance")
+  func scopedBindingRejectsParenthesizedUnlabeledCallAtCompileTime() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct ParentFeature: Reducer {
+          struct Child: Equatable, Sendable {
+              @BindableField var step = 1
+          }
+
+          struct State: Sendable, DefaultInitializable {
+              var child = Child()
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case child(ChildAction)
+
+              static let childCasePath = CasePath<Self, ChildAction>(
+                  embed: Action.child,
+                  extract: { action in
+                      guard case .child(let childAction) = action else { return nil }
+                      return childAction
+                  }
+              )
+          }
+
+          enum ChildAction: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: ParentFeature(), initialState: .init())
+          let scoped = store.scope(state: \\.child, action: ParentFeature.Action.childCasePath)
+          _ = scoped.binding(\\.$step, { .setStep($0) })
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0)
+    let diagnostics = result.normalizedOutput
+    expectParenthesizedUnlabeledBindingRejection(in: diagnostics)
+  }
+
   @Test("Scope/IfLet/IfCaseLet reject public closure-based action lifting at compile time")
   func reducerCompositionRejectsClosureActionLiftingAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
@@ -2879,6 +3077,24 @@ struct CompileContractTests {
     for signature in forbiddenSignatures {
       #expect(source.contains(signature) == false)
     }
+  }
+
+  private func expectParenthesizedUnlabeledBindingRejection(in diagnostics: String) {
+    let rejectedByCandidateMismatch =
+      diagnostics.contains("no exact matches in call to instance method 'binding'")
+      && diagnostics.contains("incorrect labels for candidate")
+      && diagnostics.contains("expected: '(_:send:)'")
+      && diagnostics.contains("expected: '(_:to:)'")
+
+    let rejectedByUnavailableMigrationOverload =
+      diagnostics.contains("'binding' is unavailable")
+      && diagnostics.contains("Use 'binding(_:send:)' or 'binding(_:to:)'")
+      && diagnostics.contains("unlabeled trailing-closure calls")
+
+    #expect(
+      rejectedByCandidateMismatch || rejectedByUnavailableMigrationOverload,
+      "expected parenthesized unlabeled binding call to be rejected with label guidance, got: \(diagnostics)"
+    )
   }
 }
 
@@ -5140,40 +5356,37 @@ struct StoreTests {
   }
 
   @Test("ManualTestClock resumes same-deadline sleepers in insertion order")
-  func manualTestClockResumesSameDeadlineSleepersInInsertionOrder() async {
+  func manualTestClockResumesSameDeadlineSleepersInInsertionOrder() async throws {
     let clock = ManualTestClock()
     let probe = OrderedIntProbe()
 
     // Spawn two sleepers that hit the same deadline. The sleepers must be
     // registered with the clock before we advance — under release optimization
     // and parallel test load, a single `Task.yield()` between spawn and advance
-    // is not reliable. Wait up to 200 yields for each Task to register before
-    // proceeding.
-    Task {
+    // is not reliable. Require each Task to register before proceeding.
+    let firstSleeper = Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(1)
     }
-    for _ in 0..<200 {
-      if await clock.sleeperCount == 1 { break }
-      await Task.yield()
-    }
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
+      }
+    )
 
-    Task {
+    let secondSleeper = Task {
       try? await clock.sleep(for: .milliseconds(50))
       await probe.append(2)
     }
-    for _ in 0..<200 {
-      if await clock.sleeperCount == 2 { break }
-      await Task.yield()
-    }
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 2
+      }
+    )
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<200 {
-      if await probe.snapshot() == [1, 2] {
-        break
-      }
-      await Task.yield()
-    }
+    _ = await firstSleeper.result
+    _ = await secondSleeper.result
 
     #expect(await probe.snapshot() == [1, 2])
   }
@@ -5199,12 +5412,11 @@ struct StoreTests {
     _ = await task.result
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<10 {
-      if await probe.snapshot() == [-1] {
-        break
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await probe.snapshot() == [-1]
       }
-      await Task.yield()
-    }
+    )
 
     #expect(await probe.snapshot() == [-1])
   }
@@ -5272,17 +5484,20 @@ struct StoreTests {
     // via `Task { ... }` still need scheduler turns to reach their first await.
     // Release optimization eliminates some scheduling boundaries, so a fixed
     // yield count is fragile — poll for the observable condition instead.
-    for _ in 0..<200 {
-      if store.state.log == ["started"] { break }
-      await Task.yield()
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+      store.state.log == ["started"]
     }
 
     #expect(store.state.log == ["started"])
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
+      }
+    )
 
     await clock.advance(by: .milliseconds(50))
-    for _ in 0..<200 {
-      if store.state.log == ["started", "finished"] { break }
-      await Task.yield()
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+      store.state.log == ["started", "finished"]
     }
 
     #expect(store.state.log == ["started", "finished"])
@@ -6762,6 +6977,26 @@ private func waitUntil(
   }
 }
 
+private func waitUntilAsync(
+  timeout: Duration = .seconds(2),
+  pollInterval: Duration = .milliseconds(20),
+  settleIterations: Int = 16,
+  condition: @escaping @Sendable () async -> Bool
+) async -> Bool {
+  let clock = ContinuousClock()
+  let deadline = clock.now.advanced(by: timeout)
+
+  while clock.now < deadline {
+    if await condition() {
+      return true
+    }
+    await drainAsyncWork(iterations: settleIterations)
+    try? await Task.sleep(for: pollInterval)
+  }
+
+  return await condition()
+}
+
 @MainActor
 private func waitForProjectionObserverStats<R: Reducer>(
   _ store: Store<R>,
@@ -7295,7 +7530,10 @@ private func runConditionalReducerReleaseHarness(
     "StoreClock.swift",
     "StoreEffectBridge.swift",
     "StoreInstrumentation.swift",
-    "StoreSupport.swift",
+    "StoreLifetimeToken.swift",
+    "ProjectionObserverRegistry.swift",
+    "StoreActionQueue.swift",
+    "StoreCaches.swift",
   ]
   .map { packageRoot.appendingPathComponent("Sources/InnoFlow/\($0)").path }
 

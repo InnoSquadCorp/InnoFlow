@@ -68,7 +68,7 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 | **`@unchecked Sendable`** | Principle gates enforce zero uses in shipped source |
 | **Principle gates** | CI enforces contract docs, ADR presence, `PhaseMap` docs, accessibility docs, underscore-stripped action path naming, visionOS docs, and ownership boundaries |
 
-**Deduction (-0.8):** `StoreSupport.swift` still contains six independent support types, which is an organizational improvement opportunity rather than a functional problem.
+**Deduction (-0.8):** Store support helpers still need clear file boundaries and low-friction ownership. This is an organizational concern rather than a functional problem.
 
 ---
 
@@ -345,7 +345,7 @@ No score change.
 | Item | Trigger Condition |
 |------|-------------------|
 | `SelectedStore` 4+ dependency / opaque selector optimization | repeated real-world usage + profiling evidence |
-| `StoreSupport.swift` file split | contributor onboarding friction |
+| store support file split | contributor onboarding friction |
 
 **Evaluation note:** These are not current defects. They are intentionally deferred backlog items that should open only when actual usage justifies them.
 

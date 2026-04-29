@@ -62,6 +62,38 @@ EOF
 EOF
 }
 
+write_doc_parity_contract() {
+  local path="$1"
+  local sample_id="$2"
+
+  mkdir -p "$(dirname "$path")"
+  cat >"$path" <<EOF
+{
+  "requiredPatterns": [
+    {
+      "file": "docs/README.md",
+      "label": "direction heading",
+      "pattern": "^## InnoFlow 3.0 direction$"
+    }
+  ],
+  "sectionCounts": [
+    {
+      "file": "docs/README.md",
+      "label": "direction heading",
+      "pattern": "^## InnoFlow 3.0 direction$",
+      "count": 1
+    }
+  ],
+  "sampleIdentifiers": [
+    {
+      "file": "docs/README.md",
+      "values": ["$sample_id"]
+    }
+  ]
+}
+EOF
+}
+
 run_search_tests() {
   local force_no_rg="$1"
   local mode_name="$2"
@@ -87,6 +119,46 @@ run_search_tests() {
   rm -rf "$tmp_root"
 }
 
+run_doc_parity_contract_tests() {
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "[principle-gates-selftest] Skipping doc parity tests because jq is not installed"
+    return
+  fi
+
+  local tmp_root
+  local previous_root
+  tmp_root="$(mktemp -d)"
+  previous_root="$ROOT_DIR"
+  trap "ROOT_DIR='$previous_root'; rm -rf '$tmp_root'" RETURN
+  make_fixture_tree "$tmp_root"
+
+  ROOT_DIR="$tmp_root"
+  pushd "$tmp_root" >/dev/null
+
+  printf 'sample.basics\n' >>docs/README.md
+  write_doc_parity_contract "docs/contracts/doc-parity.json" "sample.basics"
+  assert_success verify_doc_parity_contract
+
+  cat >docs/contracts/doc-parity.json <<'EOF'
+{
+  "sectionCounts": [],
+  "sampleIdentifiers": []
+}
+EOF
+  assert_failure verify_doc_parity_contract
+
+  sed -i.bak '$d' docs/README.md
+  printf 'sampleXbasics\n' >>docs/README.md
+  rm -f docs/README.md.bak
+  write_doc_parity_contract "docs/contracts/doc-parity.json" "sample.basics"
+  assert_failure verify_doc_parity_contract
+
+  popd >/dev/null
+  ROOT_DIR="$previous_root"
+  trap - RETURN
+  rm -rf "$tmp_root"
+}
+
 if command -v rg >/dev/null 2>&1; then
   run_search_tests "0" "rg"
 else
@@ -94,5 +166,6 @@ else
 fi
 
 run_search_tests "1" "fallback"
+run_doc_parity_contract_tests
 
 echo "[principle-gates-selftest] All checks passed"

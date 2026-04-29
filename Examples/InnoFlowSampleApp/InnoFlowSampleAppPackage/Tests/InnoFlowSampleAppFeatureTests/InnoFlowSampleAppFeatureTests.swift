@@ -1,6 +1,7 @@
 import Foundation
 import InnoFlow
 import InnoFlowTesting
+import InnoNetworkWebSocket
 import Testing
 
 @testable import InnoFlowSampleAppFeature
@@ -877,6 +878,337 @@ struct InnoFlowSampleAppFeatureTests {
 
     await store.assertNoMoreActions()
   }
+
+  // MARK: - FormValidationDemo
+
+  @Test("Form validation blocks submit until cross-field rules pass")
+  @MainActor
+  func formValidationBlocksInvalidSubmit() async {
+    let store = TestStore(reducer: FormValidationFeature())
+
+    await store.send(.setFullName("Ada")) {
+      $0.fullName = "Ada"
+    }
+    await store.send(.setEmail("ada@innosquad.com")) {
+      $0.email = "ada@innosquad.com"
+    }
+    await store.send(.setConfirmEmail("different@innosquad.com")) {
+      $0.confirmEmail = "different@innosquad.com"
+    }
+    await store.send(.submit) {
+      $0.validationMessages = [
+        "Full name must include at least two words.",
+        "Confirmation email must match the primary email.",
+        "Accept the terms before submitting.",
+      ]
+      $0.diagnostics = ["blocked submit with 3 validation issue(s)"]
+      $0.hasAttemptedSubmit = true
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("Form validation submits cleanly and reset clears bindable fields")
+  @MainActor
+  func formValidationSubmitsAndResets() async {
+    let store = TestStore(reducer: FormValidationFeature())
+
+    await store.send(.setFullName("Ada Lovelace")) {
+      $0.fullName = "Ada Lovelace"
+    }
+    await store.send(.setEmail("ada@innosquad.com")) {
+      $0.email = "ada@innosquad.com"
+    }
+    await store.send(.setConfirmEmail("ada@innosquad.com")) {
+      $0.confirmEmail = "ada@innosquad.com"
+    }
+    await store.send(.setAcceptsTerms(true)) {
+      $0.acceptsTerms = true
+    }
+    await store.send(.submit) {
+      $0.validationMessages = []
+      $0.diagnostics = ["submitted form successfully"]
+      $0.submittedSummary = "Ada Lovelace <ada@innosquad.com>"
+      $0.hasAttemptedSubmit = true
+    }
+    await store.send(.reset) {
+      $0.fullName = ""
+      $0.email = ""
+      $0.confirmEmail = ""
+      $0.acceptsTerms = false
+      $0.validationMessages = []
+      $0.diagnostics = [
+        "submitted form successfully",
+        "reset form",
+      ]
+      $0.submittedSummary = nil
+      $0.hasAttemptedSubmit = false
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  // MARK: - BidirectionalWebSocketDemo
+
+  @Test("Bidirectional websocket demo connects, sends, and disconnects through the adapter")
+  @MainActor
+  func bidirectionalWebSocketConnectSendDisconnect() async {
+    let store = TestStore(
+      reducer: BidirectionalWebSocketFeature(
+        socketClient: ScriptedBidirectionalSocketClient(),
+        integrationNote: "Test transport"
+      )
+    )
+
+    await store.send(.connectTapped) {
+      $0.connectionState = .connecting
+      $0.statusNote = "Connecting via adapter"
+      $0.canReconnect = false
+    }
+    await store.receive(._transportEvent(.connected("sample-echo"))) {
+      $0.connectionState = .connected
+      $0.statusNote = "Connected via sample-echo"
+      $0.transcript = ["system: Connected via sample-echo"]
+      $0.canReconnect = false
+    }
+
+    await store.send(.setDraftMessage("hello")) {
+      $0.draftMessage = "hello"
+    }
+    await store.send(.sendTapped)
+    await store.receive(._sendSucceeded) {
+      $0.draftMessage = ""
+    }
+    await store.receive(._transportEvent(.sent("hello"))) {
+      $0.statusNote = "Sent message"
+      $0.transcript = [
+        "system: Connected via sample-echo",
+        "outbound: hello",
+      ]
+    }
+    await store.receive(._transportEvent(.received("echo: hello"))) {
+      $0.statusNote = "Received message"
+      $0.transcript = [
+        "system: Connected via sample-echo",
+        "outbound: hello",
+        "inbound: echo: hello",
+      ]
+    }
+
+    await store.send(.disconnectTapped) {
+      $0.connectionState = .disconnected
+      $0.statusNote = "Disconnected by sample action"
+      $0.canReconnect = true
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("Bidirectional websocket preserves the draft when send fails")
+  @MainActor
+  func bidirectionalWebSocketPreservesDraftOnSendFailure() async {
+    let store = TestStore(
+      reducer: BidirectionalWebSocketFeature(
+        socketClient: ThrowingSendBidirectionalSocketClient(),
+        integrationNote: "Test transport"
+      ),
+      initialState: .init(
+        draftMessage: "retry me",
+        connectionState: .connected,
+        statusNote: "Connected",
+        transcript: [],
+        lastError: nil,
+        canReconnect: false
+      )
+    )
+
+    await store.send(.sendTapped)
+    await store.receive(._transportEvent(.transportFailure("mock send failure"))) {
+      $0.connectionState = .disconnected
+      $0.statusNote = "Transport error"
+      $0.draftMessage = "retry me"
+      $0.lastError = "mock send failure"
+      $0.canReconnect = true
+      $0.transcript = ["system: transport error mock send failure"]
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("Bidirectional websocket demo reconnects through the adapter boundary")
+  @MainActor
+  func bidirectionalWebSocketReconnects() async {
+    let store = TestStore(
+      reducer: BidirectionalWebSocketFeature(
+        socketClient: ScriptedBidirectionalSocketClient(),
+        integrationNote: "Test transport"
+      ),
+      initialState: .init(
+        draftMessage: "",
+        connectionState: .disconnected,
+        statusNote: "Disconnected",
+        transcript: ["system: Transport adapter closed the sample connection."],
+        lastError: nil,
+        canReconnect: true
+      )
+    )
+
+    await store.send(.reconnectTapped) {
+      $0.connectionState = .reconnecting
+      $0.statusNote = "Requesting adapter reconnect"
+      $0.canReconnect = false
+    }
+    await store.receive(._transportEvent(.connected("sample-echo"))) {
+      $0.connectionState = .connected
+      $0.statusNote = "Connected via sample-echo"
+      $0.transcript = [
+        "system: Transport adapter closed the sample connection.",
+        "system: Connected via sample-echo",
+      ]
+      $0.canReconnect = false
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("Bidirectional websocket failure resets connection state and surfaces reconnect")
+  @MainActor
+  func bidirectionalWebSocketFailureResetsConnectionState() async {
+    let store = TestStore(
+      reducer: BidirectionalWebSocketFeature(
+        socketClient: FailingBidirectionalSocketClient(),
+        integrationNote: "Test transport"
+      )
+    )
+
+    await store.send(.connectTapped) {
+      $0.connectionState = .connecting
+      $0.statusNote = "Connecting via adapter"
+      $0.canReconnect = false
+    }
+    await store.receive(._transportEvent(.transportFailure("mock transport failure"))) {
+      $0.connectionState = .disconnected
+      $0.statusNote = "Transport error"
+      $0.lastError = "mock transport failure"
+      $0.canReconnect = true
+      $0.transcript = ["system: transport error mock transport failure"]
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("Bidirectional websocket reconnecting event keeps manual reconnect disabled")
+  @MainActor
+  func bidirectionalWebSocketAutoRetrySurfacesReconnectingState() async {
+    let store = TestStore(
+      reducer: BidirectionalWebSocketFeature(
+        socketClient: ReconnectingBidirectionalSocketClient(),
+        integrationNote: "Test transport"
+      )
+    )
+
+    await store.send(.connectTapped) {
+      $0.connectionState = .connecting
+      $0.statusNote = "Connecting via adapter"
+      $0.canReconnect = false
+    }
+    await store.receive(._transportEvent(.connected("sample-echo"))) {
+      $0.connectionState = .connected
+      $0.statusNote = "Connected via sample-echo"
+      $0.transcript = ["system: Connected via sample-echo"]
+      $0.canReconnect = false
+    }
+    await store.receive(._transportEvent(.reconnecting("mock retryable transport failure"))) {
+      $0.connectionState = .reconnecting
+      $0.statusNote = "Reconnecting"
+      $0.transcript = [
+        "system: Connected via sample-echo",
+        "system: reconnecting via transport adapter mock retryable transport failure",
+      ]
+      $0.canReconnect = false
+    }
+    await store.receive(._transportEvent(.connected("sample-echo"))) {
+      $0.connectionState = .connected
+      $0.statusNote = "Connected via sample-echo"
+      $0.transcript = [
+        "system: Connected via sample-echo",
+        "system: reconnecting via transport adapter mock retryable transport failure",
+        "system: Connected via sample-echo",
+      ]
+      $0.canReconnect = false
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("Bidirectional websocket live mapper surfaces reconnecting for retryable transport errors")
+  func bidirectionalWebSocketLiveMapperMapsRetryableTransportError() {
+    let error = WebSocketError.pingTimeout
+
+    let mapped = BidirectionalSocketLiveEventMapper.map(
+      .error(error),
+      taskState: .reconnecting,
+      willRetry: true
+    )
+
+    #expect(mapped == .reconnecting(String(describing: error)))
+  }
+
+  @Test("Bidirectional websocket live mapper surfaces reconnecting for retryable peer closes")
+  func bidirectionalWebSocketLiveMapperMapsRetryablePeerClose() {
+    let mapped = BidirectionalSocketLiveEventMapper.map(
+      .disconnected(nil),
+      taskState: .disconnected,
+      willRetry: true
+    )
+
+    #expect(mapped == .reconnecting("Socket disconnected."))
+  }
+
+  @Test("Bidirectional websocket live mapper keeps terminal peer closes disconnected")
+  func bidirectionalWebSocketLiveMapperMapsTerminalPeerClose() {
+    let mapped = BidirectionalSocketLiveEventMapper.map(
+      .disconnected(nil),
+      taskState: .disconnected,
+      willRetry: false
+    )
+
+    #expect(mapped == .disconnected("Socket disconnected."))
+  }
+
+  @Test("Bidirectional websocket live mapper requires retry metadata for reconnecting")
+  func bidirectionalWebSocketLiveMapperRequiresRetryMetadata() {
+    let mapped = BidirectionalSocketLiveEventMapper.map(
+      .disconnected(nil),
+      taskState: .disconnected,
+      willRetry: false
+    )
+
+    #expect(mapped == .disconnected("Socket disconnected."))
+  }
+
+  @Test("Bidirectional websocket live mapper keeps exhausted retry budgets disconnected")
+  func bidirectionalWebSocketLiveMapperKeepsExhaustedRetryBudgetDisconnected() {
+    let mapped = BidirectionalSocketLiveEventMapper.map(
+      .disconnected(nil),
+      taskState: .disconnected,
+      willRetry: false
+    )
+
+    #expect(mapped == .disconnected("Socket disconnected."))
+  }
+
+  @Test(
+    "Bidirectional websocket live mapper keeps auto-reconnect disabled peer closes disconnected")
+  func bidirectionalWebSocketLiveMapperKeepsAutoReconnectDisabledPeerCloseDisconnected() {
+    let mapped = BidirectionalSocketLiveEventMapper.map(
+      .disconnected(nil),
+      taskState: .disconnected,
+      willRetry: false
+    )
+
+    #expect(mapped == .disconnected("Socket disconnected."))
+  }
 }
 
 // MARK: - Test doubles
@@ -988,5 +1320,70 @@ private struct MockTodoService: SampleTodoServiceProtocol {
       throw SampleTodoServiceError(errorDescription: "Sample network request failed")
     }
     return Self.fixtures
+  }
+}
+
+private actor FailingBidirectionalSocketClient: BidirectionalSocketClient {
+  func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    AsyncStream { continuation in
+      continuation.yield(.transportFailure("mock transport failure"))
+      continuation.finish()
+    }
+  }
+
+  func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    await connect()
+  }
+
+  func disconnect() async {}
+
+  func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
+    [.sent(text)]
+  }
+}
+
+private actor ReconnectingBidirectionalSocketClient: BidirectionalSocketClient {
+  func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    AsyncStream { continuation in
+      continuation.yield(.connected("sample-echo"))
+      continuation.yield(.reconnecting("mock retryable transport failure"))
+      continuation.yield(.connected("sample-echo"))
+      continuation.finish()
+    }
+  }
+
+  func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    await connect()
+  }
+
+  func disconnect() async {}
+
+  func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
+    [.sent(text)]
+  }
+}
+
+private actor ThrowingSendBidirectionalSocketClient: BidirectionalSocketClient {
+  func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    AsyncStream { continuation in
+      continuation.yield(.connected("sample-echo"))
+      continuation.finish()
+    }
+  }
+
+  func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    await connect()
+  }
+
+  func disconnect() async {}
+
+  func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
+    throw MockSendFailure()
+  }
+}
+
+private struct MockSendFailure: LocalizedError {
+  var errorDescription: String? {
+    "mock send failure"
   }
 }

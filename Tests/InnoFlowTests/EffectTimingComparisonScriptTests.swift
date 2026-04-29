@@ -47,7 +47,7 @@ struct EffectTimingComparisonScriptTests {
       currentEntries: []
     )
 
-    #expect(result.terminationStatus == 1)
+    #expect(result.terminationStatus == 2)
     #expect(
       result.stderr.contains(
         "current capture has no matched runs — incomplete capture or missing runFinished events")
@@ -61,7 +61,7 @@ struct EffectTimingComparisonScriptTests {
       currentEntries: startOnlyRunEntry(sequence: 1, timestampNanos: 1_000_000)
     )
 
-    #expect(result.terminationStatus == 1)
+    #expect(result.terminationStatus == 2)
     #expect(
       result.stderr.contains(
         "current capture has no matched runs — incomplete capture or missing runFinished events")
@@ -76,8 +76,19 @@ struct EffectTimingComparisonScriptTests {
       tolerance: "1.5"
     )
 
-    #expect(result.terminationStatus == 1)
+    #expect(result.terminationStatus == 2)
     #expect(result.stderr.contains("--tolerance must be within 0..1"))
+  }
+
+  @Test("Comparison script fails loudly for malformed JSONL")
+  func comparisonScriptFailsForMalformedJSONL() throws {
+    let result = try runComparisonScript(
+      baselinePayload: jsonlPayload(entries: matchedRunEntries(durations: [100, 110, 120])),
+      currentPayload: "{\"phase\":\"runStarted\""
+    )
+
+    #expect(result.terminationStatus == 2)
+    #expect(result.stderr.contains("failed to parse recorder JSONL"))
   }
 
   @Test("Comparison script p95 uses the ceiling index for 10-sample fixtures")
@@ -112,11 +123,59 @@ struct EffectTimingComparisonScriptTests {
     #expect(result.stdout.contains("PASS"))
   }
 
+  @Test("Comparison script help documents baseline regeneration")
+  func comparisonScriptHelpDocumentsBaselineRegeneration() throws {
+    let process = Process()
+    process.executableURL = try repositoryFileURL(
+      relativePath: "scripts/compare-effect-timings.sh"
+    )
+    process.arguments = ["--help"]
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    try process.run()
+    process.waitUntilExit()
+
+    let stdoutText =
+      String(
+        data: stdout.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+      ) ?? ""
+
+    #expect(process.terminationStatus == 0)
+    #expect(
+      stdoutText.contains(
+        "INNOFLOW_WRITE_EFFECT_BASELINE=Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl")
+    )
+    #expect(stdoutText.contains("EffectTimingBaselineGate"))
+    #expect(stdoutText.contains("1  metric regression detected"))
+    #expect(
+      stdoutText.contains(
+        "2  usage error, malformed data, incomplete capture, or missing dependency"))
+  }
+
   // MARK: - Helpers
 
   private func runComparisonScript(
     baselineEntries: [[String: Any]],
     currentEntries: [[String: Any]],
+    metric: String = "p95",
+    tolerance: String = "0.10"
+  ) throws -> ScriptResult {
+    try runComparisonScript(
+      baselinePayload: jsonlPayload(entries: baselineEntries),
+      currentPayload: jsonlPayload(entries: currentEntries),
+      metric: metric,
+      tolerance: tolerance
+    )
+  }
+
+  private func runComparisonScript(
+    baselinePayload: String,
+    currentPayload: String,
     metric: String = "p95",
     tolerance: String = "0.10"
   ) throws -> ScriptResult {
@@ -130,8 +189,8 @@ struct EffectTimingComparisonScriptTests {
 
     let baselineURL = temporaryDirectory.appendingPathComponent("baseline.jsonl")
     let currentURL = temporaryDirectory.appendingPathComponent("current.jsonl")
-    try writeJSONL(entries: baselineEntries, to: baselineURL)
-    try writeJSONL(entries: currentEntries, to: currentURL)
+    try baselinePayload.write(to: baselineURL, atomically: true, encoding: .utf8)
+    try currentPayload.write(to: currentURL, atomically: true, encoding: .utf8)
 
     let process = Process()
     process.executableURL = try repositoryFileURL(
@@ -165,13 +224,14 @@ struct EffectTimingComparisonScriptTests {
     )
   }
 
-  private func writeJSONL(entries: [[String: Any]], to url: URL) throws {
+  private func jsonlPayload(entries: [[String: Any]]) -> String {
     var payload = Data()
     for entry in entries {
-      payload.append(try JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]))
+      payload.append(
+        (try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys])) ?? Data())
       payload.append(0x0A)
     }
-    try payload.write(to: url, options: .atomic)
+    return String(data: payload, encoding: .utf8) ?? ""
   }
 
   private func matchedRunEntries(durations: [UInt64]) -> [[String: Any]] {

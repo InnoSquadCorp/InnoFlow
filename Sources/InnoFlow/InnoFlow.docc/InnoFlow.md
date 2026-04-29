@@ -43,6 +43,10 @@ debounce/throttle operators and explicit delays inside the effect body.
 
 Dependency graphs still belong outside `InnoFlow`. When a reducer needs services, construct an
 explicit `Dependencies` bundle in the app or coordinator layer and pass it into the feature.
+The repo-level boundary guide for navigation, transport, and DI ownership lives in
+[docs/CROSS_FRAMEWORK.md](https://github.com/InnoSquadCorp/InnoFlow/blob/main/docs/CROSS_FRAMEWORK.md),
+and the reducer-side dependency patterns live in
+[docs/DEPENDENCY_PATTERNS.md](https://github.com/InnoSquadCorp/InnoFlow/blob/main/docs/DEPENDENCY_PATTERNS.md).
 
 When a feature has meaningful domain phases, prefer ``PhaseMap`` as the canonical phase-transition
 layer. `PhaseMap` runs after the base reducer, owns the declared phase key path, and exposes
@@ -54,6 +58,7 @@ turning InnoFlow into a general FSM runtime.
 ### Essentials
 
 - <doc:GettingStarted>
+- <doc:EffectTimingBaseline>
 - <doc:PhaseDrivenModeling>
 - <doc:PhaseDrivenWalkthrough>
 - <doc:VisionOSIntegration>

@@ -2,10 +2,16 @@ import SwiftUI
 
 public struct InnoFlowSampleAppRootView: View {
   private let launchDemo = ProcessInfo.processInfo.environment["INNOFLOW_SAMPLE_DEMO"].flatMap(
-    SampleDemo.init(launchToken:))
+    SampleDemo.init(launchToken:)
+  )
+  private let bidirectionalWebSocketDependencies: BidirectionalWebSocketDemoDependencies
   @State private var presentedModalDemo: SampleDemo?
 
-  public init() {}
+  public init(
+    bidirectionalWebSocketDependencies: BidirectionalWebSocketDemoDependencies = .scripted
+  ) {
+    self.bidirectionalWebSocketDependencies = bidirectionalWebSocketDependencies
+  }
 
   public var body: some View {
     Group {
@@ -36,29 +42,34 @@ public struct InnoFlowSampleAppRootView: View {
       OfflineFirstDemoView()
     case .realtimeStream:
       RealtimeStreamDemoView()
+    case .formValidation:
+      FormValidationDemoView()
+    case .bidirectionalWebSocket:
+      BidirectionalWebSocketDemoView(dependencies: bidirectionalWebSocketDependencies)
     }
   }
 
   private var sampleHubView: some View {
     NavigationStack {
-      List(SampleDemo.allCases) { demo in
-        if demo.prefersModalPresentation {
+      List(SampleDemo.catalog) { metadata in
+        let demo = metadata.demo
+        if metadata.prefersModalPresentation {
           Button {
             presentedModalDemo = demo
           } label: {
-            sampleRow(for: demo)
+            sampleRow(for: metadata)
           }
           .buttonStyle(.plain)
-          .accessibilityIdentifier(demo.accessibilityIdentifier)
-          .accessibilityLabel(demo.accessibilityLabel)
-          .accessibilityHint(demo.accessibilityHint)
+          .accessibilityIdentifier(metadata.accessibilityIdentifier)
+          .accessibilityLabel(metadata.accessibilityLabel)
+          .accessibilityHint(metadata.accessibilityHint)
         } else {
           NavigationLink(value: demo) {
-            sampleRow(for: demo)
+            sampleRow(for: metadata)
           }
-          .accessibilityIdentifier(demo.accessibilityIdentifier)
-          .accessibilityLabel(demo.accessibilityLabel)
-          .accessibilityHint(demo.accessibilityHint)
+          .accessibilityIdentifier(metadata.accessibilityIdentifier)
+          .accessibilityLabel(metadata.accessibilityLabel)
+          .accessibilityHint(metadata.accessibilityHint)
         }
       }
       .navigationTitle("InnoFlow Samples")
@@ -66,7 +77,7 @@ public struct InnoFlowSampleAppRootView: View {
         DemoCard(
           title: "Canonical Reference App",
           summary:
-            "Explore queue-based dispatch, orchestration, phase-driven state, and app-boundary navigation in one place."
+            "Explore queue-based dispatch, orchestration, phase-driven state, app-boundary navigation, form-heavy bindings, and explicit cross-framework transport composition in one place."
         )
         .padding(.horizontal)
         .padding(.top, 8)
@@ -80,12 +91,12 @@ public struct InnoFlowSampleAppRootView: View {
     }
   }
 
-  private func sampleRow(for demo: SampleDemo) -> some View {
+  private func sampleRow(for metadata: SampleDemoMetadata) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(demo.title)
+      Text(metadata.title)
         .font(.headline)
-        .accessibilityIdentifier(demo.titleAccessibilityIdentifier)
-      Text(demo.subtitle)
+        .accessibilityIdentifier(metadata.titleAccessibilityIdentifier)
+      Text(metadata.subtitle)
         .font(.subheadline)
         .foregroundStyle(.secondary)
     }
@@ -120,138 +131,6 @@ extension View {
     #else
       fullScreenCover(item: item, content: content)
     #endif
-  }
-}
-
-enum SampleDemo: String, CaseIterable, Identifiable, Hashable {
-  case basics
-  case orchestration
-  case phaseDrivenFSM
-  case routerComposition
-  case authenticationFlow
-  case listDetailPagination
-  case offlineFirst
-  case realtimeStream
-
-  var id: String { rawValue }
-
-  var title: String {
-    switch self {
-    case .basics:
-      "Basics"
-    case .orchestration:
-      "Orchestration"
-    case .phaseDrivenFSM:
-      "Phase-Driven FSM"
-    case .routerComposition:
-      "App-Boundary Navigation"
-    case .authenticationFlow:
-      "Authentication Flow"
-    case .listDetailPagination:
-      "List + Detail + Pagination"
-    case .offlineFirst:
-      "Offline-First"
-    case .realtimeStream:
-      "Realtime Stream"
-    }
-  }
-
-  var subtitle: String {
-    switch self {
-    case .basics:
-      "Reducer basics, bindable state, and queue-based follow-up actions."
-    case .orchestration:
-      "Parent-child orchestration, cancellation fan-out, and long-running pipelines."
-    case .phaseDrivenFSM:
-      "Business lifecycle modeling with a documented phase graph."
-    case .routerComposition:
-      "Pure SwiftUI route state driven at the app/coordinator boundary."
-    case .authenticationFlow:
-      "Multi-step credential + MFA flow modeled with PhaseMap and cancellable retry."
-    case .listDetailPagination:
-      "Paginated list with per-row ForEachReducer and scoped detail projection."
-    case .offlineFirst:
-      "Optimistic local update with debounced save and server-side rollback."
-    case .realtimeStream:
-      "Looping .run subscription driven by an injectable clock dependency."
-    }
-  }
-
-  var accessibilityLabel: String {
-    "\(title). \(subtitle)"
-  }
-
-  var accessibilityHint: String {
-    switch self {
-    case .basics:
-      "Opens the basics demo for queue-based actions and bindable reducer state"
-    case .orchestration:
-      "Opens the orchestration demo for parent-child coordination and cancellation"
-    case .phaseDrivenFSM:
-      "Opens the phase-driven finite-state-machine demo with documented legal transitions"
-    case .routerComposition:
-      "Opens the app-boundary navigation demo in a modal presentation"
-    case .authenticationFlow:
-      "Opens the multi-step authentication sample with PhaseMap and cancellable retry"
-    case .listDetailPagination:
-      "Opens the paginated list sample with per-row child reducer and scoped detail"
-    case .offlineFirst:
-      "Opens the offline-first sample with optimistic update, debounce, and rollback"
-    case .realtimeStream:
-      "Opens the realtime stream sample driven by an injectable clock"
-    }
-  }
-
-  var accessibilityIdentifier: String {
-    switch self {
-    case .basics:
-      "sample.basics"
-    case .orchestration:
-      "sample.orchestration"
-    case .phaseDrivenFSM:
-      "sample.phase-driven-fsm"
-    case .routerComposition:
-      "sample.router-composition"
-    case .authenticationFlow:
-      "sample.authentication-flow"
-    case .listDetailPagination:
-      "sample.list-detail-pagination"
-    case .offlineFirst:
-      "sample.offline-first"
-    case .realtimeStream:
-      "sample.realtime-stream"
-    }
-  }
-
-  var titleAccessibilityIdentifier: String {
-    "\(accessibilityIdentifier).title"
-  }
-
-  var prefersModalPresentation: Bool {
-    self == .routerComposition
-  }
-
-  init?(launchToken: String) {
-    switch launchToken {
-    case "basics", "sample.basics":
-      self = .basics
-    case "orchestration", "sample.orchestration":
-      self = .orchestration
-    case "phase-driven-fsm", "phaseDrivenFSM", "sample.phase-driven-fsm":
-      self = .phaseDrivenFSM
-    case "router-composition", "routerComposition", "sample.router-composition":
-      self = .routerComposition
-    case "authentication-flow", "authenticationFlow", "sample.authentication-flow":
-      self = .authenticationFlow
-    case "list-detail-pagination", "listDetailPagination", "sample.list-detail-pagination":
-      self = .listDetailPagination
-    case "offline-first", "offlineFirst", "sample.offline-first":
-      self = .offlineFirst
-    case "realtime-stream", "realtimeStream", "sample.realtime-stream":
-      self = .realtimeStream
-    default:
-      return nil
-    }
   }
 }
 

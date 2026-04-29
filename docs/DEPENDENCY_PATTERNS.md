@@ -9,9 +9,10 @@ in InnoFlow features. It complements but does **not** replace the rule in
 > Construction-time `Dependencies` bundles enter reducers explicitly. InnoFlow
 > does not own the dependency graph.
 
-Follow one of the three patterns below. All four canonical samples in
-`Examples/InnoFlowSampleApp` apply them directly — the samples are the
-executable companion to this document.
+Follow one of the three patterns below. The canonical sample app applies them
+directly across multiple demos, while
+[`CROSS_FRAMEWORK.md`](./CROSS_FRAMEWORK.md) covers the adjacent navigation and
+transport boundaries.
 
 ---
 

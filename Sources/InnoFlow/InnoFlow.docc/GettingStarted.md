@@ -53,7 +53,7 @@ struct CounterView: View {
 }
 ```
 
-`binding(_:to:)` is an alias for `binding(_:send:)`. Keep the label explicit — once both overloads are in scope, unlabeled trailing-closure calls like `store.binding(\.$step) { .setStep($0) }` are ambiguous.
+`binding(_:to:)` is an alias for `binding(_:send:)`. Keep the label explicit — unlabeled calls are an intentional 3.x migration break. Swift reports `store.binding(\.$step) { .setStep($0) }` as an explicit-label ambiguity, and the parenthesized unlabeled form as a no-exact-matches call that points back to `send:` or `to:`.
 
 For multi-part features, compose reducers with ``Reduce``, ``CombineReducers``, ``Scope``, ``IfLet``, ``IfCaseLet``, and ``ForEachReducer`` instead of adding more authoring modes.
 Use `@BindableField` for reducer-facing value fields, and pass the projected key path (`\.$field`) into ``Store/binding(_:to:)`` or ``Store/binding(_:send:)``.
