@@ -6,8 +6,12 @@ import Foundation
 
 /// A low-level storage type for state fields that intentionally support SwiftUI binding.
 ///
-/// Public feature authoring should prefer `@BindableField` and pass `\.$field` into
-/// `Store.binding(_:send:)`.
+/// Public feature authoring must prefer `@BindableField` and pass `\.$field` into
+/// `Store.binding(_:send:)`. Direct authoring such as `var step: BindableProperty<Int>`
+/// in feature State is reported by the `@InnoFlow` macro as a warning with a Fix-It
+/// that rewrites the declaration to `@BindableField var step: Int`. The type is
+/// `public` only because it appears in the KeyPath signatures of public binding APIs;
+/// it is not part of the user-authoring surface.
 @dynamicMemberLookup
 public struct BindableProperty<Value>: Equatable, Sendable where Value: Equatable & Sendable {
   public var value: Value

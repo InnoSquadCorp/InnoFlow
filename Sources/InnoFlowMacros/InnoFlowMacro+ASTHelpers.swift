@@ -14,6 +14,7 @@ extension InnoFlowMacro {
     context: some MacroExpansionContext
   ) {
     diagnoseMissingBindableFieldSetters(in: declaration, context: context)
+    diagnoseDirectBindablePropertyUses(in: declaration, context: context)
   }
 
   static func hasNestedType(named typeName: String, in declaration: StructDeclSyntax) -> Bool {
