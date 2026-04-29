@@ -4000,6 +4000,99 @@ struct StoreTests {
     #expect(probe.count == 1)
   }
 
+  @Test("ScopedStore.select(dependingOnAll:) tracks an arbitrary number of child slices")
+  func scopedSelectedStoreDependingOnAllVariadic() async {
+    struct VariadicParentFeature: Reducer {
+      struct Child: Equatable, Sendable {
+        var a = 1
+        var b = 2
+        var c = 3
+        var d = 4
+        var e = 5
+        var f = 6
+        var g = 7
+        var h = 8
+      }
+
+      struct State: Equatable, Sendable, DefaultInitializable {
+        var child = Child()
+        var unrelated = 0
+      }
+
+      enum Action: Equatable, Sendable {
+        case child(ChildAction)
+        case bumpUnrelated
+
+        static let childCasePath = CasePath<Self, ChildAction>(
+          embed: { .child($0) },
+          extract: {
+            guard case .child(let action) = $0 else { return nil }
+            return action
+          }
+        )
+      }
+
+      enum ChildAction: Equatable, Sendable {
+        case bumpG
+      }
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        switch action {
+        case .child(.bumpG):
+          state.child.g &+= 1
+          return .none
+        case .bumpUnrelated:
+          state.unrelated &+= 1
+          return .none
+        }
+      }
+    }
+
+    let store = Store(reducer: VariadicParentFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child,
+      action: VariadicParentFeature.Action.childCasePath
+    )
+    let selected = scoped.select(
+      dependingOnAll:
+        \VariadicParentFeature.Child.a,
+      \VariadicParentFeature.Child.b,
+      \VariadicParentFeature.Child.c,
+      \VariadicParentFeature.Child.d,
+      \VariadicParentFeature.Child.e,
+      \VariadicParentFeature.Child.f,
+      \VariadicParentFeature.Child.g,
+      \VariadicParentFeature.Child.h
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int) -> Int in
+      a + b + c + d + e + f + g + h
+    }
+    let probe = ObservationProbe()
+
+    withObservationTracking(
+      {
+        _ = selected.value
+      },
+      onChange: {
+        probe.recordChange()
+      })
+
+    let baselineSum = 36
+    #expect(selected.value == baselineSum)
+
+    let initialStats = store.projectionObserverStats
+    store.send(.bumpUnrelated)
+    await waitForProjectionRefreshPass(store, after: initialStats)
+    #expect(probe.count == 0)
+    #expect(selected.value == baselineSum)
+
+    scoped.send(.bumpG)
+    await waitUntil {
+      probe.count == 1 && selected.value == baselineSum + 1
+    }
+    #expect(probe.count == 1)
+    #expect(selected.value == baselineSum + 1)
+  }
+
   @Test("Collection-scoped stores preserve identity across repeated calls")
   func collectionScopeCachingPreservesIdentity() {
     let store = Store(reducer: ScopedCollectionFeature(), initialState: .init())
