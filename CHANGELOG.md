@@ -7,6 +7,22 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-04-29
+
+This release rebaselines the current InnoFlow implementation, documentation, and release-readiness
+gates as the 4.0.0 public contract. It does not require source migration from the current public
+APIs.
+
+### Release Readiness
+
+- Updated README, localized README, architecture contract, migration notes, release notes, releasing
+  checklist, and doc-parity metadata to describe the 4.0.0 contract surface.
+- Clarified that fixed-arity `SelectedStore` selection covers one through six explicit state slices,
+  `select(dependingOnAll:)` covers larger explicit sets, and closure selection remains the
+  always-refresh fallback.
+- Strengthened release-sync and principle gates so localized install snippets, release target docs,
+  localized selection guidance, and throwing `.run` Markdown snippets cannot drift silently.
+
 ### Fixed
 
 - The phase totality diagnostic no longer subclasses `SyntaxVisitor`. The diagnostic now walks

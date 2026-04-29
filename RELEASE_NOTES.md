@@ -1,5 +1,35 @@
 # InnoFlow Release Notes
 
+## 4.0.0 Release
+
+This release promotes the current InnoFlow implementation and documentation contract to 4.0.0
+without changing the runtime public API surface.
+
+### Changed
+
+1. Rebaselined README, localized READMEs, architecture contract, migration notes, release notes,
+   release checklist, and doc parity metadata around the current public contract.
+2. Clarified `SelectedStore` guidance: fixed-arity `dependingOn:` selection covers one through six
+   explicit state slices, `select(dependingOnAll:)` covers larger explicit sets, and closure
+   selection remains the always-refresh fallback.
+3. Fixed Markdown `.run` examples so throwing work is wrapped inside `do/catch` in non-throwing
+   effect closures.
+4. Strengthened local release-readiness gates for localized install snippets, release target docs,
+   localized `SelectedStore` guidance, and bare throwing `.run` snippets.
+
+## Migration Note
+
+### What changed
+
+- The 4.0.0 surface is a contract and documentation rebaseline for the implementation already in
+  the repository.
+- Runtime semantics, reducer authoring, import paths, and current public APIs are unchanged.
+
+### What you may need to update
+
+- No source migration is required from the current public APIs.
+- Consumers that pin exact tags can move to `4.0.0` once that tag is published later.
+
 ## 3.0.3 Release
 
 This patch release keeps InnoFlow compatible with tvOS toolchains while preserving the

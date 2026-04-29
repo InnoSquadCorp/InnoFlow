@@ -84,8 +84,8 @@
   "sectionCounts": [
     {
       "file": "README.md",
-      "label": "InnoFlow 3.0.0 direction",
-      "pattern": "^## InnoFlow 3\\.0\\.0 direction$",
+      "label": "InnoFlow 4.0.0 direction",
+      "pattern": "^## InnoFlow 4\\.0\\.0 direction$",
       "count": 1
     },
     {

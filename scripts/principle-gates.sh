@@ -304,6 +304,22 @@ main() {
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources"
   )
 
+  MARKDOWN_DOC_PATHS=(
+    "README.md"
+    "README.kr.md"
+    "README.jp.md"
+    "README.cn.md"
+    "ARCHITECTURE_CONTRACT.md"
+    "CHANGELOG.md"
+    "RELEASE_NOTES.md"
+    "MIGRATION.md"
+    "RELEASING.md"
+    "docs"
+    "Sources/InnoFlow/InnoFlow.docc"
+    "Examples/README.md"
+    "Examples/InnoFlowSampleApp/README.md"
+  )
+
   echo "[principle-gates] Checking legacy @InnoFlow explicit reducer authoring"
   if search_multiline '@InnoFlow[\s\S]{0,200}struct[\s\S]{0,700}func reduce\(into[^)]*action:' "${DOC_AND_SAMPLE_PATHS[@]}"; then
     echo "[principle-gates] Failed: legacy explicit reducer authoring found in docs or sample sources"
@@ -341,6 +357,16 @@ main() {
   fi
   if search_lines "extractAction|embedAction" "${DOC_AND_SAMPLE_PATHS[@]}"; then
     echo "[principle-gates] Failed: docs or canonical sample still mention closure-based scoping hooks"
+    exit 1
+  fi
+
+  echo "[principle-gates] Checking Markdown .run throwing snippets"
+  if search_multiline '\.run[[:space:]]*\{[^\n}]*\bin(?![ \t]+do[ \t]*\{)[^\n}]*try[ \t]+await' "${MARKDOWN_DOC_PATHS[@]}"; then
+    echo "[principle-gates] Failed: Markdown docs must wrap throwing .run work in do/catch"
+    exit 1
+  fi
+  if search_multiline '\.run[[:space:]]*\{[^\n}]*\bin[ \t]*\n(?![ \t]*do[ \t]*\{)(?:(?!\n[ \t]*do[ \t]*\{)[^}])*try[ \t]+await' "${MARKDOWN_DOC_PATHS[@]}"; then
+    echo "[principle-gates] Failed: Markdown docs must wrap throwing .run work in do/catch"
     exit 1
   fi
 

@@ -19,9 +19,9 @@ This document captures the stable framework guarantees that should not drift wit
 ## Selection and derived state
 
 - `SelectedStore` is the official derived-read model.
-- Prefer `select(dependingOn:)` when the dependency slice is explicit.
-- Closure-based selection remains an always-refresh fallback when dependency reads cannot be declared soundly.
-- Multi-field `dependingOn:` overloads exist for the common 2-field and 3-field cases. Larger projections remain a trigger-based backlog item, not a current framework defect.
+- Prefer fixed-arity `select(dependingOn:..., transform:)` overloads when the derived value depends on one through six explicit state slices.
+- Use `select(dependingOnAll:)` when a projection legitimately depends on more than six explicit state slices and still needs selective invalidation.
+- Closure-based `select { ... }` remains an always-refresh fallback when dependency reads cannot be declared soundly.
 
 ## Projection lifecycle contract
 

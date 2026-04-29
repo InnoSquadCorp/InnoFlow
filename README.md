@@ -6,7 +6,7 @@ English | [한국어](./README.kr.md) | [日本語](./README.jp.md) | [简体中
 
 InnoFlow is a SwiftUI-first unidirectional architecture framework for business and domain state transitions.
 
-## InnoFlow 3.0.0 direction
+## InnoFlow 4.0.0 direction
 
 The framework now treats the following as source-of-truth principles:
 
@@ -27,7 +27,7 @@ Boundary references:
 
 - [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
 - [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
-- [`docs/MIGRATION_3_1.md`](docs/MIGRATION_3_1.md) for adopting the 3.1 projection, phase, and instrumentation additions
+- [`MIGRATION.md`](MIGRATION.md) for 4.0.0 source-compatibility and release-readiness notes
 - [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md) for `.sink`, `.osLog`, `.signpost`, and `.combined` examples
 - [`docs/PERFORMANCE_BASELINES.md`](docs/PERFORMANCE_BASELINES.md) for maintainer baseline policy
 - [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for TCA, ReactorKit, ReSwift, and SwiftRex positioning
@@ -41,7 +41,7 @@ For stable framework guarantees that should not drift with scorecards or line co
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "3.0.3")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "4.0.0")
 ]
 ```
 
@@ -133,7 +133,7 @@ struct CounterView: View {
 
 ## Composition Surface
 
-InnoFlow 3.0.0 uses a small composition surface instead of multiple authoring styles.
+InnoFlow 4.0.0 uses a small composition surface instead of multiple authoring styles.
 
 ### `Reduce`
 
@@ -273,7 +273,7 @@ let summary = store.select { state in
 Text(summary.title)
 ```
 
-When the derived value depends on one to six explicit slices of state, prefer the
+When the derived value depends on one through six explicit slices of state, prefer the
 dependency-annotated overload so InnoFlow can keep the selection on a selective-refresh bucket:
 
 ```swift
@@ -672,7 +672,7 @@ let status = store.select(\.phase)
 #expect(status.value == .idle)
 ```
 
-If the read model is derived from one to six explicit `Equatable` slices, prefer the
+If the read model is derived from one through six explicit `Equatable` slices, prefer the
 dependency-annotated form; use `select(dependingOnAll:)` for larger explicit sets:
 
 ```swift

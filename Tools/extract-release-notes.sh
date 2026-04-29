@@ -36,7 +36,7 @@ elif [[ $awk_status -ne 0 ]]; then
   exit "$awk_status"
 fi
 
-if [[ -z "${notes//[$' \t\r\n']/}" ]]; then
+if [[ ! "$notes" =~ [^[:space:]] ]]; then
   echo "no release notes found for tag $tag in $changelog" >&2
   exit 1
 fi

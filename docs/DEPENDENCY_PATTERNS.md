@@ -71,9 +71,15 @@ struct PhaseDrivenTodoFeature {
       case .loadTodos:
         let todoService = dependencies.todoService
         return .run { send, context in
-          try await context.checkCancellation()
-          let todos = try await todoService.loadTodos(shouldFail: false)
-          await send(._loaded(todos))
+          do {
+            try await context.checkCancellation()
+            let todos = try await todoService.loadTodos(shouldFail: false)
+            await send(._loaded(todos))
+          } catch is CancellationError {
+            return
+          } catch {
+            return
+          }
         }
       // ...
       }
@@ -167,10 +173,14 @@ case .subscribe:
   return .run { send, context in
     var counter = 0
     while true {
-      try await context.sleep(for: dependencies.tickInterval)
-      try await context.checkCancellation()
-      counter += 1
-      await send(._tick(counter))
+      do {
+        try await context.sleep(for: dependencies.tickInterval)
+        try await context.checkCancellation()
+        counter += 1
+        await send(._tick(counter))
+      } catch is CancellationError {
+        return
+      }
     }
   }
   .cancellable("realtime-stream", cancelInFlight: true)

@@ -2,6 +2,25 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
+## 4.0.0
+
+### Who is affected
+
+- Maintainers preparing the current implementation and documentation contract as the 4.0.0 public surface.
+- Consumers who pin exact package tags once the 4.0.0 tag is published later.
+
+### Required action
+
+- No source migration is required from the current public APIs.
+- Update exact package pins to `4.0.0` only after the 4.0.0 tag is published.
+
+### Notes
+
+- This release is a contract and documentation rebaseline. Runtime semantics, reducer authoring,
+  import paths, and effect APIs are unchanged.
+- `EffectTask.run` remains a non-throwing async closure; throwing work inside docs and app code
+  should be handled inside the closure with `do/catch`.
+
 ## 3.0.2
 
 ### Who is affected
