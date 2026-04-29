@@ -58,7 +58,7 @@ Effect는 다음을 반환할 수 있습니다:
   - Private storage: `private var _step_storage = BindableProperty(1)`
   - Computed property with getter/setter accessing `.value`
 - `@BindableField`로 표시된 속성만 `store.binding(_:send:)` / `store.binding(_:to:)` 사용 가능
-- 두 오버로드가 모두 존재하므로 `store.binding(\.$step) { ... }` 같은 unlabeled trailing-closure 호출은 ambiguous 하다. 항상 `send:` 또는 `to:`를 명시한다.
+- 새 코드는 `send:` 또는 `to:`를 명시한다. 기존 `store.binding(\.$step) { ... }` 같은 unlabeled trailing-closure 호출은 source compatibility를 위해 `send:` 오버로드로 계속 해석된다.
 
 ## Store 기능
 

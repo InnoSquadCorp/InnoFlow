@@ -872,4 +872,269 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow(phaseManaged:) wraps body in static phaseMap")
+  func phaseManagedAuthoringAddsPhaseMapWrapper() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: true)
+        struct PhaseManagedFeature {
+            struct State: Sendable {
+                enum Phase: Hashable, Sendable {
+                    case idle
+                    case loading
+                }
+                var phase: Phase = .idle
+            }
+            enum Action: Sendable {
+                case load
+            }
+            static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                PhaseMap(\\State.phase) {
+                    From(.idle) {
+                        On(.load, to: .loading)
+                    }
+                    From(.loading) {}
+                }
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct PhaseManagedFeature {
+              struct State: Sendable {
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                      case loading
+                  }
+                  var phase: Phase = .idle
+              }
+              enum Action: Sendable {
+                  case load
+              }
+              static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  PhaseMap(\\State.phase) {
+                      From(.idle) {
+                          On(.load, to: .loading)
+                      }
+                      From(.loading) {}
+                  }
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
+              }
+          }
+
+          extension PhaseManagedFeature: Reducer {
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow(phaseManaged:) requires static phaseMap")
+  func phaseManagedRequiresStaticPhaseMap() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: true)
+        struct MissingPhaseMapFeature {
+            struct State: Sendable {
+                enum Phase: Hashable, Sendable {
+                    case idle
+                }
+                var phase: Phase = .idle
+            }
+            enum Action: Sendable {
+                case load
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct MissingPhaseMapFeature {
+              struct State: Sendable {
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                  }
+                  var phase: Phase = .idle
+              }
+              enum Action: Sendable {
+                  case load
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "@InnoFlow(phaseManaged: true) requires a static `phaseMap` property so the macro can synthesize `body.phaseMap(Self.phaseMap)`",
+            line: 1,
+            column: 1
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow(phaseManaged:) rejects explicit body phaseMap wrapping")
+  func phaseManagedRejectsExplicitBodyPhaseMap() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: true)
+        struct ExplicitPhaseMapFeature {
+            struct State: Sendable {
+                enum Phase: Hashable, Sendable {
+                    case idle
+                }
+                var phase: Phase = .idle
+            }
+            enum Action: Sendable {
+                case load
+            }
+            static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                PhaseMap(\\State.phase) {
+                    From(.idle) {}
+                }
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+                    .phaseMap(Self.phaseMap)
+            }
+        }
+        """,
+        expandedSource: """
+          struct ExplicitPhaseMapFeature {
+              struct State: Sendable {
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                  }
+                  var phase: Phase = .idle
+              }
+              enum Action: Sendable {
+                  case load
+              }
+              static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  PhaseMap(\\State.phase) {
+                      From(.idle) {}
+                  }
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+                      .phaseMap(Self.phaseMap)
+              }
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "@InnoFlow(phaseManaged: true) synthesizes `body.phaseMap(Self.phaseMap)` automatically; remove the explicit `.phaseMap(...)` call from `body` or disable phaseManaged",
+            line: 1,
+            column: 1
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test(
+    "@InnoFlow(phaseManaged:) wraps reduce with phaseMap and warns on unreferenced phase cases"
+  )
+  func phaseManagedWarnsWhenPhaseCaseIsNeverReferencedFromPhaseMap() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: true)
+        struct UnreferencedPhaseFeature {
+            struct State: Sendable {
+                enum Phase: Hashable, Sendable {
+                    case idle
+                    case loading
+                    case orphan
+                }
+                var phase: Phase = .idle
+            }
+            enum Action: Sendable {
+                case load
+            }
+            static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                PhaseMap(\\State.phase) {
+                    From(.idle) {
+                        On(.load, to: .loading)
+                    }
+                }
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct UnreferencedPhaseFeature {
+              struct State: Sendable {
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                      case loading
+                      case orphan
+                  }
+                  var phase: Phase = .idle
+              }
+              enum Action: Sendable {
+                  case load
+              }
+              static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  PhaseMap(\\State.phase) {
+                      From(.idle) {
+                          On(.load, to: .loading)
+                      }
+                  }
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
+              }
+          }
+
+          extension UnreferencedPhaseFeature: Reducer {
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "`Phase.orphan` is declared but never referenced from the static `phaseMap` — add a `From(.orphan) { ... }` rule, an `On(..., to: .orphan)` target, or remove the case if it is unused",
+            line: 7,
+            column: 18,
+            severity: .warning
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
 }

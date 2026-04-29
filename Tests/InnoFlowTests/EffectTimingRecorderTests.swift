@@ -219,6 +219,24 @@ struct EffectTimingRecorderTests {
     #expect(cancelEntry?.effectID == "probe-start")
   }
 
+  @Test("Recorder pairs nil run sequences by token and preserves append order")
+  func recorderPairsNilRunSequencesByToken() async {
+    let recorder = EffectTimingRecorder()
+    let instrumentation: StoreInstrumentation<ProbeFeature.Action> = recorder.instrumentation()
+    let token = UUID()
+
+    instrumentation.didStartRun(.init(token: token, cancellationID: nil, sequence: nil))
+    instrumentation.didEmitAction(.init(action: ._tick, cancellationID: nil, sequence: nil))
+    instrumentation.didFinishRun(.init(token: token, cancellationID: nil, sequence: nil))
+
+    let entries = await recorder.entries()
+    #expect(entries.map(\.phase) == [.runStarted, .actionEmitted, .runFinished])
+    #expect(entries[0].sequence != 0)
+    #expect(entries[1].sequence != 0)
+    #expect(entries[0].sequence == entries[2].sequence)
+    #expect(entries[1].sequence != entries[0].sequence)
+  }
+
   // MARK: - Polling helper
 
   /// Runtime metrics are the primary synchronization surface; recorder state is

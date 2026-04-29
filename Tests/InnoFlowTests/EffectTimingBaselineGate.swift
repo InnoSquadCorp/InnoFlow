@@ -107,43 +107,68 @@ struct EffectTimingBaselineGate {
     // `mean` instead because the current 10-run workload makes `p95` collapse
     // to the single slowest run, which proved too sensitive to one-off GitHub
     // Actions runner jitter.
-    let process = Process()
-    process.executableURL = scriptURL
-    process.arguments = [
-      "--baseline", baselineURL.path,
-      "--current", currentURL.path,
-      "--metric", EffectTimingBaselineContract.gateMetric,
-      "--tolerance", EffectTimingBaselineContract.gateTolerance,
-    ]
+    let result = try await runComparisonProcess(
+      scriptPath: scriptURL.path,
+      baselinePath: baselineURL.path,
+      currentPath: currentURL.path,
+      metric: EffectTimingBaselineContract.gateMetric,
+      tolerance: EffectTimingBaselineContract.gateTolerance
+    )
 
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
-    try process.run()
-    process.waitUntilExit()
-
-    let stdoutText =
-      String(
-        data: stdout.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
-    let stderrText =
-      String(
-        data: stderr.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
-
-    if process.terminationStatus != 0 {
+    if result.terminationStatus != 0 {
       Issue.record(
         """
         Effect timing baseline regression detected.
-        stdout: \(stdoutText)
-        stderr: \(stderrText)
+        stdout: \(result.stdout)
+        stderr: \(result.stderr)
         """
       )
     }
+  }
+
+  private struct ProcessResult: Sendable {
+    let terminationStatus: Int32
+    let stdout: String
+    let stderr: String
+  }
+
+  private nonisolated func runComparisonProcess(
+    scriptPath: String,
+    baselinePath: String,
+    currentPath: String,
+    metric: String,
+    tolerance: String
+  ) async throws -> ProcessResult {
+    try await Task.detached {
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: scriptPath)
+      process.arguments = [
+        "--baseline", baselinePath,
+        "--current", currentPath,
+        "--metric", metric,
+        "--tolerance", tolerance,
+      ]
+
+      let stdout = Pipe()
+      let stderr = Pipe()
+      process.standardOutput = stdout
+      process.standardError = stderr
+
+      try process.run()
+      process.waitUntilExit()
+
+      return ProcessResult(
+        terminationStatus: process.terminationStatus,
+        stdout: String(
+          data: stdout.fileHandleForReading.readDataToEndOfFile(),
+          encoding: .utf8
+        ) ?? "",
+        stderr: String(
+          data: stderr.fileHandleForReading.readDataToEndOfFile(),
+          encoding: .utf8
+        ) ?? ""
+      )
+    }.value
   }
 
   private func waitForRecordedProbeCycle(

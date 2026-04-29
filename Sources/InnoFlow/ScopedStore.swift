@@ -285,6 +285,32 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     return cachedState
   }
 
+  /// Whether this projection is still backed by a live parent store.
+  ///
+  /// Returns `false` once the parent `Store` has been released or the
+  /// projection has been marked inactive (for example, when a collection
+  /// element corresponding to this projection is removed). Callers can use
+  /// this to skip work that would otherwise read a stale cached snapshot
+  /// from `state` or have its action dropped by `send(_:)`.
+  ///
+  /// See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
+  public var isAlive: Bool {
+    parent != nil && isActive
+  }
+
+  /// A read accessor that reports a released parent or inactive projection
+  /// as `nil` instead of returning the last cached snapshot.
+  ///
+  /// `state` keeps the existing cached-read contract for SwiftUI observer
+  /// races. `optionalState` is the explicit form: callers that need to
+  /// distinguish "value is fresh" from "parent is gone" without hitting a
+  /// debug assertion or a release-time stale read should consult this
+  /// property and treat `nil` as "regenerate the projection."
+  public var optionalState: ChildState? {
+    guard isAlive else { return nil }
+    return cachedState
+  }
+
   init(
     parent: Store<ParentReducer>,
     stateResolver: @escaping (ParentReducer.State) -> ChildState?,

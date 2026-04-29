@@ -179,7 +179,29 @@ extension InnoFlowMacro {
       return true
     }
 
-    return setter.singlePayloadType == fieldType
+    guard let setterType = setter.singlePayloadType else {
+      return false
+    }
+
+    if setterType == fieldType {
+      return true
+    }
+
+    // SwiftSyntax sees typealiases only by their spelling. A same-name
+    // single-payload setter like `case setName(Name)` should not warn just
+    // because the field annotation says `StringBackedName`. Keep hard
+    // mismatch warnings for literal-inferred primitive spellings where the
+    // macro can be confident.
+    return !isPrimitiveBindableFieldType(fieldType) || !isPrimitiveBindableFieldType(setterType)
+  }
+
+  private static func isPrimitiveBindableFieldType(_ type: String) -> Bool {
+    switch type {
+    case "Bool", "Double", "Float", "Int", "String":
+      return true
+    default:
+      return false
+    }
   }
 
   private static func emitMissingBindableFieldSetterDiagnostic(

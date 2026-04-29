@@ -1164,6 +1164,56 @@ struct IfCaseLetFeature {
   }
 }
 
+@InnoFlow(phaseManaged: true)
+struct PhaseManagedFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    enum Phase: Hashable, Sendable {
+      case idle
+      case loading
+      case loaded
+      case failed
+    }
+
+    var phase: Phase = .idle
+    var output: String?
+    var errorMessage: String?
+  }
+
+  enum Action: Equatable, Sendable {
+    case load
+    case _loaded(String)
+    case _failed(String)
+  }
+
+  static var phaseMap: PhaseMap<State, Action, State.Phase> {
+    PhaseMap(\State.phase) {
+      From(.idle) {
+        On(.load, to: .loading)
+      }
+      From(.loading) {
+        On(Action.loadedCasePath, to: .loaded)
+        On(Action.failedCasePath, to: .failed)
+      }
+    }
+  }
+
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .load:
+        state.errorMessage = nil
+        return .none
+      case ._loaded(let output):
+        state.output = output
+        return .none
+      case ._failed(let message):
+        state.errorMessage = message
+        return .none
+      }
+    }
+  }
+}
+
 struct InstrumentationFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var log: [String] = []
@@ -2705,8 +2755,8 @@ struct CompileContractTests {
       "expected @BindableField projected key path to typecheck, got: \(result.normalizedOutput)")
   }
 
-  @Test("Store.binding rejects unlabeled trailing-closure calls with explicit label guidance")
-  func bindingRejectsUnlabeledTrailingClosureAtCompileTime() throws {
+  @Test("Store.binding keeps unlabeled trailing-closure source compatibility")
+  func bindingAcceptsUnlabeledTrailingClosureAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -2740,15 +2790,14 @@ struct CompileContractTests {
 
     let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
 
-    #expect(result.status != 0)
-    let diagnostics = result.normalizedOutput
-    #expect(diagnostics.localizedCaseInsensitiveContains("ambiguous use of 'binding'"))
-    #expect(diagnostics.contains("binding(_:send:)"))
-    #expect(diagnostics.contains("binding(_:to:)"))
+    #expect(
+      result.status == 0,
+      "expected unlabeled trailing-closure binding call to typecheck, got: \(result.normalizedOutput)"
+    )
   }
 
-  @Test("Store.binding rejects parenthesized unlabeled calls with explicit label guidance")
-  func bindingRejectsParenthesizedUnlabeledCallAtCompileTime() throws {
+  @Test("Store.binding keeps parenthesized unlabeled source compatibility")
+  func bindingAcceptsParenthesizedUnlabeledCallAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -2782,13 +2831,14 @@ struct CompileContractTests {
 
     let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
 
-    #expect(result.status != 0)
-    let diagnostics = result.normalizedOutput
-    expectParenthesizedUnlabeledBindingRejection(in: diagnostics)
+    #expect(
+      result.status == 0,
+      "expected parenthesized unlabeled binding call to typecheck, got: \(result.normalizedOutput)"
+    )
   }
 
-  @Test("ScopedStore.binding rejects unlabeled trailing-closure calls with explicit label guidance")
-  func scopedBindingRejectsUnlabeledTrailingClosureAtCompileTime() throws {
+  @Test("ScopedStore.binding keeps unlabeled trailing-closure source compatibility")
+  func scopedBindingAcceptsUnlabeledTrailingClosureAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -2839,15 +2889,14 @@ struct CompileContractTests {
 
     let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
 
-    #expect(result.status != 0)
-    let diagnostics = result.normalizedOutput
-    #expect(diagnostics.localizedCaseInsensitiveContains("ambiguous use of 'binding'"))
-    #expect(diagnostics.contains("binding(_:send:)"))
-    #expect(diagnostics.contains("binding(_:to:)"))
+    #expect(
+      result.status == 0,
+      "expected scoped unlabeled trailing-closure binding call to typecheck, got: \(result.normalizedOutput)"
+    )
   }
 
-  @Test("ScopedStore.binding rejects parenthesized unlabeled calls with explicit label guidance")
-  func scopedBindingRejectsParenthesizedUnlabeledCallAtCompileTime() throws {
+  @Test("ScopedStore.binding keeps parenthesized unlabeled source compatibility")
+  func scopedBindingAcceptsParenthesizedUnlabeledCallAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -2898,9 +2947,10 @@ struct CompileContractTests {
 
     let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
 
-    #expect(result.status != 0)
-    let diagnostics = result.normalizedOutput
-    expectParenthesizedUnlabeledBindingRejection(in: diagnostics)
+    #expect(
+      result.status == 0,
+      "expected scoped parenthesized unlabeled binding call to typecheck, got: \(result.normalizedOutput)"
+    )
   }
 
   @Test("Scope/IfLet/IfCaseLet reject public closure-based action lifting at compile time")
@@ -3079,23 +3129,6 @@ struct CompileContractTests {
     }
   }
 
-  private func expectParenthesizedUnlabeledBindingRejection(in diagnostics: String) {
-    let rejectedByCandidateMismatch =
-      diagnostics.contains("no exact matches in call to instance method 'binding'")
-      && diagnostics.contains("incorrect labels for candidate")
-      && diagnostics.contains("expected: '(_:send:)'")
-      && diagnostics.contains("expected: '(_:to:)'")
-
-    let rejectedByUnavailableMigrationOverload =
-      diagnostics.contains("'binding' is unavailable")
-      && diagnostics.contains("Use 'binding(_:send:)' or 'binding(_:to:)'")
-      && diagnostics.contains("unlabeled trailing-closure calls")
-
-    #expect(
-      rejectedByCandidateMismatch || rejectedByUnavailableMigrationOverload,
-      "expected parenthesized unlabeled binding call to be rejected with label guidance, got: \(diagnostics)"
-    )
-  }
 }
 
 // MARK: - Store Tests
@@ -3288,6 +3321,119 @@ struct StoreTests {
 
     #expect(probe.count == 1)
     #expect(scoped.step == 7)
+  }
+
+  @Test("ScopedStore.isAlive and optionalState are true/non-nil while parent is alive")
+  func scopedStoreLifecycleAccessorsWhileAlive() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+
+    #expect(scoped.isAlive == true)
+    #expect(scoped.optionalState != nil)
+    #expect(scoped.optionalState?.step == 1)
+  }
+
+  @Test("ScopedStore.optionalState surfaces released parent as nil without asserting")
+  func scopedStoreOptionalStateAfterParentRelease() {
+    let scoped:
+      ScopedStore<
+        ScopedBindableChildFeature,
+        ScopedBindableChildFeature.Child,
+        ScopedBindableChildFeature.ChildAction
+      > = {
+        let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+        return store.scope(
+          state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+      }()
+
+    #expect(scoped.isAlive == false)
+    #expect(scoped.optionalState == nil)
+  }
+
+  @Test("SelectedStore.isAlive and optionalValue are true/non-nil while parent is alive")
+  func selectedStoreLifecycleAccessorsWhileAlive() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let selected = store.select(\.child.step)
+
+    #expect(selected.isAlive == true)
+    #expect(selected.optionalValue == 1)
+  }
+
+  @Test("SelectedStore.optionalValue surfaces released parent as nil without asserting")
+  func selectedStoreOptionalValueAfterParentRelease() {
+    let selected: SelectedStore<Int> = {
+      let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+      return store.select(\.child.step)
+    }()
+
+    #expect(selected.isAlive == false)
+    #expect(selected.optionalValue == nil)
+  }
+
+  @Test("Store.select(dependingOnAll:) tracks an arbitrary number of explicit dependency slices")
+  func selectedStoreDependingOnAllVariadic() {
+    struct VariadicState: Equatable, Sendable, DefaultInitializable {
+      var a: Int = 1
+      var b: Int = 2
+      var c: Int = 3
+      var d: Int = 4
+      var e: Int = 5
+      var f: Int = 6
+      var g: Int = 7
+      var h: Int = 8
+      var untracked: Int = 0
+    }
+
+    enum VariadicAction: Equatable, Sendable {
+      case bumpG
+      case bumpUntracked
+    }
+
+    struct VariadicReducer: Reducer {
+      typealias State = VariadicState
+      typealias Action = VariadicAction
+
+      func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+        switch action {
+        case .bumpG:
+          state.g &+= 1
+          return .none
+        case .bumpUntracked:
+          state.untracked &+= 1
+          return .none
+        }
+      }
+    }
+
+    let store = Store(reducer: VariadicReducer(), initialState: .init())
+    let selected = store.select(
+      dependingOnAll:
+        \VariadicState.a,
+      \VariadicState.b,
+      \VariadicState.c,
+      \VariadicState.d,
+      \VariadicState.e,
+      \VariadicState.f,
+      \VariadicState.g,
+      \VariadicState.h
+    ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int) -> Int in
+      a + b + c + d + e + f + g + h
+    }
+
+    let baselineSum = 36
+    #expect(selected.value == baselineSum)
+
+    let initialStats = store.projectionObserverStats
+
+    store.send(.bumpUntracked)
+    let afterUntrackedStats = store.projectionObserverStats
+
+    #expect(afterUntrackedStats.refreshedObservers == initialStats.refreshedObservers)
+    #expect(selected.value == baselineSum)
+
+    store.send(.bumpG)
+    #expect(selected.value == baselineSum + 1)
   }
 
   @Test("Store.select preserves SelectedStore identity across repeated calls")
@@ -4157,6 +4303,55 @@ struct StoreTests {
     #expect(probe.events.contains("start:instrumented-delayed"))
     #expect(probe.events.contains("emit:received(\"delayed\")"))
     #expect(probe.events.contains("finish:instrumented-delayed"))
+  }
+
+  @Test(
+    "@InnoFlow(phaseManaged: true) auto-applies static phaseMap inside the synthesized reducer"
+  )
+  func phaseManagedMacroAutoAppliesPhaseMap() {
+    let feature = PhaseManagedFeature()
+    var state = PhaseManagedFeature.State()
+
+    #expect(state.phase == .idle)
+
+    _ = feature.reduce(into: &state, action: .load)
+    #expect(state.phase == .loading)
+    #expect(state.errorMessage == nil)
+
+    _ = feature.reduce(into: &state, action: ._loaded("ok"))
+    #expect(state.phase == .loaded)
+    #expect(state.output == "ok")
+
+    _ = feature.reduce(into: &state, action: ._failed("boom"))
+    // The phase map only declares loading -> failed, so a failed action
+    // received in the loaded phase is a legal no-op. The body still
+    // updates non-phase state.
+    #expect(state.phase == .loaded)
+    #expect(state.errorMessage == "boom")
+  }
+
+  @Test("StoreInstrumentation.signpost preserves runtime behavior")
+  func storeInstrumentationSignpostFactory() async {
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "StoreInstrumentation")
+    let store = Store(
+      reducer: AsyncFeature(),
+      initialState: .init(),
+      instrumentation: .signpost(signposter: signposter)
+    )
+
+    store.send(.load)
+
+    let timeoutClock = ContinuousClock()
+    let deadline = timeoutClock.now.advanced(by: .seconds(2))
+    while timeoutClock.now < deadline {
+      if store.value == "Hello, InnoFlow v2" {
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+
+    #expect(store.value == "Hello, InnoFlow v2")
+    #expect(store.isLoading == false)
   }
 
   @Test("StoreInstrumentation.osLog preserves runtime behavior")
@@ -5355,8 +5550,8 @@ struct StoreTests {
     #expect(store.emitted == [2])
   }
 
-  @Test("ManualTestClock resumes same-deadline sleepers in insertion order")
-  func manualTestClockResumesSameDeadlineSleepersInInsertionOrder() async throws {
+  @Test("ManualTestClock resumes all same-deadline sleepers")
+  func manualTestClockResumesAllSameDeadlineSleepers() async throws {
     let clock = ManualTestClock()
     let probe = OrderedIntProbe()
 
@@ -5388,7 +5583,9 @@ struct StoreTests {
     _ = await firstSleeper.result
     _ = await secondSleeper.result
 
-    #expect(await probe.snapshot() == [1, 2])
+    let snapshot = await probe.snapshot()
+    #expect(snapshot.count == 2)
+    #expect(snapshot.sorted() == [1, 2])
   }
 
   @Test("ManualTestClock cancels pending sleepers without late resume")

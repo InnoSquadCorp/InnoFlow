@@ -125,7 +125,7 @@ struct CounterView: View {
 }
 ```
 
-`binding(_:to:)` is an argument-label alias for `binding(_:send:)`. Both spellings stay supported, but unlabeled calls are now an intentional 3.x migration break. In practice Swift diagnoses the trailing-closure spelling `store.binding(\.$step) { .setStep($0) }` as an explicit-label ambiguity and the parenthesized unlabeled spelling as a no-exact-matches call with the same `send:` / `to:` guidance. Use `send:` or `to:` explicitly.
+`binding(_:to:)` is an argument-label alias for `binding(_:send:)`. Both spellings stay supported. New code should spell `send:` or `to:` explicitly, and existing trailing-closure calls such as `store.binding(\.$step) { .setStep($0) }` continue to resolve to `send:` for source compatibility.
 
 ## Composition Surface
 

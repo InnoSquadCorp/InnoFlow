@@ -68,6 +68,29 @@ struct EffectTimingComparisonScriptTests {
     )
   }
 
+  @Test("Comparison script matches run pairs even when JSONL entries are unsorted")
+  func comparisonScriptMatchesUnsortedRunPairs() throws {
+    let result = try runComparisonScript(
+      baselineEntries: Array(matchedRunEntries(durations: [100, 110, 120]).reversed()),
+      currentEntries: Array(matchedRunEntries(durations: [100, 110, 120]).reversed())
+    )
+
+    #expect(result.terminationStatus == 0)
+    #expect(result.stdout.contains("baselineRuns=3"))
+    #expect(result.stdout.contains("currentRuns=3"))
+  }
+
+  @Test("Comparison script fails when baseline metric is zero")
+  func comparisonScriptFailsForZeroBaselineMetric() throws {
+    let result = try runComparisonScript(
+      baselineEntries: matchedRunEntries(durations: [0, 0, 0]),
+      currentEntries: matchedRunEntries(durations: [1, 1, 1])
+    )
+
+    #expect(result.terminationStatus == 2)
+    #expect(result.stderr.contains("baseline metric is zero"))
+  }
+
   @Test("Comparison script rejects tolerance values outside 0...1")
   func comparisonScriptRejectsOutOfRangeTolerance() throws {
     let result = try runComparisonScript(

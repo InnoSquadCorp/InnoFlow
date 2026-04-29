@@ -49,6 +49,30 @@ public final class SelectedStore<Value: Equatable & Sendable> {
     return cachedValue
   }
 
+  /// Whether this selection is still backed by a live source projection.
+  ///
+  /// Returns `false` once the parent store or scoped store backing this
+  /// selection has been released, or once the selection has been marked
+  /// inactive because its source collection entry was removed. Callers
+  /// can consult this before reading `value` to avoid the cached-fallback
+  /// path documented in the lifecycle contract.
+  public var isAlive: Bool {
+    parentObject != nil && isActive
+  }
+
+  /// A read accessor that reports a released parent or inactive selection
+  /// as `nil` instead of returning the last cached value.
+  ///
+  /// `value` keeps the existing cached-read contract for SwiftUI observer
+  /// races. `optionalValue` is the explicit form: callers that need to
+  /// distinguish "value is fresh" from "parent is gone" without hitting a
+  /// debug assertion or a release-time stale read should consult this
+  /// property and treat `nil` as "regenerate the selection."
+  public var optionalValue: Value? {
+    guard isAlive else { return nil }
+    return cachedValue
+  }
+
   init(
     initialValue: Value,
     parentObject: AnyObject,
@@ -100,6 +124,12 @@ private func selectionDependencyRegistration<Snapshot, Dependency: Equatable>(
 
 private func selectionDependencyRegistrations<Snapshot>(
   _ registrations: ProjectionDependencyRegistration<Snapshot>...
+) -> ProjectionObserverRegistration<Snapshot> {
+  selectionDependencyRegistrations(fromArray: registrations)
+}
+
+private func selectionDependencyRegistrations<Snapshot>(
+  fromArray registrations: [ProjectionDependencyRegistration<Snapshot>]
 ) -> ProjectionObserverRegistration<Snapshot> {
   guard !registrations.isEmpty else {
     return .alwaysRefresh
@@ -490,6 +520,47 @@ extension Store {
           self.state[keyPath: fifthDependency],
           self.state[keyPath: sixthDependency]
         )
+      }
+    )
+  }
+
+  /// Variadic selection: declares an arbitrary number of explicit
+  /// dependency key paths through Swift parameter packs and projects them
+  /// into a derived value.
+  ///
+  /// The fixed-arity `select(dependingOn:)` overloads (1- through 6-field)
+  /// remain the recommended form for the common cases; this overload is
+  /// the type-safe escape hatch for projections that legitimately depend
+  /// on more than six fields, where the closure-only `select(_:)` form
+  /// would otherwise force `.alwaysRefresh` and re-evaluate on every
+  /// parent action.
+  ///
+  /// Use a distinct `dependingOnAll:` argument label rather than overloading
+  /// the existing `dependingOn:` to keep the fixed-arity tuple overloads
+  /// unambiguous at call sites where one through six dependencies are
+  /// passed as a tuple literal.
+  public func select<each Dep: Equatable & Sendable, Value: Equatable & Sendable>(
+    dependingOnAll dependencies: repeat KeyPath<R.State, each Dep>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ transform: @escaping @Sendable (repeat each Dep) -> Value
+  ) -> SelectedStore<Value> {
+    let callsite = selectionCallsite(fileID: fileID, line: line)
+
+    let initial = transform(repeat state[keyPath: each dependencies])
+
+    var registrations: [ProjectionDependencyRegistration<R.State>] = []
+    for keyPath in repeat each dependencies {
+      registrations.append(selectionDependencyRegistration(keyPath))
+    }
+
+    return cachedSelectedStore(
+      callsite: callsite,
+      initialValue: initial,
+      registration: selectionDependencyRegistrations(fromArray: registrations),
+      valueResolver: { [weak self] in
+        guard let self else { return nil }
+        return transform(repeat self.state[keyPath: each dependencies])
       }
     )
   }
