@@ -500,6 +500,21 @@ main() {
     printf '%s\n' "$release_sync_output"
   fi
 
+  echo "[principle-gates] Checking localized README header parity baselines"
+  doc_parity_output=""
+  doc_parity_status=0
+  doc_parity_output="$(scripts/check-doc-parity.sh 2>&1)" || doc_parity_status=$?
+  if [[ "$doc_parity_status" -ne 0 ]]; then
+    if [[ -n "$doc_parity_output" ]]; then
+      printf '%s\n' "$doc_parity_output" >&2
+    fi
+    echo "[principle-gates] CHECK-DOC-PARITY FAILED" >&2
+    exit "$doc_parity_status"
+  fi
+  if [[ -n "$doc_parity_output" ]]; then
+    printf '%s\n' "$doc_parity_output"
+  fi
+
   echo "[principle-gates] Checking guidance for selections, effect context, and SwiftUI integration"
   search_lines "SelectedStore" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "dependingOn:" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
