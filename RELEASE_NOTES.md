@@ -1,5 +1,27 @@
 # InnoFlow Release Notes
 
+## 3.0.3 Release
+
+This patch release keeps InnoFlow compatible with tvOS toolchains while preserving the
+runtime cleanup contract used by `Store` and `TestStore`.
+
+### Changed
+
+1. Avoided isolated-deinit toolchain failures on tvOS builds.
+2. Preserved `Store` cleanup behavior and effect cancellation semantics.
+3. Kept the public `InnoFlow` and `InnoFlowTesting` API surface unchanged.
+
+## Migration Note
+
+### What changed
+
+- tvOS package consumers can build the 3.0 line without isolated-deinit toolchain failures.
+- Runtime semantics, reducer authoring, and import paths are unchanged.
+
+### What you may need to update
+
+- Consumers that pin exact tags can move to `3.0.3`.
+
 ## 3.0.2 Release
 
 This patch release aligns the macro target manifest with the `swift-syntax` modules already used during compilation so package consumers and maintainers get a quieter, explicit build graph.

@@ -70,6 +70,13 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - Added release-mode subprocess tests that verify `ScopedStore.state`, `ScopedStore.send`, collection-scoped projections, and `SelectedStore.value` all fall back to cached snapshots instead of aborting after the parent store is released.
 - Added `Repro/SILCrashRepro/` — a minimal, standalone SwiftPM package that reproduces the Swift 6.3 `EarlyPerfInliner` crash on a generic `@MainActor` class with an `isolated deinit` that stores result-builder-composed value types. Kept in-tree so toolchain bumps can retest whether the InnoFlow `@_optimize(none)` workaround is still required.
 
+## [3.0.3] - 2026-04-13
+
+### Fixed
+
+- Avoided isolated-deinit toolchain failures on tvOS builds while preserving `Store` cleanup
+  behavior and public API compatibility.
+
 ## [3.0.2] - 2026-03-21
 
 ### Changed

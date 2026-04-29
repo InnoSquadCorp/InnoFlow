@@ -459,6 +459,9 @@ main() {
     exit 1
   fi
 
+  echo "[principle-gates] Checking release surface sync"
+  scripts/check-release-sync.sh
+
   echo "[principle-gates] Checking guidance for selections, effect context, and SwiftUI integration"
   search_lines "SelectedStore" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "dependingOn:" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
