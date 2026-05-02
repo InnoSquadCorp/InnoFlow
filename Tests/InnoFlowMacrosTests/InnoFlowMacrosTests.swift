@@ -185,6 +185,64 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow synthesizes collection action paths from id/action labels")
+  func collectionActionPathUsesLabelsNotActionSuffix() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct FeedFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                case row(id: UUID, action: ChildEvent)
+            }
+            enum ChildEvent: Sendable {
+                case appeared
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct FeedFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  case row(id: UUID, action: ChildEvent)
+              }
+              enum ChildEvent: Sendable {
+                  case appeared
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension FeedFeature: Reducer {}
+          extension FeedFeature.Action {
+            static let rowActionPath = CollectionActionPath<Self, UUID, ChildEvent>(
+              embed: { id, action in
+                .row(id: id, action: action)
+              },
+              extract: { action in
+                guard case let .row(id, childAction) = action else { return nil }
+                return (id, childAction)
+              }
+            )
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow strips one leading underscore from generated case path names")
   func leadingUnderscoreCasePathUsesCleanName() throws {
     #if canImport(InnoFlowMacros)
@@ -567,6 +625,140 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow notes Optional<T> payload cases")
+  func genericOptionalPayloadCaseEmitsNote() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct OptionalPayloadFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                case child(Optional<ChildAction>)
+            }
+            enum ChildAction: Sendable {
+                case start
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct OptionalPayloadFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  case child(Optional<ChildAction>)
+              }
+              enum ChildAction: Sendable {
+                  case start
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension OptionalPayloadFeature: Reducer {}
+          extension OptionalPayloadFeature.Action {
+            static let childCasePath = CasePath<Self, Optional<ChildAction>>(
+              embed: { childAction in
+                .child(childAction)
+              },
+              extract: { action in
+                guard case .child(let childAction) = action else { return nil }
+                return childAction
+              }
+            )
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path",
+            line: 5,
+            column: 14,
+            severity: .note
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow notes implicitly unwrapped optional payload cases")
+  func implicitlyUnwrappedOptionalPayloadCaseEmitsNote() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct OptionalPayloadFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                case child(ChildAction!)
+            }
+            enum ChildAction: Sendable {
+                case start
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct OptionalPayloadFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  case child(ChildAction!)
+              }
+              enum ChildAction: Sendable {
+                  case start
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension OptionalPayloadFeature: Reducer {}
+          extension OptionalPayloadFeature.Action {
+            static let childCasePath = CasePath<Self, ChildAction!>(
+              embed: { childAction in
+                .child(childAction)
+              },
+              extract: { action in
+                guard case .child(let childAction) = action else { return nil }
+                return childAction
+              }
+            )
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path",
+            line: 5,
+            column: 14,
+            severity: .note
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow strips one leading underscore from generated collection action path names")
   func leadingUnderscoreCollectionActionPathUsesCleanName() throws {
     #if canImport(InnoFlowMacros)
@@ -681,7 +873,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case",
+              "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
             line: 6,
             column: 10
           )
@@ -738,7 +930,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case",
+              "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
             line: 6,
             column: 14
           )

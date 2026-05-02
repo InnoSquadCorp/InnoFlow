@@ -91,14 +91,4 @@ extension InnoFlowMacro {
       return issues
     }
   }
-
-  // Nested collection routes often use child action types like `TodoAction`.
-  // Treating `*Action` as collection-like preserves canonical synthesis for
-  // those feature-local wrappers without forcing a single `CollectionAction`
-  // type name across sample and app code.
-  static func isCollectionActionLikeType(_ typeName: String) -> Bool {
-    typeName == "Action"
-      || typeName.hasSuffix(".Action")
-      || typeName.hasSuffix("Action")
-  }
 }

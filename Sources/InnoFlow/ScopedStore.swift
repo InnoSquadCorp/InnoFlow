@@ -101,7 +101,8 @@ extension Store {
     collection: KeyPath<R.State, CollectionState>,
     action: @escaping @Sendable (CollectionState.Element.ID, ChildAction) -> R.Action,
     fileID: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    column: UInt = #column
   ) -> [ScopedStore<R, CollectionState.Element, ChildAction>]
   where
     CollectionState: RandomAccessCollection,
@@ -109,7 +110,7 @@ extension Store {
     CollectionState.Element.ID: Sendable
   {
     let anyKeyPath = collection as AnyKeyPath
-    let callsite = collectionScopeCallsite(fileID: fileID, line: line)
+    let callsite = collectionScopeCallsite(fileID: fileID, line: line, column: column)
     let bucket = collectionScopeCache.validatedBucket(for: anyKeyPath, callsite: callsite)
     bucket.revision &+= 1
     let elements = state[keyPath: collection]
@@ -167,7 +168,8 @@ extension Store {
     collection: KeyPath<R.State, CollectionState>,
     action: CollectionActionPath<R.Action, CollectionState.Element.ID, ChildAction>,
     fileID: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    column: UInt = #column
   ) -> [ScopedStore<R, CollectionState.Element, ChildAction>]
   where
     CollectionState: RandomAccessCollection,
@@ -178,7 +180,8 @@ extension Store {
       collection: collection,
       action: action.embed,
       fileID: fileID,
-      line: line
+      line: line,
+      column: column
     )
   }
 

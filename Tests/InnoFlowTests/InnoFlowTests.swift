@@ -66,6 +66,34 @@ struct AsyncFeature: Reducer {
   }
 }
 
+struct EmissionOrderingFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {}
+
+  enum Action: Equatable, Sendable {
+    case triggerImmediate
+    case triggerRun
+    case received(String)
+  }
+
+  let probe: InstrumentationProbe
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .triggerImmediate:
+      return .send(.received("immediate"))
+
+    case .triggerRun:
+      return .run { send in
+        await send(.received("run"))
+      }
+
+    case .received(let value):
+      probe.record("reduce:\(value)")
+      return .none
+    }
+  }
+}
+
 struct ContextClockFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var log: [String] = []
@@ -553,6 +581,31 @@ struct RunEmissionBoundaryFeature: Reducer {
 
     case .cancel:
       return .cancel("run-boundary")
+
+    case ._record(let event):
+      state.events.append(event)
+      return .none
+    }
+  }
+}
+
+struct DirectSendCancellationBoundaryFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var events: [String] = []
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _record(String)
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      return .concatenate(
+        .cancel("direct-send-boundary"),
+        .send(._record("late")).cancellable("direct-send-boundary")
+      )
 
     case ._record(let event):
       state.events.append(event)
@@ -3496,7 +3549,8 @@ struct StoreTests {
       \VariadicState.f,
       \VariadicState.g,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
       probe.record()
       return a + b + c + d + e + f + g
@@ -3511,7 +3565,8 @@ struct StoreTests {
       \VariadicState.f,
       \VariadicState.g,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
       probe.record()
       return a + b + c + d + e + f + g
@@ -3526,28 +3581,99 @@ struct StoreTests {
   func selectedStoreCachingPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
-    let first = store.select(\.child, fileID: #fileID, line: callsiteLine)
-    let second = store.select(\.child, fileID: #fileID, line: callsiteLine)
+    let first = store.select(\.child, fileID: #fileID, line: callsiteLine, column: 0)
+    let second = store.select(\.child, fileID: #fileID, line: callsiteLine, column: 0)
 
     #expect(first === second)
     #expect(first.step == 1)
+  }
+
+  @Test("Store.select cache identity includes the selected key path")
+  func selectedStoreCacheIdentityIncludesSelectedKeyPath() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      \.child.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+    let second = store.select(
+      \.unrelated,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+
+    #expect(first.value == 1)
+    #expect(second.value == 0)
+  }
+
+  @Test("Store.select cache identity includes the callsite column")
+  func selectedStoreCacheIdentityIncludesColumn() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      \.child.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+    let second = store.select(
+      \.child.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 2
+    )
+
+    #expect(first !== second)
+    #expect(first.value == second.value)
   }
 
   @Test("Store.select(dependingOn:) preserves SelectedStore identity across repeated calls")
   func selectedStoreDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
-    let first = store.select(dependingOn: \.child.title, fileID: #fileID, line: callsiteLine) {
-      title in
+    let first = store.select(
+      dependingOn: \.child.title,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { title in
       title.uppercased()
     }
-    let second = store.select(dependingOn: \.child.title, fileID: #fileID, line: callsiteLine) {
-      title in
+    let second = store.select(
+      dependingOn: \.child.title,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { title in
       title.uppercased()
     }
 
     #expect(first === second)
     #expect(first.value == "CHILD")
+  }
+
+  @Test("Store.select(dependingOn:) cache identity includes dependency key paths")
+  func selectedStoreDependingOnCacheIdentityIncludesDependencies() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      dependingOn: \.child.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    ) { $0 }
+    let second = store.select(
+      dependingOn: \.unrelated,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    ) { $0 }
+
+    #expect(first.value == 1)
+    #expect(second.value == 0)
   }
 
   @Test(
@@ -3558,14 +3684,16 @@ struct StoreTests {
     let first = store.select(
       dependingOn: (\.child.step, \.child.title),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title in
       "\(title)-\(step)"
     }
     let second = store.select(
       dependingOn: (\.child.step, \.child.title),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title in
       "\(title)-\(step)"
     }
@@ -3642,14 +3770,16 @@ struct StoreTests {
     let first = store.select(
       dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title, note, priority in
       "\(title)-\(step)-\(note)-\(priority)"
     }
     let second = store.select(
       dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title, note, priority in
       "\(title)-\(step)-\(note)-\(priority)"
     }
@@ -3835,11 +3965,34 @@ struct StoreTests {
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
-    let first = scoped.select(\.title, fileID: #fileID, line: callsiteLine)
-    let second = scoped.select(\.title, fileID: #fileID, line: callsiteLine)
+    let first = scoped.select(\.title, fileID: #fileID, line: callsiteLine, column: 0)
+    let second = scoped.select(\.title, fileID: #fileID, line: callsiteLine, column: 0)
 
     #expect(first === second)
     #expect(first.value == "Child")
+  }
+
+  @Test("ScopedStore.select cache identity includes the selected key path")
+  func scopedSelectedStoreCacheIdentityIncludesSelectedKeyPath() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let callsiteLine: UInt = #line
+    let first = scoped.select(
+      \.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+    let second = scoped.select(
+      \.priority,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+
+    #expect(first.value == 1)
+    #expect(second.value == 0)
   }
 
   @Test("ScopedStore.select(dependingOn:) preserves SelectedStore identity across repeated calls")
@@ -3848,15 +4001,48 @@ struct StoreTests {
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
-    let first = scoped.select(dependingOn: \.title, fileID: #fileID, line: callsiteLine) { title in
+    let first = scoped.select(
+      dependingOn: \.title,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { title in
       title.uppercased()
     }
-    let second = scoped.select(dependingOn: \.title, fileID: #fileID, line: callsiteLine) { title in
+    let second = scoped.select(
+      dependingOn: \.title,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { title in
       title.uppercased()
     }
 
     #expect(first === second)
     #expect(first.value == "CHILD")
+  }
+
+  @Test("ScopedStore.select(dependingOn:) cache identity includes dependency key paths")
+  func scopedSelectedStoreDependingOnCacheIdentityIncludesDependencies() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let callsiteLine: UInt = #line
+    let first = scoped.select(
+      dependingOn: \.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    ) { $0 }
+    let second = scoped.select(
+      dependingOn: \.priority,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    ) { $0 }
+
+    #expect(first.value == 1)
+    #expect(second.value == 0)
   }
 
   @Test(
@@ -3870,14 +4056,16 @@ struct StoreTests {
     let first = scoped.select(
       dependingOn: (\.step, \.title),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title in
       "\(title)-\(step)"
     }
     let second = scoped.select(
       dependingOn: (\.step, \.title),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title in
       "\(title)-\(step)"
     }
@@ -4001,14 +4189,16 @@ struct StoreTests {
     let first = scoped.select(
       dependingOn: (\.step, \.title, \.note, \.priority),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title, note, priority in
       "\(title)-\(step)-\(note)-\(priority)"
     }
     let second = scoped.select(
       dependingOn: (\.step, \.title, \.note, \.priority),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title, note, priority in
       "\(title)-\(step)-\(note)-\(priority)"
     }
@@ -4234,7 +4424,8 @@ struct StoreTests {
       \VariadicParentFeature.Child.f,
       \VariadicParentFeature.Child.g,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
       probe.record()
       return a + b + c + d + e + f + g
@@ -4249,7 +4440,8 @@ struct StoreTests {
       \VariadicParentFeature.Child.f,
       \VariadicParentFeature.Child.g,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
       probe.record()
       return a + b + c + d + e + f + g
@@ -4268,13 +4460,15 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
     let second = store.scope(
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
 
     #expect(first.count == second.count)
@@ -4291,7 +4485,8 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
     let initialByID = Dictionary(uniqueKeysWithValues: initial.map { ($0.id, $0) })
 
@@ -4300,7 +4495,8 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
 
     #expect(reordered.map(\.id) == store.state.todos.map(\.id))
@@ -4314,7 +4510,8 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
     let appendedNewStore = try! #require(appended.first(where: { $0.id == newID }))
     for scoped in appended where scoped.id != newID {
@@ -4328,7 +4525,8 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
 
     #expect(removed.contains(where: { $0.id == removedID }) == false)
@@ -4563,6 +4761,49 @@ struct StoreTests {
     #expect(probe.events.contains("start:instrumented-delayed"))
     #expect(probe.events.contains("emit:received(\"delayed\")"))
     #expect(probe.events.contains("finish:instrumented-delayed"))
+  }
+
+  @Test("Store instrumentation records immediate emissions before reducer reentry")
+  func storeInstrumentationImmediateEmissionPrecedesReducerReentry() {
+    let probe = InstrumentationProbe()
+    let store = Store(
+      reducer: EmissionOrderingFeature(probe: probe),
+      initialState: .init(),
+      instrumentation: .init(
+        didEmitAction: { event in
+          if case .received(let value) = event.action {
+            probe.record("emit:\(value)")
+          }
+        }
+      )
+    )
+
+    store.send(.triggerImmediate)
+
+    #expect(probe.events == ["emit:immediate", "reduce:immediate"])
+  }
+
+  @Test("Store instrumentation records run emissions before reducer reentry")
+  func storeInstrumentationRunEmissionPrecedesReducerReentry() async {
+    let probe = InstrumentationProbe()
+    let store = Store(
+      reducer: EmissionOrderingFeature(probe: probe),
+      initialState: .init(),
+      instrumentation: .init(
+        didEmitAction: { event in
+          if case .received(let value) = event.action {
+            probe.record("emit:\(value)")
+          }
+        }
+      )
+    )
+
+    store.send(.triggerRun)
+    await waitUntil {
+      probe.events.contains("reduce:run")
+    }
+
+    #expect(probe.events == ["emit:run", "reduce:run"])
   }
 
   @Test(
@@ -5248,6 +5489,35 @@ struct StoreTests {
     await drainAsyncWork()
 
     #expect(store.events == ["first-1"])
+  }
+
+  @Test("Store drops direct .send actions after a cancellation boundary")
+  func storeDirectSendDropsAfterCancellationBoundary() async {
+    let probe = InstrumentationProbe()
+    let store = Store(
+      reducer: DirectSendCancellationBoundaryFeature(),
+      initialState: .init(),
+      instrumentation: .init(
+        didEmitAction: { event in
+          if case ._record(let value) = event.action {
+            probe.record("emit:\(value)")
+          }
+        },
+        didDropAction: { event in
+          if case ._record(let value)? = event.action {
+            probe.record("drop:\(value):\(event.reason)")
+          }
+        }
+      )
+    )
+
+    store.send(.start)
+    await waitUntil {
+      probe.events.isEmpty == false || store.events.isEmpty == false
+    }
+
+    #expect(store.events.isEmpty)
+    #expect(probe.events == ["drop:late:cancellationBoundary"])
   }
 
   @Test("Store .run keeps FIFO ordering for multiple emitted actions")
@@ -6230,6 +6500,59 @@ struct TestStoreTests {
     await store.assertNoMoreActions()
   }
 
+  @Test("TestStore drops direct .send actions after a cancellation boundary")
+  func testStoreDirectSendDropsAfterCancellationBoundary() async {
+    let store = TestStore(
+      reducer: DirectSendCancellationBoundaryFeature(),
+      initialState: .init(),
+      effectTimeout: .milliseconds(100)
+    )
+
+    await store.send(.start)
+    await store.assertNoMoreActions()
+  }
+
+  @Test("TestStore debounce skips stale effects at cancellation boundaries")
+  func testStoreDebounceSkipsStaleEffectsAtCancellationBoundaries() async {
+    let id: EffectID = "teststore-stale-debounce"
+    let store = TestStore(reducer: CounterFeature(), initialState: .init())
+    let probe = InstrumentationProbe()
+
+    await store.cancelEffects(id: id, context: .init(sequence: 1))
+    await store.debounce(
+      EffectTask<CounterFeature.Action>.none,
+      id: id,
+      interval: .milliseconds(0),
+      context: .init(cancellationID: id, sequence: 1),
+      awaited: true
+    ) { _, _, _ in
+      probe.record("recursed")
+    }
+
+    #expect(probe.events.isEmpty)
+  }
+
+  @Test("TestStore trailing throttle skips stale effects at cancellation boundaries")
+  func testStoreTrailingThrottleSkipsStaleEffectsAtCancellationBoundaries() async {
+    let id: EffectID = "teststore-stale-throttle"
+    let store = TestStore(reducer: CounterFeature(), initialState: .init())
+    let context = EffectExecutionContext(cancellationID: id, sequence: 1)
+    let probe = InstrumentationProbe()
+
+    await store.cancelEffects(id: id, context: .init(sequence: 1))
+    store.throttleState.storePending(
+      EffectTask<CounterFeature.Action>.none, context: context, for: id)
+    store.scheduleTrailingDrain(for: id, interval: .milliseconds(0)) { _, _, _ in
+      probe.record("recursed")
+    }
+
+    await waitUntil {
+      store.throttleState.pending(for: id) == nil
+    }
+
+    #expect(probe.events.isEmpty)
+  }
+
   @Test("TestStore repeated cancellation stress keeps queue clean")
   func testStoreCancellationStress() async {
     let store = TestStore(
@@ -6440,6 +6763,116 @@ struct TestStoreTests {
       $0.values = []
       $0.errorMessage = nil
     }
+  }
+
+  @Test("PhaseMap diagnostics exposes direct phase mutation events")
+  func phaseMapDiagnosticsReportsDirectMutation() {
+    enum Phase: Equatable, Hashable, Sendable {
+      case idle
+      case loaded
+      case failed
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .idle
+    }
+    enum Action: Equatable, Sendable {
+      case load
+    }
+
+    let probe = InstrumentationProbe()
+    let diagnostics = PhaseMapDiagnostics<Action, Phase> { violation in
+      if case .directPhaseMutation(
+        action: _,
+        previousPhase: let previousPhase,
+        postReducePhase: let postReducePhase
+      ) = violation {
+        probe.record("direct:\(previousPhase):\(postReducePhase)")
+      }
+    }
+
+    diagnostics.report(
+      .directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .failed)
+    )
+
+    #expect(probe.events == ["direct:idle:failed"])
+  }
+
+  @Test("PhaseMap diagnostics can be attached without changing legal transitions")
+  func phaseMapDiagnosticsPreservesLegalTransitionSemantics() {
+    enum Phase: Equatable, Hashable, Sendable {
+      case idle
+      case loaded
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .idle
+    }
+    enum Action: Equatable, Sendable {
+      case load
+    }
+
+    let probe = InstrumentationProbe()
+    let map: PhaseMap<State, Action, Phase> = PhaseMap(
+      \State.phase,
+      diagnostics: .init { _ in
+        probe.record("violation")
+      }
+    ) {
+      From(.idle) {
+        On(.load, to: .loaded)
+      }
+    }
+    let reducer = Reduce<State, Action> { _, action in
+      switch action {
+      case .load:
+        return .none
+      }
+    }
+    .phaseMap(map)
+
+    var state = State()
+    _ = reducer.reduce(into: &state, action: Action.load)
+
+    #expect(state.phase == .loaded)
+    #expect(probe.events.isEmpty)
+  }
+
+  @Test("PhaseMap diagnostics reports undeclared dynamic targets")
+  func phaseMapDiagnosticsReportsUndeclaredTarget() {
+    enum Phase: Equatable, Hashable, Sendable {
+      case idle
+      case loaded
+      case failed
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .idle
+      var reducerWork = 0
+    }
+    enum Action: Equatable, Sendable {
+      case load
+    }
+
+    let probe = InstrumentationProbe()
+    let diagnostics = PhaseMapDiagnostics<Action, Phase> { violation in
+      if case .undeclaredTarget(
+        action: _,
+        sourcePhase: let sourcePhase,
+        target: let target,
+        declaredTargets: let declaredTargets
+      ) = violation {
+        probe.record("undeclared:\(sourcePhase):\(target):\(declaredTargets.contains(.loaded))")
+      }
+    }
+
+    diagnostics.report(
+      .undeclaredTarget(
+        action: .load,
+        sourcePhase: .idle,
+        target: .failed,
+        declaredTargets: [.loaded]
+      )
+    )
+
+    #expect(probe.events == ["undeclared:idle:failed:true"])
   }
 
   @Test("PhaseMap uses declared ordering when multiple transitions match")
