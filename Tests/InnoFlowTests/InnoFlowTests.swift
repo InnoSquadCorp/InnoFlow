@@ -6622,6 +6622,113 @@ struct TestStoreTests {
     }
   }
 
+  @Test("PhaseMap diagnostics exposes direct phase mutation events")
+  func phaseMapDiagnosticsReportsDirectMutation() {
+    enum Phase: Equatable, Hashable, Sendable {
+      case idle
+      case loaded
+      case failed
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .idle
+    }
+    enum Action: Equatable, Sendable {
+      case load
+    }
+
+    let probe = InstrumentationProbe()
+    let diagnostics = PhaseMapDiagnostics<Action, Phase> { violation in
+      if case .directPhaseMutation(
+        action: _,
+        previousPhase: let previousPhase,
+        postReducePhase: let postReducePhase
+      ) = violation {
+        probe.record("direct:\(previousPhase):\(postReducePhase)")
+      }
+    }
+
+    diagnostics.report(
+      .directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .failed)
+    )
+
+    #expect(probe.events == ["direct:idle:failed"])
+  }
+
+  @Test("PhaseMap diagnostics can be attached without changing legal transitions")
+  func phaseMapDiagnosticsPreservesLegalTransitionSemantics() {
+    enum Phase: Equatable, Hashable, Sendable {
+      case idle
+      case loaded
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .idle
+    }
+    enum Action: Equatable, Sendable {
+      case load
+    }
+
+    let probe = InstrumentationProbe()
+    let map: PhaseMap<State, Action, Phase> = PhaseMap(\State.phase, diagnostics: .init { _ in
+      probe.record("violation")
+    }) {
+      From(.idle) {
+        On(.load, to: .loaded)
+      }
+    }
+    let reducer = Reduce<State, Action> { _, action in
+      switch action {
+      case .load:
+        return .none
+      }
+    }
+    .phaseMap(map)
+
+    var state = State()
+    _ = reducer.reduce(into: &state, action: Action.load)
+
+    #expect(state.phase == .loaded)
+    #expect(probe.events.isEmpty)
+  }
+
+  @Test("PhaseMap diagnostics reports undeclared dynamic targets")
+  func phaseMapDiagnosticsReportsUndeclaredTarget() {
+    enum Phase: Equatable, Hashable, Sendable {
+      case idle
+      case loaded
+      case failed
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .idle
+      var reducerWork = 0
+    }
+    enum Action: Equatable, Sendable {
+      case load
+    }
+
+    let probe = InstrumentationProbe()
+    let diagnostics = PhaseMapDiagnostics<Action, Phase> { violation in
+      if case .undeclaredTarget(
+        action: _,
+        sourcePhase: let sourcePhase,
+        target: let target,
+        declaredTargets: let declaredTargets
+      ) = violation {
+        probe.record("undeclared:\(sourcePhase):\(target):\(declaredTargets.contains(.loaded))")
+      }
+    }
+
+    diagnostics.report(
+      .undeclaredTarget(
+        action: .load,
+        sourcePhase: .idle,
+        target: .failed,
+        declaredTargets: [.loaded]
+      )
+    )
+
+    #expect(probe.events == ["undeclared:idle:failed:true"])
+  }
+
   @Test("PhaseMap uses declared ordering when multiple transitions match")
   func phaseMapFirstMatchWins() async {
     let map:

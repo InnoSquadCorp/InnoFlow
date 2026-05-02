@@ -27,16 +27,43 @@ import Foundation
 /// to a single hash lookup would require a `Hashable` constraint on `Action`
 /// and an explicit opt-in `PhaseMap` shape; it is intentionally deferred until
 /// real workloads show the linear walk is on the hot path.
+public enum PhaseMapViolation<Action: Sendable, Phase: Hashable & Sendable>: Sendable {
+  case directPhaseMutation(action: Action, previousPhase: Phase, postReducePhase: Phase)
+  case undeclaredTarget(
+    action: Action,
+    sourcePhase: Phase,
+    target: Phase,
+    declaredTargets: Set<Phase>
+  )
+}
+
+public struct PhaseMapDiagnostics<Action: Sendable, Phase: Hashable & Sendable>: Sendable {
+  public var report: @Sendable (PhaseMapViolation<Action, Phase>) -> Void
+
+  public init(
+    report: @escaping @Sendable (PhaseMapViolation<Action, Phase>) -> Void
+  ) {
+    self.report = report
+  }
+
+  public static var disabled: Self {
+    .init { _ in }
+  }
+}
+
 public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Sendable> {
   package let phaseKeyPath: WritableKeyPath<State, Phase>
   package let rules: [PhaseRule<State, Action, Phase>]
   package let rulesBySourcePhase: [Phase: [PhaseRule<State, Action, Phase>]]
+  package let diagnostics: PhaseMapDiagnostics<Action, Phase>
 
   public init(
     _ phaseKeyPath: WritableKeyPath<State, Phase>,
+    diagnostics: PhaseMapDiagnostics<Action, Phase> = .disabled,
     @PhaseRuleBuilder<State, Action, Phase> _ rules: () -> [PhaseRule<State, Action, Phase>]
   ) {
     self.phaseKeyPath = phaseKeyPath
+    self.diagnostics = diagnostics
     let declaredRules = rules()
     self.rules = declaredRules
     self.rulesBySourcePhase = Self.makeRulesBySourcePhase(from: declaredRules)
@@ -357,6 +384,13 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
 
     let postReducePhase = state[keyPath: phaseMap.phaseKeyPath]
     if postReducePhase != previousPhase {
+      phaseMap.diagnostics.report(
+        .directPhaseMutation(
+          action: action,
+          previousPhase: previousPhase,
+          postReducePhase: postReducePhase
+        )
+      )
       assertionFailure(
         """
         Base reducer must not mutate phase directly when PhaseMap is active.
@@ -382,6 +416,14 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
         }
 
         guard transition.declaredTargets.contains(target) else {
+          phaseMap.diagnostics.report(
+            .undeclaredTarget(
+              action: action,
+              sourcePhase: previousPhase,
+              target: target,
+              declaredTargets: transition.declaredTargets
+            )
+          )
           assertionFailure(
             """
             PhaseMap resolved a target outside the declared targets.
