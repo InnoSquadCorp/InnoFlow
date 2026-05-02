@@ -6,8 +6,10 @@ large runtime regressions without turning normal CI variance into noise.
 ## Gates
 
 - `EffectTimingBaselineGate` is a release-mode capture integrity check for
-  effect scheduling. It records non-blocking mean/p95 timing regressions but
-  only fails CI when the timing recorder capture or comparison is malformed.
+  effect scheduling. It records a fresh capture and compares mean timing only
+  as a non-blocking timing trend, while malformed or incomplete captures remain
+  blocking. Use `scripts/report-effect-timing-trend.sh` for standalone
+  maintainer reporting that includes the stricter p95 metric.
 - `PhaseMapPerfTests` are opt-in local benchmarks for phase dispatch shape.
 - `ReducerCompositionPerfTests` and `scripts/compare-reducer-composition-perf.sh`
   are maintainer tools for composition construction and dispatch experiments.
