@@ -235,7 +235,7 @@ enum InnoFlowActionPathsMessage: DiagnosticMessage {
     switch self {
     case .leadingUnderscoreCollision:
       return
-        "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case"
+        "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case"
     case .optionalPayloadNote(let caseName):
       return
         "case `\(caseName)` has an optional payload; the synthesized CasePath still works but `.\(caseName)(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path"

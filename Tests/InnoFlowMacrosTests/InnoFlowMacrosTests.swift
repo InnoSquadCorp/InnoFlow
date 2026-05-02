@@ -681,7 +681,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case",
+              "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
             line: 6,
             column: 10
           )
@@ -738,7 +738,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case",
+              "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
             line: 6,
             column: 14
           )
