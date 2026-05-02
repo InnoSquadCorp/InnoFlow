@@ -14,6 +14,7 @@ import SwiftUI
 
 private actor ActionQueue<Action: Sendable> {
   private var buffer: [Action] = []
+  private var headIndex = 0
   private var waiters: [UUID: CheckedContinuation<Action?, Never>] = [:]
 
   func enqueue(_ action: Action) {
@@ -28,8 +29,11 @@ private actor ActionQueue<Action: Sendable> {
   }
 
   func next() async -> Action? {
-    if !buffer.isEmpty {
-      return buffer.removeFirst()
+    if headIndex < buffer.count {
+      let action = buffer[headIndex]
+      headIndex += 1
+      compactBufferIfNeeded()
+      return action
     }
 
     let waiterID = UUID()
@@ -45,31 +49,52 @@ private actor ActionQueue<Action: Sendable> {
   }
 
   func popBuffered() -> Action? {
-    guard !buffer.isEmpty else { return nil }
-    return buffer.removeFirst()
+    guard headIndex < buffer.count else { return nil }
+    let action = buffer[headIndex]
+    headIndex += 1
+    compactBufferIfNeeded()
+    return action
   }
 
   private func cancelWaiter(_ waiterID: UUID) {
     guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
     continuation.resume(returning: nil)
   }
+
+  private func compactBufferIfNeeded() {
+    guard headIndex > 0 else { return }
+    if headIndex == buffer.count {
+      buffer.removeAll(keepingCapacity: true)
+      headIndex = 0
+    } else if headIndex >= 64, headIndex * 2 >= buffer.count {
+      buffer.removeFirst(headIndex)
+      headIndex = 0
+    }
+  }
 }
 
 @MainActor
 private final class TestStoreRunEndpoint<Action: Sendable> {
   private let isTaskActiveImpl: (UUID) -> Bool
+  private let shouldProceedImpl: (EffectExecutionContext?) -> Bool
   private let finishTrackedTaskImpl: (UUID, EffectID?) -> Void
 
   init(
     isTaskActive: @escaping (UUID) -> Bool,
+    shouldProceed: @escaping (EffectExecutionContext?) -> Bool,
     finishTrackedTask: @escaping (UUID, EffectID?) -> Void
   ) {
     self.isTaskActiveImpl = isTaskActive
+    self.shouldProceedImpl = shouldProceed
     self.finishTrackedTaskImpl = finishTrackedTask
   }
 
   func isTaskActive(token: UUID) -> Bool {
     isTaskActiveImpl(token)
+  }
+
+  func shouldProceed(context: EffectExecutionContext?) -> Bool {
+    shouldProceedImpl(context)
   }
 
   func finishTrackedTask(token: UUID, cancellationID: EffectID?) {
@@ -81,27 +106,28 @@ private actor TestStoreRunBridge<Action: Sendable> {
   private let endpoint: TestStoreRunEndpoint<Action>
   private let queue: ActionQueue<Action>
   private let token: UUID
-  private let cancellationID: EffectID?
+  private let context: EffectExecutionContext?
 
   init(
     endpoint: TestStoreRunEndpoint<Action>,
     queue: ActionQueue<Action>,
     token: UUID,
-    cancellationID: EffectID?
+    context: EffectExecutionContext?
   ) {
     self.endpoint = endpoint
     self.queue = queue
     self.token = token
-    self.cancellationID = cancellationID
+    self.context = context
   }
 
   func emit(_ action: Action) async {
     guard await endpoint.isTaskActive(token: token) else { return }
+    guard await endpoint.shouldProceed(context: context) else { return }
     await queue.enqueue(action)
   }
 
   func finish() async {
-    await endpoint.finishTrackedTask(token: token, cancellationID: cancellationID)
+    await endpoint.finishTrackedTask(token: token, cancellationID: context?.cancellationID)
   }
 }
 
@@ -151,6 +177,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   private var taskIDsByEffectID: [EffectID: Set<UUID>] = [:]
   private var debounceDelayTasksByID: [EffectID: Task<Void, Never>] = [:]
   private var debounceGenerationByID: [EffectID: UUID] = [:]
+  private var lastIssuedSequence: UInt64 = 0
+  private var cancelledUpToAll: UInt64 = 0
+  private var cancelledUpToByID: [EffectID: UInt64] = [:]
   package let throttleState = ThrottleStateMap<R.Action>()
 
   private var walker: EffectWalker<TestStore<R>> {
@@ -206,6 +235,44 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     throttleState.clearAll()
   }
 
+  // MARK: - Sequence Boundaries
+
+  private func nextSequence() -> UInt64 {
+    lastIssuedSequence &+= 1
+    return lastIssuedSequence
+  }
+
+  private func shouldStart(sequence: UInt64, cancellationID: EffectID?) -> Bool {
+    if sequence <= cancelledUpToAll {
+      return false
+    }
+    guard let cancellationID else { return true }
+    return sequence > (cancelledUpToByID[cancellationID] ?? 0)
+  }
+
+  @discardableResult
+  private func markCancelled(id: EffectID, upTo sequence: UInt64? = nil) -> UInt64 {
+    let sequence = sequence ?? lastIssuedSequence
+    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, sequence)
+    return sequence
+  }
+
+  @discardableResult
+  private func markCancelledInFlight(id: EffectID, upTo sequence: UInt64? = nil) -> UInt64 {
+    let sequence = sequence ?? lastIssuedSequence
+    let previousSequence = sequence == 0 ? 0 : sequence - 1
+    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, previousSequence)
+    return previousSequence
+  }
+
+  @discardableResult
+  private func markCancelledAll(upTo sequence: UInt64? = nil) -> UInt64 {
+    let sequence = sequence ?? lastIssuedSequence
+    cancelledUpToAll = max(cancelledUpToAll, sequence)
+    cancelledUpToByID.removeAll(keepingCapacity: true)
+    return sequence
+  }
+
   // MARK: - Public APIs
 
   public func send(
@@ -243,7 +310,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       )
     }
 
-    await walker.walk(effect, awaited: false)
+    let sequence = nextSequence()
+    await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
   }
 
   public func receive(
@@ -312,7 +380,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       )
     }
 
-    await walker.walk(effect, awaited: false)
+    let sequence = nextSequence()
+    await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
   }
 
   public func assertNoMoreActions(
@@ -353,10 +422,12 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   }
 
   public func cancelEffects(identifiedBy id: EffectID) async {
+    markCancelled(id: id)
     cancelEffectsSynchronously(identifiedBy: id)
   }
 
   public func cancelAllEffects() async {
+    markCancelledAll()
     cancelAllEffectsSynchronously()
   }
 
@@ -459,7 +530,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   }
 
   fileprivate func walkScopedEffect(_ effect: EffectTask<R.Action>) async {
-    await walker.walk(effect, awaited: false)
+    let sequence = nextSequence()
+    await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
   }
 
   fileprivate func nextScopedActionWithinTimeout() async -> R.Action? {
@@ -486,6 +558,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       isTaskActive: { [weak self] token in
         self?.isRunTaskActive(token: token) ?? false
       },
+      shouldProceed: { [weak self] context in
+        self?.shouldProceed(context: context) ?? false
+      },
       finishTrackedTask: { [weak self] token, cancellationID in
         self?.finishTrackedRunTask(token: token, cancellationID: cancellationID)
       }
@@ -494,7 +569,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       endpoint: endpoint,
       queue: queue,
       token: token,
-      cancellationID: context?.cancellationID
+      context: context
     )
     let manualClock = self.manualClock
     let wallClock = self.wallClock
@@ -524,10 +599,11 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
           Task.isCancelled
         },
         checkCancellation: {
-          let isTaskActive = await MainActor.run {
+          let canContinue = await MainActor.run {
             endpoint.isTaskActive(token: token)
+              && endpoint.shouldProceed(context: context)
           }
-          if Task.isCancelled || isTaskActive == false {
+          if Task.isCancelled || canContinue == false {
             throw CancellationError()
           }
         }
@@ -641,8 +717,9 @@ extension TestStore: EffectDriver {
   package typealias Action = R.Action
 
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
-    Task {
-      await queue.enqueue(action)
+    Task { @MainActor [weak self] in
+      guard let self, self.shouldProceed(context: context) else { return }
+      await self.queue.enqueue(action)
     }
   }
 
@@ -664,15 +741,18 @@ extension TestStore: EffectDriver {
   }
 
   package func cancelEffects(id: EffectID, context: EffectExecutionContext?) async {
+    markCancelled(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id)
   }
 
   package func cancelInFlightEffects(id: EffectID, context: EffectExecutionContext?) async {
+    markCancelledInFlight(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id)
   }
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
-    true
+    guard let sequence = context?.sequence else { return true }
+    return shouldStart(sequence: sequence, cancellationID: context?.cancellationID)
   }
 
   package func debounce(
@@ -687,6 +767,7 @@ extension TestStore: EffectDriver {
       ) async -> Void
   ) async {
     debounceDelayTasksByID[id]?.cancel()
+    markCancelledInFlight(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id)
 
     let generation = UUID()
@@ -810,6 +891,7 @@ extension TestStore: EffectDriver {
         }
         for child in children {
           guard !Task.isCancelled else { break }
+          guard self.shouldProceed(context: context) else { break }
           await recurse(child, context, true)
         }
       }

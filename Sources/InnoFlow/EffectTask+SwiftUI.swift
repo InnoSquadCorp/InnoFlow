@@ -23,8 +23,7 @@ package struct EffectAnimation: Sendable {
 package struct EffectExecutionContext: Sendable {
   package let cancellationID: EffectID?
   package let animation: EffectAnimation?
-  /// Store-specific sequence number for cancellation boundary tracking.
-  /// Nil in TestStore contexts.
+  /// Store/TestStore sequence number for cancellation boundary tracking.
   package let sequence: UInt64?
 
   package init(
