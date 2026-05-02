@@ -7,7 +7,7 @@ if [[ $# -ne 1 ]]; then
   exit 1
 fi
 
-tag="$1"
+tag="${1#v}"
 changelog="CHANGELOG.md"
 
 if [[ ! -f "$changelog" ]]; then

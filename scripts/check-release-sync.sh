@@ -21,6 +21,13 @@ latest_tag_version() {
   fi
 }
 
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|y|Y) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 release_notes_version() {
   awk '
     /^## [0-9]+\.[0-9]+\.[0-9]+ Release$/ {
@@ -48,6 +55,27 @@ latest_release_version() {
   latest_tag_version
 }
 
+require_published_tag_version() {
+  local version="$1"
+
+  if ! is_truthy "${INNOFLOW_REQUIRE_RELEASE_TAG:-0}"; then
+    return
+  fi
+
+  local tag_version
+  tag_version="$(latest_tag_version || true)"
+  if [[ -z "$tag_version" ]]; then
+    echo "[check-release-sync] Failed: INNOFLOW_REQUIRE_RELEASE_TAG=1 but no semantic release tag exists" >&2
+    exit 1
+  fi
+
+  if [[ "$tag_version" != "$version" ]]; then
+    echo "[check-release-sync] Failed: staged release surface targets ${version}, but latest published tag is ${tag_version}" >&2
+    echo "[check-release-sync] Create/pull tag v${version} or rerun without INNOFLOW_REQUIRE_RELEASE_TAG for staged-doc sync" >&2
+    exit 1
+  fi
+}
+
 require_pattern() {
   local file="$1"
   local pattern="$2"
@@ -70,6 +98,8 @@ if [[ -z "$version" ]]; then
   echo "[check-release-sync] Failed: could not determine latest release version" >&2
   exit 1
 fi
+
+require_published_tag_version "$version"
 
 escaped_version="${version//./\\.}"
 
