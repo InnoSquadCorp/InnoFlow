@@ -4,8 +4,8 @@ extension Store: EffectDriver {
   package typealias Action = R.Action
 
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
-    enqueue(action, animation: context?.animation)
     recordEmission(action, context: context)
+    enqueue(action, animation: context?.animation)
   }
 
   package func startRun(
@@ -72,12 +72,9 @@ extension Store: EffectDriver {
             return
           }
 
-          let enqueued = self.effectBridge.enqueueRunActionIfAllowed(action, context: context) {
-            [weak self] action, animation in
-            self?.enqueue(action, animation: animation)
-          }
-          if enqueued {
+          if self.effectBridge.shouldProceed(context: context) {
             self.recordEmission(action, context: context)
+            self.enqueue(action, animation: context?.animation)
           } else {
             self.recordDrop(action, reason: .cancellationBoundary, context: context)
           }

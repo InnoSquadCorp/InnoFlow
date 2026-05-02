@@ -87,17 +87,6 @@ package final class StoreEffectBridge<Action: Sendable> {
     return sequence
   }
 
-  @discardableResult
-  package func enqueueRunActionIfAllowed(
-    _ action: Action,
-    context: EffectExecutionContext?,
-    enqueue: (Action, EffectAnimation?) -> Void
-  ) -> Bool {
-    guard shouldProceed(context: context) else { return false }
-    enqueue(action, context?.animation)
-    return true
-  }
-
   package func cancelEffects(id: EffectID, upTo sequence: UInt64) async {
     await runtime.cancel(id: id, upTo: sequence)
     throttleState.clearState(for: id)

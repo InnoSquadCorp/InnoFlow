@@ -66,6 +66,34 @@ struct AsyncFeature: Reducer {
   }
 }
 
+struct EmissionOrderingFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {}
+
+  enum Action: Equatable, Sendable {
+    case triggerImmediate
+    case triggerRun
+    case received(String)
+  }
+
+  let probe: InstrumentationProbe
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .triggerImmediate:
+      return .send(.received("immediate"))
+
+    case .triggerRun:
+      return .run { send in
+        await send(.received("run"))
+      }
+
+    case .received(let value):
+      probe.record("reduce:\(value)")
+      return .none
+    }
+  }
+}
+
 struct ContextClockFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var log: [String] = []
@@ -4672,6 +4700,49 @@ struct StoreTests {
     #expect(probe.events.contains("start:instrumented-delayed"))
     #expect(probe.events.contains("emit:received(\"delayed\")"))
     #expect(probe.events.contains("finish:instrumented-delayed"))
+  }
+
+  @Test("Store instrumentation records immediate emissions before reducer reentry")
+  func storeInstrumentationImmediateEmissionPrecedesReducerReentry() {
+    let probe = InstrumentationProbe()
+    let store = Store(
+      reducer: EmissionOrderingFeature(probe: probe),
+      initialState: .init(),
+      instrumentation: .init(
+        didEmitAction: { event in
+          if case .received(let value) = event.action {
+            probe.record("emit:\(value)")
+          }
+        }
+      )
+    )
+
+    store.send(.triggerImmediate)
+
+    #expect(probe.events == ["emit:immediate", "reduce:immediate"])
+  }
+
+  @Test("Store instrumentation records run emissions before reducer reentry")
+  func storeInstrumentationRunEmissionPrecedesReducerReentry() async {
+    let probe = InstrumentationProbe()
+    let store = Store(
+      reducer: EmissionOrderingFeature(probe: probe),
+      initialState: .init(),
+      instrumentation: .init(
+        didEmitAction: { event in
+          if case .received(let value) = event.action {
+            probe.record("emit:\(value)")
+          }
+        }
+      )
+    )
+
+    store.send(.triggerRun)
+    await waitUntil {
+      probe.events.contains("reduce:run")
+    }
+
+    #expect(probe.events == ["emit:run", "reduce:run"])
   }
 
   @Test(
