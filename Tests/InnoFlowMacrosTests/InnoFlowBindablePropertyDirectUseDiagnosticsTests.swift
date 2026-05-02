@@ -188,6 +188,119 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
     #endif
   }
 
+  @Test("@InnoFlow ignores unrelated qualified BindableProperty spellings")
+  func unrelatedQualifiedBindablePropertySpellingDoesNotWarn() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct CounterFeature {
+            struct State: Sendable {
+                var step: OtherModule.BindableProperty<Int> = OtherModule.BindableProperty(0)
+            }
+            enum Action: Sendable {
+                case setStep(Int)
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in
+                    .none
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct CounterFeature {
+              struct State: Sendable {
+                  var step: OtherModule.BindableProperty<Int> = OtherModule.BindableProperty(0)
+              }
+              enum Action: Sendable {
+                  case setStep(Int)
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in
+                      .none
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+
+          extension CounterFeature: Reducer {
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow omits unsafe BindableProperty Fix-Its")
+  func unsafeBindablePropertyFixItsAreOmitted() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct CounterFeature {
+            struct State: Sendable {
+                @available(*, deprecated)
+                private var step: BindableProperty<Int> = BindableProperty<Int>(1)
+            }
+            enum Action: Sendable {
+                case setStep(Int)
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in
+                    .none
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct CounterFeature {
+              struct State: Sendable {
+                  @available(*, deprecated)
+                  private var step: BindableProperty<Int> = BindableProperty<Int>(1)
+              }
+              enum Action: Sendable {
+                  case setStep(Int)
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in
+                      .none
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+
+          extension CounterFeature: Reducer {
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "state field `step` declares `BindableProperty<Int>` directly; use `@BindableField var step: Int` instead — `BindableProperty` is a low-level storage type that must not be authored directly in feature State",
+            line: 5,
+            column: 23,
+            severity: .warning
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow skips BindableProperty diagnostics when State is a typealias")
   func typealiasedStateSkipsBindablePropertyDiagnostic() throws {
     #if canImport(InnoFlowMacros)

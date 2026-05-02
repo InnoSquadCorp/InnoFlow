@@ -388,6 +388,62 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow labeled-payload notes use the generated action path base name")
+  func labeledLeadingUnderscorePayloadNoteUsesGeneratedBaseName() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct LabeledActionFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                case _child(action: ChildAction)
+            }
+            enum ChildAction: Sendable {
+                case start
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct LabeledActionFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  case _child(action: ChildAction)
+              }
+              enum ChildAction: Sendable {
+                  case start
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension LabeledActionFeature: Reducer {}
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "case `_child` has a labeled payload (`action:`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `childCasePath` manually",
+            line: 5,
+            column: 14,
+            severity: .note
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow notes multi-parameter cases instead of silently skipping them")
   func multiParameterCaseDoesNotSynthesizeActionPath() throws {
     #if canImport(InnoFlowMacros)
@@ -637,6 +693,63 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow diagnoses generated action path collisions in static multi-bindings")
+  func staticMultiBindingActionPathCollisionsAreDiagnosed() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct CollisionFeature {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                static let unrelated = 0, childCasePath = 1
+                case child(ChildAction)
+            }
+            enum ChildAction: Sendable {
+                case start
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct CollisionFeature {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  static let unrelated = 0, childCasePath = 1
+                  case child(ChildAction)
+              }
+              enum ChildAction: Sendable {
+                  case start
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension CollisionFeature: Reducer {}
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "generated action path name collides after stripping leading underscore; declare an explicit static alias or rename the case",
+            line: 6,
+            column: 14
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow rejects missing body")
   func missingBodyIsRejected() throws {
     #if canImport(InnoFlowMacros)
@@ -721,6 +834,54 @@ struct InnoFlowMacrosTests {
               }
           }
           """,
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow omits explicit reduce Fix-It when body contains a multiline string")
+  func explicitReduceWithMultilineStringOmitsFixIt() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct LegacyFeature {
+            struct State: Sendable { var message = "" }
+            enum Action: Sendable { case log }
+
+            func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                state.message = \"\"\"
+                line 1
+                  line 2
+                \"\"\"
+                return .none
+            }
+        }
+        """,
+        expandedSource: """
+          struct LegacyFeature {
+              struct State: Sendable { var message = "" }
+              enum Action: Sendable { case log }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                  state.message = \"\"\"
+                  line 1
+                    line 2
+                  \"\"\"
+                  return .none
+              }
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead",
+            line: 1,
+            column: 1
+          )
+        ],
+        macros: testMacros
       )
     #else
       Issue.record("Macros are only supported when running tests for the host platform")

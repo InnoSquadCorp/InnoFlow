@@ -114,6 +114,9 @@ extension InnoFlowMacro {
 
   private static func bodyReplacement(for function: FunctionDeclSyntax) -> VariableDeclSyntax? {
     guard let body = function.body else { return nil }
+    guard !containsMultilineStringLiteral(body.statements) else {
+      return nil
+    }
 
     let renderedStatements = indentCodeBlockItems(body.statements, spaces: 8)
     return try? VariableDeclSyntax(
@@ -125,6 +128,10 @@ extension InnoFlowMacro {
       }
       """
     )
+  }
+
+  private static func containsMultilineStringLiteral(_ items: CodeBlockItemListSyntax) -> Bool {
+    items.description.contains("\"\"\"")
   }
 
   private static func indentCodeBlockItems(

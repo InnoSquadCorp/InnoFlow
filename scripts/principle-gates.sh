@@ -191,6 +191,7 @@ validate_doc_parity_contract_shape() {
 
     non_empty_array("requiredPatterns")
     and non_empty_array("sectionCounts")
+    and non_empty_array("localizedHeaderParity")
     and non_empty_array("sampleIdentifiers")
     and all(
       .requiredPatterns[];
@@ -204,6 +205,20 @@ validate_doc_parity_contract_shape() {
       and typed_field("label"; "string")
       and typed_field("pattern"; "string")
       and typed_field("count"; "number")
+    )
+    and all(
+      .localizedHeaderParity[];
+      typed_field("source"; "string")
+      and typed_field("headerLevel"; "string")
+      and typed_field("expectedSourceHeaderCount"; "number")
+      and has("translations")
+      and (.translations | type == "array")
+      and (.translations | length > 0)
+      and all(
+        .translations[];
+        typed_field("file"; "string")
+        and typed_field("expectedHeaderCount"; "number")
+      )
     )
     and all(
       .sampleIdentifiers[];
@@ -604,11 +619,9 @@ main() {
 
   echo "[principle-gates] Running isolated release timing baseline gate"
   # `INNOFLOW_CHECK_EFFECT_BASELINE=1` opts the `EffectTimingBaselineGate` in
-  # for this dedicated release-only run so release-mode scheduling regressions
-  # (the 2026-04 class of yield-count failures) are detected against
-  # `Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl` via
-  # `scripts/compare-effect-timings.sh` without unrelated suite load skewing
-  # the measured mean.
+  # for this dedicated release-only run so malformed or incomplete timing
+  # captures still fail CI. Metric regressions are reported as non-blocking
+  # trend output because wall-clock effect timings are runner-sensitive.
   RELEASE_BASELINE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-baseline"
   if ! INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
       --package-path "$ROOT_DIR" \

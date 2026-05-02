@@ -9,9 +9,10 @@ release gate in `EffectTimingBaselineGate` replays a fixed workload, records a
 fresh JSONL capture, and compares that capture to the committed baseline with
 `scripts/compare-effect-timings.sh`.
 
-That release gate is intentionally catastrophic-only. Use
-`scripts/report-effect-timing-trend.sh` when you want stricter, non-blocking
-mean and p95 reporting for maintainer review.
+That release gate blocks on capture integrity only and reports metric
+regressions as non-blocking trend output. Use
+`scripts/report-effect-timing-trend.sh` when you want the same mean signal plus
+stricter p95 reporting for maintainer review.
 For the broader maintainer policy on when to refresh or interpret baselines,
 see `docs/PERFORMANCE_BASELINES.md`.
 
@@ -25,12 +26,12 @@ This article explains:
 
 ## When To Use It
 
-Use the timing baseline when you need to catch broad runtime regressions such
-as:
+Use the timing baseline when you need to verify that runtime instrumentation can
+still capture broad scheduling signals such as:
 
 - release-only scheduling drift after optimizer or actor-hop changes
 - unexpectedly longer effect runs for the same fixed workload
-- catastrophic regressions where `.run` pipelines stop draining as expected
+- regressions where `.run` pipelines stop draining as expected
 
 Do not use it for feature-level latency budgets, user-visible SLA checks, or
 fine-grained microbenchmarks. The baseline is intentionally coarse. It exists
@@ -106,9 +107,9 @@ feature performs 10 identical start/reset cycles.
 It computes one scalar metric from each distribution:
 
 - `p95` for standalone script comparisons
-- `mean` for the dedicated release gate
+- `mean` for the dedicated release-gate trend
 
-The release gate uses `mean` because a 10-run fixture makes `p95` collapse to
+The release gate reports `mean` because a 10-run fixture makes `p95` collapse to
 the slowest single run, which proved too noisy on CI runners. The standalone
 script still supports `p95` when you want a stricter local percentile check.
 
@@ -170,7 +171,7 @@ To compare a fresh dump directly:
   --tolerance 1.0
 ```
 
-Use `mean` when you want behavior close to the release gate. Use `p95` when
+Use `mean` when you want behavior close to the release-gate trend. Use `p95` when
 you want a stricter local check on the slow tail.
 
 To print both signals without turning them into a blocker:

@@ -65,8 +65,9 @@ package final class StoreEffectBridge<Action: Sendable> {
   ///   - id: cancellation key for the effect group.
   ///   - sequence: the sequence to keep alive (defaults to the most recent issued
   ///     sequence). Sequences strictly less than this become cancelled.
-  /// - Returns: the boundary written to `cancelledUpToByID[id]` — i.e.
-  ///   `sequence - 1` (saturating at `0`).
+  /// - Returns: the computed in-flight boundary for this call, i.e.
+  ///   `sequence - 1` (saturating at `0`). The stored `cancelledUpToByID[id]`
+  ///   boundary remains monotonic as `max(existingBoundary, returnedBoundary)`.
   ///
   /// Concurrency: this read-modify-write is atomic by virtue of the class-level
   /// `@MainActor` isolation. Callers do not need additional synchronization.

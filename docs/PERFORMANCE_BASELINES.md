@@ -5,26 +5,28 @@ large runtime regressions without turning normal CI variance into noise.
 
 ## Gates
 
-- `EffectTimingBaselineGate` is a release-mode catastrophic regression check
-  for effect scheduling.
+- `EffectTimingBaselineGate` is a release-mode capture integrity check for
+  effect scheduling. It records non-blocking mean/p95 timing regressions but
+  only fails CI when the timing recorder capture or comparison is malformed.
 - `PhaseMapPerfTests` are opt-in local benchmarks for phase dispatch shape.
 - `ReducerCompositionPerfTests` and `scripts/compare-reducer-composition-perf.sh`
   are maintainer tools for composition construction and dispatch experiments.
 
 ## Interpreting Failures
 
-Treat a blocking baseline failure as a prompt to compare evidence, not as proof
-that the last code edit is wrong.
+Treat a blocking baseline failure as evidence that the timing capture or
+comparison pipeline is broken, not as proof that the last code edit is slow.
+Metric regressions are reported as non-blocking trend output.
 
 1. Re-run the same gate once on a quiet machine.
 2. Check whether matched run counts are complete.
-3. Compare the changed code path against the benchmark workload.
+3. Compare the non-blocking trend output against the changed code path.
 4. If the workload changed intentionally, regenerate the fixture in a dedicated
    commit and explain the reason.
 5. If only CI hardware changed, regenerate only after confirming the new runner
    is stable.
 
-Do not loosen tolerance to make a noisy run pass.
+Do not loosen tolerance to make noisy trend output disappear.
 
 ## Refresh Policy
 

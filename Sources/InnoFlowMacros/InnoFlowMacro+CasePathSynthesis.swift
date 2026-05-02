@@ -13,29 +13,30 @@ extension InnoFlowMacro {
     in actionEnum: EnumDeclSyntax,
     context: some MacroExpansionContext
   ) -> [DeclSyntax] {
-    let existingNames = Set<String>(
-      actionEnum.memberBlock.members.compactMap { member in
+    let existingNames = Set(
+      actionEnum.memberBlock.members.flatMap { member -> [String] in
         if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
           guard variableDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) })
           else {
-            return nil
+            return []
           }
-          return variableDecl.bindings.first?
-            .pattern
-            .as(IdentifierPatternSyntax.self)?
-            .identifier
-            .text
+          return variableDecl.bindings.compactMap { binding in
+            binding.pattern
+              .as(IdentifierPatternSyntax.self)?
+              .identifier
+              .text
+          }
         }
 
         if let functionDecl = member.decl.as(FunctionDeclSyntax.self) {
           guard functionDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) })
           else {
-            return nil
+            return []
           }
-          return functionDecl.name.text
+          return [functionDecl.name.text]
         }
 
-        return nil
+        return []
       }
     )
 
@@ -127,12 +128,14 @@ extension InnoFlowMacro {
       let labelToken = parameter.firstName,
       labelToken.text != "_"
     {
+      let actionPathBaseName = generatedActionPathBaseName(from: caseName)
       context.diagnose(
         Diagnostic(
           node: Syntax(element.name),
           message: InnoFlowActionPathsMessage.labeledPayloadNote(
             caseName: caseName,
-            label: labelToken.text
+            label: labelToken.text,
+            actionPathBaseName: actionPathBaseName
           )
         )
       )
@@ -225,7 +228,7 @@ private struct SynthesizedActionPathMember {
 enum InnoFlowActionPathsMessage: DiagnosticMessage {
   case leadingUnderscoreCollision
   case optionalPayloadNote(caseName: String)
-  case labeledPayloadNote(caseName: String, label: String)
+  case labeledPayloadNote(caseName: String, label: String, actionPathBaseName: String)
   case multiPayloadNote(caseName: String)
 
   var message: String {
@@ -236,9 +239,9 @@ enum InnoFlowActionPathsMessage: DiagnosticMessage {
     case .optionalPayloadNote(let caseName):
       return
         "case `\(caseName)` has an optional payload; the synthesized CasePath still works but `.\(caseName)(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path"
-    case .labeledPayloadNote(let caseName, let label):
+    case .labeledPayloadNote(let caseName, let label, let actionPathBaseName):
       return
-        "case `\(caseName)` has a labeled payload (`\(label):`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `\(caseName)CasePath` manually"
+        "case `\(caseName)` has a labeled payload (`\(label):`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `\(actionPathBaseName)CasePath` manually"
     case .multiPayloadNote(let caseName):
       return
         "case `\(caseName)` has multiple payload parameters; CasePath synthesis only handles unlabeled single payloads and `id:action:` collection routes. Declare a static path manually if you need one"
@@ -250,11 +253,11 @@ enum InnoFlowActionPathsMessage: DiagnosticMessage {
     case .leadingUnderscoreCollision:
       return .init(domain: "InnoFlowMacro", id: "LeadingUnderscoreCollision")
     case .optionalPayloadNote:
-      return .init(domain: "InnoFlowMacro", id: "OptionalPayloadActionPathSkipped")
+      return .init(domain: "InnoFlowMacro", id: "OptionalPayloadActionPathNote")
     case .labeledPayloadNote:
-      return .init(domain: "InnoFlowMacro", id: "LabeledPayloadActionPathSkipped")
+      return .init(domain: "InnoFlowMacro", id: "LabeledPayloadActionPathNote")
     case .multiPayloadNote:
-      return .init(domain: "InnoFlowMacro", id: "MultiPayloadActionPathSkipped")
+      return .init(domain: "InnoFlowMacro", id: "MultiPayloadActionPathNote")
     }
   }
 

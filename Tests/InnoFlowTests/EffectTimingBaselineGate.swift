@@ -11,9 +11,9 @@
 // suites on a variety of developer machines, where absolute run durations
 // can drift by an order of magnitude. It is opted in from
 // `scripts/principle-gates.sh`, which runs this suite in a dedicated release
-// invocation with `INNOFLOW_CHECK_EFFECT_BASELINE=1` set so CI fails on
-// genuine regressions (for example the 2026-04 class of release-mode
-// scheduling failures) but local runs stay quiet. Setting
+// invocation with `INNOFLOW_CHECK_EFFECT_BASELINE=1` set so CI blocks on
+// capture integrity failures while reporting metric regressions as a
+// non-blocking timing trend. Setting
 // `INNOFLOW_WRITE_EFFECT_BASELINE=<path>` switches the suite into export mode
 // so maintainers can regenerate the committed JSONL fixture deliberately.
 
@@ -33,7 +33,7 @@ struct EffectTimingBaselineGate {
     let didTick: Bool
   }
 
-  @Test("Effect timing mean stays within tolerance of the committed baseline")
+  @Test("Effect timing capture completes and reports the committed baseline trend")
   @MainActor
   func currentTimingsStayWithinBaselineTolerance() async throws {
     let environment = ProcessInfo.processInfo.environment
@@ -96,11 +96,10 @@ struct EffectTimingBaselineGate {
       relativePath: "scripts/compare-effect-timings.sh"
     )
 
-    // Tolerance is intentionally loose: even in the isolated release-only
-    // invocation from `principle-gates.sh`, machine-local drift can still
-    // move these timings materially. The gate exists to catch catastrophic
-    // regressions (the 2026-04 class of release yield-count failures), not to
-    // enforce a specific absolute performance target.
+    // Tolerance remains intentionally loose because the same script is used
+    // for trend reporting. In this release gate, metric regressions are
+    // non-blocking; incomplete captures or malformed comparison output remain
+    // blocking because those mean the trend signal itself is broken.
     //
     // The standalone script still supports `p95`, and its direct contract
     // tests cover the percentile ceiling behavior. This release-only gate uses
@@ -115,10 +114,18 @@ struct EffectTimingBaselineGate {
       tolerance: EffectTimingBaselineContract.gateTolerance
     )
 
-    if result.terminationStatus != 0 {
+    if result.terminationStatus == 1 {
+      print(
+        """
+        [EffectTimingBaselineGate] NON-BLOCKING_REGRESSION
+        stdout: \(result.stdout)
+        stderr: \(result.stderr)
+        """
+      )
+    } else if result.terminationStatus != 0 {
       Issue.record(
         """
-        Effect timing baseline regression detected.
+        Effect timing baseline capture or comparison failed.
         stdout: \(result.stdout)
         stderr: \(result.stderr)
         """

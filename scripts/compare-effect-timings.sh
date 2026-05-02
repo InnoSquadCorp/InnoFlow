@@ -65,7 +65,7 @@ Regenerate the committed baseline fixture from the repository root:
 
 Notes:
   The standalone script supports both p95 and mean.
-  The dedicated release gate uses mean to reduce CI runner jitter sensitivity.
+  The dedicated release-gate trend uses mean to reduce CI runner jitter sensitivity.
 HELP
 }
 

@@ -112,6 +112,7 @@ extension InnoFlowMacro {
 
     if let member = type.as(MemberTypeSyntax.self),
       member.name.text == "BindableProperty",
+      member.baseType.trimmedDescription == "InnoFlow",
       let arguments = member.genericArgumentClause?.arguments,
       arguments.count == 1,
       let first = arguments.first
@@ -136,11 +137,16 @@ extension InnoFlowMacro {
     guard variable.bindings.count == 1 else {
       return nil
     }
+    guard variable.modifiers.isEmpty, variable.attributes.isEmpty else {
+      return nil
+    }
 
     let initializerSource: String
     if let initializer = binding.initializer {
-      let unwrapped = unwrappedBindablePropertyInitializer(initializer.value)
-      initializerSource = " = \(unwrapped ?? initializer.value.trimmedDescription)"
+      guard let unwrapped = unwrappedBindablePropertyInitializer(initializer.value) else {
+        return nil
+      }
+      initializerSource = " = \(unwrapped)"
     } else {
       initializerSource = ""
     }
@@ -161,7 +167,8 @@ extension InnoFlowMacro {
     if let calleeIdentifier = call.calledExpression.as(DeclReferenceExprSyntax.self) {
       calleeIsBindableProperty = calleeIdentifier.baseName.text == "BindableProperty"
     } else if let memberAccess = call.calledExpression.as(MemberAccessExprSyntax.self),
-      memberAccess.declName.baseName.text == "BindableProperty"
+      memberAccess.declName.baseName.text == "BindableProperty",
+      memberAccess.base?.trimmedDescription == "InnoFlow"
     {
       calleeIsBindableProperty = true
     } else {

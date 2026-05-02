@@ -24,8 +24,7 @@ count_headers() {
 }
 
 extract_json_value() {
-  # Extracts the first scalar value for a given key from a JSON file using
-  # only POSIX tooling. Sufficient for the limited shapes used here.
+  # Extracts tab-separated rows from the limited JSON contract shape.
   python3 - "$PARITY_FILE" <<'PY'
 import json
 import sys
@@ -33,16 +32,23 @@ import sys
 with open(sys.argv[1]) as handle:
     data = json.load(handle)
 
-entries = data.get("localizedHeaderParity", [])
-if not entries:
-    sys.exit(0)
+entries = data.get("localizedHeaderParity")
+if not isinstance(entries, list) or not entries:
+    raise SystemExit(
+        "[check-doc-parity] Failed: docs/contracts/doc-parity.json must define a non-empty localizedHeaderParity array"
+    )
 
 for entry in entries:
     source = entry["source"]
     header_level = entry["headerLevel"]
     expected_source = entry["expectedSourceHeaderCount"]
     print(f"SOURCE\t{source}\t{header_level}\t{expected_source}")
-    for translation in entry.get("translations", []):
+    translations = entry.get("translations")
+    if not isinstance(translations, list) or not translations:
+        raise SystemExit(
+            f"[check-doc-parity] Failed: localizedHeaderParity entry for {source} must define a non-empty translations array"
+        )
+    for translation in translations:
         print(
             f"TRANSLATION\t{translation['file']}\t{header_level}\t{translation['expectedHeaderCount']}"
         )
@@ -50,6 +56,10 @@ PY
 }
 
 failed=0
+parity_rows=""
+if ! parity_rows="$(extract_json_value)"; then
+  exit 1
+fi
 
 while IFS=$'\t' read -r kind file header_level expected; do
   [[ -z "${kind:-}" ]] && continue
@@ -68,7 +78,7 @@ while IFS=$'\t' read -r kind file header_level expected; do
     echo "[check-doc-parity] Failed: $file ($role) has $actual lines starting with '${header_level}', expected $expected — update docs/contracts/doc-parity.json after translating, or revert the structural change" >&2
     failed=1
   fi
-done < <(extract_json_value)
+done <<< "$parity_rows"
 
 if [[ "$failed" -ne 0 ]]; then
   exit 1
