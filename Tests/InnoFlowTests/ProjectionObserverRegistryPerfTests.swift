@@ -35,10 +35,11 @@ struct ProjectionObserverRegistryPerfScenario: Sendable, CustomStringConvertible
   let label: String
   let observerCount: Int
   let iterations: Int
-  let registration: @MainActor (
-    ProjectionObserverRegistry<ProjectionObserverRegistryPerfSnapshot>,
-    ProjectionObserverRegistryPerfObserver
-  ) -> Void
+  let registration:
+    @MainActor (
+      ProjectionObserverRegistry<ProjectionObserverRegistryPerfSnapshot>,
+      ProjectionObserverRegistryPerfObserver
+    ) -> Void
   let nextSnapshot: @Sendable (Int) -> ProjectionObserverRegistryPerfSnapshot
 
   var description: String { label }

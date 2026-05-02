@@ -6668,9 +6668,12 @@ struct TestStoreTests {
     }
 
     let probe = InstrumentationProbe()
-    let map: PhaseMap<State, Action, Phase> = PhaseMap(\State.phase, diagnostics: .init { _ in
-      probe.record("violation")
-    }) {
+    let map: PhaseMap<State, Action, Phase> = PhaseMap(
+      \State.phase,
+      diagnostics: .init { _ in
+        probe.record("violation")
+      }
+    ) {
       From(.idle) {
         On(.load, to: .loaded)
       }
