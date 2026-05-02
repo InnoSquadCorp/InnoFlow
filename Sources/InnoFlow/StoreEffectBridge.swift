@@ -6,6 +6,13 @@ import Foundation
 
 /// StoreEffectBridge keeps store-local cancellation boundaries and shared timing state.
 ///
+/// Concurrency: every mutating and reading method on this type is `@MainActor`-isolated
+/// (see the class attribute below). Read-modify-write sequences such as
+/// `cancelledUpToByID[id] = max(existing, new)` are therefore atomic with respect to all
+/// other accesses on the bridge — Swift's actor isolation provides the mutual exclusion,
+/// so no CAS, lock, or atomic primitive is needed. Callers do not need to add
+/// synchronization when invoking these methods from MainActor-bound contexts.
+///
 /// Invariants:
 /// - issued sequences are strictly increasing
 /// - `cancelledUpTo*` values are monotonic and gate future emissions
@@ -51,6 +58,19 @@ package final class StoreEffectBridge<Action: Sendable> {
     return sequence
   }
 
+  /// Cancels every prior sequence for `id` while leaving the in-flight effect at
+  /// exactly `sequence` alive. Used by `cancelInFlight: true` semantics.
+  ///
+  /// - Parameters:
+  ///   - id: cancellation key for the effect group.
+  ///   - sequence: the sequence to keep alive (defaults to the most recent issued
+  ///     sequence). Sequences strictly less than this become cancelled.
+  /// - Returns: the computed in-flight boundary for this call, i.e.
+  ///   `sequence - 1` (saturating at `0`). The stored `cancelledUpToByID[id]`
+  ///   boundary remains monotonic as `max(existingBoundary, returnedBoundary)`.
+  ///
+  /// Concurrency: this read-modify-write is atomic by virtue of the class-level
+  /// `@MainActor` isolation. Callers do not need additional synchronization.
   @discardableResult
   package func markCancelledInFlight(id: EffectID, upTo sequence: UInt64? = nil) -> UInt64 {
     let sequence = sequence ?? lastIssuedSequence

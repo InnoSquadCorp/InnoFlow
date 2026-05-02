@@ -107,6 +107,28 @@
       "count": 1
     }
   ],
+  "localizedHeaderParity": [
+    {
+      "source": "README.md",
+      "headerLevel": "## ",
+      "expectedSourceHeaderCount": 14,
+      "translations": [
+        {
+          "file": "README.kr.md",
+          "expectedHeaderCount": 9
+        },
+        {
+          "file": "README.jp.md",
+          "expectedHeaderCount": 9
+        },
+        {
+          "file": "README.cn.md",
+          "expectedHeaderCount": 9
+        }
+      ],
+      "rationale": "Baseline captured 2026-04-29 while the localized READMEs catch up to README.md. The check fails when README.md gains or loses an H2 without a matching expectedSourceHeaderCount bump, or when a translation drifts from its baseline. Update the baselines together with the translation work; the goal is parity, but the check guards against silent drift in the meantime."
+    }
+  ],
   "sampleIdentifiers": [
     {
       "file": "README.md",

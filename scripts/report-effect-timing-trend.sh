@@ -31,7 +31,7 @@ Behavior:
     INNOFLOW_WRITE_EFFECT_BASELINE=<tmp> swift test -c release --filter EffectTimingBaselineGate
 
   The script then reports both:
-  - mean    (matches the catastrophic-only release blocker)
+  - mean    (matches the release-gate trend metric)
   - p95     (stricter local percentile signal)
 
 Exit codes:
