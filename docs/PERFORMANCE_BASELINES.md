@@ -11,6 +11,8 @@ large runtime regressions without turning normal CI variance into noise.
   blocking. Use `scripts/report-effect-timing-trend.sh` for standalone
   maintainer reporting that includes the stricter p95 metric.
 - `PhaseMapPerfTests` are opt-in local benchmarks for phase dispatch shape.
+- `ProjectionObserverRegistryPerfTests` are opt-in local benchmarks for observer
+  fanout, always-refresh observers, and overlapping dependency buckets.
 - `ReducerCompositionPerfTests` and `scripts/compare-reducer-composition-perf.sh`
   are maintainer tools for composition construction and dispatch experiments.
 
