@@ -102,7 +102,7 @@ extension Store {
     action: @escaping @Sendable (CollectionState.Element.ID, ChildAction) -> R.Action,
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = #column
+    column: UInt = 0
   ) -> [ScopedStore<R, CollectionState.Element, ChildAction>]
   where
     CollectionState: RandomAccessCollection,
@@ -169,7 +169,7 @@ extension Store {
     action: CollectionActionPath<R.Action, CollectionState.Element.ID, ChildAction>,
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = #column
+    column: UInt = 0
   ) -> [ScopedStore<R, CollectionState.Element, ChildAction>]
   where
     CollectionState: RandomAccessCollection,
