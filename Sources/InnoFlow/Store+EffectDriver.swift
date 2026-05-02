@@ -4,6 +4,10 @@ extension Store: EffectDriver {
   package typealias Action = R.Action
 
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
+    guard effectBridge.shouldProceed(context: context) else {
+      recordDrop(action, reason: .cancellationBoundary, context: context)
+      return
+    }
     recordEmission(action, context: context)
     enqueue(action, animation: context?.animation)
   }

@@ -589,6 +589,31 @@ struct RunEmissionBoundaryFeature: Reducer {
   }
 }
 
+struct DirectSendCancellationBoundaryFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var events: [String] = []
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _record(String)
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      return .concatenate(
+        .cancel("direct-send-boundary"),
+        .send(._record("late")).cancellable("direct-send-boundary")
+      )
+
+    case ._record(let event):
+      state.events.append(event)
+      return .none
+    }
+  }
+}
+
 struct LazyMappedEffectFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var values: [String] = []
@@ -3524,7 +3549,8 @@ struct StoreTests {
       \VariadicState.f,
       \VariadicState.g,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
       probe.record()
       return a + b + c + d + e + f + g
@@ -3539,7 +3565,8 @@ struct StoreTests {
       \VariadicState.f,
       \VariadicState.g,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
       probe.record()
       return a + b + c + d + e + f + g
@@ -3554,8 +3581,8 @@ struct StoreTests {
   func selectedStoreCachingPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
-    let first = store.select(\.child, fileID: #fileID, line: callsiteLine)
-    let second = store.select(\.child, fileID: #fileID, line: callsiteLine)
+    let first = store.select(\.child, fileID: #fileID, line: callsiteLine, column: 0)
+    let second = store.select(\.child, fileID: #fileID, line: callsiteLine, column: 0)
 
     #expect(first === second)
     #expect(first.step == 1)
@@ -3607,12 +3634,20 @@ struct StoreTests {
   func selectedStoreDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
-    let first = store.select(dependingOn: \.child.title, fileID: #fileID, line: callsiteLine) {
-      title in
+    let first = store.select(
+      dependingOn: \.child.title,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { title in
       title.uppercased()
     }
-    let second = store.select(dependingOn: \.child.title, fileID: #fileID, line: callsiteLine) {
-      title in
+    let second = store.select(
+      dependingOn: \.child.title,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { title in
       title.uppercased()
     }
 
@@ -3649,14 +3684,16 @@ struct StoreTests {
     let first = store.select(
       dependingOn: (\.child.step, \.child.title),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title in
       "\(title)-\(step)"
     }
     let second = store.select(
       dependingOn: (\.child.step, \.child.title),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title in
       "\(title)-\(step)"
     }
@@ -3733,14 +3770,16 @@ struct StoreTests {
     let first = store.select(
       dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title, note, priority in
       "\(title)-\(step)-\(note)-\(priority)"
     }
     let second = store.select(
       dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title, note, priority in
       "\(title)-\(step)-\(note)-\(priority)"
     }
@@ -3926,8 +3965,8 @@ struct StoreTests {
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
-    let first = scoped.select(\.title, fileID: #fileID, line: callsiteLine)
-    let second = scoped.select(\.title, fileID: #fileID, line: callsiteLine)
+    let first = scoped.select(\.title, fileID: #fileID, line: callsiteLine, column: 0)
+    let second = scoped.select(\.title, fileID: #fileID, line: callsiteLine, column: 0)
 
     #expect(first === second)
     #expect(first.value == "Child")
@@ -3962,10 +4001,20 @@ struct StoreTests {
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
-    let first = scoped.select(dependingOn: \.title, fileID: #fileID, line: callsiteLine) { title in
+    let first = scoped.select(
+      dependingOn: \.title,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { title in
       title.uppercased()
     }
-    let second = scoped.select(dependingOn: \.title, fileID: #fileID, line: callsiteLine) { title in
+    let second = scoped.select(
+      dependingOn: \.title,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { title in
       title.uppercased()
     }
 
@@ -4007,14 +4056,16 @@ struct StoreTests {
     let first = scoped.select(
       dependingOn: (\.step, \.title),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title in
       "\(title)-\(step)"
     }
     let second = scoped.select(
       dependingOn: (\.step, \.title),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title in
       "\(title)-\(step)"
     }
@@ -4138,14 +4189,16 @@ struct StoreTests {
     let first = scoped.select(
       dependingOn: (\.step, \.title, \.note, \.priority),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title, note, priority in
       "\(title)-\(step)-\(note)-\(priority)"
     }
     let second = scoped.select(
       dependingOn: (\.step, \.title, \.note, \.priority),
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { step, title, note, priority in
       "\(title)-\(step)-\(note)-\(priority)"
     }
@@ -4371,7 +4424,8 @@ struct StoreTests {
       \VariadicParentFeature.Child.f,
       \VariadicParentFeature.Child.g,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
       probe.record()
       return a + b + c + d + e + f + g
@@ -4386,7 +4440,8 @@ struct StoreTests {
       \VariadicParentFeature.Child.f,
       \VariadicParentFeature.Child.g,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     ) { (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int) -> Int in
       probe.record()
       return a + b + c + d + e + f + g
@@ -4405,13 +4460,15 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
     let second = store.scope(
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
 
     #expect(first.count == second.count)
@@ -4428,7 +4485,8 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
     let initialByID = Dictionary(uniqueKeysWithValues: initial.map { ($0.id, $0) })
 
@@ -4437,7 +4495,8 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
 
     #expect(reordered.map(\.id) == store.state.todos.map(\.id))
@@ -4451,7 +4510,8 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
     let appendedNewStore = try! #require(appended.first(where: { $0.id == newID }))
     for scoped in appended where scoped.id != newID {
@@ -4465,7 +4525,8 @@ struct StoreTests {
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
       fileID: #fileID,
-      line: callsiteLine
+      line: callsiteLine,
+      column: 0
     )
 
     #expect(removed.contains(where: { $0.id == removedID }) == false)
@@ -5428,6 +5489,35 @@ struct StoreTests {
     await drainAsyncWork()
 
     #expect(store.events == ["first-1"])
+  }
+
+  @Test("Store drops direct .send actions after a cancellation boundary")
+  func storeDirectSendDropsAfterCancellationBoundary() async {
+    let probe = InstrumentationProbe()
+    let store = Store(
+      reducer: DirectSendCancellationBoundaryFeature(),
+      initialState: .init(),
+      instrumentation: .init(
+        didEmitAction: { event in
+          if case ._record(let value) = event.action {
+            probe.record("emit:\(value)")
+          }
+        },
+        didDropAction: { event in
+          if case ._record(let value)? = event.action {
+            probe.record("drop:\(value):\(event.reason)")
+          }
+        }
+      )
+    )
+
+    store.send(.start)
+    await waitUntil {
+      probe.events.isEmpty == false || store.events.isEmpty == false
+    }
+
+    #expect(store.events.isEmpty)
+    #expect(probe.events == ["drop:late:cancellationBoundary"])
   }
 
   @Test("Store .run keeps FIFO ordering for multiple emitted actions")
@@ -6408,6 +6498,59 @@ struct TestStoreTests {
     await store.send(.start)
     await store.cancelEffects(identifiedBy: "uncooperative")
     await store.assertNoMoreActions()
+  }
+
+  @Test("TestStore drops direct .send actions after a cancellation boundary")
+  func testStoreDirectSendDropsAfterCancellationBoundary() async {
+    let store = TestStore(
+      reducer: DirectSendCancellationBoundaryFeature(),
+      initialState: .init(),
+      effectTimeout: .milliseconds(100)
+    )
+
+    await store.send(.start)
+    await store.assertNoMoreActions()
+  }
+
+  @Test("TestStore debounce skips stale effects at cancellation boundaries")
+  func testStoreDebounceSkipsStaleEffectsAtCancellationBoundaries() async {
+    let id: EffectID = "teststore-stale-debounce"
+    let store = TestStore(reducer: CounterFeature(), initialState: .init())
+    let probe = InstrumentationProbe()
+
+    await store.cancelEffects(id: id, context: .init(sequence: 1))
+    await store.debounce(
+      EffectTask<CounterFeature.Action>.none,
+      id: id,
+      interval: .milliseconds(0),
+      context: .init(cancellationID: id, sequence: 1),
+      awaited: true
+    ) { _, _, _ in
+      probe.record("recursed")
+    }
+
+    #expect(probe.events.isEmpty)
+  }
+
+  @Test("TestStore trailing throttle skips stale effects at cancellation boundaries")
+  func testStoreTrailingThrottleSkipsStaleEffectsAtCancellationBoundaries() async {
+    let id: EffectID = "teststore-stale-throttle"
+    let store = TestStore(reducer: CounterFeature(), initialState: .init())
+    let context = EffectExecutionContext(cancellationID: id, sequence: 1)
+    let probe = InstrumentationProbe()
+
+    await store.cancelEffects(id: id, context: .init(sequence: 1))
+    store.throttleState.storePending(
+      EffectTask<CounterFeature.Action>.none, context: context, for: id)
+    store.scheduleTrailingDrain(for: id, interval: .milliseconds(0)) { _, _, _ in
+      probe.record("recursed")
+    }
+
+    await waitUntil {
+      store.throttleState.pending(for: id) == nil
+    }
+
+    #expect(probe.events.isEmpty)
   }
 
   @Test("TestStore repeated cancellation stress keeps queue clean")

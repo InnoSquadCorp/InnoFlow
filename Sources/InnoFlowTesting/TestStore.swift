@@ -790,6 +790,7 @@ extension TestStore: EffectDriver {
 
       guard !Task.isCancelled else { return }
       guard self.debounceGenerationByID[id] == generation else { return }
+      guard self.shouldProceed(context: context) else { return }
       await recurse(nested, context, true)
     }
 
@@ -824,6 +825,7 @@ extension TestStore: EffectDriver {
         }
       }
       guard let pending = self.throttleState.pending(for: id) else { return }
+      guard self.shouldProceed(context: pending.context) else { return }
       await recurse(pending.effect, pending.context, false)
     }
     throttleState.setTrailingTask(task, for: id)

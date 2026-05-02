@@ -216,7 +216,7 @@ extension Store {
     _ keyPath: KeyPath<R.State, Value>,
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0
+    column: UInt = #column
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
@@ -239,7 +239,7 @@ extension Store {
     dependingOn dependency: KeyPath<R.State, Dependency>,
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform: @escaping @Sendable (Dependency) -> Value
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
@@ -270,7 +270,7 @@ extension Store {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform: @escaping @Sendable (FirstDependency, SecondDependency) -> Value
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency) = dependencies
@@ -322,7 +322,7 @@ extension Store {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform: @escaping @Sendable (FirstDependency, SecondDependency, ThirdDependency) -> Value
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency) = dependencies
@@ -383,7 +383,7 @@ extension Store {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform:
       @escaping @Sendable (
         FirstDependency,
@@ -456,7 +456,7 @@ extension Store {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform:
       @escaping @Sendable (
         FirstDependency,
@@ -537,7 +537,7 @@ extension Store {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform:
       @escaping @Sendable (
         FirstDependency,
@@ -618,7 +618,7 @@ extension Store {
     dependingOnAll dependencies: repeat KeyPath<R.State, each Dep>,
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform: @escaping @Sendable (repeat each Dep) -> Value
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
@@ -647,7 +647,7 @@ extension Store {
   public func select<Value: Equatable & Sendable>(
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ selector: @escaping @Sendable (R.State) -> Value
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
@@ -716,7 +716,7 @@ extension ScopedStore {
     _ keyPath: KeyPath<ChildState, Value>,
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0
+    column: UInt = #column
   ) -> SelectedStore<Value> {
     let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
@@ -739,7 +739,7 @@ extension ScopedStore {
     dependingOn dependency: KeyPath<ChildState, Dependency>,
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform: @escaping @Sendable (Dependency) -> Value
   ) -> SelectedStore<Value> {
     let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
@@ -770,7 +770,7 @@ extension ScopedStore {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform: @escaping @Sendable (FirstDependency, SecondDependency) -> Value
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency) = dependencies
@@ -811,7 +811,7 @@ extension ScopedStore {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform: @escaping @Sendable (FirstDependency, SecondDependency, ThirdDependency) -> Value
   ) -> SelectedStore<Value> {
     let (firstDependency, secondDependency, thirdDependency) = dependencies
@@ -872,7 +872,7 @@ extension ScopedStore {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform:
       @escaping @Sendable (
         FirstDependency,
@@ -945,7 +945,7 @@ extension ScopedStore {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform:
       @escaping @Sendable (
         FirstDependency,
@@ -1026,7 +1026,7 @@ extension ScopedStore {
     ),
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform:
       @escaping @Sendable (
         FirstDependency,
@@ -1102,7 +1102,7 @@ extension ScopedStore {
     dependingOnAll dependencies: repeat KeyPath<ChildState, each Dep>,
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ transform: @escaping @Sendable (repeat each Dep) -> Value
   ) -> SelectedStore<Value> {
     let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
@@ -1131,7 +1131,7 @@ extension ScopedStore {
   public func select<Value: Equatable & Sendable>(
     fileID: StaticString = #fileID,
     line: UInt = #line,
-    column: UInt = 0,
+    column: UInt = #column,
     _ selector: @escaping @Sendable (ChildState) -> Value
   ) -> SelectedStore<Value> {
     let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
