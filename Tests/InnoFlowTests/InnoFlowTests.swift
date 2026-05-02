@@ -3533,6 +3533,48 @@ struct StoreTests {
     #expect(first.step == 1)
   }
 
+  @Test("Store.select cache identity includes the selected key path")
+  func selectedStoreCacheIdentityIncludesSelectedKeyPath() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      \.child.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+    let second = store.select(
+      \.unrelated,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+
+    #expect(first.value == 1)
+    #expect(second.value == 0)
+  }
+
+  @Test("Store.select cache identity includes the callsite column")
+  func selectedStoreCacheIdentityIncludesColumn() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      \.child.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+    let second = store.select(
+      \.child.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 2
+    )
+
+    #expect(first !== second)
+    #expect(first.value == second.value)
+  }
+
   @Test("Store.select(dependingOn:) preserves SelectedStore identity across repeated calls")
   func selectedStoreDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -3548,6 +3590,27 @@ struct StoreTests {
 
     #expect(first === second)
     #expect(first.value == "CHILD")
+  }
+
+  @Test("Store.select(dependingOn:) cache identity includes dependency key paths")
+  func selectedStoreDependingOnCacheIdentityIncludesDependencies() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let callsiteLine: UInt = #line
+    let first = store.select(
+      dependingOn: \.child.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    ) { $0 }
+    let second = store.select(
+      dependingOn: \.unrelated,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    ) { $0 }
+
+    #expect(first.value == 1)
+    #expect(second.value == 0)
   }
 
   @Test(
@@ -3842,6 +3905,29 @@ struct StoreTests {
     #expect(first.value == "Child")
   }
 
+  @Test("ScopedStore.select cache identity includes the selected key path")
+  func scopedSelectedStoreCacheIdentityIncludesSelectedKeyPath() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let callsiteLine: UInt = #line
+    let first = scoped.select(
+      \.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+    let second = scoped.select(
+      \.priority,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    )
+
+    #expect(first.value == 1)
+    #expect(second.value == 0)
+  }
+
   @Test("ScopedStore.select(dependingOn:) preserves SelectedStore identity across repeated calls")
   func scopedSelectedStoreDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -3857,6 +3943,29 @@ struct StoreTests {
 
     #expect(first === second)
     #expect(first.value == "CHILD")
+  }
+
+  @Test("ScopedStore.select(dependingOn:) cache identity includes dependency key paths")
+  func scopedSelectedStoreDependingOnCacheIdentityIncludesDependencies() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
+    let callsiteLine: UInt = #line
+    let first = scoped.select(
+      dependingOn: \.step,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    ) { $0 }
+    let second = scoped.select(
+      dependingOn: \.priority,
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 1
+    ) { $0 }
+
+    #expect(first.value == 1)
+    #expect(second.value == 0)
   }
 
   @Test(

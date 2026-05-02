@@ -173,16 +173,18 @@ public final class Store<R: Reducer> {
 
   package func collectionScopeCallsite(
     fileID: StaticString,
-    line: UInt
+    line: UInt,
+    column: UInt
   ) -> CollectionScopeCallsite {
-    .init(fileID: fileID.description, line: line)
+    .init(fileID: fileID.description, line: line, column: column)
   }
 
   package func selectionCallsite(
     fileID: StaticString,
-    line: UInt
+    line: UInt,
+    column: UInt
   ) -> SelectionCallsite {
-    .init(fileID: fileID.description, line: line)
+    .init(fileID: fileID.description, line: line, column: column)
   }
 
   package func recordEmission(_ action: R.Action, context: EffectExecutionContext?) {
