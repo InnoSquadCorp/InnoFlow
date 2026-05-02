@@ -85,7 +85,7 @@ extension InnoFlowMacro {
       // compatibility, but emit a note because the resulting `extract` always
       // unwraps a non-nil child action — `.case(nil)` round-trips as `nil`,
       // which is rarely what feature authors intend.
-      if parameter.type.is(OptionalTypeSyntax.self) {
+      if isOptionalPayloadType(parameter.type) {
         context.diagnose(
           Diagnostic(
             node: Syntax(element.name),
@@ -146,8 +146,7 @@ extension InnoFlowMacro {
       let idParameter = parameters.first,
       let actionParameter = parameters.last,
       idParameter.firstName?.text == "id",
-      actionParameter.firstName?.text == "action",
-      isCollectionActionLikeType(actionParameter.type.trimmedDescription)
+      actionParameter.firstName?.text == "action"
     {
       let memberName = "\(generatedActionPathBaseName(from: caseName))ActionPath"
       guard
@@ -189,6 +188,21 @@ extension InnoFlowMacro {
     }
 
     return nil
+  }
+
+  private static func isOptionalPayloadType(_ type: TypeSyntax) -> Bool {
+    let trimmed = type.trimmed
+    if trimmed.is(OptionalTypeSyntax.self)
+      || trimmed.is(ImplicitlyUnwrappedOptionalTypeSyntax.self)
+    {
+      return true
+    }
+
+    let description = trimmed.description.trimmingCharacters(in: .whitespacesAndNewlines)
+    return description.hasSuffix("?")
+      || description.hasSuffix("!")
+      || description.hasPrefix("Optional<")
+      || description.contains(".Optional<")
   }
 
   private static func generatedActionPathBaseName(from caseName: String) -> String {
