@@ -220,11 +220,21 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     tapButton(
       "websocket.connect", in: app,
       failureMessage: "Expected websocket connect button")
+    let connectedStatus = app.staticTexts["websocket.status"]
+    let connectedPredicate = NSPredicate(format: "label == %@", "Connected")
+    expectation(for: connectedPredicate, evaluatedWith: connectedStatus)
+    waitForExpectations(timeout: 4)
 
     let messageField = app.textFields["websocket.message"]
     XCTAssertTrue(messageField.waitForExistence(timeout: 2))
     messageField.tap()
     messageField.typeText("hello")
+    dismissKeyboard(in: app)
+
+    let sendButton = app.buttons["websocket.send"]
+    let sendReadyPredicate = NSPredicate(format: "enabled == true AND hittable == true")
+    expectation(for: sendReadyPredicate, evaluatedWith: sendButton)
+    waitForExpectations(timeout: 4)
 
     tapButton(
       "websocket.send", in: app,
@@ -232,7 +242,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     let transcript = app.staticTexts["websocket.transcript"]
     let echoPredicate = NSPredicate(format: "label CONTAINS %@", "echo: hello")
     expectation(for: echoPredicate, evaluatedWith: transcript)
-    waitForExpectations(timeout: 2)
+    waitForExpectations(timeout: 4)
     XCTAssertTrue(transcript.label.contains("echo: hello"))
 
     tapButton(

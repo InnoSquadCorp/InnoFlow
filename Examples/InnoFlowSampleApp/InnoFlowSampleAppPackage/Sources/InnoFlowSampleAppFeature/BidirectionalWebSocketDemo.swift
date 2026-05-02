@@ -299,6 +299,11 @@ struct BidirectionalWebSocketFeature {
     var transcript: [String] = []
     var lastError: String?
     var canReconnect = false
+
+    var canSendMessage: Bool {
+      connectionState == .connected
+        && !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
   }
 
   enum Action: Equatable, Sendable {
@@ -574,6 +579,7 @@ struct BidirectionalWebSocketDemoView: View {
               store.send(.sendTapped)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(!store.canSendMessage)
             .accessibilityIdentifier("websocket.send")
 
             Button("Clear Log") {
