@@ -45,16 +45,23 @@ The framework handles this race explicitly:
   at init time, and reading `ScopedStore.id` when the stable identifier type
   does not match the child state's `Identifiable.ID`.
 
-Callers that need to react to a released parent without consulting the cached
-fallback can use the explicit accessors:
+**Recommended for new code:** branch on liveness explicitly through the
+optional accessors instead of relying on the cached-read fallback. The
+fallback exists so SwiftUI observer races do not crash release builds, not
+as a stable read path:
 
-- `ScopedStore.isAlive` and `SelectedStore.isAlive` report whether the
-  projection is still backed by a live parent and active observer state.
 - `ScopedStore.optionalState` and `SelectedStore.optionalValue` return `nil`
   in the same situations where `state`/`value` would emit a debug assertion
-  and a cached fallback. They are the contract-compliant way to ask
-  "is this projection still meaningful?" from a release-tolerant call site
-  and treat `nil` as "regenerate the projection."
+  and a cached fallback. Treat `nil` as "regenerate the projection." This is
+  the contract-compliant way to ask "is this projection still meaningful?"
+  from a release-tolerant call site.
+- `ScopedStore.isAlive` and `SelectedStore.isAlive` report the same liveness
+  signal as a `Bool` for sites that only need to gate work and do not read
+  the projected value.
+
+Use the cached-read `state`/`value` accessors when a SwiftUI view body or
+similar tick-bounded observer must always return *something*; reach for the
+optional accessors everywhere else.
 
 These accessors do not change the cached-read or no-op-write semantics above;
 they expose the same lifecycle signal to callers that prefer to branch on

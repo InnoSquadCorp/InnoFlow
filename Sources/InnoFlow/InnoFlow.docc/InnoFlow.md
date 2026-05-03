@@ -39,6 +39,12 @@ projection without pulling an entire mutable child scope into the view tree. Use
 of arity. Plain `select { ... }` remains the always-refresh fallback because general closures do
 not expose their dependencies.
 
+For lifecycle-aware reads outside SwiftUI view bodies, prefer ``SelectedStore/optionalValue`` and
+``ScopedStore/optionalState`` (or gate on the matching `isAlive` flag) over the cached-fallback
+`value`/`state` accessors. The cached read exists so SwiftUI observer races do not crash release
+builds; treat `nil` from the optional accessors as "regenerate the projection." See
+ARCHITECTURE_CONTRACT.md — *Projection lifecycle contract*.
+
 Time-sensitive `.run` effects should use ``EffectContext``. That keeps `StoreClock` in control of
 debounce/throttle operators and explicit delays inside the effect body.
 

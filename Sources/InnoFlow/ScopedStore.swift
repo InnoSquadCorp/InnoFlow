@@ -274,14 +274,23 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package var pendingObserverPrune = false
   @ObservationIgnored package nonisolated(unsafe) let stableID: AnyHashable?
 
+  /// The current child state, falling back to the last cached snapshot
+  /// when the parent store is released or the projection is inactive.
+  ///
+  /// This accessor exists so SwiftUI observer races do not crash release
+  /// builds; it is **not** intended as a stable lifecycle-aware read path.
+  /// New call sites should prefer ``optionalState`` (or gate on
+  /// ``isAlive``) and treat `nil` as "regenerate the projection." Reserve
+  /// `state` for tick-bounded observers (SwiftUI view bodies, dynamic
+  /// member lookups) that must always return something.
+  ///
+  /// See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
   public var state: ChildState {
     // Lifecycle race: a SwiftUI observer may read this projection on the same
     // tick that its parent store is released. Rather than aborting the
     // process in release builds, return the last valid cached projection —
     // the observer refresh pass will invalidate dependents within the next
     // tick. Debug builds surface the race via `assertionFailure`.
-    //
-    // See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
     guard parent != nil else {
       assertionFailure(parentReleasedMessage())
       return cachedState

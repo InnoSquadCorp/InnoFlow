@@ -16,6 +16,17 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   call sites must migrate from `dependingOn: (\.a, \.b)` to
   `dependingOnAll: \.a, \.b`. Closure-based `select { ... }` is unchanged.
 
+### Documentation
+
+- Projection lifecycle contract now documents `ScopedStore.optionalState` /
+  `SelectedStore.optionalValue` (and the `isAlive` flags) as the recommended
+  read path for non-SwiftUI call sites. The cached-fallback `state` / `value`
+  accessors are unchanged in behavior but are now framed as a SwiftUI
+  observer-race tolerance, not a stable lifecycle-aware read path. Affected
+  surfaces: `ARCHITECTURE_CONTRACT.md`, `docs/MIGRATION_3_1.md`,
+  `Sources/InnoFlow/InnoFlow.docc/InnoFlow.md`, and the doc comments on
+  `SelectedStore.value` / `ScopedStore.state`.
+
 ## [4.0.0] - 2026-04-29
 
 This release rebaselines the current InnoFlow implementation, documentation, and release-readiness
