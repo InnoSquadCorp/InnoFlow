@@ -297,7 +297,7 @@ struct EffectTaskTests {
   }
 
   @Test("EffectTask.run consumes AsyncSequence actions")
-  func effectRunConsumesAsyncSequenceActions() async {
+  func effectRunConsumesAsyncSequenceActions() async throws {
     let clock = ManualTestClock()
     let store = TestStore(
       reducer: AsyncSequenceConsumerFeature(),
@@ -306,13 +306,13 @@ struct EffectTaskTests {
     )
 
     await store.send(.startActions([1, 2]))
-    await waitForSleeperCount(clock, atLeast: 1)
+    try #require(await waitForSleeperCount(clock, atLeast: 1))
     await clock.advance(by: .milliseconds(10))
     await store.receive(.value(1)) {
       $0.values = [1]
     }
 
-    await waitForSleeperCount(clock, atLeast: 1)
+    try #require(await waitForSleeperCount(clock, atLeast: 1))
     await clock.advance(by: .milliseconds(10))
     await store.receive(.value(2)) {
       $0.values = [1, 2]
@@ -322,7 +322,7 @@ struct EffectTaskTests {
   }
 
   @Test("EffectTask.run AsyncSequence helper works with dynamic cancellation IDs")
-  func effectRunAsyncSequenceUsesDynamicCancellationID() async {
+  func effectRunAsyncSequenceUsesDynamicCancellationID() async throws {
     let id = UUID()
     let clock = ManualTestClock()
     let store = TestStore(
@@ -333,13 +333,13 @@ struct EffectTaskTests {
     )
 
     await store.send(.startTransformed(id: id, values: [1, 2, 3]))
-    await waitForSleeperCount(clock, atLeast: 1)
+    try #require(await waitForSleeperCount(clock, atLeast: 1))
     await clock.advance(by: .milliseconds(10))
     await store.receive(.value(1)) {
       $0.values = [1]
     }
 
-    await waitForSleeperCount(clock, atLeast: 1)
+    try #require(await waitForSleeperCount(clock, atLeast: 1))
     await store.send(.cancel(id))
     await clock.advance(by: .milliseconds(30))
 
@@ -537,11 +537,8 @@ private struct AsyncSequenceConsumerFeature: Reducer {
   }
 }
 
-private func waitForSleeperCount(_ clock: ManualTestClock, atLeast count: Int) async {
-  for _ in 0..<100 {
-    if await clock.sleeperCount >= count {
-      return
-    }
-    await Task.yield()
+private func waitForSleeperCount(_ clock: ManualTestClock, atLeast count: Int) async -> Bool {
+  await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+    await clock.sleeperCount >= count
   }
 }
