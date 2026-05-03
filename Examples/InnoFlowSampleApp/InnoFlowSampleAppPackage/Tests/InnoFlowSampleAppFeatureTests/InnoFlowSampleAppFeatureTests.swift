@@ -1035,6 +1035,35 @@ struct InnoFlowSampleAppFeatureTests {
     await store.assertNoMoreActions()
   }
 
+  @Test("Bidirectional websocket ignores send while disconnected")
+  @MainActor
+  func bidirectionalWebSocketSendWhileDisconnectedIsNoOp() async {
+    let socketClient = CountingBidirectionalSocketClient()
+    let store = TestStore(
+      reducer: BidirectionalWebSocketFeature(
+        socketClient: socketClient,
+        integrationNote: "Test transport"
+      ),
+      initialState: .init(
+        draftMessage: "do not send",
+        connectionState: .disconnected,
+        statusNote: "Disconnected",
+        transcript: [],
+        lastError: nil,
+        canReconnect: true
+      ),
+      effectTimeout: .milliseconds(20)
+    )
+
+    await store.send(.sendTapped)
+    for _ in 0..<20 {
+      await Task.yield()
+    }
+
+    #expect(await socketClient.sendCount == 0)
+    await store.assertNoBufferedActions()
+  }
+
   @Test("Bidirectional websocket demo reconnects through the adapter boundary")
   @MainActor
   func bidirectionalWebSocketReconnects() async {
@@ -1360,6 +1389,28 @@ private actor ReconnectingBidirectionalSocketClient: BidirectionalSocketClient {
 
   func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
     [.sent(text)]
+  }
+}
+
+private actor CountingBidirectionalSocketClient: BidirectionalSocketClient {
+  private(set) var sendCount = 0
+
+  func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    AsyncStream { continuation in
+      continuation.yield(.connected("counting"))
+      continuation.finish()
+    }
+  }
+
+  func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
+    await connect()
+  }
+
+  func disconnect() async {}
+
+  func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
+    sendCount += 1
+    return [.sent(text)]
   }
 }
 

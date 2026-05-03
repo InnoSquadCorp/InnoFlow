@@ -113,9 +113,17 @@ public final class Store<R: Reducer> {
       let context = EffectExecutionContext(sequence: sequence)
       Task { [weak self] in
         guard let self else { return }
-        await self.walker.walk(effect, context: context, awaited: false)
+        await self.walkEffect(effect, context: context, awaited: false)
       }
     }
+  }
+
+  package func walkEffect(
+    _ effect: EffectTask<R.Action>,
+    context: EffectExecutionContext?,
+    awaited: Bool
+  ) async {
+    await walker.walk(effect, context: context, awaited: awaited)
   }
 
   package func enqueue(_ action: R.Action, animation: EffectAnimation?) {

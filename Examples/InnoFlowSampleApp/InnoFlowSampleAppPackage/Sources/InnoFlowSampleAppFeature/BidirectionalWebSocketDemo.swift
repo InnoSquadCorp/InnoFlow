@@ -392,7 +392,7 @@ struct BidirectionalWebSocketFeature {
 
       case .sendTapped:
         let text = state.draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return .none }
+        guard state.canSendMessage, !text.isEmpty else { return .none }
         let socketClient = dependencies.socketClient
         return .run { send, _ in
           do {

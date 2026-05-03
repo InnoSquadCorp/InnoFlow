@@ -612,7 +612,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path",
+              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` extracts as `.some(nil)`; consider splitting into two cases or declaring a custom path",
             line: 5,
             column: 14,
             severity: .note
@@ -679,7 +679,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path",
+              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` extracts as `.some(nil)`; consider splitting into two cases or declaring a custom path",
             line: 5,
             column: 14,
             severity: .note
@@ -746,7 +746,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path",
+              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` extracts as `.some(nil)`; consider splitting into two cases or declaring a custom path",
             line: 5,
             column: 14,
             severity: .note

@@ -82,9 +82,10 @@ extension InnoFlowMacro {
       parameter.firstName == nil || parameter.firstName?.text == "_"
     {
       // Optional payloads still synthesize a CasePath for backward
-      // compatibility, but emit a note because the resulting `extract` always
-      // unwraps a non-nil child action — `.case(nil)` round-trips as `nil`,
-      // which is rarely what feature authors intend.
+      // compatibility, but emit a note because the resulting `extract` returns
+      // the outer extraction optional around the optional payload. `.case(nil)`
+      // therefore extracts as `.some(nil)`, which is rarely what feature
+      // authors intend.
       if isOptionalPayloadType(parameter.type) {
         context.diagnose(
           Diagnostic(
@@ -252,7 +253,7 @@ enum InnoFlowActionPathsMessage: DiagnosticMessage {
         "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case"
     case .optionalPayloadNote(let caseName):
       return
-        "case `\(caseName)` has an optional payload; the synthesized CasePath still works but `.\(caseName)(nil)` round-trips as `nil` — consider splitting into two cases or declaring a custom path"
+        "case `\(caseName)` has an optional payload; the synthesized CasePath still works but `.\(caseName)(nil)` extracts as `.some(nil)`; consider splitting into two cases or declaring a custom path"
     case .labeledPayloadNote(let caseName, let label, let actionPathBaseName):
       return
         "case `\(caseName)` has a labeled payload (`\(label):`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `\(actionPathBaseName)CasePath` manually"

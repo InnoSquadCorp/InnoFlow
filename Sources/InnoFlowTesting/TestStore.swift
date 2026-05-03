@@ -13,27 +13,33 @@ import SwiftUI
 #endif
 
 private actor ActionQueue<Action: Sendable> {
-  private var buffer: [Action] = []
-  private var headIndex = 0
-  private var waiters: [UUID: CheckedContinuation<Action?, Never>] = [:]
+  struct QueuedAction: Sendable {
+    let action: Action
+    let context: EffectExecutionContext?
+  }
 
-  func enqueue(_ action: Action) {
+  private var buffer: [QueuedAction] = []
+  private var headIndex = 0
+  private var waiters: [UUID: CheckedContinuation<QueuedAction?, Never>] = [:]
+
+  func enqueue(_ action: Action, context: EffectExecutionContext?) {
+    let queuedAction = QueuedAction(action: action, context: context)
     if let waiterID = waiters.keys.first,
       let continuation = waiters.removeValue(forKey: waiterID)
     {
-      continuation.resume(returning: action)
+      continuation.resume(returning: queuedAction)
       return
     }
 
-    buffer.append(action)
+    buffer.append(queuedAction)
   }
 
-  func next() async -> Action? {
+  func next() async -> QueuedAction? {
     if headIndex < buffer.count {
-      let action = buffer[headIndex]
+      let queuedAction = buffer[headIndex]
       headIndex += 1
       compactBufferIfNeeded()
-      return action
+      return queuedAction
     }
 
     let waiterID = UUID()
@@ -48,12 +54,12 @@ private actor ActionQueue<Action: Sendable> {
     }
   }
 
-  func popBuffered() -> Action? {
+  func popBuffered() -> QueuedAction? {
     guard headIndex < buffer.count else { return nil }
-    let action = buffer[headIndex]
+    let queuedAction = buffer[headIndex]
     headIndex += 1
     compactBufferIfNeeded()
-    return action
+    return queuedAction
   }
 
   private func cancelWaiter(_ waiterID: UUID) {
@@ -123,7 +129,7 @@ private actor TestStoreRunBridge<Action: Sendable> {
   func emit(_ action: Action) async {
     guard await endpoint.isTaskActive(token: token) else { return }
     guard await endpoint.shouldProceed(context: context) else { return }
-    await queue.enqueue(action)
+    await queue.enqueue(action, context: context)
   }
 
   func finish() async {
@@ -133,12 +139,19 @@ private actor TestStoreRunBridge<Action: Sendable> {
 
 private actor TestStoreRunStartGate {
   private var isOpen = false
-  private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var waiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
 
-  func wait() async {
-    guard isOpen == false else { return }
-    await withCheckedContinuation { continuation in
-      waiters.append(continuation)
+  func wait() async -> Bool {
+    guard isOpen == false else { return true }
+    let waiterID = UUID()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        waiters[waiterID] = continuation
+      }
+    } onCancel: {
+      Task {
+        await self.cancelWaiter(waiterID)
+      }
     }
   }
 
@@ -147,9 +160,14 @@ private actor TestStoreRunStartGate {
     isOpen = true
     let continuations = waiters
     waiters.removeAll()
-    for continuation in continuations {
-      continuation.resume()
+    for continuation in continuations.values {
+      continuation.resume(returning: true)
     }
+  }
+
+  private func cancelWaiter(_ waiterID: UUID) {
+    guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
+    continuation.resume(returning: false)
   }
 }
 
@@ -388,7 +406,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     file: StaticString = #file,
     line: UInt = #line
   ) async {
-    if let buffered = await queue.popBuffered() {
+    if let buffered = await popBufferedAction() {
       testStoreAssertionFailure(
         """
         Unhandled received action:
@@ -402,10 +420,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       return
     }
 
-    let queue = self.queue
-    let leftover = await withTimeout(effectTimeout) {
-      await queue.next()
-    }
+    let leftover = await nextActionWithinTimeout()
 
     if let leftover {
       testStoreAssertionFailure(
@@ -414,6 +429,24 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
         \(leftover)
 
         All effect actions should be verified with `receive(_:assert:)`.
+        """,
+        file: file,
+        line: line
+      )
+    }
+  }
+
+  public func assertNoBufferedActions(
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async {
+    if let buffered = await popBufferedAction() {
+      testStoreAssertionFailure(
+        """
+        Unhandled buffered action:
+        \(buffered)
+
+        All already-buffered effect actions should be verified with `receive(_:assert:)`.
         """,
         file: file,
         line: line
@@ -575,7 +608,18 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     let wallClock = self.wallClock
 
     let task = Task(priority: priority) {
-      await startGate.wait()
+      guard await startGate.wait() else {
+        await runBridge.finish()
+        return
+      }
+      let canStart = await MainActor.run {
+        endpoint.isTaskActive(token: token)
+          && endpoint.shouldProceed(context: context)
+      }
+      guard !Task.isCancelled, canStart else {
+        await runBridge.finish()
+        return
+      }
 
       let send = Send<R.Action> { action in
         await runBridge.emit(action)
@@ -619,7 +663,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       taskIDsByEffectID[id, default: []].insert(token)
     }
 
-    Task {
+    Task { @MainActor in
       await startGate.open()
     }
 
@@ -669,9 +713,21 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   private func nextActionWithinTimeout() async -> R.Action? {
     let queue = self.queue
-    return await withTimeout(effectTimeout) {
+    while let queuedAction = await withTimeout(effectTimeout, operation: {
       await queue.next()
+    }) {
+      guard shouldProceed(context: queuedAction.context) else { continue }
+      return queuedAction.action
     }
+    return nil
+  }
+
+  private func popBufferedAction() async -> R.Action? {
+    while let queuedAction = await queue.popBuffered() {
+      guard shouldProceed(context: queuedAction.context) else { continue }
+      return queuedAction.action
+    }
+    return nil
   }
 
   private func withTimeout<T: Sendable>(
@@ -719,7 +775,7 @@ extension TestStore: EffectDriver {
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
     Task { @MainActor [weak self] in
       guard let self, self.shouldProceed(context: context) else { return }
-      await self.queue.enqueue(action)
+      await self.queue.enqueue(action, context: context)
     }
   }
 
@@ -886,7 +942,9 @@ extension TestStore: EffectDriver {
       let cancellationID = context?.cancellationID
       let startGate = TestStoreRunStartGate()
       let task = Task { @MainActor [weak self] in
-        await startGate.wait()
+        guard await startGate.wait() else {
+          return
+        }
         guard let self else { return }
         defer {
           self.removeTrackedTask(token: token, cancellationID: cancellationID)
@@ -901,7 +959,7 @@ extension TestStore: EffectDriver {
       if let id = cancellationID {
         taskIDsByEffectID[id, default: []].insert(token)
       }
-      Task {
+      Task { @MainActor in
         await startGate.open()
       }
     }
@@ -1082,6 +1140,13 @@ where Root.State: Equatable {
     line: UInt = #line
   ) async {
     await parent.assertNoMoreActions(file: file, line: line)
+  }
+
+  public func assertNoBufferedActions(
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async {
+    await parent.assertNoBufferedActions(file: file, line: line)
   }
 
   package var resolvedDiffLineLimit: Int {

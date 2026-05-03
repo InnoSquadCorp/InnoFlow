@@ -30,6 +30,23 @@ extension Store: EffectDriver {
     let lifetime = self.lifetime
     let task = Task(priority: priority) { [weak self] in
       await gate.wait()
+      do {
+        if lifetime.isReleased {
+          throw CancellationError()
+        }
+        guard await runtime.canStartOperation(
+          token: token,
+          id: context?.cancellationID,
+          sequence: sequence
+        ) else {
+          throw CancellationError()
+        }
+      } catch {
+        await runtime.finish(token: token)
+        instrumentation.didFinishRun(runEvent)
+        return
+      }
+
       let send = Send<R.Action> { action in
         if lifetime.isReleased {
           instrumentation.didDropAction(
@@ -152,16 +169,37 @@ extension Store: EffectDriver {
       ) async -> Void
   ) async {
     await cancelInFlightEffects(id: id, context: context)
+    let generation = effectBridge.nextDebounceGeneration(for: id)
+    let clock = self.clock
 
-    do {
-      try await clock.sleep(interval)
-    } catch {
-      recordDrop(nil, reason: .throttledOrDebouncedCancellation, context: context)
-      return
+    let task = Task { [weak self] in
+      do {
+        try await clock.sleep(interval)
+      } catch {
+        await MainActor.run {
+          self?.recordDrop(nil, reason: .throttledOrDebouncedCancellation, context: context)
+        }
+        return
+      }
+
+      let shouldRun = await MainActor.run { [weak self] in
+        guard let self else { return false }
+        guard self.effectBridge.debounceGeneration(for: id) == generation else { return false }
+        defer {
+          self.effectBridge.finishDebounceState(for: id, generation: generation)
+        }
+        return self.shouldProceed(context: context)
+      }
+
+      guard shouldRun, let self else { return }
+      await self.walkEffect(nested, context: context, awaited: awaited)
     }
 
-    guard shouldProceed(context: context) else { return }
-    await recurse(nested, context, awaited)
+    effectBridge.setDebounceDelayTask(task, for: id, generation: generation)
+
+    if awaited {
+      _ = await task.result
+    }
   }
 
   package var throttleState: ThrottleStateMap<R.Action> {
@@ -179,26 +217,33 @@ extension Store: EffectDriver {
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
 
+    let clock = self.clock
     let task = Task { [weak self] in
       do {
-        guard let self else { return }
-        try await self.clock.sleep(interval)
+        try await clock.sleep(interval)
       } catch {
         await MainActor.run {
           self?.recordDrop(nil, reason: .throttledOrDebouncedCancellation, context: nil)
         }
         return
       }
-      guard let self else { return }
-      guard self.throttleState.generation(for: id) == generation else { return }
-      defer {
-        if self.throttleState.generation(for: id) == generation {
-          self.throttleState.clearState(for: id)
+
+      let pending: ThrottleStateMap<R.Action>.PendingTrailing? =
+        await MainActor.run { [weak self] in
+          guard let self else { return nil }
+          guard self.throttleState.generation(for: id) == generation else { return nil }
+          defer {
+            if self.throttleState.generation(for: id) == generation {
+              self.throttleState.finishState(for: id, generation: generation)
+            }
+          }
+          guard let pending = self.throttleState.pending(for: id) else { return nil }
+          guard self.shouldProceed(context: pending.context) else { return nil }
+          return pending
         }
-      }
-      guard let pending = self.throttleState.pending(for: id) else { return }
-      guard self.shouldProceed(context: pending.context) else { return }
-      await recurse(pending.effect, pending.context, false)
+
+      guard let pending, let self else { return }
+      await self.walkEffect(pending.effect, context: pending.context, awaited: false)
     }
 
     throttleState.setTrailingTask(task, for: id)

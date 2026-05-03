@@ -15,6 +15,7 @@ package final class ThrottleStateMap<Action: Sendable> {
   private var pendingByID: [EffectID: PendingTrailing] = [:]
   private var trailingTaskByID: [EffectID: Task<Void, Never>] = [:]
   private var generationByID: [EffectID: UInt64] = [:]
+  private var nextGenerationValue: UInt64 = 0
 
   package init() {}
 
@@ -52,9 +53,9 @@ package final class ThrottleStateMap<Action: Sendable> {
 
   @discardableResult
   package func nextGeneration(for id: EffectID) -> UInt64 {
-    let next = (generationByID[id] ?? 0) &+ 1
-    generationByID[id] = next
-    return next
+    nextGenerationValue &+= 1
+    generationByID[id] = nextGenerationValue
+    return nextGenerationValue
   }
 
   package func resetWindow(for id: EffectID) {
@@ -66,6 +67,16 @@ package final class ThrottleStateMap<Action: Sendable> {
   package func clearState(for id: EffectID) {
     resetWindow(for: id)
     windowEndByID.removeValue(forKey: id)
+  }
+
+  @discardableResult
+  package func finishState(for id: EffectID, generation: UInt64) -> Bool {
+    guard generationByID[id] == generation else { return false }
+    trailingTaskByID.removeValue(forKey: id)
+    generationByID.removeValue(forKey: id)
+    pendingByID.removeValue(forKey: id)
+    windowEndByID.removeValue(forKey: id)
+    return true
   }
 
   package func clearAll() {
@@ -114,7 +125,7 @@ package protocol EffectDriver<Action>: AnyObject {
   func cancelInFlightEffects(id: EffectID, context: EffectExecutionContext?) async
 
   /// Whether execution should proceed for the given context.
-  /// Store checks sequence boundaries; TestStore always returns true.
+  /// Store and TestStore both check sequence boundaries for cancellable effects.
   func shouldProceed(context: EffectExecutionContext?) -> Bool
 
   // MARK: - Debounce

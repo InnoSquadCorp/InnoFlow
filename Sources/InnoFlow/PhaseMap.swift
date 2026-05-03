@@ -38,7 +38,7 @@ public enum PhaseMapViolation<Action: Sendable, Phase: Hashable & Sendable>: Sen
 }
 
 public struct PhaseMapDiagnostics<Action: Sendable, Phase: Hashable & Sendable>: Sendable {
-  public var report: @Sendable (PhaseMapViolation<Action, Phase>) -> Void
+  public let report: @Sendable (PhaseMapViolation<Action, Phase>) -> Void
 
   public init(
     report: @escaping @Sendable (PhaseMapViolation<Action, Phase>) -> Void
