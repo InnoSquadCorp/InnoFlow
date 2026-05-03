@@ -683,7 +683,12 @@ main() {
   echo "[principle-gates] Running sample package tests"
   local sample_test_root
   sample_test_root="$(canonical_root_for_sample_package_tests)"
-  swift test --package-path "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" -Xswiftc -warnings-as-errors
+  local sample_package_path
+  sample_package_path="$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
+  # The sample package has its own .build cache. Clean it before testing so
+  # local branch switches cannot reuse a stale source-file graph for InnoFlow.
+  swift package --package-path "$sample_package_path" clean
+  swift test --package-path "$sample_package_path" -Xswiftc -warnings-as-errors
 
   echo "[principle-gates] Building canonical sample app"
   xcodebuild \
