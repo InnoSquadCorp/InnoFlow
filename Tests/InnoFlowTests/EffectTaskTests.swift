@@ -296,6 +296,56 @@ struct EffectTaskTests {
     await store.assertNoMoreActions()
   }
 
+  @Test("EffectTask.run consumes AsyncSequence actions")
+  func effectRunConsumesAsyncSequenceActions() async {
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: AsyncSequenceConsumerFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+
+    await store.send(.startActions([1, 2]))
+    await waitForSleeperCount(clock, atLeast: 1)
+    await clock.advance(by: .milliseconds(10))
+    await store.receive(.value(1)) {
+      $0.values = [1]
+    }
+
+    await waitForSleeperCount(clock, atLeast: 1)
+    await clock.advance(by: .milliseconds(10))
+    await store.receive(.value(2)) {
+      $0.values = [1, 2]
+    }
+
+    await store.assertNoMoreActions()
+  }
+
+  @Test("EffectTask.run AsyncSequence helper works with dynamic cancellation IDs")
+  func effectRunAsyncSequenceUsesDynamicCancellationID() async {
+    let id = UUID()
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: AsyncSequenceConsumerFeature(),
+      initialState: .init(),
+      clock: clock,
+      effectTimeout: .milliseconds(50)
+    )
+
+    await store.send(.startTransformed(id: id, values: [1, 2, 3]))
+    await waitForSleeperCount(clock, atLeast: 1)
+    await clock.advance(by: .milliseconds(10))
+    await store.receive(.value(1)) {
+      $0.values = [1]
+    }
+
+    await waitForSleeperCount(clock, atLeast: 1)
+    await store.send(.cancel(id))
+    await clock.advance(by: .milliseconds(30))
+
+    await store.assertNoMoreActions()
+  }
+
   @Test(
     "EffectTask.cancellable latest-wins semantics hold across random trigger streams",
     arguments: Array(0..<50)
@@ -404,5 +454,94 @@ struct EffectTaskTests {
     )
 
     #expect(actual == expected)
+  }
+}
+
+private struct DelayedAsyncSequence<Element: Sendable>: AsyncSequence, Sendable {
+  let values: [Element]
+  let interval: Duration
+  let context: EffectContext
+
+  func makeAsyncIterator() -> Iterator {
+    .init(values: values, interval: interval, context: context)
+  }
+
+  struct Iterator: AsyncIteratorProtocol, Sendable {
+    let values: [Element]
+    let interval: Duration
+    let context: EffectContext
+    var index = 0
+
+    mutating func next() async -> Element? {
+      guard index < values.count else { return nil }
+      let value = values[index]
+      index += 1
+
+      do {
+        try await context.sleep(for: interval)
+        try await context.checkCancellation()
+        return value
+      } catch {
+        return nil
+      }
+    }
+  }
+}
+
+private struct AsyncSequenceConsumerFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var values: [Int] = []
+  }
+
+  enum Action: Equatable, Sendable {
+    case startActions([Int])
+    case startTransformed(id: UUID, values: [Int])
+    case cancel(UUID)
+    case value(Int)
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .startActions(let values):
+      return .run { context in
+        DelayedAsyncSequence(
+          values: values.map(Action.value),
+          interval: .milliseconds(10),
+          context: context
+        )
+      }
+
+    case .startTransformed(let id, let values):
+      let cancellationID = EffectID(id)
+      return EffectTask.run(
+        sequence: { context in
+          DelayedAsyncSequence(
+            values: values,
+            interval: .milliseconds(10),
+            context: context
+          )
+        },
+        transform: { value in
+          value >= 0 ? .value(value) : nil
+        }
+      )
+      .cancellable(cancellationID, cancelInFlight: true)
+
+    case .cancel(let id):
+      return .cancel(EffectID(id))
+
+    case .value(let value):
+      state.values.append(value)
+      return .none
+    }
+  }
+}
+
+private func waitForSleeperCount(_ clock: ManualTestClock, atLeast count: Int) async {
+  for _ in 0..<100 {
+    if await clock.sleeperCount >= count {
+      return
+    }
+    await Task.yield()
   }
 }

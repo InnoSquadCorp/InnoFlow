@@ -55,6 +55,8 @@ ARCHITECTURE_CONTRACT.md — *Projection lifecycle contract*.
 
 Time-sensitive `.run` effects should use ``EffectContext``. That keeps `StoreClock` in control of
 debounce/throttle operators and explicit delays inside the effect body.
+When a dependency already exposes an `AsyncSequence`, use the sequence-based `EffectTask.run`
+overloads to consume stream elements without adding a custom effect operation.
 
 Dependency graphs still belong outside `InnoFlow`. When a reducer needs services, construct an
 explicit `Dependencies` bundle in the app or coordinator layer and pass it into the feature.
@@ -73,6 +75,7 @@ turning InnoFlow into a general FSM runtime.
 ### Essentials
 
 - <doc:GettingStarted>
+- <doc:AsyncSequenceEffects>
 - <doc:EffectTimingBaseline>
 - <doc:PhaseDrivenModeling>
 - <doc:PhaseDrivenWalkthrough>

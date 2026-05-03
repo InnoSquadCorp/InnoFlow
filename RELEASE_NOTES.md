@@ -18,6 +18,8 @@ without changing the runtime public API surface.
    localized `SelectedStore` guidance, and bare throwing `.run` snippets.
 5. Generalized `EffectID` to accept typed `Hashable & Sendable` raw values while keeping
    `StaticEffectID` as the string-literal convenience alias.
+6. Added `EffectTask.run` overloads for consuming `AsyncSequence` streams directly or through an
+   optional element-to-action transform.
 
 ## Migration Note
 

@@ -396,6 +396,8 @@ This keeps reducer dependencies explicit:
 - `.none`
 - `.send(action)`
 - `.run { send, context in ... }`
+- `.run { context in asyncSequence }`
+- `.run(sequence:transform:)`
 - `.merge(...)`
 - `.concatenate(...)`
 - `.cancel(id)`

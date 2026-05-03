@@ -235,6 +235,49 @@ public struct EffectTask<Action: Sendable>: Sendable {
     .init(operation: .run(priority: priority, operation: operation))
   }
 
+  /// Runs an async sequence and emits each element as an action.
+  ///
+  /// The sequence is built from the active ``EffectContext`` so producers can use the
+  /// store-controlled clock and cancellation checks. Thrown errors stop the effect.
+  public static func run<S: AsyncSequence & Sendable>(
+    priority: TaskPriority? = nil,
+    _ makeSequence: @escaping @Sendable (EffectContext) async throws -> S
+  ) -> Self where S.Element == Action, S.AsyncIterator: Sendable {
+    run(priority: priority) { send, context in
+      do {
+        let sequence = try await makeSequence(context)
+        for try await action in sequence {
+          try await context.checkCancellation()
+          await send(action)
+        }
+      } catch {
+        return
+      }
+    }
+  }
+
+  /// Runs an async sequence and transforms each element into an optional action.
+  ///
+  /// Returning `nil` from `transform` drops that element without ending the effect.
+  public static func run<S: AsyncSequence & Sendable>(
+    priority: TaskPriority? = nil,
+    sequence makeSequence: @escaping @Sendable (EffectContext) async throws -> S,
+    transform: @escaping @Sendable (S.Element) -> Action?
+  ) -> Self where S.AsyncIterator: Sendable {
+    run(priority: priority) { send, context in
+      do {
+        let sequence = try await makeSequence(context)
+        for try await element in sequence {
+          try await context.checkCancellation()
+          guard let action = transform(element) else { continue }
+          await send(action)
+        }
+      } catch {
+        return
+      }
+    }
+  }
+
   /// Runs effects concurrently.
   public static func merge(_ effects: Self...) -> Self {
     merge(effects)
