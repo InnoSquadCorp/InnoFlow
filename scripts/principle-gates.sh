@@ -500,6 +500,37 @@ main() {
     exit 1
   fi
 
+  echo "[principle-gates] Checking ADR document format"
+  local adr_dir="docs/adr"
+  if [[ ! -d "$adr_dir" ]]; then
+    echo "[principle-gates] Failed: $adr_dir directory is missing"
+    exit 1
+  fi
+  shopt -s nullglob
+  local -a adr_files=("$adr_dir"/ADR-*.md)
+  shopt -u nullglob
+  if [[ "${#adr_files[@]}" -eq 0 ]]; then
+    echo "[principle-gates] Failed: $adr_dir contains no ADR-*.md files"
+    exit 1
+  fi
+  local adr_file
+  local adr_basename
+  local adr_section
+  local -a adr_required_sections=("## Status" "## Context" "## Decision" "## Consequences")
+  for adr_file in "${adr_files[@]}"; do
+    adr_basename="$(basename "$adr_file")"
+    if [[ ! "$adr_basename" =~ ^ADR-[a-z0-9]+(-[a-z0-9]+)*\.md$ ]]; then
+      echo "[principle-gates] Failed: $adr_file filename must match ADR-{kebab-case}.md"
+      exit 1
+    fi
+    for adr_section in "${adr_required_sections[@]}"; do
+      if ! grep -qF -- "$adr_section" "$adr_file"; then
+        echo "[principle-gates] Failed: $adr_file is missing required section '$adr_section'"
+        exit 1
+      fi
+    done
+  done
+
   echo "[principle-gates] Checking release surface sync"
   release_sync_output=""
   release_sync_status=0
