@@ -726,23 +726,22 @@ struct StoreEffectRuntimeTests {
       clock: .manual(clock)
     )
 
-    store.send(.trigger(1))
-    try #require(
-      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+    func waitForSingleDebounceSleeper() async -> Bool {
+      await drainAsyncWork(iterations: 64)
+      return await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
         await clock.sleeperCount == 1
       }
-    )
+    }
+
+    store.send(.trigger(1))
+    try #require(await waitForSingleDebounceSleeper())
 
     for value in 2...5 {
       store.send(.trigger(value))
-      try #require(
-        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
-          await clock.sleeperCount == 1
-        }
-      )
+      try #require(await waitForSingleDebounceSleeper())
     }
 
-    #expect(await clock.sleeperCount == 1)
+    try #require(await waitForSingleDebounceSleeper())
 
     await clock.advance(by: .milliseconds(60))
     await waitUntil {
