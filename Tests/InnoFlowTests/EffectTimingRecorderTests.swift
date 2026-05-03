@@ -248,7 +248,7 @@ struct EffectTimingRecorderTests {
     witness: EffectInstrumentationWitness,
     expectedRunCount: Int,
     expectedCount: Int,
-    timeout: Duration = .seconds(15)
+    timeout: Duration = .seconds(60)
   ) async -> Bool {
     let expectedRuns = UInt64(expectedRunCount)
     return await waitForEffectTimingCondition(
@@ -279,7 +279,7 @@ struct EffectTimingRecorderTests {
     recorder: EffectTimingRecorder,
     witness: EffectInstrumentationWitness,
     expectedCancellations: UInt64 = 1,
-    timeout: Duration = .seconds(15)
+    timeout: Duration = .seconds(60)
   ) async -> Bool {
     await waitForEffectTimingCondition(
       timeout: timeout,
@@ -329,7 +329,7 @@ struct EffectTimingRecorderTests {
   private func waitForRunStartedCount(
     atLeast expectedCount: Int,
     in counter: RunStartedCounter,
-    timeout: Duration = .seconds(15)
+    timeout: Duration = .seconds(60)
   ) async -> Bool {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout

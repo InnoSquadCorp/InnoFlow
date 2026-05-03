@@ -5682,22 +5682,16 @@ struct StoreTests {
 
     store.send(.start)
 
-    for _ in 0..<128 {
-      if store.values == ["first"] {
-        break
-      }
-      await drainAsyncWork(iterations: 1)
+    await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
+      store.values == ["first"]
     }
 
     #expect(store.values == ["first"])
     await drainAsyncWork(iterations: 128)
     await clock.advance(by: .milliseconds(80))
 
-    for _ in 0..<128 {
-      if store.values == ["first", "second"] {
-        break
-      }
-      await drainAsyncWork(iterations: 1)
+    await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
+      store.values == ["first", "second"]
     }
 
     #expect(store.values == ["first", "second"])
