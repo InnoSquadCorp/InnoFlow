@@ -138,8 +138,8 @@ extension Store {
 
       let scopedStore = ScopedStore(
         parent: self,
-        stateResolver: { state in
-          self.resolveCollectionElement(
+        stateResolver: { [collection, scopedElementID, weak bucket, offsetBox] state in
+          resolveScopedCollectionElement(
             in: state,
             collection: collection,
             id: scopedElementID,
@@ -185,53 +185,58 @@ extension Store {
     )
   }
 
-  private func resolveCollectionElement<CollectionState>(
-    in state: R.State,
-    collection: KeyPath<R.State, CollectionState>,
-    id: CollectionState.Element.ID,
-    bucket: CollectionScopeCacheBucket,
-    offsetBox: CollectionScopeOffsetBox
-  ) -> CollectionState.Element?
-  where
-    CollectionState: RandomAccessCollection,
-    CollectionState.Element: Equatable & Identifiable
+}
+
+@MainActor
+private func resolveScopedCollectionElement<ParentState, CollectionState>(
+  in state: ParentState,
+  collection: KeyPath<ParentState, CollectionState>,
+  id: CollectionState.Element.ID,
+  bucket: CollectionScopeCacheBucket?,
+  offsetBox: CollectionScopeOffsetBox
+) -> CollectionState.Element?
+where
+  CollectionState: RandomAccessCollection,
+  CollectionState.Element: Equatable & Identifiable
+{
+  let collectionState = state[keyPath: collection]
+
+  if let bucket,
+    offsetBox.revision == bucket.revision,
+    let candidate = scopedCollectionElement(
+      in: collectionState,
+      at: offsetBox.offset
+    ),
+    candidate.id == id
   {
-    let collectionState = state[keyPath: collection]
+    return candidate
+  }
 
-    if offsetBox.revision == bucket.revision,
-      let candidate = element(
-        in: collectionState,
-        at: offsetBox.offset
-      ),
-      candidate.id == id
-    {
-      return candidate
-    }
-
-    for (offset, candidate) in collectionState.enumerated() where candidate.id == id {
-      offsetBox.offset = offset
+  for (offset, candidate) in collectionState.enumerated() where candidate.id == id {
+    offsetBox.offset = offset
+    if let bucket {
       offsetBox.revision = bucket.revision
-      return candidate
     }
+    return candidate
+  }
 
+  return nil
+}
+
+private func scopedCollectionElement<CollectionState>(
+  in collection: CollectionState,
+  at offset: Int
+) -> CollectionState.Element?
+where CollectionState: RandomAccessCollection {
+  guard offset >= 0 else { return nil }
+  guard
+    let index = collection.index(
+      collection.startIndex, offsetBy: offset, limitedBy: collection.endIndex),
+    index != collection.endIndex
+  else {
     return nil
   }
-
-  private func element<CollectionState>(
-    in collection: CollectionState,
-    at offset: Int
-  ) -> CollectionState.Element?
-  where CollectionState: RandomAccessCollection {
-    guard offset >= 0 else { return nil }
-    guard
-      let index = collection.index(
-        collection.startIndex, offsetBy: offset, limitedBy: collection.endIndex),
-      index != collection.endIndex
-    else {
-      return nil
-    }
-    return collection[index]
-  }
+  return collection[index]
 }
 
 private func collectionSnapshotChanged<CollectionState>(
@@ -260,7 +265,7 @@ where
 public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, ChildAction> {
   package var cachedState: ChildState
   @ObservationIgnored private weak var parent: Store<ParentReducer>?
-  @ObservationIgnored private let stateResolver: (ParentReducer.State) -> ChildState?
+  @ObservationIgnored private let stateResolver: @MainActor (ParentReducer.State) -> ChildState?
   @ObservationIgnored private let actionTransform: @Sendable (ChildAction) -> ParentReducer.Action
   @ObservationIgnored package let failureKind: ScopedStoreFailureKind
   @ObservationIgnored package let observerRegistry = ProjectionObserverRegistry<ChildState>()
@@ -316,7 +321,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
 
   init(
     parent: Store<ParentReducer>,
-    stateResolver: @escaping (ParentReducer.State) -> ChildState?,
+    stateResolver: @escaping @MainActor (ParentReducer.State) -> ChildState?,
     stableID: AnyHashable? = nil,
     failureKind: ScopedStoreFailureKind = .parentReleased,
     observerRegistration: ProjectionObserverRegistration<ParentReducer.State> = .alwaysRefresh,

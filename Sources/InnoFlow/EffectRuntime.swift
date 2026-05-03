@@ -106,6 +106,30 @@ package actor EffectRuntime<Action: Sendable> {
     sequence: UInt64
   ) -> EffectEmissionDecision {
     emissionDecisionCount &+= 1
+    return cancellationDecision(token: token, id: id, sequence: sequence)
+  }
+
+  package func canStartOperation(
+    token: UUID,
+    id: EffectID?,
+    sequence: UInt64
+  ) -> Bool {
+    if Task.isCancelled {
+      return false
+    }
+    switch cancellationDecision(token: token, id: id, sequence: sequence) {
+    case .allow:
+      return true
+    case .drop:
+      return false
+    }
+  }
+
+  private func cancellationDecision(
+    token: UUID,
+    id: EffectID?,
+    sequence: UInt64
+  ) -> EffectEmissionDecision {
     guard activeTokens.contains(token) else { return .drop(.inactiveToken) }
     if sequence <= cancelledUpToAll {
       return .drop(.cancellationBoundary)

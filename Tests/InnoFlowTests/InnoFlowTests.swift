@@ -1627,6 +1627,37 @@ actor DeinitCancellationProbe {
   }
 }
 
+actor RunStartGateRaceProbe {
+  private(set) var started = 0
+
+  func markStarted() {
+    started += 1
+  }
+}
+
+struct RunStartGateRaceFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var requested = false
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+  }
+
+  let probe: RunStartGateRaceProbe
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      state.requested = true
+      return .run { _, _ in
+        await probe.markStarted()
+      }
+      .cancellable("start-gate-race")
+    }
+  }
+}
+
 struct ChildScopedReducer: Reducer {
   struct State: Equatable, Sendable {
     var value = 0
@@ -4477,6 +4508,49 @@ struct StoreTests {
     }
   }
 
+  @Test("Collection-scoped stores do not retain their parent Store")
+  func collectionScopeCachingDoesNotRetainParentStore() async {
+    typealias RowStore =
+      ScopedStore<
+        ScopedCollectionFeature,
+        ScopedCollectionFeature.Todo,
+        ScopedCollectionFeature.TodoAction
+      >
+
+    var row: RowStore?
+    weak var weakRow: RowStore?
+    weak var weakStore: Store<ScopedCollectionFeature>?
+
+    do {
+      var store: Store<ScopedCollectionFeature>? = Store(
+        reducer: ScopedCollectionFeature(),
+        initialState: .init()
+      )
+      weakStore = store
+      row =
+        store?.scope(
+          collection: \.todos,
+          action: ScopedCollectionFeature.Action.todoActionPath
+        )[0]
+      weakRow = row
+      store = nil
+    }
+
+    await waitUntil {
+      weakStore == nil
+    }
+
+    #expect(weakStore == nil)
+    #expect(row?.optionalState == nil)
+
+    row = nil
+    await waitUntil {
+      weakRow == nil
+    }
+
+    #expect(weakRow == nil)
+  }
+
   @Test("Collection-scoped stores preserve identity across reorder and prune removed ids")
   func collectionScopeCachingTracksElementsByID() {
     let store = Store(reducer: ScopedCollectionFeature(), initialState: .init())
@@ -5608,22 +5682,16 @@ struct StoreTests {
 
     store.send(.start)
 
-    for _ in 0..<128 {
-      if store.values == ["first"] {
-        break
-      }
-      await drainAsyncWork(iterations: 1)
+    await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
+      store.values == ["first"]
     }
 
     #expect(store.values == ["first"])
     await drainAsyncWork(iterations: 128)
     await clock.advance(by: .milliseconds(80))
 
-    for _ in 0..<128 {
-      if store.values == ["first", "second"] {
-        break
-      }
-      await drainAsyncWork(iterations: 1)
+    await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
+      store.values == ["first", "second"]
     }
 
     #expect(store.values == ["first", "second"])
@@ -6080,6 +6148,40 @@ struct StoreTests {
     #expect(store.emitted == [2])
   }
 
+  @Test("Store debounce cancels stale sleeper tasks by id")
+  func storeDebounceCancelsStaleSleeperTasks() async throws {
+    let clock = ManualTestClock()
+    let store = Store(
+      reducer: DebounceFeature(),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+
+    func waitForSingleDebounceSleeper() async -> Bool {
+      await drainAsyncWork(iterations: 64)
+      return await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
+      }
+    }
+
+    store.send(.trigger(1))
+    try #require(await waitForSingleDebounceSleeper())
+
+    for value in 2...5 {
+      store.send(.trigger(value))
+      try #require(await waitForSingleDebounceSleeper())
+    }
+
+    try #require(await waitForSingleDebounceSleeper())
+
+    await clock.advance(by: .milliseconds(60))
+    await waitUntil {
+      store.emitted == [5]
+    }
+
+    #expect(store.emitted == [5])
+  }
+
   @Test("ManualTestClock resumes all same-deadline sleepers")
   func manualTestClockResumesAllSameDeadlineSleepers() async throws {
     let clock = ManualTestClock()
@@ -6354,6 +6456,77 @@ struct StoreTests {
     #expect(store.emitted.isEmpty)
   }
 
+  @Test("Store release cancels pending debounce without retaining Store")
+  func storeReleaseCancelsPendingDebounceWithoutRetainingStore() async throws {
+    let clock = ManualTestClock()
+    weak var weakStore: Store<DebounceFeature>?
+
+    do {
+      var store: Store<DebounceFeature>? = Store(
+        reducer: DebounceFeature(),
+        initialState: .init(),
+        clock: .manual(clock)
+      )
+      weakStore = store
+      store?.send(.trigger(1))
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      store = nil
+    }
+
+    await waitUntil {
+      weakStore == nil
+    }
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+
+    await clock.advance(by: .seconds(5))
+    #expect(weakStore == nil)
+    #expect(await clock.sleeperCount == 0)
+  }
+
+  @Test("Store release cancels pending trailing throttle without retaining Store")
+  func storeReleaseCancelsPendingTrailingThrottleWithoutRetainingStore() async throws {
+    let clock = ManualTestClock()
+    weak var weakStore: Store<ThrottleTrailingFeature>?
+
+    do {
+      var store: Store<ThrottleTrailingFeature>? = Store(
+        reducer: ThrottleTrailingFeature(),
+        initialState: .init(),
+        clock: .manual(clock)
+      )
+      weakStore = store
+      store?.send(.trigger(1))
+      store?.send(.trigger(2))
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      store = nil
+    }
+
+    await waitUntil {
+      weakStore == nil
+    }
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+
+    await clock.advance(by: .seconds(5))
+    #expect(weakStore == nil)
+    #expect(await clock.sleeperCount == 0)
+  }
+
   @Test("Store deinit prevents long-running effect completion")
   func storeDeinitPreventsLongRunningCompletion() async {
     let probe = DeinitCancellationProbe()
@@ -6422,6 +6595,47 @@ struct StoreTests {
 
     #expect(await probe.cancelled == 1)
   }
+
+  @Test("Store startRun honors cancellation boundaries before user operation")
+  func storeStartRunHonorsCancellationBoundariesBeforeUserOperation() async {
+    let id: EffectID = "store-start-gate-race"
+    let context = EffectExecutionContext(cancellationID: id, sequence: 1)
+    let probe = RunStartGateRaceProbe()
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init()
+    )
+
+    await store.cancelEffects(id: id, context: context)
+    await store.startRun(
+      priority: nil,
+      operation: { _, _ in
+        await probe.markStarted()
+      }, context: context, awaited: true)
+
+    let metrics = await store.effectRuntimeMetrics
+    #expect(metrics.preparedRuns == 1)
+    #expect(metrics.finishedRuns == 1)
+    #expect(metrics.cancellations == 1)
+    #expect(await probe.started == 0)
+  }
+
+  @Test("Store cancelled run effects do not start after public cancellation")
+  func storeCancelledRunEffectsDoNotStartAfterPublicCancellation() async {
+    let probe = RunStartGateRaceProbe()
+    let store = Store(
+      reducer: RunStartGateRaceFeature(probe: probe),
+      initialState: .init()
+    )
+
+    store.send(.start)
+    await store.cancelEffects(identifiedBy: "start-gate-race")
+    await drainAsyncWork()
+    try? await Task.sleep(for: .milliseconds(20))
+    await drainAsyncWork()
+
+    #expect(await probe.started == 0)
+  }
 }
 
 // MARK: - TestStore Tests
@@ -6451,7 +6665,7 @@ struct TestStoreTests {
       $0.isLoading = false
     }
 
-    await store.assertNoMoreActions()
+    await store.assertNoBufferedActions()
   }
 
   @Test("TestStore run effects deliver their first emission deterministically")
@@ -6472,7 +6686,7 @@ struct TestStoreTests {
         $0.isLoading = false
       }
 
-      await store.assertNoMoreActions()
+      await store.assertNoBufferedActions()
     }
   }
 
@@ -6510,6 +6724,43 @@ struct TestStoreTests {
 
     await store.send(.start)
     await store.assertNoMoreActions()
+  }
+
+  @Test("TestStore filters stale queued actions at assertion time")
+  func testStoreFiltersStaleQueuedActionsAtAssertionTime() async {
+    let id: EffectID = "queued-stale-action"
+    let context = EffectExecutionContext(cancellationID: id, sequence: 1)
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      effectTimeout: .milliseconds(20)
+    )
+
+    store.deliverAction(.increment, context: context)
+    await drainAsyncWork()
+    await store.cancelEffects(id: id, context: .init(sequence: 1))
+
+    await store.assertNoBufferedActions()
+    await store.assertNoMoreActions()
+  }
+
+  @Test("TestStore cancelled run tasks do not start after the gate opens")
+  func testStoreCancelledRunTasksDoNotStartAfterGateOpens() async {
+    let probe = RunStartGateRaceProbe()
+    let store = TestStore(
+      reducer: RunStartGateRaceFeature(probe: probe),
+      initialState: .init(),
+      effectTimeout: .milliseconds(20)
+    )
+
+    await store.send(.start) {
+      $0.requested = true
+    }
+    await store.cancelEffects(identifiedBy: "start-gate-race")
+    await drainAsyncWork()
+
+    #expect(await probe.started == 0)
+    await store.assertNoBufferedActions()
   }
 
   @Test("TestStore debounce skips stale effects at cancellation boundaries")
@@ -7245,6 +7496,36 @@ struct TestStoreTests {
     #expect(map.pending(for: id) == nil)
     #expect(map.generation(for: id) == nil)
     #expect(task.isCancelled)
+  }
+
+  @Test("ThrottleStateMap.finishState clears current state without cancelling current task")
+  @MainActor
+  func throttleStateMapFinishState() {
+    let map = ThrottleStateMap<CounterFeature.Action>()
+    let id: EffectID = "throttle-finish-state"
+    let task = Task<Void, Never> {
+      try? await Task.sleep(for: .seconds(5))
+    }
+
+    map.setWindowEnd(ContinuousClock().now, for: id)
+    map.storePending(.send(.increment), context: nil, for: id)
+    let generation = map.nextGeneration(for: id)
+    map.setTrailingTask(task, for: id)
+
+    #expect(map.finishState(for: id, generation: generation + 1) == false)
+    #expect(map.pending(for: id) != nil)
+    #expect(task.isCancelled == false)
+
+    #expect(map.finishState(for: id, generation: generation) == true)
+    #expect(map.windowEnd(for: id) == nil)
+    #expect(map.pending(for: id) == nil)
+    #expect(map.generation(for: id) == nil)
+    #expect(task.isCancelled == false)
+
+    let nextGeneration = map.nextGeneration(for: id)
+    #expect(nextGeneration > generation)
+
+    task.cancel()
   }
 
   @Test("ThrottleStateMap.clearAll cancels all trailing tasks and clears stored state")

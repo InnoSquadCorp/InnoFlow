@@ -16,7 +16,7 @@ import Foundation
 /// Invariants:
 /// - issued sequences are strictly increasing
 /// - `cancelledUpTo*` values are monotonic and gate future emissions
-/// - throttle state must be cleared whenever the owning Store shuts down
+/// - delayed debounce/throttle state must be cleared whenever the owning Store shuts down
 @MainActor
 package final class StoreEffectBridge<Action: Sendable> {
   package let runtime = EffectRuntime<Action>()
@@ -25,6 +25,9 @@ package final class StoreEffectBridge<Action: Sendable> {
   private var lastIssuedSequence: UInt64 = 0
   private var cancelledUpToAll: UInt64 = 0
   private var cancelledUpToByID: [EffectID: UInt64] = [:]
+  private var debounceDelayTasksByID: [EffectID: Task<Void, Never>] = [:]
+  private var debounceGenerationByID: [EffectID: UInt64] = [:]
+  private var nextDebounceGenerationValue: UInt64 = 0
 
   package init() {}
 
@@ -87,19 +90,66 @@ package final class StoreEffectBridge<Action: Sendable> {
     return sequence
   }
 
+  @discardableResult
+  package func nextDebounceGeneration(for id: EffectID) -> UInt64 {
+    nextDebounceGenerationValue &+= 1
+    debounceGenerationByID[id] = nextDebounceGenerationValue
+    return nextDebounceGenerationValue
+  }
+
+  package func debounceGeneration(for id: EffectID) -> UInt64? {
+    debounceGenerationByID[id]
+  }
+
+  package func setDebounceDelayTask(
+    _ task: Task<Void, Never>,
+    for id: EffectID,
+    generation: UInt64
+  ) {
+    guard debounceGenerationByID[id] == generation else { return }
+    debounceDelayTasksByID[id] = task
+  }
+
+  package func clearDebounceState(for id: EffectID, generation: UInt64? = nil) {
+    if let generation, debounceGenerationByID[id] != generation {
+      return
+    }
+    debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
+    debounceGenerationByID.removeValue(forKey: id)
+  }
+
+  @discardableResult
+  package func finishDebounceState(for id: EffectID, generation: UInt64) -> Bool {
+    guard debounceGenerationByID[id] == generation else { return false }
+    debounceDelayTasksByID.removeValue(forKey: id)
+    debounceGenerationByID.removeValue(forKey: id)
+    return true
+  }
+
+  package func clearAllDelayedState() {
+    for task in debounceDelayTasksByID.values {
+      task.cancel()
+    }
+    debounceDelayTasksByID.removeAll(keepingCapacity: true)
+    debounceGenerationByID.removeAll(keepingCapacity: true)
+    throttleState.clearAll()
+  }
+
   package func cancelEffects(id: EffectID, upTo sequence: UInt64) async {
     await runtime.cancel(id: id, upTo: sequence)
+    clearDebounceState(for: id)
     throttleState.clearState(for: id)
   }
 
   package func cancelInFlightEffects(id: EffectID, upTo sequence: UInt64) async {
     await runtime.cancelInFlight(id: id, upTo: sequence)
+    clearDebounceState(for: id)
     throttleState.clearState(for: id)
   }
 
   package func cancelAllEffects(upTo sequence: UInt64) async {
     await runtime.cancelAll(upTo: sequence)
-    throttleState.clearAll()
+    clearAllDelayedState()
   }
 
   /// Clears store-local timing state and triggers best-effort runtime cancellation.
@@ -110,7 +160,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   /// boundary used for instrumentation and tests.
   @discardableResult
   package func shutdown() -> UInt64 {
-    throttleState.clearAll()
+    clearAllDelayedState()
     let runtime = self.runtime
     let sequence = self.currentSequence
     Task {
