@@ -3,14 +3,14 @@
 ## 4.0.0 Release
 
 This release promotes the current InnoFlow implementation and documentation contract to 4.0.0
-without changing the runtime public API surface.
+with the public API updates captured below.
 
 ### Changed
 
 1. Rebaselined README, localized READMEs, architecture contract, migration notes, release notes,
    release checklist, and doc parity metadata around the current public contract.
-2. Clarified `SelectedStore` guidance: fixed-arity `dependingOn:` selection covers one through six
-   explicit state slices, `select(dependingOnAll:)` covers larger explicit sets, and closure
+2. Clarified `SelectedStore` guidance: `select(dependingOn:)` covers a single explicit state
+   slice, the variadic `select(dependingOnAll:)` covers two or more explicit slices, and closure
    selection remains the always-refresh fallback.
 3. Fixed Markdown `.run` examples so throwing work is wrapped inside `do/catch` in non-throwing
    effect closures.
@@ -27,11 +27,18 @@ without changing the runtime public API surface.
 
 - The 4.0.0 surface is a contract and documentation rebaseline for the implementation already in
   the repository.
-- Runtime semantics, reducer authoring, import paths, and current public APIs are unchanged.
+- Runtime semantics, reducer authoring, and import paths are unchanged. Selection, effect ID, and
+  instrumentation event APIs have the source updates listed above.
 
 ### What you may need to update
 
-- No source migration is required from the current public APIs.
+- Multi-slice `SelectedStore` call sites should migrate from tuple-packed
+  `select(dependingOn: (\.a, \.b))` to `select(dependingOnAll: \.a, \.b)`.
+- Explicit `EffectID` type annotations should use `StaticEffectID` for string identifiers or
+  `EffectID<RawValue>` for typed dynamic identifiers.
+- Instrumentation consumers should treat event cancellation identifiers as `AnyEffectID?`; typed
+  `EffectID` values remain accepted by event initializers and `AnyEffectID.rawValue` exposes the
+  erased raw value for logging.
 - Consumers that pin exact tags can move to `4.0.0` once that tag is published later.
 
 ## 3.0.3 Release

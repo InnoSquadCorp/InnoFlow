@@ -481,7 +481,7 @@ struct StoreScopeSelectionTests {
   }
 
   @Test(
-    "Store.select(dependingOn:(..., ...)) preserves SelectedStore identity across repeated calls")
+    "Store.select(dependingOnAll: ..., ...) preserves SelectedStore identity across repeated calls")
   func selectedStoreTwoFieldDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
@@ -506,7 +506,7 @@ struct StoreScopeSelectionTests {
     #expect(first.value == "Child-1")
   }
 
-  @Test("Store.select(dependingOn:(..., ...)) invalidates when either dependency changes")
+  @Test("Store.select(dependingOnAll: ..., ...) invalidates when either dependency changes")
   func selectedStoreTwoFieldDependingOnInvalidatesForAnyDependencyMutation() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let selected = store.select(dependingOnAll: \.child.step, \.child.title) { step, title in
@@ -536,7 +536,7 @@ struct StoreScopeSelectionTests {
     #expect(selected.value == "Updated-4")
   }
 
-  @Test("Store.select(dependingOn:(..., ..., ...)) tracks three explicit dependency slices")
+  @Test("Store.select(dependingOnAll: ..., ..., ...) tracks three explicit dependency slices")
   func selectedStoreThreeFieldDependingOnTracksExplicitSlices() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let selected = store.select(
@@ -566,7 +566,7 @@ struct StoreScopeSelectionTests {
   }
 
   @Test(
-    "Store.select(dependingOn:(..., ..., ..., ...)) preserves SelectedStore identity across repeated calls"
+    "Store.select(dependingOnAll: ..., ..., ..., ...) preserves SelectedStore identity across repeated calls"
   )
   func selectedStoreFourFieldDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -593,7 +593,7 @@ struct StoreScopeSelectionTests {
   }
 
   @Test(
-    "Store.select(dependingOn:(..., ..., ..., ..., ...)) invalidates only for tracked mutations"
+    "Store.select(dependingOnAll: ..., ..., ..., ..., ...) invalidates only for tracked mutations"
   )
   func selectedStoreFiveFieldDependingOnInvalidatesForTrackedMutations() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -634,7 +634,7 @@ struct StoreScopeSelectionTests {
     #expect(selected.value == "Child-1-Ready-2-false")
   }
 
-  @Test("Store.select(dependingOn:(..., ..., ..., ..., ..., ...)) tracks six explicit slices")
+  @Test("Store.select(dependingOnAll: ..., ..., ..., ..., ..., ...) tracks six explicit slices")
   func selectedStoreSixFieldDependingOnTracksExplicitSlices() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let selected = store.select(
@@ -850,7 +850,7 @@ struct StoreScopeSelectionTests {
   }
 
   @Test(
-    "ScopedStore.select(dependingOn:(..., ...)) preserves SelectedStore identity across repeated calls"
+    "ScopedStore.select(dependingOnAll: ..., ...) preserves SelectedStore identity across repeated calls"
   )
   func scopedSelectedStoreTwoFieldDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -953,7 +953,7 @@ struct StoreScopeSelectionTests {
     #expect(selected.value == "READY")
   }
 
-  @Test("ScopedStore.select(dependingOn:(..., ..., ...)) tracks three explicit dependency slices")
+  @Test("ScopedStore.select(dependingOnAll: ..., ..., ...) tracks three explicit dependency slices")
   func scopedSelectedStoreThreeFieldDependingOnTracksExplicitSlices() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let scoped = store.scope(
@@ -983,7 +983,7 @@ struct StoreScopeSelectionTests {
   }
 
   @Test(
-    "ScopedStore.select(dependingOn:(..., ..., ..., ...)) preserves SelectedStore identity across repeated calls"
+    "ScopedStore.select(dependingOnAll: ..., ..., ..., ...) preserves SelectedStore identity across repeated calls"
   )
   func scopedSelectedStoreFourFieldDependingOnPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -1012,7 +1012,7 @@ struct StoreScopeSelectionTests {
   }
 
   @Test(
-    "ScopedStore.select(dependingOn:(..., ..., ..., ..., ...)) ignores parent mutations outside tracked slices"
+    "ScopedStore.select(dependingOnAll: ..., ..., ..., ..., ...) ignores parent mutations outside tracked slices"
   )
   func scopedSelectedStoreFiveFieldDependingOnIgnoresNonDependencies() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -1047,7 +1047,9 @@ struct StoreScopeSelectionTests {
     #expect(selected.value == "Child-1-Ready-0-false")
   }
 
-  @Test("ScopedStore.select(dependingOn:(..., ..., ..., ..., ..., ...)) tracks six explicit slices")
+  @Test(
+    "ScopedStore.select(dependingOnAll: ..., ..., ..., ..., ..., ...) tracks six explicit slices"
+  )
   func scopedSelectedStoreSixFieldDependingOnTracksExplicitSlices() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let scoped = store.scope(

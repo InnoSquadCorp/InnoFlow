@@ -40,6 +40,83 @@ struct CompileContractTests {
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
+  @Test("StoreInstrumentation events accept typed EffectID values")
+  func storeInstrumentationEventsAcceptTypedEffectIDValues() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import Foundation
+      import InnoFlow
+
+      let token = UUID()
+      let staticID: StaticEffectID = "legacy-id"
+      let dynamicID = EffectID(UUID())
+      let erasedID = AnyEffectID(staticID)
+
+      let run = StoreInstrumentation<Int>.RunEvent(
+          token: token,
+          cancellationID: staticID,
+          sequence: 1
+      )
+      let emitted = StoreInstrumentation<Int>.ActionEvent(
+          action: 1,
+          cancellationID: dynamicID,
+          sequence: 2
+      )
+      let dropped = StoreInstrumentation<Int>.ActionDropEvent(
+          action: nil,
+          reason: .cancellationBoundary,
+          cancellationID: staticID,
+          sequence: 3
+      )
+      let cancelled = StoreInstrumentation<Int>.CancellationEvent(
+          id: dynamicID,
+          sequence: 4
+      )
+      let runWithErasedID = StoreInstrumentation<Int>.RunEvent(
+          token: token,
+          cancellationID: erasedID,
+          sequence: nil
+      )
+      let emittedWithoutID = StoreInstrumentation<Int>.ActionEvent(
+          action: 2,
+          cancellationID: nil,
+          sequence: nil
+      )
+      let droppedWithoutID = StoreInstrumentation<Int>.ActionDropEvent(
+          action: nil,
+          reason: .cancellationBoundary,
+          cancellationID: nil,
+          sequence: nil
+      )
+      let cancelledWithoutID = StoreInstrumentation<Int>.CancellationEvent(
+          id: nil,
+          sequence: 5
+      )
+
+      let _ = run.cancellationID
+      let _ = run.cancellationID?.rawValue.description
+      let _ = emitted.cancellationID
+      let _ = dropped.cancellationID
+      let _ = cancelled.id
+      let _ = runWithErasedID.cancellationID
+      let _ = emittedWithoutID.cancellationID
+      let _ = droppedWithoutID.cancellationID
+      let _ = cancelledWithoutID.id
+      """
+
+    let result = try typecheckSource(
+      source,
+      moduleDirectory: moduleDirectory
+    )
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
   @Test("Store.binding rejects non-bindable key paths at compile time")
   func bindingRejectsNonBindableKeyPathAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)

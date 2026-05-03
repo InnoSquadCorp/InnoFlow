@@ -57,6 +57,18 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       self.cancellationID = cancellationID
       self.sequence = sequence
     }
+
+    public init<ID: Hashable & Sendable>(
+      token: UUID,
+      cancellationID: EffectID<ID>?,
+      sequence: UInt64?
+    ) {
+      self.init(
+        token: token,
+        cancellationID: cancellationID.map(AnyEffectID.init),
+        sequence: sequence
+      )
+    }
   }
 
   public struct ActionEvent: Sendable {
@@ -68,6 +80,18 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       self.action = action
       self.cancellationID = cancellationID
       self.sequence = sequence
+    }
+
+    public init<ID: Hashable & Sendable>(
+      action: Action,
+      cancellationID: EffectID<ID>?,
+      sequence: UInt64?
+    ) {
+      self.init(
+        action: action,
+        cancellationID: cancellationID.map(AnyEffectID.init),
+        sequence: sequence
+      )
     }
   }
 
@@ -88,6 +112,20 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       self.cancellationID = cancellationID
       self.sequence = sequence
     }
+
+    public init<ID: Hashable & Sendable>(
+      action: Action?,
+      reason: ActionDropReason,
+      cancellationID: EffectID<ID>?,
+      sequence: UInt64?
+    ) {
+      self.init(
+        action: action,
+        reason: reason,
+        cancellationID: cancellationID.map(AnyEffectID.init),
+        sequence: sequence
+      )
+    }
   }
 
   public struct CancellationEvent: Sendable {
@@ -97,6 +135,10 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     public init(id: AnyEffectID?, sequence: UInt64) {
       self.id = id
       self.sequence = sequence
+    }
+
+    public init<ID: Hashable & Sendable>(id: EffectID<ID>?, sequence: UInt64) {
+      self.init(id: id.map(AnyEffectID.init), sequence: sequence)
     }
   }
 

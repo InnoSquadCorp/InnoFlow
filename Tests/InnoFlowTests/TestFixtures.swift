@@ -519,6 +519,12 @@ struct LongRunningOrchestrationFeature: Reducer {
 }
 
 struct CancellableFeature: Reducer {
+  let delay: Duration
+
+  init(delay: Duration = .milliseconds(200)) {
+    self.delay = delay
+  }
+
   struct State: Equatable, Sendable, DefaultInitializable {
     var completed: [Int] = []
     var requested = 0
@@ -535,7 +541,7 @@ struct CancellableFeature: Reducer {
       state.requested += 1
       return .run { send in
         do {
-          try await Task.sleep(for: .milliseconds(200))
+          try await Task.sleep(for: delay)
           await send(._completed(value))
         } catch {
           // Cancellation should stop action emission.

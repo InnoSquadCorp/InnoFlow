@@ -48,6 +48,15 @@ public struct AnyEffectID: Hashable, Sendable, CustomStringConvertible {
     self.box = EffectIDBox(rawValue: id.rawValue)
   }
 
+  /// The erased raw identifier value.
+  ///
+  /// Equality and hashing still include the original raw value type, so two
+  /// erased IDs with the same rendered value but different raw value types
+  /// remain distinct.
+  public var rawValue: AnyHashable {
+    box.rawValue
+  }
+
   public var description: String {
     box.description
   }
@@ -62,26 +71,35 @@ public struct AnyEffectID: Hashable, Sendable, CustomStringConvertible {
 }
 
 private protocol AnyEffectIDBox: Sendable {
+  var rawValue: AnyHashable { get }
   var description: String { get }
   func isEqual(to other: any AnyEffectIDBox) -> Bool
   func hash(into hasher: inout Hasher)
 }
 
 private struct EffectIDBox<RawValue: Hashable & Sendable>: AnyEffectIDBox {
-  let rawValue: RawValue
+  let typedRawValue: RawValue
+
+  init(rawValue: RawValue) {
+    self.typedRawValue = rawValue
+  }
+
+  var rawValue: AnyHashable {
+    AnyHashable(typedRawValue)
+  }
 
   var description: String {
-    String(describing: rawValue)
+    String(describing: typedRawValue)
   }
 
   func isEqual(to other: any AnyEffectIDBox) -> Bool {
     guard let other = other as? Self else { return false }
-    return rawValue == other.rawValue
+    return typedRawValue == other.typedRawValue
   }
 
   func hash(into hasher: inout Hasher) {
     hasher.combine(ObjectIdentifier(Self.self))
-    hasher.combine(rawValue)
+    hasher.combine(typedRawValue)
   }
 }
 

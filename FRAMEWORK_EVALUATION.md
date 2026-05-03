@@ -4,9 +4,9 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 
 > **Evaluation date:** 2026-04-29
 > **Target version:** InnoFlow 4.0.0 contract surface
-> **Repository snapshot:** `3.0.3-8-g3b77300` on `main`
+> **Repository snapshot:** current stacked PR snapshot on `followup/p0-p1-evaluation-batch`
 > **Scoring axes:** Programming (40%) · CS theory (25%) · SwiftUI philosophy (35%)
-> **Evidence base:** README + localized README, DocC articles, `ARCHITECTURE_CONTRACT.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`, 279 core `@Test` declarations, 37 sample-package `@Test` declarations, 10 canonical sample demos, release build validation, release-sync checks, and principle-gate policy reviewed directly
+> **Evidence base:** README + localized README, DocC articles, `ARCHITECTURE_CONTRACT.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`, 327 core `@Test` declarations, 38 sample-package `@Test` declarations, 10 canonical sample demos, release build validation, release-sync checks, and principle-gate policy reviewed directly
 
 ---
 
@@ -49,12 +49,12 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 | **`PhaseMap` DSL** | `From` / `On` builders mirror SwiftUI-style declaration while keeping phase ownership explicit |
 | **Phase-managed macro** | `@InnoFlow(phaseManaged: true)` removes the need to remember a manual `.phaseMap(Self.phaseMap)` wrapper |
 | **Action routing** | Generated `CasePath` / `CollectionActionPath` values keep scoping public APIs typed and closure-free |
-| **Selection API** | Fixed-arity `select(dependingOn:)` covers one through six explicit slices, `select(dependingOnAll:)` covers larger explicit dependency sets, and plain `select { ... }` remains the always-refresh fallback |
-| **Scoped selection parity** | `ScopedStore.select(dependingOnAll:)` now mirrors the root-store API for large child read models |
+| **Selection API** | `select(dependingOn:)` covers a single explicit slice, variadic `select(dependingOnAll:)` covers two or more explicit dependency slices, and plain `select { ... }` remains the always-refresh fallback |
+| **Scoped selection parity** | `ScopedStore.select(dependingOnAll:)` mirrors the root-store API for multi-slice child read models |
 | **Binding contract** | `@BindableField` + projected key paths keep bindings explicit; `binding(_:to:)` improves enum-case callsites without breaking `send:` |
 | **Instrumentation factories** | `.sink`, `.osLog`, `.signpost`, and `.combined` are all official extension points |
 
-**Deduction (-0.6):** The common 1-through-6 `SelectedStore` overloads still create some API and implementation duplication, and payload-case sugar beyond canonical `CasePath` authoring remains intentionally minimal.
+**Deduction (-0.6):** Payload-case sugar beyond canonical `CasePath` authoring remains intentionally minimal, and closure selectors remain an always-refresh fallback because their read sets are opaque.
 
 ---
 
@@ -96,7 +96,7 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 | **`EffectID` hashing** | Typed `Hashable & Sendable` IDs are erased once at runtime while preserving raw-value equality domains |
 | **Collection offset cache** | `CollectionScopeOffsetBox` + revision tracking keep common collection-scoped lookup paths O(1) |
 | **Dependency-bucket refresh** | Key-path dependency buckets avoid re-evaluating unrelated `SelectedStore` projections |
-| **`dependingOnAll:`** | Parameter-pack selection keeps large explicit read models selective instead of falling back to always-refresh recomputation |
+| **`dependingOnAll:`** | Parameter-pack selection keeps multi-slice explicit read models selective instead of falling back to always-refresh recomputation |
 | **`PhaseMap` lookup** | Per-action resolution uses O(1) source-phase lookup plus a linear walk over only that source phase's transitions |
 | **Effect timing baseline** | Principle gates include a dedicated release-only effect timing baseline check to catch catastrophic scheduling regressions |
 
@@ -108,8 +108,8 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 
 | Item | Evaluation |
 |------|------------|
-| **Core tests** | 279 core `@Test` declarations across runtime, projection, phase, macro, instrumentation, performance, and subprocess contract suites |
-| **Sample tests** | 37 sample-package `@Test` declarations exercise the canonical demos through `TestStore` and real sample features |
+| **Core tests** | 327 core `@Test` declarations across runtime, projection, phase, macro, instrumentation, performance, and subprocess contract suites |
+| **Sample tests** | 38 sample-package `@Test` declarations exercise the canonical demos through `TestStore` and real sample features |
 | **Canonical sample count** | 10 documented demos: basics, orchestration, phase-driven FSM, app-boundary navigation, authentication, pagination, offline-first, realtime stream, form validation, and bidirectional websocket |
 | **Release build** | `swift build -c release` is a required principle-gate step and was validated for the current snapshot |
 | **Release tests** | Principle gates include full release-mode tests plus an isolated release timing baseline gate |
@@ -277,7 +277,7 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 | **`@BindableField`** | Field-level binding is explicit and diagnostic-backed |
 | **`ScopedStore`** | Child views receive read-only projected state plus typed action forwarding |
 | **`SelectedStore`** | Expensive derived read models are cached, equatable, and dependency-aware |
-| **`dependingOnAll:`** | Larger read models no longer have to choose between six-field arity limits and always-refresh fallback |
+| **`dependingOnAll:`** | Multi-slice read models no longer have to choose between fixed arity limits and always-refresh fallback |
 | **Lifecycle accessors** | `isAlive`, `optionalState`, and `optionalValue` let callers branch on projection liveness without triggering debug assertions |
 | **Preview stores** | `Store.preview(...)` standardizes preview-only clock and instrumentation defaults |
 
@@ -349,7 +349,7 @@ This score evaluates the implementation and documentation contract in the curren
 | Code Quality | 9.2 | 9.4 | +0.2 | Macro diagnostics are split, builder internals are gated, and release-workaround scope is explicit |
 | Error Handling & Lifecycle | 9.2 | 9.4 | +0.2 | Cached-read / no-op write lifecycle behavior has release-like subprocess coverage |
 | Performance | 8.6 | 8.9 | +0.3 | Reducer builder specialization, `dependingOnAll:`, and release timing baseline policy improve practical performance confidence |
-| Testing & Validation | 9.8 | 9.9 | +0.1 | Current evidence is 279 core tests, 37 sample tests, release build, release tests, and sample validation policy |
+| Testing & Validation | 9.8 | 9.9 | +0.1 | Current evidence is 327 core tests, 38 sample tests, release build, release tests, and sample validation policy |
 | Automata / FSM | 8.7 | 9.0 | +0.3 | Phase-managed macro diagnostics complement opt-in runtime totality validation |
 | Platform Integration | 9.0 | 9.3 | +0.3 | Signpost instrumentation, ten-demo canonical sample, and release build/test gates improve Apple-platform readiness |
 
@@ -436,10 +436,10 @@ This score evaluates the implementation and documentation contract in the curren
 ### v6.1 -> v7.0 / 4.0.0 (9.20 -> 9.38)
 
 - 4.0.0 contract and documentation rebaseline
-- 279 core tests and 37 sample-package tests reflected in the scorecard
+- 327 core tests and 38 sample-package tests reflected in the scorecard
 - Ten-demo canonical sample catalog reflected in the evaluation evidence
 - Release build, release-mode test, and isolated release timing baseline policy added to validation evidence
-- `Store.select(dependingOnAll:)` and `ScopedStore.select(dependingOnAll:)` for larger explicit read-model dependency sets
+- `Store.select(dependingOnAll:)` and `ScopedStore.select(dependingOnAll:)` for multi-slice explicit read-model dependency sets
 - Projection lifecycle contract for `ScopedStore` and `SelectedStore`, including `isAlive`, `optionalState`, and `optionalValue`
 - Release-mode subprocess coverage for projection cached-read / no-op-write behavior
 - `StoreInstrumentation.signpost(...)` plus `.combined(...)` as official Instruments-friendly instrumentation

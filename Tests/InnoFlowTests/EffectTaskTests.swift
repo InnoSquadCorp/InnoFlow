@@ -351,7 +351,11 @@ struct EffectTaskTests {
     arguments: Array(0..<50)
   )
   func effectCancellableLatestWinsProperty(seed: Int) async throws {
-    let store = TestStore(reducer: CancellableFeature(), initialState: .init())
+    let store = TestStore(
+      reducer: CancellableFeature(delay: .milliseconds(100)),
+      initialState: .init(),
+      effectTimeout: .milliseconds(300)
+    )
     var rng = SeededGenerator(seed: UInt64(seed + 1))
     let count = rng.nextInt(upperBound: 6) + 2
     let values = (0..<count).map { _ in rng.nextInt(upperBound: 10_000) }

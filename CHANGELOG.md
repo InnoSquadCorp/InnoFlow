@@ -9,6 +9,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- `EffectTask.run` now has `AsyncSequence` helpers for streams that emit
+  actions directly or transform elements into optional actions.
+- `EffectID<RawValue>` supports dynamic cancellation identifiers when
+  `RawValue: Hashable & Sendable`; `StaticEffectID` remains the string-literal
+  convenience alias.
 - `IfLet` and `IfCaseLet` accept an `onMissing:` `OnMissingPolicy` parameter
   that controls behavior when a child action arrives while child state is
   unavailable. The default `.assertOnly` preserves the existing contract
@@ -18,6 +23,13 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed (BREAKING)
 
+- `EffectID` is now generic. Existing explicit `EffectID` type annotations
+  should migrate to `StaticEffectID` for string identifiers or
+  `EffectID<RawValue>` for typed dynamic identifiers.
+- `StoreInstrumentation` event payloads expose cancellation identifiers as
+  `AnyEffectID?` so typed effect IDs can be observed uniformly. Event
+  initializers still accept typed `EffectID` values, and `AnyEffectID.rawValue`
+  exposes the erased raw value for instrumentation consumers.
 - `SelectedStore` no longer ships fixed-arity `select(dependingOn:)` overloads
   for two through six tuple-packed slices. The single-slice `select(dependingOn:)`
   convenience and the variadic `select(dependingOnAll:)` parameter-pack
