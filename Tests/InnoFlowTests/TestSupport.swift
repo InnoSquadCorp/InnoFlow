@@ -415,7 +415,34 @@ func findBuiltModuleDirectory(
       attemptedPaths.append(child.appendingPathComponent("release", isDirectory: true).path)
     }
   }
+
+  let moduleSearchRoots = attemptedPaths
+  for attemptedPath in moduleSearchRoots {
+    let directory = URL(fileURLWithPath: attemptedPath, isDirectory: true)
+    attemptedPaths.append(directory.appendingPathComponent("Modules", isDirectory: true).path)
+    attemptedPaths.append(directory.appendingPathComponent("Modules-tool", isDirectory: true).path)
+  }
+
+  let orderedAttemptedPaths = attemptedPaths.reduce(into: [String]()) { result, path in
+    if !result.contains(path) {
+      result.append(path)
+    }
+  }
   attemptedPaths = Array(Set(attemptedPaths)).sorted()
+
+  for attemptedPath in orderedAttemptedPaths {
+    if let configuration,
+      !URL(fileURLWithPath: attemptedPath).pathComponents.contains(configuration)
+    {
+      continue
+    }
+
+    let directory = URL(fileURLWithPath: attemptedPath, isDirectory: true)
+    let modulePath = directory.appendingPathComponent("\(moduleName).swiftmodule").path
+    if fileManager.fileExists(atPath: modulePath) {
+      return directory
+    }
+  }
 
   guard
     let enumerator = fileManager.enumerator(

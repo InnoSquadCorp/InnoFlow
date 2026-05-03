@@ -16,9 +16,10 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 2. [CS Theory (25%)](#ii-cs-theory-weight-25)
 3. [SwiftUI Philosophy (35%)](#iii-swiftui-philosophy-weight-35)
 4. [Overall Score](#iv-overall-score)
-5. [What Changed Since v6.1](#v-what-changed-since-v61)
-6. [Remaining Work](#vi-remaining-work)
-7. [Cumulative Improvement Log](#vii-cumulative-improvement-log)
+5. [Known Limitations](#v-known-limitations)
+6. [What Changed Since v6.1](#vi-what-changed-since-v61)
+7. [Remaining Work](#vii-remaining-work)
+8. [Cumulative Improvement Log](#viii-cumulative-improvement-log)
 
 ---
 
@@ -328,7 +329,18 @@ This score evaluates the implementation and documentation contract in the curren
 
 ---
 
-## V. What Changed Since v6.1
+## V. Known Limitations
+
+| Area | Current Policy |
+|------|----------------|
+| **Effect identifiers** | `EffectID<RawValue>` now supports dynamic identifiers, but only for `RawValue: Hashable & Sendable`. This keeps runtime cancellation maps safe while leaving reducer types themselves non-`Sendable` by policy. See `docs/adr/ADR-reducer-sendable-policy.md`. |
+| **Dependency graph construction** | InnoFlow intentionally does not ship a DI container. Reducers receive explicit construction-time dependency bundles; richer graph behavior belongs in the app layer or a DI library. See `docs/adr/ADR-no-builtin-di-container.md` and `docs/DEPENDENCY_PATTERNS.md`. |
+| **Navigation ownership** | Concrete route stacks, `NavigationPath`, tabs, windows, and immersive-space orchestration remain outside InnoFlow. Reducers may emit business intent, but the app boundary owns navigation state. See `docs/CROSS_FRAMEWORK.md`. |
+| **Transport/session lifecycle** | Long-lived sockets, reachability monitors, retry policies, and session ownership stay in transport clients. InnoFlow consumes their domain events as effects but does not become the transport runtime. See `docs/CROSS_FRAMEWORK.md`. |
+
+---
+
+## VI. What Changed Since v6.1
 
 | Item | v6.1 | v7.0 | Delta | Reason |
 |------|------|------|-------|--------|
@@ -345,7 +357,7 @@ This score evaluates the implementation and documentation contract in the curren
 
 ---
 
-## VI. Remaining Work
+## VII. Remaining Work
 
 ### P1 — Release Publication Gate
 
@@ -373,7 +385,7 @@ This score evaluates the implementation and documentation contract in the curren
 
 ---
 
-## VII. Cumulative Improvement Log
+## VIII. Cumulative Improvement Log
 
 ### v1 -> v2 (8.07 -> 8.19)
 
