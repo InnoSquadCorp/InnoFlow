@@ -4527,10 +4527,11 @@ struct StoreTests {
         initialState: .init()
       )
       weakStore = store
-      row = store?.scope(
-        collection: \.todos,
-        action: ScopedCollectionFeature.Action.todoActionPath
-      )[0]
+      row =
+        store?.scope(
+          collection: \.todos,
+          action: ScopedCollectionFeature.Action.todoActionPath
+        )[0]
       weakRow = row
       store = nil
     }
@@ -6613,9 +6614,11 @@ struct StoreTests {
     )
 
     await store.cancelEffects(id: id, context: context)
-    await store.startRun(priority: nil, operation: { _, _ in
-      await probe.markStarted()
-    }, context: context, awaited: true)
+    await store.startRun(
+      priority: nil,
+      operation: { _, _ in
+        await probe.markStarted()
+      }, context: context, awaited: true)
 
     let metrics = await store.effectRuntimeMetrics
     #expect(metrics.preparedRuns == 1)

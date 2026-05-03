@@ -713,9 +713,12 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   private func nextActionWithinTimeout() async -> R.Action? {
     let queue = self.queue
-    while let queuedAction = await withTimeout(effectTimeout, operation: {
-      await queue.next()
-    }) {
+    while let queuedAction = await withTimeout(
+      effectTimeout,
+      operation: {
+        await queue.next()
+      })
+    {
       guard shouldProceed(context: queuedAction.context) else { continue }
       return queuedAction.action
     }

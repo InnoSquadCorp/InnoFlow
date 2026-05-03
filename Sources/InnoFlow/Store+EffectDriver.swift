@@ -34,11 +34,13 @@ extension Store: EffectDriver {
         if lifetime.isReleased {
           throw CancellationError()
         }
-        guard await runtime.canStartOperation(
-          token: token,
-          id: context?.cancellationID,
-          sequence: sequence
-        ) else {
+        guard
+          await runtime.canStartOperation(
+            token: token,
+            id: context?.cancellationID,
+            sequence: sequence
+          )
+        else {
           throw CancellationError()
         }
       } catch {
