@@ -3713,7 +3713,7 @@ struct StoreTests {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
     let first = store.select(
-      dependingOn: (\.child.step, \.child.title),
+      dependingOnAll: \.child.step, \.child.title,
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -3721,7 +3721,7 @@ struct StoreTests {
       "\(title)-\(step)"
     }
     let second = store.select(
-      dependingOn: (\.child.step, \.child.title),
+      dependingOnAll: \.child.step, \.child.title,
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -3736,7 +3736,7 @@ struct StoreTests {
   @Test("Store.select(dependingOn:(..., ...)) invalidates when either dependency changes")
   func selectedStoreTwoFieldDependingOnInvalidatesForAnyDependencyMutation() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let selected = store.select(dependingOn: (\.child.step, \.child.title)) { step, title in
+    let selected = store.select(dependingOnAll: \.child.step, \.child.title) { step, title in
       "\(title)-\(step)"
     }
     let initial = store.projectionObserverStats
@@ -3767,7 +3767,7 @@ struct StoreTests {
   func selectedStoreThreeFieldDependingOnTracksExplicitSlices() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let selected = store.select(
-      dependingOn: (\.child.step, \.child.title, \.unrelated)
+      dependingOnAll: \.child.step, \.child.title, \.unrelated
     ) { step, title, unrelated in
       "\(title)-\(step)-\(unrelated)"
     }
@@ -3799,7 +3799,7 @@ struct StoreTests {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let callsiteLine: UInt = #line
     let first = store.select(
-      dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority),
+      dependingOnAll: \.child.step, \.child.title, \.child.note, \.child.priority,
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -3807,7 +3807,7 @@ struct StoreTests {
       "\(title)-\(step)-\(note)-\(priority)"
     }
     let second = store.select(
-      dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority),
+      dependingOnAll: \.child.step, \.child.title, \.child.note, \.child.priority,
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -3825,7 +3825,7 @@ struct StoreTests {
   func selectedStoreFiveFieldDependingOnInvalidatesForTrackedMutations() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let selected = store.select(
-      dependingOn: (\.child.step, \.child.title, \.child.note, \.child.priority, \.child.isEnabled)
+      dependingOnAll: \.child.step, \.child.title, \.child.note, \.child.priority, \.child.isEnabled
     ) { step, title, note, priority, isEnabled in
       "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)"
     }
@@ -3865,14 +3865,14 @@ struct StoreTests {
   func selectedStoreSixFieldDependingOnTracksExplicitSlices() async {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let selected = store.select(
-      dependingOn: (
+      dependingOnAll:
         \.child.step,
         \.child.title,
         \.child.note,
         \.child.priority,
         \.child.isEnabled,
         \.child.version
-      )
+      
     ) { step, title, note, priority, isEnabled, version in
       "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)-\(version)"
     }
@@ -4085,7 +4085,7 @@ struct StoreTests {
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
     let first = scoped.select(
-      dependingOn: (\.step, \.title),
+      dependingOnAll: \.step, \.title,
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -4093,7 +4093,7 @@ struct StoreTests {
       "\(title)-\(step)"
     }
     let second = scoped.select(
-      dependingOn: (\.step, \.title),
+      dependingOnAll: \.step, \.title,
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -4185,7 +4185,7 @@ struct StoreTests {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
-    let selected = scoped.select(dependingOn: (\.step, \.title, \.note)) { step, title, note in
+    let selected = scoped.select(dependingOnAll: \.step, \.title, \.note) { step, title, note in
       "\(title)-\(step)-\(note)"
     }
     let probe = ObservationProbe()
@@ -4218,7 +4218,7 @@ struct StoreTests {
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let callsiteLine: UInt = #line
     let first = scoped.select(
-      dependingOn: (\.step, \.title, \.note, \.priority),
+      dependingOnAll: \.step, \.title, \.note, \.priority,
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -4226,7 +4226,7 @@ struct StoreTests {
       "\(title)-\(step)-\(note)-\(priority)"
     }
     let second = scoped.select(
-      dependingOn: (\.step, \.title, \.note, \.priority),
+      dependingOnAll: \.step, \.title, \.note, \.priority,
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -4246,7 +4246,7 @@ struct StoreTests {
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let selected = scoped.select(
-      dependingOn: (\.step, \.title, \.note, \.priority, \.isEnabled)
+      dependingOnAll: \.step, \.title, \.note, \.priority, \.isEnabled
     ) { step, title, note, priority, isEnabled in
       "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)"
     }
@@ -4280,7 +4280,7 @@ struct StoreTests {
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     let selected = scoped.select(
-      dependingOn: (\.step, \.title, \.note, \.priority, \.isEnabled, \.version)
+      dependingOnAll: \.step, \.title, \.note, \.priority, \.isEnabled, \.version
     ) { step, title, note, priority, isEnabled, version in
       "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)-\(version)"
     }
@@ -5236,7 +5236,7 @@ struct StoreTests {
   )
   func projectionObserverStatsDedupeMultiFieldSelections() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    _ = store.select(dependingOn: (\.child.step, \.child.title)) { step, title in
+    _ = store.select(dependingOnAll: \.child.step, \.child.title) { step, title in
       "\(title)-\(step)"
     }
 
@@ -5257,14 +5257,14 @@ struct StoreTests {
   func projectionObserverStatsDedupeSixFieldSelections() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     _ = store.select(
-      dependingOn: (
+      dependingOnAll:
         \.child.step,
         \.child.title,
         \.child.note,
         \.child.priority,
         \.child.isEnabled,
         \.child.version
-      )
+      
     ) { step, title, note, priority, isEnabled, version in
       "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)-\(version)"
     }

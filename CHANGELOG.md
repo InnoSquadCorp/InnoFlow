@@ -7,6 +7,15 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Changed (BREAKING)
+
+- `SelectedStore` no longer ships fixed-arity `select(dependingOn:)` overloads
+  for two through six tuple-packed slices. The single-slice `select(dependingOn:)`
+  convenience and the variadic `select(dependingOnAll:)` parameter-pack
+  overload are now the only typed-dependency selection forms; multi-slice
+  call sites must migrate from `dependingOn: (\.a, \.b)` to
+  `dependingOnAll: \.a, \.b`. Closure-based `select { ... }` is unchanged.
+
 ## [4.0.0] - 2026-04-29
 
 This release rebaselines the current InnoFlow implementation, documentation, and release-readiness

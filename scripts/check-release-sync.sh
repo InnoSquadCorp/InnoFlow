@@ -132,8 +132,8 @@ require_pattern \
 
 require_pattern \
   ARCHITECTURE_CONTRACT.md \
-  "one through six explicit state slices" \
-  "SelectedStore fixed-arity selection contract"
+  "select\\(dependingOn:\\).+for a single explicit state slice" \
+  "SelectedStore single-slice selection contract"
 
 require_pattern \
   ARCHITECTURE_CONTRACT.md \
@@ -147,22 +147,22 @@ require_pattern \
 
 require_pattern \
   README.md \
-  "one through six explicit.*select\\(dependingOnAll:\\).*always-refresh fallback" \
+  "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
   "English SelectedStore selection guidance"
 
 require_pattern \
   README.kr.md \
-  "1~6개.*select\\(dependingOnAll:\\).*always-refresh fallback" \
+  "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
   "Korean SelectedStore selection guidance"
 
 require_pattern \
   README.jp.md \
-  "1〜6 個.*select\\(dependingOnAll:\\).*always-refresh fallback" \
+  "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
   "Japanese SelectedStore selection guidance"
 
 require_pattern \
   README.cn.md \
-  "1 到 6 个.*select\\(dependingOnAll:\\).*always-refresh fallback" \
+  "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
   "Chinese SelectedStore selection guidance"
 
 echo "[check-release-sync] OK: release surface matches ${version}"

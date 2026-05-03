@@ -6,17 +6,17 @@ selection dependencies, and instrumentation.
 
 ## Selected Projections
 
-Use fixed-arity `select(dependingOn:..., transform:)` for one through six
-explicit `Equatable` slices.
+Use `select(dependingOn:)` for a single explicit `Equatable` slice and
+`select(dependingOnAll:)` (parameter-pack variadic) for two or more slices.
 
 ```swift
-let badge = store.select(dependingOn: (\.profile, \.permissions)) { profile, permissions in
+let badge = store.select(dependingOnAll: \.profile, \.permissions) { profile, permissions in
   DashboardBadge(name: profile.name, canEdit: permissions.canEdit)
 }
 ```
 
-Use `select(dependingOnAll:)` when a projection legitimately depends on more
-than six slices and still needs selective invalidation.
+The variadic form preserves explicit dependency tracking and selective
+invalidation regardless of how many slices a projection consumes.
 
 ```swift
 let summary = store.select(
@@ -26,8 +26,8 @@ let summary = store.select(
 }
 ```
 
-`ScopedStore` exposes the same fixed-arity and `dependingOnAll:` selection
-shape against child state.
+`ScopedStore` exposes the same one-field `dependingOn:` and variadic
+`dependingOnAll:` selection shape against child state.
 
 ## Projection Liveness
 

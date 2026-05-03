@@ -106,7 +106,7 @@ Stepper(
 - `IfLet`: optional child state
 - `IfCaseLet`: enum-backed child state
 - `ForEachReducer`: collection child state
-- `SelectedStore`: 읽기 전용 파생 모델. 1~6개 명시적 key path는 `dependingOn:` 오버로드를, 더 큰 명시적 dependency set은 `select(dependingOnAll:)`을 사용하며, dependency를 선언할 수 없을 때 `select { ... }`는 always-refresh fallback입니다
+- `SelectedStore`: 읽기 전용 파생 모델. 단일 명시적 key path는 `select(dependingOn:)`, 둘 이상의 key path는 가변 인자 `select(dependingOnAll:)`을 사용합니다. dependency를 선언할 수 없을 때 `select { ... }`는 always-refresh fallback입니다
 
 ## 샘플 카탈로그
 

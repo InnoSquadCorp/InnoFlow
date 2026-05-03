@@ -19,8 +19,7 @@ This document captures the stable framework guarantees that should not drift wit
 ## Selection and derived state
 
 - `SelectedStore` is the official derived-read model.
-- Prefer fixed-arity `select(dependingOn:..., transform:)` overloads when the derived value depends on one through six explicit state slices.
-- Use `select(dependingOnAll:)` when a projection legitimately depends on more than six explicit state slices and still needs selective invalidation.
+- Use `select(dependingOn:)` for a single explicit state slice; use the variadic `select(dependingOnAll:)` for two or more slices. Both forms keep selective invalidation regardless of arity.
 - Closure-based `select { ... }` remains an always-refresh fallback when dependency reads cannot be declared soundly.
 
 ## Projection lifecycle contract

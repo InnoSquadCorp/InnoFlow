@@ -403,8 +403,8 @@ main() {
     echo "[principle-gates] Failed: SelectedStore dependency-annotated selection overload is missing"
     exit 1
   fi
-  if ! search_multiline 'public func select<[\s\S]{0,260}dependingOn dependencies:\s*\([\s\S]{0,180}KeyPath<[^>]+,[^>]+>[\s\S]{0,120}KeyPath<[^>]+,[^>]+>' Sources/InnoFlow/SelectedStore.swift; then
-    echo "[principle-gates] Failed: SelectedStore multi-field selection overload is missing"
+  if ! search_multiline 'public func select<each Dep: Equatable & Sendable[\s\S]{0,200}dependingOnAll dependencies:\s*repeat KeyPath<' Sources/InnoFlow/SelectedStore.swift; then
+    echo "[principle-gates] Failed: SelectedStore variadic dependingOnAll overload is missing"
     exit 1
   fi
   if search_multiline 'public init\([\s\S]{0,240}extractAction:\s*@escaping' Sources/InnoFlow/ReducerComposition.swift; then

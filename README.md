@@ -273,7 +273,7 @@ let summary = store.select { state in
 Text(summary.title)
 ```
 
-When the derived value depends on one through six explicit slices of state, prefer the
+When the derived value depends on a single explicit slice of state, use the
 dependency-annotated overload so InnoFlow can keep the selection on a selective-refresh bucket:
 
 ```swift
@@ -283,7 +283,7 @@ let summary = store.select(dependingOn: \.profile) { profile in
 ```
 
 ```swift
-let badge = store.select(dependingOn: (\.profile, \.permissions)) { profile, permissions in
+let badge = store.select(dependingOnAll: \.profile, \.permissions) { profile, permissions in
   DashboardBadge(
     title: profile.name,
     isReady: profile.isReady && permissions.isReady
@@ -291,9 +291,10 @@ let badge = store.select(dependingOn: (\.profile, \.permissions)) { profile, per
 }
 ```
 
-For projections that legitimately depend on more than six slices, use
-`select(dependingOnAll:)` to keep explicit dependency tracking without falling back to
-always-refresh selection:
+For projections that depend on two or more slices, use
+`select(dependingOnAll:)` with a comma-separated list of key paths. The
+parameter-pack overload preserves explicit dependency tracking without falling
+back to always-refresh selection regardless of arity:
 
 ```swift
 let summary = store.select(
@@ -672,8 +673,9 @@ let status = store.select(\.phase)
 #expect(status.value == .idle)
 ```
 
-If the read model is derived from one through six explicit `Equatable` slices, prefer the
-dependency-annotated form; use `select(dependingOnAll:)` for larger explicit sets:
+If the read model is derived from a single explicit `Equatable` slice, use the
+dependency-annotated form; for two or more slices use the variadic
+`select(dependingOnAll:)`:
 
 ```swift
 let title = store.select(dependingOn: \.child.title) { $0.uppercased() }
@@ -724,7 +726,7 @@ Launch-environment direct demo mode (`INNOFLOW_SAMPLE_DEMO`) remains available f
 - Add explicit VoiceOver labels and hints when button text or dense layouts do not fully describe the action.
 - Prioritize explicit accessibility metadata on demo hub rows, modal dismiss actions, and long-running or destructive controls where context can be ambiguous in VoiceOver.
 - Prefer system controls and Dynamic Type-friendly layouts over custom fixed-size controls.
-- Use `SelectedStore` only for expensive read-only derived values. Prefer `select(dependingOn:..., transform:)` for one through six explicit state slices, `select(dependingOnAll:)` for larger explicit dependency sets, and plain `select { ... }` only as the always-refresh fallback. Keep mutable child flows on `ScopedStore`.
+- Use `SelectedStore` only for expensive read-only derived values. Use `select(dependingOn:)` for a single explicit state slice and the variadic `select(dependingOnAll:)` for two or more slices; reserve plain `select { ... }` for the always-refresh fallback. Keep mutable child flows on `ScopedStore`.
 - Use `Store.preview(...)` as the default path for preview and accessibility review passes so preview-only setup never changes production store wiring.
 
 ## Cross-framework notes
@@ -746,9 +748,9 @@ redesign.
 - **PhaseMap strict totality enforcement** — `PhaseMap` is intentionally partial by default and
   unmatched actions remain legal no-ops. Stronger enforcement remains a future design decision,
   not a current runtime contract.
-- **Opaque selector memoization** — explicit key-path dependencies are covered by fixed-arity
-  overloads through six slices and `select(dependingOnAll:)` beyond that. Memoizing arbitrary
-  closure selectors remains future work because general closures do not expose their read set.
+- **Opaque selector memoization** — explicit key-path dependencies are covered by `select(dependingOn:)`
+  for a single slice and the variadic `select(dependingOnAll:)` for two or more slices. Memoizing
+  arbitrary closure selectors remains future work because general closures do not expose their read set.
 - **Optional metrics ecosystem package** — `StoreInstrumentation.sink(...)`, `.osLog(...)`,
   `.signpost(...)`, and `.combined(...)` are the supported extension points today. If a standard backend emerges, an
   optional `InnoFlowMetrics`-style package can sit on top without changing the core graph.
