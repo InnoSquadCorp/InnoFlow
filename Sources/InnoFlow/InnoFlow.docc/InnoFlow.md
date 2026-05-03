@@ -32,6 +32,14 @@ Conditional child composition stays explicit:
 - use ``IfCaseLet`` for enum-backed child state
 - use ``ForEachReducer`` for collection-backed child state
 
+`IfLet` and `IfCaseLet` accept an optional `onMissing:` policy that controls
+behavior when a child action arrives while child state is unavailable. The
+default `.assertOnly` matches the existing contract (debug `assertionFailure`,
+release silent no-op). Use `.ignore` to drop the action without an assertion in
+either build (useful for late-arriving effects from a dismissed flow), and
+`.crash` to trap with `preconditionFailure` in every build (useful when the
+late action is treated as a programming bug).
+
 For read-only derived values, use ``SelectedStore`` so large SwiftUI views can observe an `Equatable`
 projection without pulling an entire mutable child scope into the view tree. Use
 `select(dependingOn:)` for a single explicit state slice and the variadic

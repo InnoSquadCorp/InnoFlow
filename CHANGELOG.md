@@ -7,6 +7,15 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+
+- `IfLet` and `IfCaseLet` accept an `onMissing:` `OnMissingPolicy` parameter
+  that controls behavior when a child action arrives while child state is
+  unavailable. The default `.assertOnly` preserves the existing contract
+  (debug `assertionFailure`, release silent no-op). New options: `.ignore`
+  drops the action silently in every build configuration, and `.crash` traps
+  with `preconditionFailure` in every build configuration.
+
 ### Changed (BREAKING)
 
 - `SelectedStore` no longer ships fixed-arity `select(dependingOn:)` overloads

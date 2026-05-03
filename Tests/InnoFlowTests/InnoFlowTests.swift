@@ -1229,6 +1229,100 @@ struct IfCaseLetFeature {
   }
 }
 
+@InnoFlow
+struct IfLetIgnoreFeature {
+  struct Child: Equatable, Sendable {
+    var count = 0
+  }
+
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var child: Child? = .init()
+    var untouched: Int = 7
+  }
+
+  enum Action: Equatable, Sendable {
+    case child(ChildAction)
+  }
+
+  enum ChildAction: Equatable, Sendable {
+    case increment
+  }
+
+  struct ChildReducer: Reducer {
+    typealias State = Child
+    typealias Action = ChildAction
+
+    func reduce(into state: inout Child, action: ChildAction) -> EffectTask<ChildAction> {
+      switch action {
+      case .increment:
+        state.count += 1
+        return .none
+      }
+    }
+  }
+
+  var body: some Reducer<State, Action> {
+    IfLet(
+      state: \.child,
+      action: Action.childCasePath,
+      reducer: ChildReducer(),
+      onMissing: .ignore
+    )
+  }
+}
+
+@InnoFlow
+struct IfCaseLetIgnoreFeature {
+  struct Child: Equatable, Sendable {
+    var count = 0
+  }
+
+  enum State: Equatable, Sendable, DefaultInitializable {
+    case idle
+    case child(Child)
+
+    init() { self = .idle }
+  }
+
+  enum Action: Equatable, Sendable {
+    case child(ChildAction)
+  }
+
+  enum ChildAction: Equatable, Sendable {
+    case increment
+  }
+
+  static let childStateCasePath = CasePath<State, Child>(
+    embed: State.child,
+    extract: { state in
+      guard case .child(let child) = state else { return nil }
+      return child
+    }
+  )
+
+  struct ChildReducer: Reducer {
+    typealias State = Child
+    typealias Action = ChildAction
+
+    func reduce(into state: inout Child, action: ChildAction) -> EffectTask<ChildAction> {
+      switch action {
+      case .increment:
+        state.count += 1
+        return .none
+      }
+    }
+  }
+
+  var body: some Reducer<State, Action> {
+    IfCaseLet(
+      state: Self.childStateCasePath,
+      action: Action.childCasePath,
+      reducer: ChildReducer(),
+      onMissing: .ignore
+    )
+  }
+}
+
 @InnoFlow(phaseManaged: true)
 struct PhaseManagedFeature {
   struct State: Equatable, Sendable, DefaultInitializable {
@@ -4661,6 +4755,25 @@ struct StoreTests {
     #expect(store.state == .child(.init(count: 1, completions: 1)))
 
     store.send(.deactivate)
+    #expect(store.state == .idle)
+  }
+
+  @Test("IfLet with onMissing: .ignore drops child actions silently without firing assertion")
+  func ifLetIgnorePolicyDropsActionWithoutAssertion() {
+    let store = Store(reducer: IfLetIgnoreFeature(), initialState: .init(child: nil))
+
+    store.send(.child(.increment))
+
+    #expect(store.state.child == nil)
+    #expect(store.state.untouched == 7)
+  }
+
+  @Test("IfCaseLet with onMissing: .ignore drops child actions silently without firing assertion")
+  func ifCaseLetIgnorePolicyDropsActionWithoutAssertion() {
+    let store = Store(reducer: IfCaseLetIgnoreFeature(), initialState: .idle)
+
+    store.send(.child(.increment))
+
     #expect(store.state == .idle)
   }
 

@@ -321,6 +321,26 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   }
 }
 
+/// Policy that controls how `IfLet` / `IfCaseLet` react when a child action
+/// arrives while child state is unavailable (optional is `nil`, or the parent
+/// enum is in a different case).
+///
+/// - `assertOnly` (default): debug builds emit `assertionFailure`, release
+///   builds drop the action as a silent no-op. Preserves source compatibility
+///   with releases prior to the introduction of this policy.
+/// - `ignore`: silent no-op in every build configuration. Use when the
+///   late-arriving action is a known race (e.g. an effect that fired after a
+///   dismiss completed) and a debug abort would be more disruptive than the
+///   drop itself.
+/// - `crash`: traps with `preconditionFailure` in every build configuration.
+///   Use when receiving the action is treated as a programming bug that must
+///   never reach production.
+public enum OnMissingPolicy: Sendable {
+  case ignore
+  case assertOnly
+  case crash
+}
+
 /// Runs a child reducer only while optional child state is present.
 public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reducer>: Reducer {
   public typealias State = ParentState
@@ -330,29 +350,34 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   private let extractAction: @Sendable (ParentAction) -> Child.Action?
   private let embedAction: @Sendable (Child.Action) -> ParentAction
   private let reducer: Child
+  private let onMissing: OnMissingPolicy
 
   private init(
     state: WritableKeyPath<ParentState, Child.State?>,
     extractAction: @escaping @Sendable (ParentAction) -> Child.Action?,
     embedAction: @escaping @Sendable (Child.Action) -> ParentAction,
-    reducer: Child
+    reducer: Child,
+    onMissing: OnMissingPolicy
   ) {
     self.state = state
     self.extractAction = extractAction
     self.embedAction = embedAction
     self.reducer = reducer
+    self.onMissing = onMissing
   }
 
   public init(
     state: WritableKeyPath<ParentState, Child.State?>,
     action: CasePath<ParentAction, Child.Action>,
-    reducer: Child
+    reducer: Child,
+    onMissing: OnMissingPolicy = .assertOnly
   ) {
     self.init(
       state: state,
       extractAction: action.extract,
       embedAction: action.embed,
-      reducer: reducer
+      reducer: reducer,
+      onMissing: onMissing
     )
   }
 
@@ -363,7 +388,14 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
       return .none
     }
     guard var childState = state[keyPath: self.state] else {
-      assertionFailure("IfLet received a child action while child state was nil.")
+      switch onMissing {
+      case .ignore:
+        break
+      case .assertOnly:
+        assertionFailure("IfLet received a child action while child state was nil.")
+      case .crash:
+        preconditionFailure("IfLet received a child action while child state was nil.")
+      }
       return .none
     }
 
@@ -382,29 +414,34 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
   private let extractAction: @Sendable (ParentAction) -> Child.Action?
   private let embedAction: @Sendable (Child.Action) -> ParentAction
   private let reducer: Child
+  private let onMissing: OnMissingPolicy
 
   private init(
     state: CasePath<ParentState, Child.State>,
     extractAction: @escaping @Sendable (ParentAction) -> Child.Action?,
     embedAction: @escaping @Sendable (Child.Action) -> ParentAction,
-    reducer: Child
+    reducer: Child,
+    onMissing: OnMissingPolicy
   ) {
     self.state = state
     self.extractAction = extractAction
     self.embedAction = embedAction
     self.reducer = reducer
+    self.onMissing = onMissing
   }
 
   public init(
     state: CasePath<ParentState, Child.State>,
     action: CasePath<ParentAction, Child.Action>,
-    reducer: Child
+    reducer: Child,
+    onMissing: OnMissingPolicy = .assertOnly
   ) {
     self.init(
       state: state,
       extractAction: action.extract,
       embedAction: action.embed,
-      reducer: reducer
+      reducer: reducer,
+      onMissing: onMissing
     )
   }
 
@@ -415,8 +452,16 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
       return .none
     }
     guard var childState = self.state.extract(state) else {
-      assertionFailure(
-        "IfCaseLet received a child action while parent state was in a different case.")
+      switch onMissing {
+      case .ignore:
+        break
+      case .assertOnly:
+        assertionFailure(
+          "IfCaseLet received a child action while parent state was in a different case.")
+      case .crash:
+        preconditionFailure(
+          "IfCaseLet received a child action while parent state was in a different case.")
+      }
       return .none
     }
 
