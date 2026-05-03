@@ -77,6 +77,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   // NOTE: `@_optimize(none)` matches the workaround applied to `Store.deinit`.
   // See the comment there — the Swift 6.3 `EarlyPerfInliner` crashes on
   // generic isolated deinits that touch builder-emitted composition types.
+  // Retest when swiftlang/swift#88173 is fixed:
+  // https://github.com/swiftlang/swift/issues/88173
   @_optimize(none)
   isolated deinit {
     for task in runningTasks.values {

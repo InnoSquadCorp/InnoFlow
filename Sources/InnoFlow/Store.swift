@@ -93,7 +93,9 @@ public final class Store<R: Reducer> {
   // appears to trip the layout-compatibility check. Disabling optimization on
   // just this one function sidesteps the crash. `deinit` is not a hot path, so
   // the lost optimization opportunity is negligible. Lifecycle semantics
-  // (`@MainActor isolated deinit`) are unchanged.
+  // (`@MainActor isolated deinit`) are unchanged. Retest when
+  // swiftlang/swift#88173 is fixed:
+  // https://github.com/swiftlang/swift/issues/88173
   @_optimize(none)
   isolated deinit {
     lifetime.markReleased()

@@ -180,6 +180,19 @@ count_line_matches() {
   printf '%s\n' "$output" | sed '/^$/d' | wc -l | tr -d ' '
 }
 
+warn_if_optimize_none_workaround_should_be_retested() {
+  local version_line
+  version_line="$(swift --version 2>/dev/null | head -n 1 || true)"
+
+  if [[ "$version_line" =~ Swift\ version\ ([0-9]+)\.([0-9]+) ]]; then
+    local major="${BASH_REMATCH[1]}"
+    local minor="${BASH_REMATCH[2]}"
+    if (( major > 6 || (major == 6 && minor >= 4) )); then
+      echo "[principle-gates] Warning: Swift ${major}.${minor} detected; retest removing @_optimize(none) from Store/TestStore deinits (swiftlang/swift#88173)."
+    fi
+  fi
+}
+
 validate_doc_parity_contract_shape() {
   local contract_path="$1"
 
@@ -610,6 +623,7 @@ main() {
   fi
 
   echo "[principle-gates] Verifying release build succeeds (SIL inliner regression guard)"
+  warn_if_optimize_none_workaround_should_be_retested
   # Use an isolated build path so release object files do not leak into the
   # main .build/ tree. The stale-scope and phase-map subprocess harnesses
   # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
