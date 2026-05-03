@@ -27,12 +27,12 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let queue = ActionQueue<R.Action>()
 
   package var runningTasks: [UUID: Task<Void, Never>] = [:]
-  package var taskIDsByEffectID: [EffectID: Set<UUID>] = [:]
-  package var debounceDelayTasksByID: [EffectID: Task<Void, Never>] = [:]
-  package var debounceGenerationByID: [EffectID: UUID] = [:]
+  package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]
+  package var debounceDelayTasksByID: [AnyEffectID: Task<Void, Never>] = [:]
+  package var debounceGenerationByID: [AnyEffectID: UUID] = [:]
   package var lastIssuedSequence: UInt64 = 0
   package var cancelledUpToAll: UInt64 = 0
-  package var cancelledUpToByID: [EffectID: UInt64] = [:]
+  package var cancelledUpToByID: [AnyEffectID: UInt64] = [:]
   package let throttleState = ThrottleStateMap<R.Action>()
 
   package var walker: EffectWalker<TestStore<R>> {
@@ -95,7 +95,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     return lastIssuedSequence
   }
 
-  package func shouldStart(sequence: UInt64, cancellationID: EffectID?) -> Bool {
+  package func shouldStart(sequence: UInt64, cancellationID: AnyEffectID?) -> Bool {
     if sequence <= cancelledUpToAll {
       return false
     }
@@ -104,14 +104,14 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   }
 
   @discardableResult
-  package func markCancelled(id: EffectID, upTo sequence: UInt64? = nil) -> UInt64 {
+  package func markCancelled(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
     let sequence = sequence ?? lastIssuedSequence
     cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, sequence)
     return sequence
   }
 
   @discardableResult
-  package func markCancelledInFlight(id: EffectID, upTo sequence: UInt64? = nil) -> UInt64 {
+  package func markCancelledInFlight(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
     let sequence = sequence ?? lastIssuedSequence
     let previousSequence = sequence == 0 ? 0 : sequence - 1
     cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, previousSequence)

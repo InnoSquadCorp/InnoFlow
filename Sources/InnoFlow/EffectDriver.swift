@@ -11,66 +11,66 @@ package final class ThrottleStateMap<Action: Sendable> {
     package let context: EffectExecutionContext?
   }
 
-  private var windowEndByID: [EffectID: ContinuousClock.Instant] = [:]
-  private var pendingByID: [EffectID: PendingTrailing] = [:]
-  private var trailingTaskByID: [EffectID: Task<Void, Never>] = [:]
-  private var generationByID: [EffectID: UInt64] = [:]
+  private var windowEndByID: [AnyEffectID: ContinuousClock.Instant] = [:]
+  private var pendingByID: [AnyEffectID: PendingTrailing] = [:]
+  private var trailingTaskByID: [AnyEffectID: Task<Void, Never>] = [:]
+  private var generationByID: [AnyEffectID: UInt64] = [:]
   private var nextGenerationValue: UInt64 = 0
 
   package init() {}
 
-  package func windowEnd(for id: EffectID) -> ContinuousClock.Instant? {
+  package func windowEnd(for id: AnyEffectID) -> ContinuousClock.Instant? {
     windowEndByID[id]
   }
 
-  package func setWindowEnd(_ instant: ContinuousClock.Instant, for id: EffectID) {
+  package func setWindowEnd(_ instant: ContinuousClock.Instant, for id: AnyEffectID) {
     windowEndByID[id] = instant
   }
 
   package func storePending(
     _ effect: EffectTask<Action>,
     context: EffectExecutionContext?,
-    for id: EffectID
+    for id: AnyEffectID
   ) {
     pendingByID[id] = .init(effect: effect, context: context)
   }
 
-  package func pending(for id: EffectID) -> PendingTrailing? {
+  package func pending(for id: AnyEffectID) -> PendingTrailing? {
     pendingByID[id]
   }
 
-  package func setTrailingTask(_ task: Task<Void, Never>, for id: EffectID) {
+  package func setTrailingTask(_ task: Task<Void, Never>, for id: AnyEffectID) {
     trailingTaskByID[id] = task
   }
 
-  package func cancelTrailingTask(for id: EffectID) {
+  package func cancelTrailingTask(for id: AnyEffectID) {
     trailingTaskByID.removeValue(forKey: id)?.cancel()
   }
 
-  package func generation(for id: EffectID) -> UInt64? {
+  package func generation(for id: AnyEffectID) -> UInt64? {
     generationByID[id]
   }
 
   @discardableResult
-  package func nextGeneration(for id: EffectID) -> UInt64 {
+  package func nextGeneration(for id: AnyEffectID) -> UInt64 {
     nextGenerationValue &+= 1
     generationByID[id] = nextGenerationValue
     return nextGenerationValue
   }
 
-  package func resetWindow(for id: EffectID) {
+  package func resetWindow(for id: AnyEffectID) {
     cancelTrailingTask(for: id)
     generationByID.removeValue(forKey: id)
     pendingByID.removeValue(forKey: id)
   }
 
-  package func clearState(for id: EffectID) {
+  package func clearState(for id: AnyEffectID) {
     resetWindow(for: id)
     windowEndByID.removeValue(forKey: id)
   }
 
   @discardableResult
-  package func finishState(for id: EffectID, generation: UInt64) -> Bool {
+  package func finishState(for id: AnyEffectID, generation: UInt64) -> Bool {
     guard generationByID[id] == generation else { return false }
     trailingTaskByID.removeValue(forKey: id)
     generationByID.removeValue(forKey: id)
@@ -117,12 +117,12 @@ package protocol EffectDriver<Action>: AnyObject {
 
   /// Cancel all effects for the given id.
   /// Used by `.cancel(id)` — includes the current sequence in the boundary.
-  func cancelEffects(id: EffectID, context: EffectExecutionContext?) async
+  func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async
 
   /// Cancel in-flight effects for the given id, preserving the current
   /// sequence's eligibility.
   /// Used by `.cancellable(cancelInFlight: true)` and `.debounce`.
-  func cancelInFlightEffects(id: EffectID, context: EffectExecutionContext?) async
+  func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async
 
   /// Whether execution should proceed for the given context.
   /// Store and TestStore both check sequence boundaries for cancellable effects.
@@ -134,7 +134,7 @@ package protocol EffectDriver<Action>: AnyObject {
   /// When the timer fires, calls `recurse(nested, context, awaited)`.
   func debounce(
     _ nested: EffectTask<Action>,
-    id: EffectID,
+    id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
     awaited: Bool,
@@ -151,7 +151,7 @@ package protocol EffectDriver<Action>: AnyObject {
 
   /// Schedules the trailing drain task for the throttle id.
   func scheduleTrailingDrain(
-    for id: EffectID,
+    for id: AnyEffectID,
     interval: Duration,
     recurse:
       @escaping @MainActor @Sendable (

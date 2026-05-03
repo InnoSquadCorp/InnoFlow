@@ -1168,7 +1168,7 @@ struct StoreEffectRuntimeTests {
 
   @Test("Store startRun honors cancellation boundaries before user operation")
   func storeStartRunHonorsCancellationBoundariesBeforeUserOperation() async {
-    let id: EffectID = "store-start-gate-race"
+    let id = AnyEffectID(StaticEffectID("store-start-gate-race"))
     let context = EffectExecutionContext(cancellationID: id, sequence: 1)
     let probe = RunStartGateRaceProbe()
     let store = Store(

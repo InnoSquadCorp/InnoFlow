@@ -112,7 +112,7 @@ public actor EffectTimingRecorder {
     return StoreInstrumentation<Action>(
       didStartRun: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let effectID = event.cancellationID?.rawValue.description
+        let effectID = event.cancellationID?.description
         recorder.record(
           phase: .runStarted,
           sequence: event.sequence,
@@ -124,7 +124,7 @@ public actor EffectTimingRecorder {
       },
       didFinishRun: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let effectID = event.cancellationID?.rawValue.description
+        let effectID = event.cancellationID?.description
         recorder.record(
           phase: .runFinished,
           sequence: event.sequence,
@@ -136,7 +136,7 @@ public actor EffectTimingRecorder {
       },
       didEmitAction: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let effectID = event.cancellationID?.rawValue.description
+        let effectID = event.cancellationID?.description
         let label = Self.labelForAction(event.action)
         recorder.record(
           phase: .actionEmitted,
@@ -148,7 +148,7 @@ public actor EffectTimingRecorder {
       },
       didDropAction: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let effectID = event.cancellationID?.rawValue.description
+        let effectID = event.cancellationID?.description
         let label = event.action.map(Self.labelForAction)
         recorder.record(
           phase: .actionDropped,
@@ -160,7 +160,7 @@ public actor EffectTimingRecorder {
       },
       didCancelEffects: { event in
         let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
-        let effectID = event.id?.rawValue.description
+        let effectID = event.id?.description
         recorder.record(
           phase: .effectsCancelled,
           sequence: event.sequence,

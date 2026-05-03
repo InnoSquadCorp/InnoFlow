@@ -49,10 +49,10 @@ public enum StoreInstrumentationEvent<Action: Sendable>: Sendable {
 public struct StoreInstrumentation<Action: Sendable>: Sendable {
   public struct RunEvent: Sendable {
     public let token: UUID
-    public let cancellationID: EffectID?
+    public let cancellationID: AnyEffectID?
     public let sequence: UInt64?
 
-    public init(token: UUID, cancellationID: EffectID?, sequence: UInt64?) {
+    public init(token: UUID, cancellationID: AnyEffectID?, sequence: UInt64?) {
       self.token = token
       self.cancellationID = cancellationID
       self.sequence = sequence
@@ -61,10 +61,10 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
 
   public struct ActionEvent: Sendable {
     public let action: Action
-    public let cancellationID: EffectID?
+    public let cancellationID: AnyEffectID?
     public let sequence: UInt64?
 
-    public init(action: Action, cancellationID: EffectID?, sequence: UInt64?) {
+    public init(action: Action, cancellationID: AnyEffectID?, sequence: UInt64?) {
       self.action = action
       self.cancellationID = cancellationID
       self.sequence = sequence
@@ -74,13 +74,13 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   public struct ActionDropEvent: Sendable {
     public let action: Action?
     public let reason: ActionDropReason
-    public let cancellationID: EffectID?
+    public let cancellationID: AnyEffectID?
     public let sequence: UInt64?
 
     public init(
       action: Action?,
       reason: ActionDropReason,
-      cancellationID: EffectID?,
+      cancellationID: AnyEffectID?,
       sequence: UInt64?
     ) {
       self.action = action
@@ -91,10 +91,10 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   }
 
   public struct CancellationEvent: Sendable {
-    public let id: EffectID?
+    public let id: AnyEffectID?
     public let sequence: UInt64
 
-    public init(id: EffectID?, sequence: UInt64) {
+    public init(id: AnyEffectID?, sequence: UInt64) {
       self.id = id
       self.sequence = sequence
     }

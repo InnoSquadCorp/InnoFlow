@@ -16,14 +16,26 @@ import os
 @MainActor
 struct EffectTaskTests {
 
-  @Test("EffectID supports StaticString literals")
-  func effectIDStaticStringLiteral() {
-    let first: EffectID = "load-user"
-    let second = EffectID("load-user")
+  @Test("StaticEffectID supports string literals")
+  func staticEffectIDStringLiteral() {
+    let first: StaticEffectID = "load-user"
+    let second = StaticEffectID("load-user")
 
     #expect(first == second)
     #expect(first.hashValue == second.hashValue)
-    #expect(String(describing: first.rawValue) == "load-user")
+    #expect(first.rawValue == "load-user")
+  }
+
+  @Test("EffectID supports dynamic and non-string raw values")
+  func effectIDDynamicRawValues() {
+    let dynamic = StaticEffectID("load-\(42)")
+    let uuid = UUID()
+    let first = EffectID(uuid)
+    let second = EffectID(uuid)
+
+    #expect(dynamic.rawValue == "load-42")
+    #expect(first == second)
+    #expect(AnyEffectID(first) != AnyEffectID(dynamic))
   }
 
   @Test("EffectTask.none does not emit follow-up actions")

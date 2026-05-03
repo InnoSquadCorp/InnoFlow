@@ -268,7 +268,6 @@ extension Store {
     )
   }
 
-
   /// Variadic selection: declares an arbitrary number of explicit
   /// dependency key paths through Swift parameter packs and projects them
   /// into a derived value.
@@ -422,7 +421,6 @@ extension ScopedStore {
       }
     )
   }
-
 
   /// Variadic selection: declares an arbitrary number of explicit child-state
   /// dependency key paths through Swift parameter packs and projects them into

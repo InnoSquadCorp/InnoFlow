@@ -21,13 +21,13 @@ package struct EffectAnimation: Sendable {
 ///
 /// Extracted to eliminate duplication between production and testing runtimes.
 package struct EffectExecutionContext: Sendable {
-  package let cancellationID: EffectID?
+  package let cancellationID: AnyEffectID?
   package let animation: EffectAnimation?
   /// Store/TestStore sequence number for cancellation boundary tracking.
   package let sequence: UInt64?
 
   package init(
-    cancellationID: EffectID? = nil,
+    cancellationID: AnyEffectID? = nil,
     animation: EffectAnimation? = nil,
     sequence: UInt64? = nil
   ) {
@@ -37,7 +37,7 @@ package struct EffectExecutionContext: Sendable {
   }
 
   package static func withCancellation(
-    _ id: EffectID,
+    _ id: AnyEffectID,
     on existing: Self?
   ) -> Self {
     .init(cancellationID: id, animation: existing?.animation, sequence: existing?.sequence)

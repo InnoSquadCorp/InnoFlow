@@ -404,7 +404,14 @@ This keeps reducer dependencies explicit:
 - `.throttle(id:for:leading:trailing:)`
 - `.animation(_:)`
 
-`EffectID` is still compile-time-literal oriented. Use static string literals for cancellation IDs.
+`EffectID<RawValue>` accepts any `Hashable & Sendable` raw value, so cancellation IDs can be
+string literals, dynamic strings, UUIDs, or domain-specific key types. Use `StaticEffectID` for the
+common string-literal case:
+
+```swift
+let refreshID: StaticEffectID = "refresh"
+let sessionID = EffectID(session.uuid)
+```
 
 `EffectContext` exposes the store clock inside `.run`, so time-sensitive effects can stay deterministic
 in both runtime code and tests:

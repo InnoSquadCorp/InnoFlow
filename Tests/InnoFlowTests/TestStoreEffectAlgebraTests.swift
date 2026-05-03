@@ -19,7 +19,7 @@ struct TestStoreEffectAlgebraTests {
   @MainActor
   func throttleStateMapClearState() {
     let map = ThrottleStateMap<CounterFeature.Action>()
-    let id: EffectID = "throttle-clear-state"
+    let id = AnyEffectID(StaticEffectID("throttle-clear-state"))
     let task = Task<Void, Never> {
       try? await Task.sleep(for: .seconds(5))
     }
@@ -40,7 +40,7 @@ struct TestStoreEffectAlgebraTests {
   @MainActor
   func throttleStateMapFinishState() {
     let map = ThrottleStateMap<CounterFeature.Action>()
-    let id: EffectID = "throttle-finish-state"
+    let id = AnyEffectID(StaticEffectID("throttle-finish-state"))
     let task = Task<Void, Never> {
       try? await Task.sleep(for: .seconds(5))
     }
@@ -70,8 +70,8 @@ struct TestStoreEffectAlgebraTests {
   @MainActor
   func throttleStateMapClearAll() {
     let map = ThrottleStateMap<CounterFeature.Action>()
-    let firstID: EffectID = "throttle-clear-all-1"
-    let secondID: EffectID = "throttle-clear-all-2"
+    let firstID = AnyEffectID(StaticEffectID("throttle-clear-all-1"))
+    let secondID = AnyEffectID(StaticEffectID("throttle-clear-all-2"))
     let firstTask = Task<Void, Never> {
       try? await Task.sleep(for: .seconds(5))
     }

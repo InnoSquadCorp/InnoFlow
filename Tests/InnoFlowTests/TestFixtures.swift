@@ -678,12 +678,12 @@ struct DeepLazyMapStressFeature: Reducer {
   }
 
   let chainDepth: Int
-  let cancellationID: EffectID
+  let cancellationID: StaticEffectID
   let includesAsyncTail: Bool
 
   init(
     chainDepth: Int,
-    cancellationID: EffectID = "deep-lazy-map-stress",
+    cancellationID: StaticEffectID = "deep-lazy-map-stress",
     includesAsyncTail: Bool = true
   ) {
     self.chainDepth = chainDepth

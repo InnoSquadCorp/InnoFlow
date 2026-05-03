@@ -170,9 +170,10 @@ extension TestStore {
     }
   }
 
-  public func cancelEffects(identifiedBy id: EffectID) async {
-    markCancelled(id: id)
-    cancelEffectsSynchronously(identifiedBy: id)
+  public func cancelEffects<ID: Hashable & Sendable>(identifiedBy id: EffectID<ID>) async {
+    let erasedID = AnyEffectID(id)
+    markCancelled(id: erasedID)
+    cancelEffectsSynchronously(identifiedBy: erasedID)
   }
 
   public func cancelAllEffects() async {

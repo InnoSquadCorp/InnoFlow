@@ -30,19 +30,19 @@ func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Action>) ->
     return "concatenate(\(children.map(effectOperationSignature).joined(separator: ",")))"
 
   case .cancel(let id):
-    return "cancel(\(id.rawValue.description))"
+    return "cancel(\(id.description))"
 
   case .cancellable(let nested, let id, let cancelInFlight):
     return
-      "cancellable(id:\(id.rawValue.description),cancelInFlight:\(cancelInFlight),nested:\(effectOperationSignature(nested)))"
+      "cancellable(id:\(id.description),cancelInFlight:\(cancelInFlight),nested:\(effectOperationSignature(nested)))"
 
   case .debounce(let nested, let id, let interval):
     return
-      "debounce(id:\(id.rawValue.description),interval:\(interval),nested:\(effectOperationSignature(nested)))"
+      "debounce(id:\(id.description),interval:\(interval),nested:\(effectOperationSignature(nested)))"
 
   case .throttle(let nested, let id, let interval, let leading, let trailing):
     return
-      "throttle(id:\(id.rawValue.description),interval:\(interval),leading:\(leading),trailing:\(trailing),nested:\(effectOperationSignature(nested)))"
+      "throttle(id:\(id.description),interval:\(interval),leading:\(leading),trailing:\(trailing),nested:\(effectOperationSignature(nested)))"
 
   case .animation(let nested, let animation):
     return "animation(\(String(describing: animation)),nested:\(effectOperationSignature(nested)))"
@@ -319,11 +319,11 @@ func waitForProjectionRefreshPass<R: Reducer>(
   }
 }
 
-private var isHeavyStressEnabled: Bool {
+var isHeavyStressEnabled: Bool {
   ProcessInfo.processInfo.environment["INNOFLOW_HEAVY_STRESS"] == "1"
 }
 
-private var isPerformanceBenchmarkEnabled: Bool {
+var isPerformanceBenchmarkEnabled: Bool {
   ProcessInfo.processInfo.environment["INNOFLOW_PERF_BENCHMARKS"] == "1"
 }
 
@@ -351,7 +351,7 @@ struct TypecheckResult {
 }
 
 extension TypecheckResult {
-  fileprivate var normalizedOutput: String {
+  var normalizedOutput: String {
     output.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }
@@ -526,7 +526,7 @@ struct ProcessResult {
 }
 
 extension ProcessResult {
-  fileprivate var normalizedOutput: String {
+  var normalizedOutput: String {
     output.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

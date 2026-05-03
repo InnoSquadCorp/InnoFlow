@@ -77,12 +77,12 @@ package actor ActionQueue<Action: Sendable> {
 private final class TestStoreRunEndpoint<Action: Sendable> {
   private let isTaskActiveImpl: (UUID) -> Bool
   private let shouldProceedImpl: (EffectExecutionContext?) -> Bool
-  private let finishTrackedTaskImpl: (UUID, EffectID?) -> Void
+  private let finishTrackedTaskImpl: (UUID, AnyEffectID?) -> Void
 
   init(
     isTaskActive: @escaping (UUID) -> Bool,
     shouldProceed: @escaping (EffectExecutionContext?) -> Bool,
-    finishTrackedTask: @escaping (UUID, EffectID?) -> Void
+    finishTrackedTask: @escaping (UUID, AnyEffectID?) -> Void
   ) {
     self.isTaskActiveImpl = isTaskActive
     self.shouldProceedImpl = shouldProceed
@@ -97,7 +97,7 @@ private final class TestStoreRunEndpoint<Action: Sendable> {
     shouldProceedImpl(context)
   }
 
-  func finishTrackedTask(token: UUID, cancellationID: EffectID?) {
+  func finishTrackedTask(token: UUID, cancellationID: AnyEffectID?) {
     finishTrackedTaskImpl(token, cancellationID)
   }
 }
@@ -258,7 +258,7 @@ extension TestStore {
     return task
   }
 
-  package func cancelEffectsSynchronously(identifiedBy id: EffectID) {
+  package func cancelEffectsSynchronously(identifiedBy id: AnyEffectID) {
     debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
     debounceGenerationByID.removeValue(forKey: id)
     throttleState.clearState(for: id)
@@ -283,7 +283,7 @@ extension TestStore {
     debounceGenerationByID.removeAll()
   }
 
-  private func removeTrackedTask(token: UUID, cancellationID: EffectID?) {
+  private func removeTrackedTask(token: UUID, cancellationID: AnyEffectID?) {
     runningTasks.removeValue(forKey: token)
 
     guard let id = cancellationID,
@@ -345,7 +345,7 @@ extension TestStore {
     runningTasks[token] != nil
   }
 
-  private func finishTrackedRunTask(token: UUID, cancellationID: EffectID?) {
+  private func finishTrackedRunTask(token: UUID, cancellationID: AnyEffectID?) {
     removeTrackedTask(token: token, cancellationID: cancellationID)
   }
 
@@ -387,12 +387,12 @@ extension TestStore: EffectDriver {
     }
   }
 
-  package func cancelEffects(id: EffectID, context: EffectExecutionContext?) async {
+  package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
     markCancelled(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id)
   }
 
-  package func cancelInFlightEffects(id: EffectID, context: EffectExecutionContext?) async {
+  package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
     markCancelledInFlight(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id)
   }
@@ -404,7 +404,7 @@ extension TestStore: EffectDriver {
 
   package func debounce(
     _ nested: EffectTask<R.Action>,
-    id: EffectID,
+    id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
     awaited: Bool,
@@ -449,7 +449,7 @@ extension TestStore: EffectDriver {
   }
 
   package func scheduleTrailingDrain(
-    for id: EffectID,
+    for id: AnyEffectID,
     interval: Duration,
     recurse:
       @escaping @MainActor @Sendable (

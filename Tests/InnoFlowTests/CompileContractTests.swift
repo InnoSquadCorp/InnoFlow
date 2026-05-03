@@ -13,8 +13,8 @@ import os
 @Suite("Compile Contract Tests")
 struct CompileContractTests {
 
-  @Test("EffectID rejects dynamic String construction at compile time")
-  func effectIDRejectsDynamicStringConstruction() throws {
+  @Test("EffectID accepts dynamic and non-string raw values")
+  func effectIDAcceptsDynamicAndNonStringRawValues() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -22,10 +22,14 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
+      import Foundation
       import InnoFlow
 
       let dynamic = String("dynamic-id")
-      let _ = EffectID(dynamic)
+      let stringID = StaticEffectID(dynamic)
+      let uuidID = EffectID(UUID())
+      let _ = EffectTask<Int>.cancel(stringID)
+      let _ = EffectTask<Int>.cancel(uuidID)
       """
 
     let result = try typecheckSource(
@@ -33,18 +37,7 @@ struct CompileContractTests {
       moduleDirectory: moduleDirectory
     )
 
-    #expect(result.status != 0)
-    let diagnostics = result.normalizedOutput
-    #expect(!diagnostics.isEmpty)
-    #expect(
-      diagnostics.localizedCaseInsensitiveContains("error")
-        || diagnostics.localizedCaseInsensitiveContains("failed")
-    )
-    #expect(
-      diagnostics.contains("EffectID")
-        || diagnostics.contains("StaticString")
-        || diagnostics.contains("String")
-    )
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
   @Test("Store.binding rejects non-bindable key paths at compile time")

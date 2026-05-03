@@ -99,7 +99,7 @@ struct TestStoreCoreTests {
 
   @Test("TestStore filters stale queued actions at assertion time")
   func testStoreFiltersStaleQueuedActionsAtAssertionTime() async {
-    let id: EffectID = "queued-stale-action"
+    let id = AnyEffectID(StaticEffectID("queued-stale-action"))
     let context = EffectExecutionContext(cancellationID: id, sequence: 1)
     let store = TestStore(
       reducer: CounterFeature(),
@@ -136,7 +136,7 @@ struct TestStoreCoreTests {
 
   @Test("TestStore debounce skips stale effects at cancellation boundaries")
   func testStoreDebounceSkipsStaleEffectsAtCancellationBoundaries() async {
-    let id: EffectID = "teststore-stale-debounce"
+    let id = AnyEffectID(StaticEffectID("teststore-stale-debounce"))
     let store = TestStore(reducer: CounterFeature(), initialState: .init())
     let probe = InstrumentationProbe()
 
@@ -156,7 +156,7 @@ struct TestStoreCoreTests {
 
   @Test("TestStore trailing throttle skips stale effects at cancellation boundaries")
   func testStoreTrailingThrottleSkipsStaleEffectsAtCancellationBoundaries() async {
-    let id: EffectID = "teststore-stale-throttle"
+    let id = AnyEffectID(StaticEffectID("teststore-stale-throttle"))
     let store = TestStore(reducer: CounterFeature(), initialState: .init())
     let context = EffectExecutionContext(cancellationID: id, sequence: 1)
     let probe = InstrumentationProbe()

@@ -92,7 +92,7 @@ English | [한국어](./FRAMEWORK_EVALUATION.kr.md) | [日本語](./FRAMEWORK_EV
 | Item | Evaluation |
 |------|------------|
 | **Reducer composition** | Concrete builder chains avoid the older nested-closure collapse and improve construction benchmarks |
-| **`EffectID` hashing** | Static-string IDs cache a normalized string for O(1) hashing behavior |
+| **`EffectID` hashing** | Typed `Hashable & Sendable` IDs are erased once at runtime while preserving raw-value equality domains |
 | **Collection offset cache** | `CollectionScopeOffsetBox` + revision tracking keep common collection-scoped lookup paths O(1) |
 | **Dependency-bucket refresh** | Key-path dependency buckets avoid re-evaluating unrelated `SelectedStore` projections |
 | **`dependingOnAll:`** | Parameter-pack selection keeps large explicit read models selective instead of falling back to always-refresh recomputation |

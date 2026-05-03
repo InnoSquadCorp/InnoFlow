@@ -71,10 +71,11 @@ public final class Store<R: Reducer> {
   }
 
   /// Cancels effects associated with an identifier and waits for cancellation bookkeeping.
-  public func cancelEffects(identifiedBy id: EffectID) async {
-    let sequence = effectBridge.markCancelled(id: id)
-    recordCancellation(id: id, sequence: sequence)
-    await effectBridge.cancelEffects(id: id, upTo: sequence)
+  public func cancelEffects<ID: Hashable & Sendable>(identifiedBy id: EffectID<ID>) async {
+    let erasedID = AnyEffectID(id)
+    let sequence = effectBridge.markCancelled(id: erasedID)
+    recordCancellation(id: erasedID, sequence: sequence)
+    await effectBridge.cancelEffects(id: erasedID, upTo: sequence)
   }
 
   /// Cancels every running effect and waits for cancellation bookkeeping.
@@ -220,7 +221,7 @@ public final class Store<R: Reducer> {
     )
   }
 
-  package func recordCancellation(id: EffectID?, sequence: UInt64) {
+  package func recordCancellation(id: AnyEffectID?, sequence: UInt64) {
     instrumentation.didCancelEffects(.init(id: id, sequence: sequence))
   }
 

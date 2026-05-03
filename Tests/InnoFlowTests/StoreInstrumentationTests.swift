@@ -43,10 +43,10 @@ struct StoreInstrumentationTests {
       initialState: .init(),
       instrumentation: .init(
         didStartRun: { event in
-          probe.record("start:\(event.cancellationID?.rawValue.description ?? "nil")")
+          probe.record("start:\(event.cancellationID?.description ?? "nil")")
         },
         didFinishRun: { event in
-          probe.record("finish:\(event.cancellationID?.rawValue.description ?? "nil")")
+          probe.record("finish:\(event.cancellationID?.description ?? "nil")")
         },
         didEmitAction: { event in
           probe.record("emit:\(event.action)")
@@ -255,7 +255,7 @@ struct StoreInstrumentationTests {
           probe.record("drop:\(String(describing: event.action)):\(event.reason)")
         },
         didCancelEffects: { event in
-          probe.record("cancel:\(event.id?.rawValue.description ?? "all")")
+          probe.record("cancel:\(event.id?.description ?? "all")")
         }
       )
     )
@@ -304,7 +304,7 @@ struct StoreInstrumentationTests {
           probe.record("drop:\(String(describing: event.action)):\(event.reason)")
         },
         didCancelEffects: { event in
-          probe.record("cancel:\(event.id?.rawValue.description ?? "all"):\(event.sequence)")
+          probe.record("cancel:\(event.id?.description ?? "all"):\(event.sequence)")
         }
       )
     )

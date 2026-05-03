@@ -16,6 +16,8 @@ without changing the runtime public API surface.
    effect closures.
 4. Strengthened local release-readiness gates for localized install snippets, release target docs,
    localized `SelectedStore` guidance, and bare throwing `.run` snippets.
+5. Generalized `EffectID` to accept typed `Hashable & Sendable` raw values while keeping
+   `StaticEffectID` as the string-literal convenience alias.
 
 ## Migration Note
 
@@ -185,7 +187,7 @@ This release extends effect orchestration while preserving cancellation guarante
 
 1. `Store` and `TestStore` now track pending trailing throttle events per `EffectID`.
 2. Trailing throttle state is cleaned up on ID cancellation and global cancellation.
-3. Effect execution context now carries animation metadata without introducing dynamic `EffectID` values.
+3. Effect execution context now carries animation metadata through the shared runtime context.
 
 ## 2.3.0 Patch (Coverage + Combinators + Diagnostics)
 
@@ -232,7 +234,8 @@ v2 prioritizes ideal API design over backward compatibility, and allows breaking
 5. Restrict `Store.binding` to `@BindableField`-backed fields
 6. Update the `@InnoFlow` macro contract to the v2 reducer form
 7. Encapsulate `EffectTask.Operation` and remove it from the public surface
-8. Redefine `EffectID` as a `StaticString`-backed `Sendable` type and disallow dynamic `String` IDs
+8. Redefine `EffectID` as a typed `Hashable & Sendable` identifier, with `StaticEffectID` as the
+   string-literal convenience alias
 9. Change `Store.cancelEffects` and `Store.cancelAllEffects` to `async`
 10. Shift macro signature validation toward structural checks (`reduce` + `into`/`action` + `inout`)
 11. Simplify cancellation-boundary runtime handling by removing `pendingCancellableRunsByID` and tightening the emission gate

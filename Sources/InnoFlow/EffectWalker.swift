@@ -116,7 +116,7 @@ package struct EffectWalker<D: EffectDriver> {
 
   private func walkThrottle(
     nested: EffectTask<D.Action>,
-    id: EffectID,
+    id: AnyEffectID,
     interval: Duration,
     leading: Bool,
     trailing: Bool,
