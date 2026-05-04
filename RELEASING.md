@@ -11,7 +11,7 @@ Before tagging a release:
 1. Update [CHANGELOG.md](CHANGELOG.md).
 2. Decide whether [MIGRATION.md](MIGRATION.md) needs a new entry.
 3. Run the main package test suite.
-4. Run the sample package test suite in `Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage`.
+4. Run the sample package test suite in `Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage` with `--jobs 1`.
 5. Run [scripts/principle-gates.sh](scripts/principle-gates.sh).
 6. Generate DocC through [Tools/generate-docc.sh](Tools/generate-docc.sh).
 7. Confirm the README and localized README installation snippets match the intended public tag.

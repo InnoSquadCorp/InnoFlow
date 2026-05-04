@@ -33,6 +33,7 @@ jobs:
           set -eo pipefail
           swift test \
             --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" \
+            --jobs 1 \
             -Xswiftc -warnings-as-errors
 
       - name: Run principle gates

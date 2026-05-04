@@ -23,6 +23,17 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed (BREAKING)
 
+- `ReducerBuilder` no longer exposes implementation-only underscore wrapper
+  types such as `_EmptyReducer`, `_ReducerSequence`, `_OptionalReducer`,
+  `_ConditionalReducer`, and `_ArrayReducer` as public API. Builder entry
+  points continue to return `some Reducer<State, Action>` through public
+  authoring surfaces like `Reduce`, `CombineReducers`, `Scope`, `IfLet`,
+  `IfCaseLet`, and `ForEachReducer`; downstream code that directly named the
+  underscore wrappers must stop doing so.
+- `EffectContext.isCancelled` has been removed. Use
+  `try await context.checkCancellation()` as the authoritative cancellation
+  boundary, or `await context.isCancellationRequested()` when a non-throwing
+  async probe is required.
 - `EffectID` is now generic. Existing explicit `EffectID` type annotations
   should migrate to `StaticEffectID` for string identifiers or
   `EffectID<RawValue>` for typed dynamic identifiers.
@@ -37,8 +48,31 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   call sites must migrate from `dependingOn: (\.a, \.b)` to
   `dependingOnAll: \.a, \.b`. Closure-based `select { ... }` is unchanged.
 
+### Changed
+
+- Root and canonical sample package platform floors now target iOS 17,
+  macOS 14, tvOS 17, watchOS 10, and visionOS 1 where the current API surface
+  builds without availability branches.
+- The canonical sample package no longer has a hard dependency on
+  `InnoNetworkWebSocket`. Scripted/protocol-backed clients remain compiled
+  sample coverage; the concrete InnoNetwork adapter now lives as a
+  non-compiled app-boundary integration snippet.
+
+### Fixed
+
+- Compile-contract tests now locate built modules correctly when SwiftPM is
+  invoked with a custom `--build-path`, avoiding accidental fallback to stale
+  `.build` products from the repository root.
+- Principle gates and CI now run canonical sample macro-heavy test/build steps
+  serially and fail if sample logs contain Swift macro/plugin internal
+  diagnostic noise such as `Internal Error:`, `DecodingError.dataCorrupted`,
+  or `Corrupted JSON`.
+
 ### Documentation
 
+- Removed the retired `FRAMEWORK_EVALUATION*` documents and their localized
+  README links. Adjacent-library positioning now lives in
+  `docs/FRAMEWORK_COMPARISON.md`.
 - Projection lifecycle contract now documents `ScopedStore.optionalState` /
   `SelectedStore.optionalValue` (and the `isAlive` flags) as the recommended
   read path for non-SwiftUI call sites. The cached-fallback `state` / `value`

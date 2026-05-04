@@ -56,7 +56,7 @@ jobs:
       - name: Run sample package tests
         run: |
           set -eo pipefail
-          swift test --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" -Xswiftc -warnings-as-errors
+          swift test --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" --jobs 1 -Xswiftc -warnings-as-errors
 
   package-builds:
     name: Package Build (${{ matrix.platform }})
@@ -115,6 +115,7 @@ jobs:
           set -eo pipefail
           cd "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
           xcodebuild \
+            -jobs 1 \
             -scheme InnoFlowSampleAppFeature \
             -destination 'generic/platform=visionOS' \
             CODE_SIGNING_ALLOWED=NO \
@@ -136,6 +137,7 @@ jobs:
         run: |
           set -eo pipefail
           xcodebuild \
+            -jobs 1 \
             -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
             -scheme InnoFlowSampleApp \
             -destination 'generic/platform=iOS' \
@@ -194,6 +196,7 @@ jobs:
         run: |
           set -eo pipefail
           xcodebuild \
+            -jobs 1 \
             -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
             -scheme InnoFlowSampleApp \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.udid }}" \

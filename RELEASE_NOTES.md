@@ -1,5 +1,48 @@
 # InnoFlow Release Notes
 
+## Unreleased Release Hardening
+
+This hardening pass removes retired evaluation artifacts, tightens the public
+surface around reducer builders and effect cancellation, lowers supported
+platform floors where the current APIs allow it, and makes canonical sample
+validation stricter.
+
+### Changed
+
+1. Removed public underscored reducer-builder implementation wrappers from the
+   supported API surface. Public feature authoring remains
+   `var body: some Reducer<State, Action>` composed from `Reduce`,
+   `CombineReducers`, `Scope`, and the other public reducer combinators.
+2. Removed `EffectContext.isCancelled`; effects should use
+   `try await context.checkCancellation()` or the async
+   `await context.isCancellationRequested()` probe.
+3. Lowered root and canonical sample package floors to iOS 17, macOS 14,
+   tvOS 17, watchOS 10, and visionOS 1.
+4. Removed the sample package's compiled `InnoNetworkWebSocket` dependency and
+   kept concrete transport integration as a non-compiled app-boundary snippet.
+5. Hardened CI and principle gates so canonical sample logs fail on Swift
+   macro/plugin internal diagnostic corruption.
+
+## Migration Note
+
+### What changed
+
+- Direct references to `_EmptyReducer`, `_ReducerSequence`, `_OptionalReducer`,
+  `_ConditionalReducer`, or `_ArrayReducer` are no longer supported.
+- Cancellation is checked through the async runtime boundary instead of a
+  synchronous boolean snapshot.
+- `FRAMEWORK_EVALUATION*` documents were retired; adjacent-library comparison
+  now lives in `docs/FRAMEWORK_COMPARISON.md`.
+
+### What you may need to update
+
+- Replace direct underscore wrapper type references with public reducer
+  composition.
+- Replace `context.isCancelled` with `checkCancellation()` or
+  `isCancellationRequested()`.
+- Run canonical sample package tests with `--jobs 1` and sample Xcode builds
+  with `-jobs 1` in downstream release gates.
+
 ## 4.0.0 Release
 
 This release promotes the current InnoFlow implementation and documentation contract to 4.0.0

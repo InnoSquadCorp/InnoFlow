@@ -51,7 +51,7 @@ The canonical sample uses one local path dependency:
 ### CLI verification
 
 ```bash
-swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage
+swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1
 ```
 
 ## Checklist
