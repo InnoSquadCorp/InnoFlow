@@ -4,7 +4,6 @@
 
 import Foundation
 import InnoFlow
-import SwiftUI
 
 @dynamicMemberLookup
 @MainActor

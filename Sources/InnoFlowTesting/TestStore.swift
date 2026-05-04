@@ -4,7 +4,6 @@
 
 import Foundation
 import InnoFlow
-import SwiftUI
 
 /// A deterministic test harness for InnoFlow v2 reducers.
 ///

@@ -1,7 +1,8 @@
 // MARK: - Store+SwiftUIBindings.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// InnoFlow - SwiftUI integration
 // Copyright © 2025 InnoSquad. All rights reserved.
 
+import InnoFlow
 import SwiftUI
 
 extension Store {

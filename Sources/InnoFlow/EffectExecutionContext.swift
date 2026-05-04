@@ -1,19 +1,22 @@
-// MARK: - EffectTask+SwiftUI.swift
+// MARK: - EffectExecutionContext.swift
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-import SwiftUI
+package struct EffectAnimation: @unchecked Sendable, CustomStringConvertible {
+  private let performer: @MainActor (_ updates: () -> Void) -> Void
+  package let description: String
 
-package struct EffectAnimation: Sendable {
-  package let rawValue: Animation?
-
-  package init(_ rawValue: Animation?) {
-    self.rawValue = rawValue
+  package init(
+    description: String,
+    perform: @escaping @MainActor (_ updates: () -> Void) -> Void
+  ) {
+    self.description = description
+    self.performer = perform
   }
 
   @MainActor
   package func perform(_ updates: () -> Void) {
-    withAnimation(rawValue, updates)
+    performer(updates)
   }
 }
 
@@ -55,10 +58,5 @@ package struct EffectExecutionContext: Sendable {
 extension EffectTask {
   package func applyingAnimation(_ animation: EffectAnimation) -> Self {
     .init(operation: .animation(effect: self, animation: animation))
-  }
-
-  /// Applies animation to state changes caused by actions emitted from this effect.
-  public func animation(_ animation: Animation? = .default) -> Self {
-    applyingAnimation(.init(animation))
   }
 }

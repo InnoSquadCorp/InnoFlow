@@ -4,7 +4,6 @@
 
 import Foundation
 import InnoFlow
-import SwiftUI
 
 package actor ActionQueue<Action: Sendable> {
   struct QueuedAction: Sendable {

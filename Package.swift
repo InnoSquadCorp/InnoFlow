@@ -18,6 +18,10 @@ let package = Package(
             targets: ["InnoFlow"]
         ),
         .library(
+            name: "InnoFlowSwiftUI",
+            targets: ["InnoFlowSwiftUI"]
+        ),
+        .library(
             name: "InnoFlowTesting",
             targets: ["InnoFlowTesting"]
         ),
@@ -30,6 +34,10 @@ let package = Package(
         .target(
             name: "InnoFlow",
             dependencies: ["InnoFlowMacros"]
+        ),
+        .target(
+            name: "InnoFlowSwiftUI",
+            dependencies: ["InnoFlow"]
         ),
 
         // MARK: - Macro Implementation
@@ -55,6 +63,7 @@ let package = Package(
             name: "InnoFlowTests",
             dependencies: [
                 "InnoFlow",
+                "InnoFlowSwiftUI",
                 "InnoFlowTesting",
             ],
             resources: [

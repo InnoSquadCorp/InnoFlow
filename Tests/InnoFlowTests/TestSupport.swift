@@ -3,7 +3,6 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import SwiftUI
 import Testing
 import os
 
@@ -925,7 +924,7 @@ func runConditionalReducerReleaseHarness(
     "EffectRuntime.swift",
     "EffectDriver.swift",
     "EffectTask.swift",
-    "EffectTask+SwiftUI.swift",
+    "EffectExecutionContext.swift",
     "EffectWalker.swift",
     "Reducer.swift",
     "ReducerComposition.swift",
@@ -933,7 +932,6 @@ func runConditionalReducerReleaseHarness(
     "SelectedStore.swift",
     "Store.swift",
     "Store+EffectDriver.swift",
-    "Store+SwiftUIPreviews.swift",
     "StoreClock.swift",
     "StoreEffectBridge.swift",
     "StoreInstrumentation.swift",
