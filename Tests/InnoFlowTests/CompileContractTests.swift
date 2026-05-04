@@ -90,6 +90,61 @@ struct CompileContractTests {
     }
   }
 
+  @Test("EffectContext exposes async cancellation probe")
+  func effectContextExposesAsyncCancellationProbe() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import Foundation
+      import InnoFlow
+
+      let context = EffectContext(
+          now: { ContinuousClock().now },
+          sleep: { _ in },
+          isCancellationRequested: { false }
+      )
+
+      func probe() async throws {
+          let _ = await context.isCancellationRequested()
+          try await context.checkCancellation()
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("EffectContext no longer exposes synchronous isCancelled")
+  func effectContextDoesNotExposeSynchronousIsCancelled() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import Foundation
+      import InnoFlow
+
+      let context = EffectContext(
+          now: { ContinuousClock().now },
+          sleep: { _ in },
+          isCancellationRequested: { false }
+      )
+      let _ = context.isCancelled
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+    #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
+  }
+
   @Test("StoreInstrumentation events accept typed EffectID values")
   func storeInstrumentationEventsAcceptTypedEffectIDValues() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)

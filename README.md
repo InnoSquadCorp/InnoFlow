@@ -432,7 +432,9 @@ return .run { send, context in
 
 The older `.run { send in ... }` overload still works, but new code should prefer
 `context.sleep(for:)` and `context.checkCancellation()` over `Task.sleep(...)` plus ad-hoc
-cancellation checks.
+cancellation checks. If an effect needs a non-throwing probe, call
+`await context.isCancellationRequested()`; it uses the same store/runtime boundary as
+`checkCancellation()`.
 
 Store deinit and explicit effect cancellation are still cooperative. InnoFlow guarantees
 that late emissions are dropped immediately, but runtime teardown continues as best-effort
