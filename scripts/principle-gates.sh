@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CANONICAL_ROOT_DIR=""
+SWIFTPM_JOBS="${PRINCIPLE_GATES_SWIFTPM_JOBS:-1}"
+PROCESS_NICE="${PRINCIPLE_GATES_NICE:-15}"
 
 cd "$ROOT_DIR"
 
@@ -120,6 +122,14 @@ search_multiline() {
     fi
   done < <(enumerate_target_files "$@")
   return "$matched"
+}
+
+run_low_priority() {
+  if [[ "$PROCESS_NICE" == "0" ]]; then
+    "$@"
+  else
+    nice -n "$PROCESS_NICE" "$@"
+  fi
 }
 
 search_lines_excluding() {
@@ -473,7 +483,7 @@ main() {
   search_lines "public static func preview\\(" Sources/InnoFlowSwiftUI/Store+SwiftUIPreviews.swift >/dev/null
   search_lines "public func map<" Sources/InnoFlow/EffectTask.swift >/dev/null
   search_lines 'name: "InnoFlowSwiftUI"' Package.swift >/dev/null
-  if search_lines "^import SwiftUI$" Sources/InnoFlow >/dev/null; then
+  if search_lines "^import SwiftUI$" Sources/InnoFlow/*.swift >/dev/null; then
     echo "[principle-gates] Failed: core InnoFlow target must not import SwiftUI"
     exit 1
   fi
@@ -693,17 +703,16 @@ main() {
   # main .build/ tree. The stale-scope and phase-map subprocess harnesses
   # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
   # debug and release artifacts there causes duplicate-symbol failures.
-  RELEASE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
-  if ! swift build --package-path "$ROOT_DIR" --build-path "$RELEASE_BUILD_PATH" -c release >/dev/null 2>&1; then
+  RELEASE_GATE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
+  if ! run_low_priority swift build --package-path "$ROOT_DIR" --build-path "$RELEASE_GATE_BUILD_PATH" -c release --jobs "$SWIFTPM_JOBS" >/dev/null 2>&1; then
     echo "[principle-gates] Failed: 'swift build -c release' crashed or failed — SIL inliner regression suspected"
     swift --version || true
-    rm -rf "$RELEASE_BUILD_PATH"
+    rm -rf "$RELEASE_GATE_BUILD_PATH"
     exit 1
   fi
-  rm -rf "$RELEASE_BUILD_PATH"
 
   echo "[principle-gates] Running package tests"
-  swift test --package-path "$ROOT_DIR" -Xswiftc -warnings-as-errors
+  run_low_priority swift test --package-path "$ROOT_DIR" --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors
 
   echo "[principle-gates] Running package tests in release configuration"
   # Release-mode test gate. Uses an isolated build path for the same reason as
@@ -715,35 +724,36 @@ main() {
   # baseline comparison uses absolute timings, so running it alongside the
   # rest of the release suite creates cross-suite scheduler contention and can
   # produce false regressions even when the implementation is healthy.
-  RELEASE_TEST_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-test"
-  if ! swift test \
+  if ! run_low_priority swift test \
       --package-path "$ROOT_DIR" \
-      --build-path "$RELEASE_TEST_BUILD_PATH" \
+      --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
+      --jobs "$SWIFTPM_JOBS" \
       -Xswiftc -warnings-as-errors; then
     echo "[principle-gates] Failed: 'swift test -c release' failed — release-mode regression"
-    rm -rf "$RELEASE_TEST_BUILD_PATH"
+    rm -rf "$RELEASE_GATE_BUILD_PATH"
     exit 1
   fi
-  rm -rf "$RELEASE_TEST_BUILD_PATH"
 
   echo "[principle-gates] Running isolated release timing baseline gate"
   # `INNOFLOW_CHECK_EFFECT_BASELINE=1` opts the `EffectTimingBaselineGate` in
   # for this dedicated release-only run so malformed or incomplete timing
   # captures still fail CI. Metric regressions are reported as non-blocking
-  # trend output because wall-clock effect timings are runner-sensitive.
-  RELEASE_BASELINE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-baseline"
-  if ! INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
+  # trend output because wall-clock effect timings are runner-sensitive. Reuse
+  # the release gate build path from the full release suite so SwiftSyntax does
+  # not need to be compiled repeatedly on local machines.
+  if ! env INNOFLOW_CHECK_EFFECT_BASELINE=1 nice -n "$PROCESS_NICE" swift test \
       --package-path "$ROOT_DIR" \
-      --build-path "$RELEASE_BASELINE_BUILD_PATH" \
+      --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
+      --jobs "$SWIFTPM_JOBS" \
       -Xswiftc -warnings-as-errors \
       --filter EffectTimingBaselineGate; then
     echo "[principle-gates] Failed: isolated release timing baseline gate regressed"
-    rm -rf "$RELEASE_BASELINE_BUILD_PATH"
+    rm -rf "$RELEASE_GATE_BUILD_PATH"
     exit 1
   fi
-  rm -rf "$RELEASE_BASELINE_BUILD_PATH"
+  rm -rf "$RELEASE_GATE_BUILD_PATH"
 
   echo "[principle-gates] Running sample package tests"
   local sample_test_root
@@ -752,17 +762,17 @@ main() {
   sample_package_path="$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
   # The sample package has its own .build cache. Clean it before testing so
   # local branch switches cannot reuse a stale source-file graph for InnoFlow.
-  swift package --package-path "$sample_package_path" clean
+  run_low_priority swift package --package-path "$sample_package_path" clean
   if ! run_logged_gate_command \
       "sample package tests" \
-      swift test --package-path "$sample_package_path" --jobs 1 -Xswiftc -warnings-as-errors; then
+      run_low_priority swift test --package-path "$sample_package_path" --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors; then
     exit 1
   fi
 
   echo "[principle-gates] Building canonical sample app"
   if ! run_logged_gate_command \
       "canonical sample app build" \
-      xcodebuild \
+      run_low_priority xcodebuild \
       -jobs 1 \
       -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
       -scheme InnoFlowSampleApp \
