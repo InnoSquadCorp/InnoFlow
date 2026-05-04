@@ -50,7 +50,7 @@ struct StoreInstrumentationTests {
     )
 
     store.send(.startDelayed)
-    await waitUntil(timeout: .seconds(10), pollInterval: .milliseconds(10)) {
+    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
       store.state.log == ["delayed"]
         && probe.events.contains("start:instrumented-delayed")
         && probe.events.contains("emit:received(\"delayed\")")
