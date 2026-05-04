@@ -97,6 +97,7 @@ iOSInjectionProject/
 .swiftpm/
 **/.swiftpm/
 **/Package.resolved
+!/Package.resolved
 
 # Xcode user data (should be ignored)
 **/xcuserdata/
