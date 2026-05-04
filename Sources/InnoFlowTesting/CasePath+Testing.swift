@@ -1,5 +1,5 @@
 import Foundation
-import InnoFlow
+public import InnoFlow
 
 /// Returns a human-readable failure message when a case-path extraction does
 /// not match the expected enum case.

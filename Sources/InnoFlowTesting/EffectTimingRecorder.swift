@@ -10,7 +10,7 @@
 // fixes) surface in CI rather than in ad-hoc manual runs.
 
 import Foundation
-import InnoFlow
+public import InnoFlow
 import os
 
 /// Captures `StoreInstrumentation` events with monotonic nanosecond timestamps

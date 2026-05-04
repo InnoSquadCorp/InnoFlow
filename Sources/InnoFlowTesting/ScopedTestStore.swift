@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import InnoFlow
+public import InnoFlow
 
 @dynamicMemberLookup
 @MainActor

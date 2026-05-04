@@ -3,6 +3,12 @@
 import PackageDescription
 import CompilerPluginSupport
 
+let swift6PackageContract: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    .enableUpcomingFeature("ExistentialAny"),
+    .enableUpcomingFeature("InternalImportsByDefault"),
+]
+
 let package = Package(
     name: "InnoFlow",
     platforms: [
@@ -33,11 +39,13 @@ let package = Package(
         // MARK: - Core Library
         .target(
             name: "InnoFlow",
-            dependencies: ["InnoFlowMacros"]
+            dependencies: ["InnoFlowMacros"],
+            swiftSettings: swift6PackageContract
         ),
         .target(
             name: "InnoFlowSwiftUI",
-            dependencies: ["InnoFlow"]
+            dependencies: ["InnoFlow"],
+            swiftSettings: swift6PackageContract
         ),
 
         // MARK: - Macro Implementation
@@ -49,13 +57,15 @@ let package = Package(
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
                 .product(name: "SwiftDiagnostics", package: "swift-syntax"),
-            ]
+            ],
+            swiftSettings: swift6PackageContract
         ),
         
         // MARK: - Testing Utilities
         .target(
             name: "InnoFlowTesting",
-            dependencies: ["InnoFlow"]
+            dependencies: ["InnoFlow"],
+            swiftSettings: swift6PackageContract
         ),
         
         // MARK: - Tests
@@ -68,14 +78,16 @@ let package = Package(
             ],
             resources: [
                 .copy("Fixtures")
-            ]
+            ],
+            swiftSettings: swift6PackageContract
         ),
         .testTarget(
             name: "InnoFlowMacrosTests",
             dependencies: [
                 "InnoFlowMacros",
                 .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
-            ]
+            ],
+            swiftSettings: swift6PackageContract
         ),
     ]
 )

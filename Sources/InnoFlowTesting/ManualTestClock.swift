@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import InnoFlow
+public import InnoFlow
 
 /// A manually-advanced clock for deterministic effect testing.
 public actor ManualTestClock {
@@ -12,7 +12,7 @@ public actor ManualTestClock {
   private struct SleepRequest {
     let deadline: Instant
     let insertionOrder: UInt64
-    let continuation: CheckedContinuation<Void, Error>
+    let continuation: CheckedContinuation<Void, any Error>
   }
 
   private var current: Instant
@@ -109,7 +109,7 @@ public actor ManualTestClock {
   private func registerSleep(
     id: UUID,
     deadline: Instant,
-    continuation: CheckedContinuation<Void, Error>
+    continuation: CheckedContinuation<Void, any Error>
   ) -> Bool {
     guard Task.isCancelled == false else { return false }
     let insertionOrder = nextInsertionOrder

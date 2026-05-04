@@ -2,8 +2,8 @@
 // InnoFlow - SwiftUI integration
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-import InnoFlow
-import SwiftUI
+public import InnoFlow
+public import SwiftUI
 
 extension EffectTask {
   /// Applies animation to state changes caused by actions emitted from this effect.

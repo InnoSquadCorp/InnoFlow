@@ -4,7 +4,7 @@
 
 import Foundation
 import OSLog
-import os
+public import os
 
 /// Thread-safe slot registry used to pair `runStarted` and `runFinished`
 /// callbacks for the signpost adapter. Signpost interval state values must

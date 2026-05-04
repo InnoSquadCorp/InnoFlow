@@ -2,8 +2,8 @@
 // InnoFlow - SwiftUI integration
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-import InnoFlow
-import SwiftUI
+public import InnoFlow
+public import SwiftUI
 
 extension Store {
   /// Creates a SwiftUI `Binding` for properties marked with `@BindableField`.

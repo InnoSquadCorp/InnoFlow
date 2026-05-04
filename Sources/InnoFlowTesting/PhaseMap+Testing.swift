@@ -1,5 +1,5 @@
 import Foundation
-import InnoFlow
+public import InnoFlow
 
 @discardableResult
 public func assertPhaseMapCovers<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>(

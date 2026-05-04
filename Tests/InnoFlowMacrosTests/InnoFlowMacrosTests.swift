@@ -11,7 +11,7 @@ import Testing
 #if canImport(InnoFlowMacros)
   import InnoFlowMacros
 
-  let testMacros: [String: Macro.Type] = [
+  let testMacros: [String: any Macro.Type] = [
     "InnoFlow": InnoFlowMacro.self,
     "_InnoFlowActionPaths": InnoFlowActionPathsMacro.self,
   ]
