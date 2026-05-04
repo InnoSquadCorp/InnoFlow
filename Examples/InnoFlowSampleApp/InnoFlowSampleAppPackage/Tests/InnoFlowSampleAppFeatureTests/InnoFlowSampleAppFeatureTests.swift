@@ -529,7 +529,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     await store.receive(
-      ._loaded(MockArticlesService.page0, page: 0)
+      ._loaded(.init(articles: MockArticlesService.page0, page: 0))
     ) {
       $0.isLoading = false
       $0.currentPage = 0
@@ -558,7 +558,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
     }
 
-    await store.receive(._loaded([], page: 1)) {
+    await store.receive(._loaded(.init(articles: [], page: 1))) {
       $0.isLoading = false
       $0.currentPage = 1
       $0.hasReachedEnd = true
@@ -632,7 +632,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.log = ["edit: 'Edited title'", "save attempt: 'Edited title'"]
     }
 
-    await store.receive(._saveConfirmed(title: "Edited title")) {
+    await store.receive(._saveConfirmed("Edited title")) {
       $0.draft.lastSavedTitle = "Edited title"
       $0.draft.inFlightTitle = nil
       $0.errorMessage = nil
@@ -672,9 +672,11 @@ struct InnoFlowSampleAppFeatureTests {
 
     await store.receive(
       ._saveRolledBack(
-        previous: "Offline-first draft",
-        failedTitle: "Broken edit",
-        reason: "mock-rejected"
+        .init(
+          previous: "Offline-first draft",
+          failedTitle: "Broken edit",
+          reason: "mock-rejected"
+        )
       )
     ) {
       $0.draft.title = "Offline-first draft"
@@ -712,7 +714,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.log = ["edit: 'Edited title'", "save attempt: 'Edited title'"]
     }
 
-    await store.receive(._saveConfirmed(title: "Edited title")) {
+    await store.receive(._saveConfirmed("Edited title")) {
       $0.draft.lastSavedTitle = "Edited title"
       $0.draft.inFlightTitle = nil
       $0.errorMessage = nil
@@ -766,9 +768,11 @@ struct InnoFlowSampleAppFeatureTests {
 
     await store.receive(
       ._saveRolledBack(
-        previous: "Offline-first draft",
-        failedTitle: "Broken edit",
-        reason: "mock-rejected"
+        .init(
+          previous: "Offline-first draft",
+          failedTitle: "Broken edit",
+          reason: "mock-rejected"
+        )
       )
     ) {
       $0.draft.inFlightTitle = nil

@@ -60,6 +60,10 @@ EOF
   cat >"$root/docs/README.md" <<'EOF'
 ## InnoFlow 3.0 direction
 EOF
+
+  cat >"$root/docs/README.kr.md" <<'EOF'
+## InnoFlow 3.0 direction
+EOF
 }
 
 write_doc_parity_contract() {
@@ -82,6 +86,19 @@ write_doc_parity_contract() {
       "label": "direction heading",
       "pattern": "^## InnoFlow 3.0 direction$",
       "count": 1
+    }
+  ],
+  "localizedHeaderParity": [
+    {
+      "source": "docs/README.md",
+      "headerLevel": "h2",
+      "expectedSourceHeaderCount": 1,
+      "translations": [
+        {
+          "file": "docs/README.kr.md",
+          "expectedHeaderCount": 1
+        }
+      ]
     }
   ],
   "sampleIdentifiers": [
@@ -159,6 +176,21 @@ EOF
   rm -rf "$tmp_root"
 }
 
+run_internal_diagnostic_log_tests() {
+  local tmp_root
+  tmp_root="$(mktemp -d)"
+  trap "rm -rf '$tmp_root'" RETURN
+
+  printf 'Build complete\n' >"$tmp_root/clean.log"
+  assert_success reject_toolchain_internal_diagnostics "clean log" "$tmp_root/clean.log"
+
+  printf 'Internal Error: DecodingError.dataCorrupted: Corrupted JSON\n' >"$tmp_root/bad.log"
+  assert_failure reject_toolchain_internal_diagnostics "bad log" "$tmp_root/bad.log"
+
+  trap - RETURN
+  rm -rf "$tmp_root"
+}
+
 if command -v rg >/dev/null 2>&1; then
   run_search_tests "0" "rg"
 else
@@ -167,5 +199,6 @@ fi
 
 run_search_tests "1" "fallback"
 run_doc_parity_contract_tests
+run_internal_diagnostic_log_tests
 
 echo "[principle-gates-selftest] All checks passed"

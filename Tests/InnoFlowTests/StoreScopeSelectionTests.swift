@@ -1354,7 +1354,7 @@ struct StoreScopeSelectionTests {
     }
 
     let newID = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
-    store.send(.appendTodo(id: newID, title: "Four"))
+    store.send(.appendTodo(.init(id: newID, title: "Four")))
     let appended = store.scope(
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,
@@ -1369,7 +1369,7 @@ struct StoreScopeSelectionTests {
     #expect(!initial.contains(where: { $0 === appendedNewStore }))
 
     let removedID = reordered[0].id
-    store.send(.removeTodo(id: removedID))
+    store.send(.removeTodo(removedID))
     let removed = store.scope(
       collection: \.todos,
       action: ScopedCollectionFeature.Action.todoActionPath,

@@ -938,10 +938,15 @@ struct ScopedCollectionFeature {
   }
 
   enum Action: Equatable, Sendable {
+    struct NewTodo: Equatable, Sendable {
+      let id: UUID
+      let title: String
+    }
+
     case todo(id: UUID, action: TodoAction)
     case moveLastToFront
-    case appendTodo(id: UUID, title: String)
-    case removeTodo(id: UUID)
+    case appendTodo(NewTodo)
+    case removeTodo(UUID)
 
     static func todoAction(id: UUID, action: TodoAction) -> Self {
       .todo(id: id, action: action)
@@ -974,8 +979,8 @@ struct ScopedCollectionFeature {
           state.todos.insert(last, at: 0)
           return .none
 
-        case .appendTodo(let id, let title):
-          state.todos.append(.init(id: id, title: title))
+        case .appendTodo(let todo):
+          state.todos.append(.init(id: todo.id, title: todo.title))
           return .none
 
         case .removeTodo(let id):

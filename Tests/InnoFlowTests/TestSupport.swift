@@ -445,37 +445,55 @@ enum CompileContractError: Error, CustomStringConvertible {
 func findBuiltModuleDirectory(
   named moduleName: String,
   in packageRoot: URL,
-  configuration: String? = nil
+  configuration: String? = nil,
+  additionalSearchRoots: [URL] = []
 ) throws -> URL {
   let fileManager = FileManager.default
   let buildDirectory = packageRoot.appendingPathComponent(".build", isDirectory: true)
-  var attemptedPaths: [String] = [
-    packageRoot.path,
-    buildDirectory.path,
-    buildDirectory.appendingPathComponent("debug", isDirectory: true).path,
-    buildDirectory.appendingPathComponent("release", isDirectory: true).path,
-    buildDirectory.appendingPathComponent("arm64-apple-macosx/debug", isDirectory: true).path,
-    buildDirectory.appendingPathComponent("x86_64-apple-macosx/debug", isDirectory: true).path,
-    buildDirectory.appendingPathComponent("arm64-apple-macosx/release", isDirectory: true).path,
-    buildDirectory.appendingPathComponent("x86_64-apple-macosx/release", isDirectory: true).path,
-  ]
+  var attemptedPaths: [String] = []
+
+  func appendCandidate(_ url: URL) {
+    attemptedPaths.append(url.path)
+    attemptedPaths.append(url.appendingPathComponent("Modules", isDirectory: true).path)
+    attemptedPaths.append(url.appendingPathComponent("Modules-tool", isDirectory: true).path)
+    attemptedPaths.append(url.appendingPathComponent("debug", isDirectory: true).path)
+    attemptedPaths.append(url.appendingPathComponent("release", isDirectory: true).path)
+  }
+
+  func appendCandidateAndAncestors(from url: URL, limit: Int = 8) {
+    var current = url
+    for _ in 0..<limit {
+      appendCandidate(current)
+      let parent = current.deletingLastPathComponent()
+      if parent.path == current.path { break }
+      current = parent
+    }
+  }
+
+  for root in additionalSearchRoots {
+    appendCandidateAndAncestors(from: root)
+  }
+  if let executableURL = Bundle.main.executableURL {
+    appendCandidateAndAncestors(from: executableURL.deletingLastPathComponent())
+  }
+  if let executablePath = CommandLine.arguments.first, !executablePath.isEmpty {
+    appendCandidateAndAncestors(
+      from: URL(fileURLWithPath: executablePath).deletingLastPathComponent()
+    )
+  }
+  appendCandidate(packageRoot)
+  appendCandidate(buildDirectory)
+  appendCandidate(buildDirectory.appendingPathComponent("arm64-apple-macosx", isDirectory: true))
+  appendCandidate(buildDirectory.appendingPathComponent("x86_64-apple-macosx", isDirectory: true))
+
   if let buildChildren = try? fileManager.contentsOfDirectory(
     at: buildDirectory,
     includingPropertiesForKeys: [.isDirectoryKey],
     options: [.skipsHiddenFiles]
   ) {
     for child in buildChildren {
-      attemptedPaths.append(child.path)
-      attemptedPaths.append(child.appendingPathComponent("debug", isDirectory: true).path)
-      attemptedPaths.append(child.appendingPathComponent("release", isDirectory: true).path)
+      appendCandidate(child)
     }
-  }
-
-  let moduleSearchRoots = attemptedPaths
-  for attemptedPath in moduleSearchRoots {
-    let directory = URL(fileURLWithPath: attemptedPath, isDirectory: true)
-    attemptedPaths.append(directory.appendingPathComponent("Modules", isDirectory: true).path)
-    attemptedPaths.append(directory.appendingPathComponent("Modules-tool", isDirectory: true).path)
   }
 
   let orderedAttemptedPaths = attemptedPaths.reduce(into: [String]()) { result, path in
@@ -485,6 +503,16 @@ func findBuiltModuleDirectory(
   }
   attemptedPaths = Array(Set(attemptedPaths)).sorted()
 
+  var matches: [(directory: URL, modificationDate: Date)] = []
+
+  func appendMatchIfPresent(at directory: URL) {
+    let moduleURL = directory.appendingPathComponent("\(moduleName).swiftmodule")
+    guard fileManager.fileExists(atPath: moduleURL.path) else { return }
+    let resourceValues = try? moduleURL.resourceValues(forKeys: [.contentModificationDateKey])
+    let modificationDate = resourceValues?.contentModificationDate ?? .distantPast
+    matches.append((directory, modificationDate))
+  }
+
   for attemptedPath in orderedAttemptedPaths {
     if let configuration,
       !URL(fileURLWithPath: attemptedPath).pathComponents.contains(configuration)
@@ -493,10 +521,7 @@ func findBuiltModuleDirectory(
     }
 
     let directory = URL(fileURLWithPath: attemptedPath, isDirectory: true)
-    let modulePath = directory.appendingPathComponent("\(moduleName).swiftmodule").path
-    if fileManager.fileExists(atPath: modulePath) {
-      return directory
-    }
+    appendMatchIfPresent(at: directory)
   }
 
   guard
@@ -516,7 +541,13 @@ func findBuiltModuleDirectory(
     {
       continue
     }
-    return fileURL.deletingLastPathComponent()
+    let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey])
+    let modificationDate = resourceValues?.contentModificationDate ?? .distantPast
+    matches.append((fileURL.deletingLastPathComponent(), modificationDate))
+  }
+
+  if let newest = matches.max(by: { $0.modificationDate < $1.modificationDate }) {
+    return newest.directory
   }
 
   throw CompileContractError.moduleNotFound(attemptedPaths: attemptedPaths)

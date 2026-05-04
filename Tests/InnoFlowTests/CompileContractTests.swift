@@ -145,6 +145,43 @@ struct CompileContractTests {
     #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
   }
 
+  @Test("Module lookup supports custom SwiftPM build paths")
+  func moduleLookupSupportsCustomSwiftPMBuildPaths() throws {
+    let temporaryRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let packageRoot = temporaryRoot.appendingPathComponent("Package", isDirectory: true)
+    let buildRoot = temporaryRoot.appendingPathComponent("custom-build", isDirectory: true)
+    let moduleDirectory = buildRoot.appendingPathComponent("debug/Modules", isDirectory: true)
+    let executableDirectory = buildRoot
+      .appendingPathComponent(
+        "debug/InnoFlowPackageTests.xctest/Contents/MacOS",
+        isDirectory: true
+      )
+
+    try FileManager.default.createDirectory(
+      at: moduleDirectory,
+      withIntermediateDirectories: true
+    )
+    try FileManager.default.createDirectory(
+      at: executableDirectory,
+      withIntermediateDirectories: true
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+    FileManager.default.createFile(
+      atPath: moduleDirectory.appendingPathComponent("InnoFlow.swiftmodule").path,
+      contents: Data()
+    )
+
+    let resolved = try findBuiltModuleDirectory(
+      named: "InnoFlow",
+      in: packageRoot,
+      additionalSearchRoots: [executableDirectory]
+    )
+
+    #expect(resolved.path == moduleDirectory.path)
+  }
+
   @Test("StoreInstrumentation events accept typed EffectID values")
   func storeInstrumentationEventsAcceptTypedEffectIDValues() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)

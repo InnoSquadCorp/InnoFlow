@@ -142,6 +142,40 @@ search_lines_excluding() {
   printf '%s\n' "$filtered"
 }
 
+reject_toolchain_internal_diagnostics() {
+  local label="$1"
+  local log_file="$2"
+
+  if grep -E "Internal Error:|DecodingError\\.dataCorrupted|Corrupted JSON" "$log_file" >/dev/null; then
+    echo "[principle-gates] Failed: $label emitted Swift toolchain internal diagnostics"
+    grep -E "Internal Error:|DecodingError\\.dataCorrupted|Corrupted JSON" "$log_file" || true
+    return 1
+  fi
+}
+
+run_logged_gate_command() {
+  local label="$1"
+  shift
+
+  local log_file
+  log_file="$(mktemp "${TMPDIR:-/tmp}/innoflow-principle-gate-log.XXXXXX")"
+
+  if ! "$@" >"$log_file" 2>&1; then
+    cat "$log_file"
+    echo "[principle-gates] Failed: $label command failed"
+    rm -f "$log_file"
+    return 1
+  fi
+
+  if ! reject_toolchain_internal_diagnostics "$label" "$log_file"; then
+    cat "$log_file"
+    rm -f "$log_file"
+    return 1
+  fi
+
+  rm -f "$log_file"
+}
+
 require_pattern_in_every_file() {
   local pattern="$1"
   shift
@@ -688,16 +722,25 @@ main() {
   # The sample package has its own .build cache. Clean it before testing so
   # local branch switches cannot reuse a stale source-file graph for InnoFlow.
   swift package --package-path "$sample_package_path" clean
-  swift test --package-path "$sample_package_path" -Xswiftc -warnings-as-errors
+  if ! run_logged_gate_command \
+      "sample package tests" \
+      swift test --package-path "$sample_package_path" --jobs 1 -Xswiftc -warnings-as-errors; then
+    exit 1
+  fi
 
   echo "[principle-gates] Building canonical sample app"
-  xcodebuild \
-    -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
-    -scheme InnoFlowSampleApp \
-    -destination 'generic/platform=iOS' \
-    CODE_SIGNING_ALLOWED=NO \
-    CODE_SIGNING_REQUIRED=NO \
-    build >/dev/null
+  if ! run_logged_gate_command \
+      "canonical sample app build" \
+      xcodebuild \
+      -jobs 1 \
+      -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
+      -scheme InnoFlowSampleApp \
+      -destination 'generic/platform=iOS' \
+      CODE_SIGNING_ALLOWED=NO \
+      CODE_SIGNING_REQUIRED=NO \
+      build; then
+    exit 1
+  fi
 
   echo "[principle-gates] All checks passed"
 }
