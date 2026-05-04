@@ -22,13 +22,8 @@ struct StoreInstrumentationTests {
     store.send(.load)
     #expect(store.isLoading)
 
-    let timeoutClock = ContinuousClock()
-    let deadline = timeoutClock.now.advanced(by: .seconds(2))
-    while timeoutClock.now < deadline {
-      if store.value == "Hello, InnoFlow v2" {
-        break
-      }
-      try? await Task.sleep(for: .milliseconds(20))
+    await waitUntil(timeout: .seconds(10), pollInterval: .milliseconds(10)) {
+      store.value == "Hello, InnoFlow v2" && store.isLoading == false
     }
 
     #expect(store.value == "Hello, InnoFlow v2")
