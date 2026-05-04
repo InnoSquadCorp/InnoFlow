@@ -5,6 +5,11 @@ ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CANONICAL_ROOT_DIR=""
 SWIFTPM_JOBS="${PRINCIPLE_GATES_SWIFTPM_JOBS:-1}"
 PROCESS_NICE="${PRINCIPLE_GATES_NICE:-15}"
+SWIFT_FRONTEND_THREADS="${PRINCIPLE_GATES_SWIFT_FRONTEND_THREADS:-1}"
+SWIFT_FRONTEND_THREAD_FLAGS=()
+if [[ "$SWIFT_FRONTEND_THREADS" != "0" ]]; then
+  SWIFT_FRONTEND_THREAD_FLAGS=(-Xswiftc -num-threads -Xswiftc "$SWIFT_FRONTEND_THREADS")
+fi
 
 cd "$ROOT_DIR"
 
@@ -734,7 +739,12 @@ main() {
   # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
   # debug and release artifacts there causes duplicate-symbol failures.
   RELEASE_GATE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
-  if ! run_low_priority swift build --package-path "$ROOT_DIR" --build-path "$RELEASE_GATE_BUILD_PATH" -c release --jobs "$SWIFTPM_JOBS" >/dev/null 2>&1; then
+  if ! run_low_priority swift build \
+      --package-path "$ROOT_DIR" \
+      --build-path "$RELEASE_GATE_BUILD_PATH" \
+      -c release \
+      --jobs "$SWIFTPM_JOBS" \
+      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" >/dev/null 2>&1; then
     echo "[principle-gates] Failed: 'swift build -c release' crashed or failed — SIL inliner regression suspected"
     swift --version || true
     rm -rf "$RELEASE_GATE_BUILD_PATH"
@@ -759,6 +769,7 @@ main() {
       --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
       --jobs "$SWIFTPM_JOBS" \
+      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" \
       -Xswiftc -warnings-as-errors; then
     echo "[principle-gates] Failed: 'swift test -c release' failed — release-mode regression"
     rm -rf "$RELEASE_GATE_BUILD_PATH"
@@ -777,6 +788,7 @@ main() {
       --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
       --jobs "$SWIFTPM_JOBS" \
+      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" \
       -Xswiftc -warnings-as-errors \
       --filter EffectTimingBaselineGate; then
     echo "[principle-gates] Failed: isolated release timing baseline gate regressed"
