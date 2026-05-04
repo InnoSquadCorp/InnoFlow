@@ -48,7 +48,6 @@ dependencies: [
 - [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
 - [Phase-Driven Modeling](./PHASE_DRIVEN_MODELING.md)
 - [Release Notes](./RELEASE_NOTES.md)
-- [Framework Evaluation](./FRAMEWORK_EVALUATION.md)
 - [Canonical Sample README](./Examples/InnoFlowSampleApp/README.md)
 
 ## 快速开始
