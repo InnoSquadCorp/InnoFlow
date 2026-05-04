@@ -6,11 +6,11 @@ import PackageDescription
 let package = Package(
   name: "InnoFlowSampleAppFeature",
   platforms: [
-    .iOS(.v18),
-    .macOS(.v15),
-    .tvOS(.v18),
-    .watchOS(.v11),
-    .visionOS(.v2),
+    .iOS(.v17),
+    .macOS(.v14),
+    .tvOS(.v17),
+    .watchOS(.v10),
+    .visionOS(.v1),
   ],
   products: [
     .library(
@@ -20,14 +20,12 @@ let package = Package(
   ],
   dependencies: [
     .package(name: "InnoFlow", path: "../../../"),
-    .package(url: "https://github.com/InnoSquadCorp/InnoNetwork.git", from: "3.1.0"),
   ],
   targets: [
     .target(
       name: "InnoFlowSampleAppFeature",
       dependencies: [
         .product(name: "InnoFlow", package: "InnoFlow"),
-        .product(name: "InnoNetworkWebSocket", package: "InnoNetwork"),
       ]
     ),
     .testTarget(

@@ -3,11 +3,10 @@
 // The reducer owns business-facing connection status and transcript entries.
 // The websocket adapter owns protocol details, event streams, and reconnect
 // mechanics. The default sample dependency is scripted for deterministic UI
-// tests; the same reducer also accepts a live InnoNetwork-backed adapter.
+// tests; apps can provide a live adapter at the app boundary.
 
 import Foundation
 import InnoFlow
-import InnoNetworkWebSocket
 import SwiftUI
 
 public protocol BidirectionalSocketClient: Sendable {
@@ -39,7 +38,7 @@ private enum ScriptedBidirectionalSocketError: LocalizedError, Equatable, Sendab
 
 public struct BidirectionalWebSocketDemoDependencies: Sendable {
   public static let defaultIntegrationNote =
-    "Default sample transport is scripted for deterministic UI tests. Swap the dependency to InnoNetworkBidirectionalSocketClient at the app boundary to talk to a live websocket backend that keeps adapter-owned auto-retry enabled and surfaces reconnecting state for retryable transport failures and peer closes."
+    "Default sample transport is scripted for deterministic UI tests. Swap the dependency at the app boundary to talk to a live websocket backend that keeps protocol state, retry budget, and reconnect policy outside InnoFlow."
 
   public let socketClient: any BidirectionalSocketClient
   public let integrationNote: String
@@ -56,22 +55,6 @@ public struct BidirectionalWebSocketDemoDependencies: Sendable {
     .init(
       socketClient: ScriptedBidirectionalSocketClient(),
       integrationNote: Self.defaultIntegrationNote
-    )
-  }
-
-  public static func live(
-    url: URL,
-    subprotocols: [String]? = nil,
-    configuration: WebSocketConfiguration = .safeDefaults(),
-    integrationNote: String = Self.defaultIntegrationNote
-  ) -> Self {
-    .init(
-      socketClient: InnoNetworkBidirectionalSocketClient(
-        url: url,
-        subprotocols: subprotocols,
-        configuration: configuration
-      ),
-      integrationNote: integrationNote
     )
   }
 }
@@ -121,29 +104,33 @@ actor ScriptedBidirectionalSocketClient: BidirectionalSocketClient {
   }
 }
 
-private enum LiveBidirectionalSocketClientError: LocalizedError, Sendable {
-  case notConnected
-
-  var errorDescription: String? {
-    switch self {
-    case .notConnected:
-      "The live websocket task is not connected."
-    }
-  }
+enum BidirectionalSocketAdapterState: Equatable, Sendable {
+  case disconnected
+  case connected
+  case reconnecting
 }
 
-enum BidirectionalSocketLiveEventMapper {
+enum BidirectionalSocketAdapterEvent: Equatable, Sendable {
+  case connected(String?)
+  case disconnected(String?)
+  case string(String)
+  case data(Data)
+  case failure(String)
+  case heartbeat
+}
+
+enum BidirectionalSocketAdapterEventMapper {
   static func map(
-    _ event: WebSocketEvent,
-    taskState: WebSocketState,
+    _ event: BidirectionalSocketAdapterEvent,
+    adapterState: BidirectionalSocketAdapterState,
     willRetry: Bool
   ) -> BidirectionalSocketTransportEvent? {
     switch event {
     case .connected(let subprotocol):
       return .connected(subprotocol)
 
-    case .disconnected(let error):
-      let reason = describeDisconnect(error)
+    case .disconnected(let reason):
+      let reason = reason ?? "Socket disconnected."
       if willRetry {
         return .reconnecting(reason)
       }
@@ -152,128 +139,19 @@ enum BidirectionalSocketLiveEventMapper {
     case .string(let value):
       return .received(value)
 
-    case .message(let data):
+    case .data(let data):
       guard let text = String(data: data, encoding: .utf8) else { return nil }
       return .received(text)
 
-    case .error(let error):
-      let reason = String(describing: error)
-      if taskState == .reconnecting {
+    case .failure(let reason):
+      if adapterState == .reconnecting || willRetry {
         return .reconnecting(reason)
       }
       return .transportFailure(reason)
 
-    case .pong:
-      return nil
-
-    @unknown default:
+    case .heartbeat:
       return nil
     }
-  }
-
-  private static func describeDisconnect(_ error: WebSocketError?) -> String {
-    if let error {
-      return String(describing: error)
-    }
-    return "Socket disconnected."
-  }
-}
-
-public actor InnoNetworkBidirectionalSocketClient: BidirectionalSocketClient {
-  // Keep this retryable close-code mirror in sync with
-  // InnoNetworkWebSocket.WebSocketCloseDisposition.classifyPeerClose.
-  private static let retryablePeerCloseCodes: Set<Int> = [1001, 1006, 1011, 1012, 1013, 1015]
-
-  private let manager: WebSocketManager
-  private let url: URL
-  private let subprotocols: [String]?
-  private let maxReconnectAttempts: Int
-  private var task: WebSocketTask?
-
-  public init(
-    url: URL,
-    subprotocols: [String]? = nil,
-    configuration: WebSocketConfiguration = .safeDefaults()
-  ) {
-    self.url = url
-    self.subprotocols = subprotocols
-    self.maxReconnectAttempts = configuration.maxReconnectAttempts
-    self.manager = WebSocketManager(configuration: configuration)
-  }
-
-  public func connect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
-    if let task {
-      await manager.disconnect(task)
-      self.task = nil
-    }
-
-    let task = await manager.connect(url: url, subprotocols: subprotocols)
-    self.task = task
-    return await relayStream(for: task)
-  }
-
-  public func reconnect() async -> AsyncStream<BidirectionalSocketTransportEvent> {
-    if let task {
-      await manager.retry(task)
-      return await relayStream(for: task)
-    }
-    return await connect()
-  }
-
-  public func disconnect() async {
-    guard let task else { return }
-    await manager.disconnect(task)
-    self.task = nil
-  }
-
-  public func send(text: String) async throws -> [BidirectionalSocketTransportEvent] {
-    guard let task else { throw LiveBidirectionalSocketClientError.notConnected }
-    try await manager.send(task, string: text)
-    return [.sent(text)]
-  }
-
-  private func relayStream(
-    for task: WebSocketTask
-  ) async -> AsyncStream<BidirectionalSocketTransportEvent> {
-    let source = await manager.events(for: task)
-
-    return AsyncStream<BidirectionalSocketTransportEvent>(bufferingPolicy: .unbounded) {
-      continuation in
-      let relayTask = Task {
-        for await event in source {
-          if let mappedEvent = await mapTransportEvent(event, for: task) {
-            continuation.yield(mappedEvent)
-          }
-        }
-        continuation.finish()
-      }
-
-      continuation.onTermination = { _ in
-        relayTask.cancel()
-      }
-    }
-  }
-
-  private func mapTransportEvent(
-    _ event: WebSocketEvent,
-    for task: WebSocketTask
-  ) async -> BidirectionalSocketTransportEvent? {
-    let closeCode = await task.closeCode
-    return BidirectionalSocketLiveEventMapper.map(
-      event,
-      taskState: await task.state,
-      willRetry: await transportWillRetryPeerClose(closeCode: closeCode, for: task)
-    )
-  }
-
-  private func transportWillRetryPeerClose(
-    closeCode: URLSessionWebSocketTask.CloseCode?,
-    for task: WebSocketTask
-  ) async -> Bool {
-    guard await task.autoReconnectEnabled else { return false }
-    guard let closeCode else { return false }
-    guard Self.retryablePeerCloseCodes.contains(Int(closeCode.rawValue)) else { return false }
-    return await task.reconnectCount < maxReconnectAttempts
   }
 }
 

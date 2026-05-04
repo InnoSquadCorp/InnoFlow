@@ -9,7 +9,7 @@ Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcworkspace
 ```
 
 2. Select the `InnoFlowSampleApp` scheme.
-3. Run on an iOS 18 simulator or device.
+3. Run on an iOS 17 or newer simulator or device.
 
 Important:
 - Open the `.xcworkspace`, not the `.xcodeproj`.

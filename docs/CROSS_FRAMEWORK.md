@@ -112,10 +112,10 @@ Attach InnoFlow to a transport library like this:
 
 - `URLSession`: an injected service or adapter performs requests and emits
   reducer actions with parsed domain results.
-- `InnoNetworkWebSocket`: a sample-only adapter owns the socket task, event
-  stream, retryable peer-close classification, reconnect trigger, retry budget,
-  and `send(_:)`; the reducer only sees domain actions such as `.connectTapped`,
-  `._messageReceived`, or `._connectionLost`.
+- `InnoNetworkWebSocket`: an app-boundary adapter can own the socket task,
+  event stream, retryable peer-close classification, reconnect trigger, retry
+  budget, and `send(_:)`; the reducer only sees domain actions such as
+  `.connectTapped`, `._messageReceived`, or `._connectionLost`.
 - SSE / gRPC / MQTT: the coordinator or adapter bridges protocol events into
   reducer actions; reducers never become the transport state machine.
 
@@ -182,6 +182,62 @@ struct ChatFeature {
       case ._transportEvent:
         return .none
       }
+    }
+  }
+}
+```
+
+The canonical sample keeps this dependency scripted so the sample package does
+not inherit a transport library's platform floor. A live app can still assemble
+an InnoNetwork-backed adapter outside the sample package:
+
+```swift
+import Foundation
+import InnoNetworkWebSocket
+
+actor LiveChatTransport: ChatTransport {
+  private let manager = WebSocketManager(configuration: .safeDefaults())
+  private let url: URL
+  private var task: WebSocketTask?
+
+  init(url: URL) {
+    self.url = url
+  }
+
+  func connect() async {
+    task = await manager.connect(url: url)
+  }
+
+  func disconnect() async {
+    guard let task else { return }
+    await manager.disconnect(task)
+    self.task = nil
+  }
+
+  func send(text: String) async throws {
+    guard let task else { return }
+    try await manager.send(task, string: text)
+  }
+
+  func events() -> AsyncStream<ChatTransportEvent> {
+    guard let task else { return AsyncStream { $0.finish() } }
+    return AsyncStream { continuation in
+      let relay = Task {
+        for await event in await manager.events(for: task) {
+          switch event {
+          case .connected:
+            continuation.yield(.connected)
+          case .disconnected:
+            continuation.yield(.disconnected)
+          case .string(let value):
+            continuation.yield(.message(value))
+          default:
+            break
+          }
+        }
+        continuation.finish()
+      }
+      continuation.onTermination = { _ in relay.cancel() }
     }
   }
 }

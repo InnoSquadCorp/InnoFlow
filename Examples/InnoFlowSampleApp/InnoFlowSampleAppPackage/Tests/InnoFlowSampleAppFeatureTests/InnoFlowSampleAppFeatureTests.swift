@@ -1,7 +1,6 @@
 import Foundation
 import InnoFlow
 import InnoFlowTesting
-import InnoNetworkWebSocket
 import Testing
 
 @testable import InnoFlowSampleAppFeature
@@ -1170,57 +1169,55 @@ struct InnoFlowSampleAppFeatureTests {
     await store.assertNoMoreActions()
   }
 
-  @Test("Bidirectional websocket live mapper surfaces reconnecting for retryable transport errors")
-  func bidirectionalWebSocketLiveMapperMapsRetryableTransportError() {
-    let error = WebSocketError.pingTimeout
-
-    let mapped = BidirectionalSocketLiveEventMapper.map(
-      .error(error),
-      taskState: .reconnecting,
+  @Test("Bidirectional websocket adapter mapper surfaces reconnecting for retryable errors")
+  func bidirectionalWebSocketAdapterMapperMapsRetryableTransportError() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
+      .failure("ping timeout"),
+      adapterState: .reconnecting,
       willRetry: true
     )
 
-    #expect(mapped == .reconnecting(String(describing: error)))
+    #expect(mapped == .reconnecting("ping timeout"))
   }
 
-  @Test("Bidirectional websocket live mapper surfaces reconnecting for retryable peer closes")
-  func bidirectionalWebSocketLiveMapperMapsRetryablePeerClose() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+  @Test("Bidirectional websocket adapter mapper surfaces reconnecting for retryable peer closes")
+  func bidirectionalWebSocketAdapterMapperMapsRetryablePeerClose() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: true
     )
 
     #expect(mapped == .reconnecting("Socket disconnected."))
   }
 
-  @Test("Bidirectional websocket live mapper keeps terminal peer closes disconnected")
-  func bidirectionalWebSocketLiveMapperMapsTerminalPeerClose() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+  @Test("Bidirectional websocket adapter mapper keeps terminal peer closes disconnected")
+  func bidirectionalWebSocketAdapterMapperMapsTerminalPeerClose() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: false
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
   }
 
-  @Test("Bidirectional websocket live mapper requires retry metadata for reconnecting")
-  func bidirectionalWebSocketLiveMapperRequiresRetryMetadata() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+  @Test("Bidirectional websocket adapter mapper requires retry metadata for reconnecting")
+  func bidirectionalWebSocketAdapterMapperRequiresRetryMetadata() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: false
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
   }
 
-  @Test("Bidirectional websocket live mapper keeps exhausted retry budgets disconnected")
-  func bidirectionalWebSocketLiveMapperKeepsExhaustedRetryBudgetDisconnected() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+  @Test("Bidirectional websocket adapter mapper keeps exhausted retry budgets disconnected")
+  func bidirectionalWebSocketAdapterMapperKeepsExhaustedRetryBudgetDisconnected() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: false
     )
 
@@ -1228,11 +1225,11 @@ struct InnoFlowSampleAppFeatureTests {
   }
 
   @Test(
-    "Bidirectional websocket live mapper keeps auto-reconnect disabled peer closes disconnected")
-  func bidirectionalWebSocketLiveMapperKeepsAutoReconnectDisabledPeerCloseDisconnected() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+    "Bidirectional websocket adapter mapper keeps auto-reconnect disabled peer closes disconnected")
+  func bidirectionalWebSocketAdapterMapperKeepsAutoReconnectDisabledPeerCloseDisconnected() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: false
     )
 

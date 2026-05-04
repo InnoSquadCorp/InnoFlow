@@ -798,9 +798,9 @@ production store semantics.
 }
 ```
 
-Package support is declared for iOS, macOS, tvOS, watchOS, and visionOS. The canonical sample
-still treats iOS as the primary interactive shell, while CI package builds cover the package-level
-visionOS contract.
+Package support is declared for iOS 17, macOS 14, tvOS 17, watchOS 10, and visionOS 1 or newer.
+The canonical sample still treats iOS as the primary interactive shell, while CI package builds
+cover the package-level visionOS contract.
 
 For visionOS-specific guidance, keep the same ownership split:
 
