@@ -4,6 +4,7 @@ Create a feature with `@InnoFlow`, expose reducer composition from `body`, hold 
 
 ```swift
 import InnoFlow
+import InnoFlowSwiftUI
 import SwiftUI
 
 @InnoFlow
@@ -53,10 +54,15 @@ struct CounterView: View {
 }
 ```
 
+SwiftUI app targets should depend on both `InnoFlow` and `InnoFlowSwiftUI`.
+Non-UI domain targets can depend on `InnoFlow` alone. `InnoFlowSwiftUI` contains
+the SwiftUI-only helpers: `Store.binding`, `ScopedStore.binding`,
+`Store.preview`, and `EffectTask.animation(Animation?)`.
+
 `binding(_:to:)` is an alias for `binding(_:send:)`. Prefer explicit labels in new code; existing trailing-closure calls such as `store.binding(\.$step) { .setStep($0) }` continue to resolve to `send:` for source compatibility.
 
 For multi-part features, compose reducers with ``Reduce``, ``CombineReducers``, ``Scope``, ``IfLet``, ``IfCaseLet``, and ``ForEachReducer`` instead of adding more authoring modes.
-Use `@BindableField` for reducer-facing value fields, and pass the projected key path (`\.$field`) into ``Store/binding(_:to:)`` or ``Store/binding(_:send:)``.
+Use `@BindableField` for reducer-facing value fields, and pass the projected key path (`\.$field`) into `Store.binding(_:to:)` or `Store.binding(_:send:)`.
 
 - Use ``Scope`` when child state is always present.
 - Use ``IfLet`` when child state is optional.
@@ -76,8 +82,8 @@ When you want a full end-to-end sample that covers `Store`, row projections, and
 
 For store-level debounce or throttle tests, inject `StoreClock.manual(...)` instead of relying on wall-clock delays. `StoreClock.manual(...)` lives in the `InnoFlowTesting` module, so test targets should `import InnoFlowTesting` before using it. New `.run` effects should prefer `EffectContext.sleep(for:)` and `EffectContext.checkCancellation()` over `Task.sleep(...)` plus ad-hoc cancellation checks so the same store clock controls both scheduling operators and effect delays. Cancellation remains cooperative: InnoFlow drops late emissions for cancelled or released stores immediately, while runtime teardown continues as best-effort async cleanup. Long-running work should still probe `checkCancellation()` if it needs prompt shutdown.
 
-For SwiftUI previews, use `Store.preview(...)` so preview-only setup stays explicit without changing
-production store semantics.
+For SwiftUI previews, use `Store.preview(...)` from `InnoFlowSwiftUI` so preview-only setup stays
+explicit without changing production store semantics.
 
 For accessibility, keep stable `accessibilityIdentifier(...)` values on tested controls, add
 explicit VoiceOver labels or hints when dense layouts are not self-explanatory, and prefer system

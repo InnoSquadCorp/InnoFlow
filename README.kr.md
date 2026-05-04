@@ -20,6 +20,17 @@ InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단
 - [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
 - [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
 
+## Why InnoFlow over TCA?
+
+TCA는 dependency system, navigation pattern, test convention, 큰 생태계까지
+포함한 폭넓은 application architecture가 필요할 때 더 강한 기본 선택지입니다.
+InnoFlow는 더 작은 경계를 원할 때 선택합니다. reducer는 비즈니스 전환만
+소유하고, dependency는 생성자 주입 bundle로 명시하며, navigation/transport는
+앱 경계에 남기고, SwiftUI 전용 편의 API는 선택 product인 `InnoFlowSwiftUI`에
+둡니다.
+
+자세한 비교는 [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md)을 봅니다.
+
 ## 설치
 
 ```swift
@@ -30,8 +41,13 @@ dependencies: [
 
 ```swift
 .target(
-  name: "YourApp",
+  name: "YourDomain",
   dependencies: ["InnoFlow"]
+)
+
+.target(
+  name: "YourSwiftUIApp",
+  dependencies: ["InnoFlow", "InnoFlowSwiftUI"]
 )
 
 .testTarget(
@@ -40,12 +56,17 @@ dependencies: [
 )
 ```
 
+non-UI feature/domain target은 `InnoFlow`만 의존하면 됩니다. SwiftUI app target은
+`InnoFlowSwiftUI`를 함께 의존해 `Store.binding`, `ScopedStore.binding`,
+`Store.preview`, `EffectTask.animation(Animation?)`를 사용합니다.
+
 ## 빠른 링크
 
 - [English README](./README.md)
 - [Architecture Contract](./ARCHITECTURE_CONTRACT.md)
 - [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
 - [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
+- [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md)
 - [Phase-Driven Modeling](./PHASE_DRIVEN_MODELING.md)
 - [Release Notes](./RELEASE_NOTES.md)
 - [Canonical Sample README](./Examples/InnoFlowSampleApp/README.md)
@@ -87,6 +108,7 @@ struct CounterFeature {
 ```
 
 SwiftUI에서는 projected key path를 사용해 명시적으로 binding을 연결합니다.
+SwiftUI view target은 `import InnoFlowSwiftUI`를 추가합니다.
 
 ```swift
 Stepper(
