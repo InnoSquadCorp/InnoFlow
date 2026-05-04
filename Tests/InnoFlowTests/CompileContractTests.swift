@@ -40,6 +40,56 @@ struct CompileContractTests {
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
+  @Test("ReducerBuilder implementation wrappers are not public API")
+  func reducerBuilderImplementationWrappersAreNotPublicAPI() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let snippets = [
+      """
+      import InnoFlow
+
+      let _ = _EmptyReducer<Int, Int>()
+      """,
+      """
+      import InnoFlow
+
+      let first = Reduce<Int, Int> { _, _ in .none }
+      let second = Reduce<Int, Int> { _, _ in .none }
+      let _ = _ReducerSequence(first: first, second: second)
+      """,
+      """
+      import InnoFlow
+
+      let reducer = Reduce<Int, Int> { _, _ in .none }
+      let _ = _OptionalReducer(reducer)
+      """,
+      """
+      import InnoFlow
+
+      let first = Reduce<Int, Int> { _, _ in .none }
+      let second = Reduce<Int, Int> { _, _ in .none }
+      let _ = _ConditionalReducer(branch: .first(first))
+      """,
+      """
+      import InnoFlow
+
+      let reducer = Reduce<Int, Int> { _, _ in .none }
+      let _ = _ArrayReducer([reducer])
+      """,
+    ]
+
+    for source in snippets {
+      let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+      #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+      #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
+    }
+  }
+
   @Test("StoreInstrumentation events accept typed EffectID values")
   func storeInstrumentationEventsAcceptTypedEffectIDValues() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
