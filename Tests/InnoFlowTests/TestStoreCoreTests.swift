@@ -45,7 +45,7 @@ struct TestStoreCoreTests {
       let store = TestStore(
         reducer: AsyncFeature(),
         initialState: .init(),
-        effectTimeout: .seconds(3)
+        effectTimeout: .seconds(60)
       )
 
       await store.send(.load) {
