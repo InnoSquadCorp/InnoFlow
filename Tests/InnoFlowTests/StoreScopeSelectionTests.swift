@@ -229,6 +229,48 @@ struct StoreScopeSelectionTests {
     #expect(scoped.optionalState == nil)
   }
 
+  @Test("ScopedStore does not retain its parent Store")
+  func scopedStoreDoesNotRetainParentStore() async {
+    typealias ChildStore =
+      ScopedStore<
+        ScopedBindableChildFeature,
+        ScopedBindableChildFeature.Child,
+        ScopedBindableChildFeature.ChildAction
+      >
+
+    var scoped: ChildStore?
+    weak var weakScoped: ChildStore?
+    weak var weakStore: Store<ScopedBindableChildFeature>?
+
+    do {
+      var store: Store<ScopedBindableChildFeature>? = Store(
+        reducer: ScopedBindableChildFeature(),
+        initialState: .init()
+      )
+      weakStore = store
+      scoped = store?.scope(
+        state: \.child,
+        action: ScopedBindableChildFeature.Action.childCasePath
+      )
+      weakScoped = scoped
+      store = nil
+    }
+
+    await waitUntil {
+      weakStore == nil
+    }
+
+    #expect(weakStore == nil)
+    #expect(scoped?.optionalState == nil)
+
+    scoped = nil
+    await waitUntil {
+      weakScoped == nil
+    }
+
+    #expect(weakScoped == nil)
+  }
+
   @Test("SelectedStore.isAlive and optionalValue are true/non-nil while parent is alive")
   func selectedStoreLifecycleAccessorsWhileAlive() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
@@ -247,6 +289,38 @@ struct StoreScopeSelectionTests {
 
     #expect(selected.isAlive == false)
     #expect(selected.optionalValue == nil)
+  }
+
+  @Test("SelectedStore does not retain its parent Store")
+  func selectedStoreDoesNotRetainParentStore() async {
+    var selected: SelectedStore<Int>?
+    weak var weakSelected: SelectedStore<Int>?
+    weak var weakStore: Store<ScopedBindableChildFeature>?
+
+    do {
+      var store: Store<ScopedBindableChildFeature>? = Store(
+        reducer: ScopedBindableChildFeature(),
+        initialState: .init()
+      )
+      weakStore = store
+      selected = store?.select(\.child.step)
+      weakSelected = selected
+      store = nil
+    }
+
+    await waitUntil {
+      weakStore == nil
+    }
+
+    #expect(weakStore == nil)
+    #expect(selected?.optionalValue == nil)
+
+    selected = nil
+    await waitUntil {
+      weakSelected == nil
+    }
+
+    #expect(weakSelected == nil)
   }
 
   @Test("Store.select(dependingOnAll:) tracks an arbitrary number of explicit dependency slices")
