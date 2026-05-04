@@ -86,7 +86,9 @@ struct CompileContractTests {
       let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
 
       #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
-      #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
+      #expect(
+        !result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'")
+      )
     }
   }
 
@@ -152,7 +154,8 @@ struct CompileContractTests {
     let packageRoot = temporaryRoot.appendingPathComponent("Package", isDirectory: true)
     let buildRoot = temporaryRoot.appendingPathComponent("custom-build", isDirectory: true)
     let moduleDirectory = buildRoot.appendingPathComponent("debug/Modules", isDirectory: true)
-    let executableDirectory = buildRoot
+    let executableDirectory =
+      buildRoot
       .appendingPathComponent(
         "debug/InnoFlowPackageTests.xctest/Contents/MacOS",
         isDirectory: true

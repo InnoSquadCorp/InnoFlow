@@ -157,11 +157,13 @@ struct OfflineFirstFeature {
             return
           } catch {
             await send(
-              ._saveRolledBack(.init(
-                previous: previousTitle,
-                failedTitle: pendingTitle,
-                reason: error.localizedDescription
-              ))
+              ._saveRolledBack(
+                .init(
+                  previous: previousTitle,
+                  failedTitle: pendingTitle,
+                  reason: error.localizedDescription
+                )
+              )
             )
           }
         }

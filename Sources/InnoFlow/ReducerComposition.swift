@@ -50,8 +50,7 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   public static func buildPartialBlock(
     accumulated: Reduce<State, Action>,
     next component: Reduce<State, Action>
-  ) -> Reduce<State, Action>
-  {
+  ) -> Reduce<State, Action> {
     Reduce { state, action in
       let accumulatedEffect = accumulated.reduce(into: &state, action: action)
       let componentEffect = component.reduce(into: &state, action: action)
@@ -62,8 +61,7 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   @inlinable
   public static func buildOptional(
     _ component: Reduce<State, Action>?
-  ) -> Reduce<State, Action>
-  {
+  ) -> Reduce<State, Action> {
     Reduce { state, action in
       component?.reduce(into: &state, action: action) ?? .none
     }
@@ -72,8 +70,7 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   @inlinable
   public static func buildEither(
     first component: Reduce<State, Action>
-  ) -> Reduce<State, Action>
-  {
+  ) -> Reduce<State, Action> {
     Reduce { state, action in
       component.reduce(into: &state, action: action)
     }
@@ -82,8 +79,7 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   @inlinable
   public static func buildEither(
     second component: Reduce<State, Action>
-  ) -> Reduce<State, Action>
-  {
+  ) -> Reduce<State, Action> {
     Reduce { state, action in
       component.reduce(into: &state, action: action)
     }
@@ -92,8 +88,7 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   @inlinable
   public static func buildArray(
     _ components: [Reduce<State, Action>]
-  ) -> Reduce<State, Action>
-  {
+  ) -> Reduce<State, Action> {
     Reduce { state, action in
       guard !components.isEmpty else { return .none }
       var effects: [EffectTask<Action>] = []
