@@ -2,13 +2,13 @@
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-package struct EffectAnimation: @unchecked Sendable, CustomStringConvertible {
-  private let performer: @MainActor (_ updates: () -> Void) -> Void
+package struct EffectAnimation: Sendable, CustomStringConvertible {
+  private let performer: @MainActor @Sendable (_ updates: () -> Void) -> Void
   package let description: String
 
   package init(
     description: String,
-    perform: @escaping @MainActor (_ updates: () -> Void) -> Void
+    perform: @escaping @MainActor @Sendable (_ updates: () -> Void) -> Void
   ) {
     self.description = description
     self.performer = perform

@@ -88,6 +88,16 @@ write_doc_parity_contract() {
       "count": 1
     }
   ],
+  "readmeCorePatterns": [
+    {
+      "label": "direction heading",
+      "pattern": "^## InnoFlow 3.0 direction$",
+      "files": [
+        "docs/README.md",
+        "docs/README.kr.md"
+      ]
+    }
+  ],
   "localizedHeaderParity": [
     {
       "source": "docs/README.md",

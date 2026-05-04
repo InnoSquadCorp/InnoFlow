@@ -107,6 +107,38 @@
       "count": 1
     }
   ],
+  "readmeCorePatterns": [
+    {
+      "label": "Cross-framework boundary guide",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md",
+      "files": [
+        "README.md",
+        "README.kr.md",
+        "README.jp.md",
+        "README.cn.md"
+      ]
+    },
+    {
+      "label": "Dependency patterns guide",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md",
+      "files": [
+        "README.md",
+        "README.kr.md",
+        "README.jp.md",
+        "README.cn.md"
+      ]
+    },
+    {
+      "label": "Canonical bidirectional websocket sample identifier",
+      "pattern": "sample\\.bidirectional-websocket",
+      "files": [
+        "README.md",
+        "README.kr.md",
+        "README.jp.md",
+        "README.cn.md"
+      ]
+    }
+  ],
   "localizedHeaderParity": [
     {
       "source": "README.md",

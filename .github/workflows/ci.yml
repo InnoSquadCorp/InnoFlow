@@ -42,6 +42,22 @@ jobs:
           set -eo pipefail
           swift test --package-path "$GITHUB_WORKSPACE" -Xswiftc -warnings-as-errors
 
+  thread-sanitizer:
+    name: Package Tests (ThreadSanitizer)
+    runs-on: macos-26
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Run package tests with ThreadSanitizer
+        run: |
+          set -eo pipefail
+          swift test --package-path "$GITHUB_WORKSPACE" --sanitize=thread -Xswiftc -warnings-as-errors
+
   sample-tests:
     name: Package Tests (Sample)
     runs-on: macos-26
@@ -86,7 +102,7 @@ jobs:
   principle-gates:
     name: Principle Gates
     runs-on: macos-26
-    needs: [tests, sample-tests, package-builds]
+    needs: [tests, thread-sanitizer, sample-tests, package-builds]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5

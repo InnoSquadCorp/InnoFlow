@@ -238,6 +238,7 @@ validate_doc_parity_contract_shape() {
 
     non_empty_array("requiredPatterns")
     and non_empty_array("sectionCounts")
+    and non_empty_array("readmeCorePatterns")
     and non_empty_array("localizedHeaderParity")
     and non_empty_array("sampleIdentifiers")
     and all(
@@ -252,6 +253,15 @@ validate_doc_parity_contract_shape() {
       and typed_field("label"; "string")
       and typed_field("pattern"; "string")
       and typed_field("count"; "number")
+    )
+    and all(
+      .readmeCorePatterns[];
+      typed_field("label"; "string")
+      and typed_field("pattern"; "string")
+      and has("files")
+      and (.files | type == "array")
+      and (.files | length > 0)
+      and all(.files[]; type == "string")
     )
     and all(
       .localizedHeaderParity[];
@@ -331,6 +341,22 @@ verify_doc_parity_contract() {
       return 1
     fi
   done < <(jq -c '.sectionCounts[]' "$contract_path")
+
+  local readme_file
+  while IFS= read -r item; do
+    label="$(jq -r '.label' <<<"$item")"
+    pattern="$(jq -r '.pattern' <<<"$item")"
+    while IFS= read -r readme_file; do
+      if [[ ! -f "$readme_file" ]]; then
+        echo "[principle-gates] Failed: $readme_file not found"
+        return 1
+      fi
+      if ! search_lines "$pattern" "$readme_file" >/dev/null; then
+        echo "[principle-gates] Failed: $readme_file must include README core pattern '$label'"
+        return 1
+      fi
+    done < <(jq -r '.files[]' <<<"$item")
+  done < <(jq -c '.readmeCorePatterns[]' "$contract_path")
 
   local sample_id
   while IFS= read -r item; do
@@ -444,8 +470,13 @@ main() {
   search_lines "public final class SelectedStore<" Sources/InnoFlow/SelectedStore.swift >/dev/null
   search_lines "public struct EffectContext" Sources/InnoFlow/EffectTask.swift >/dev/null
   search_lines "public actor ManualTestClock" Sources/InnoFlowTesting/ManualTestClock.swift >/dev/null
-  search_lines "public static func preview\\(" Sources/InnoFlow/Store+SwiftUIPreviews.swift >/dev/null
+  search_lines "public static func preview\\(" Sources/InnoFlowSwiftUI/Store+SwiftUIPreviews.swift >/dev/null
   search_lines "public func map<" Sources/InnoFlow/EffectTask.swift >/dev/null
+  search_lines 'name: "InnoFlowSwiftUI"' Package.swift >/dev/null
+  if search_lines "^import SwiftUI$" Sources/InnoFlow >/dev/null; then
+    echo "[principle-gates] Failed: core InnoFlow target must not import SwiftUI"
+    exit 1
+  fi
   if ! search_multiline 'public func select<[\s\S]{0,220}dependingOn dependency:' Sources/InnoFlow/SelectedStore.swift; then
     echo "[principle-gates] Failed: SelectedStore dependency-annotated selection overload is missing"
     exit 1
