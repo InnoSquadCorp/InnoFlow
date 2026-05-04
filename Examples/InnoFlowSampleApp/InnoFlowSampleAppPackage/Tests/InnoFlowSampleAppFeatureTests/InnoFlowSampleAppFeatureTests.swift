@@ -1184,6 +1184,17 @@ struct InnoFlowSampleAppFeatureTests {
     #expect(mapped == .reconnecting("ping timeout"))
   }
 
+  @Test("Bidirectional websocket adapter mapper surfaces terminal failures while reconnecting")
+  func bidirectionalWebSocketAdapterMapperMapsTerminalFailureWhileReconnecting() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
+      .failure("retry budget exhausted"),
+      adapterState: .reconnecting,
+      willRetry: false
+    )
+
+    #expect(mapped == .transportFailure("retry budget exhausted"))
+  }
+
   @Test("Bidirectional websocket adapter mapper surfaces reconnecting for retryable peer closes")
   func bidirectionalWebSocketAdapterMapperMapsRetryablePeerClose() {
     let mapped = BidirectionalSocketAdapterEventMapper.map(

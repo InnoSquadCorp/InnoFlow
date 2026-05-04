@@ -145,7 +145,7 @@ enum BidirectionalSocketAdapterEventMapper {
       return .received(text)
 
     case .failure(let reason):
-      if adapterState == .reconnecting || willRetry {
+      if willRetry {
         return .reconnecting(reason)
       }
       return .transportFailure(reason)
