@@ -29,7 +29,11 @@ assert_equals() {
 
 make_fixture_tree() {
   local root="$1"
-  mkdir -p "$root/docs" "$root/sample"
+  mkdir -p "$root/core/Nested" "$root/docs" "$root/sample"
+
+  cat >"$root/core/Nested/Leaky.swift" <<'EOF'
+public import SwiftUI
+EOF
 
   cat >"$root/docs/Legacy.md" <<'EOF'
 @InnoFlow
@@ -63,6 +67,12 @@ EOF
 
   cat >"$root/docs/README.kr.md" <<'EOF'
 ## InnoFlow 3.0 direction
+EOF
+
+  cat >"$root/docs/GettingStarted.md" <<'EOF'
+```swift
+import SwiftUI
+```
 EOF
 }
 
@@ -139,6 +149,8 @@ run_search_tests() {
 
   assert_failure search_lines_excluding "RouteStack|NavigationPath|NavigationStore|Navigator" "RouterCompositionDemo|InnoFlowSampleAppRootView" "$tmp_root/sample/RouterCompositionDemo.swift"
   assert_success search_lines_excluding "RouteStack|NavigationPath|NavigationStore|Navigator" "RouterCompositionDemo|InnoFlowSampleAppRootView" "$tmp_root/sample"
+  assert_success search_swift_lines '^[[:space:]]*(@_exported[[:space:]]+)?(public[[:space:]]+)?import[[:space:]]+SwiftUI$' "$tmp_root/core"
+  assert_failure search_swift_lines '^[[:space:]]*(@_exported[[:space:]]+)?(public[[:space:]]+)?import[[:space:]]+SwiftUI$' "$tmp_root/docs"
 
   assert_equals "$(count_line_matches '^## InnoFlow 3.0 direction$' "$tmp_root/docs/README.md")" "1"
 

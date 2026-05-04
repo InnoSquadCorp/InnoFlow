@@ -78,6 +78,17 @@ enumerate_target_files() {
   done
 }
 
+enumerate_swift_files() {
+  local target
+  for target in "$@"; do
+    if [[ -d "$target" ]]; then
+      find "$target" -type f -name '*.swift' | sort
+    elif [[ -f "$target" && "$target" == *.swift ]]; then
+      printf '%s\n' "$target"
+    fi
+  done
+}
+
 search_lines() {
   local pattern="$1"
   shift
@@ -94,6 +105,25 @@ search_lines() {
       matched=0
     fi
   done < <(enumerate_target_files "$@")
+  return "$matched"
+}
+
+search_swift_lines() {
+  local pattern="$1"
+  shift
+
+  if [[ "$HAS_RG" == "1" ]]; then
+    "$RG_BIN" -H -n --glob '*.swift' -- "$pattern" "$@"
+    return $?
+  fi
+
+  local matched=1
+  local file
+  while IFS= read -r file; do
+    if grep -Hn -E -- "$pattern" "$file"; then
+      matched=0
+    fi
+  done < <(enumerate_swift_files "$@")
   return "$matched"
 }
 
@@ -483,7 +513,7 @@ main() {
   search_lines "public static func preview\\(" Sources/InnoFlowSwiftUI/Store+SwiftUIPreviews.swift >/dev/null
   search_lines "public func map<" Sources/InnoFlow/EffectTask.swift >/dev/null
   search_lines 'name: "InnoFlowSwiftUI"' Package.swift >/dev/null
-  if search_lines "^import SwiftUI$" Sources/InnoFlow/*.swift >/dev/null; then
+  if search_swift_lines '^[[:space:]]*(@_exported[[:space:]]+)?(public[[:space:]]+)?import[[:space:]]+SwiftUI$' Sources/InnoFlow >/dev/null; then
     echo "[principle-gates] Failed: core InnoFlow target must not import SwiftUI"
     exit 1
   fi
@@ -742,7 +772,7 @@ main() {
   # trend output because wall-clock effect timings are runner-sensitive. Reuse
   # the release gate build path from the full release suite so SwiftSyntax does
   # not need to be compiled repeatedly on local machines.
-  if ! env INNOFLOW_CHECK_EFFECT_BASELINE=1 nice -n "$PROCESS_NICE" swift test \
+  if ! run_low_priority env INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
       --package-path "$ROOT_DIR" \
       --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
