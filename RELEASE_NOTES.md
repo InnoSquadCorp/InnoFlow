@@ -83,10 +83,11 @@ with the public API updates captured below.
 
 ### What changed
 
-- The 4.0.0 surface is a contract and documentation rebaseline for the implementation already in
-  the repository.
-- Runtime semantics, reducer authoring, and import paths are unchanged. Selection, effect ID, and
-  instrumentation event APIs have the source updates listed above.
+- The 4.0.0 surface includes the release hardening changes above plus the
+  selection, effect ID, and instrumentation updates listed in this section.
+- SwiftUI conveniences now live in `InnoFlowSwiftUI`, synchronous
+  `EffectContext.isCancelled` is removed, and direct underscored reducer-builder
+  wrapper references are no longer supported.
 
 ### What you may need to update
 

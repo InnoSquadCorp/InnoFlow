@@ -12,8 +12,11 @@ current `main` branch before a release is cut.
 
 ## Reporting a Vulnerability
 
-Please do not open public issues for suspected vulnerabilities. Send a private
-report to the maintainers with:
+Please do not open public issues for suspected vulnerabilities. Report them
+through GitHub Private Vulnerability Reporting:
+https://github.com/InnoSquadCorp/InnoFlow/security/advisories/new.
+
+Include:
 
 - affected package version or commit
 - a minimal reproduction, if available

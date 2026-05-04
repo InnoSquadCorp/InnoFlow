@@ -2,12 +2,13 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
-## Unreleased
+## 4.0.0
 
 ### Who is affected
 
-- Consumers that directly referenced `ReducerBuilder`'s underscored
-  implementation wrapper types instead of composing through public reducers.
+- Consumers adopting the 4.0.0 public surface before the release tag is cut.
+- Consumers that directly referenced `ReducerBuilder` underscored implementation
+  wrapper types instead of composing through public reducers.
 - SwiftUI app targets that call `Store.binding`, `ScopedStore.binding`,
   `Store.preview`, or `EffectTask.animation(Animation?)`.
 - Effects that still read `context.isCancelled` from inside `EffectTask.run`.
@@ -43,25 +44,7 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   when adopting the release.
 - The retired `FRAMEWORK_EVALUATION*` documents were removed. Use
   `docs/FRAMEWORK_COMPARISON.md` for adjacent-library positioning.
-
-## 4.0.0
-
-### Who is affected
-
-- Maintainers preparing the current implementation and documentation contract as the 4.0.0 public surface.
-- Consumers who pin exact package tags once the 4.0.0 tag is published later.
-
-### Required action
-
-- No source migration is required from the current public APIs.
-- Update exact package pins to `4.0.0` only after the 4.0.0 tag is published.
-
-### Notes
-
-- This release is a contract and documentation rebaseline. Runtime semantics, reducer authoring,
-  import paths, and effect APIs are unchanged.
-- `EffectTask.run` remains a non-throwing async closure; throwing work inside docs and app code
-  should be handled inside the closure with `do/catch`.
+- Exact package pins can move to `4.0.0` once the tag is published.
 
 ## 3.0.2
 

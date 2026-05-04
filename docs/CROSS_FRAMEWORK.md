@@ -196,26 +196,34 @@ import Foundation
 import InnoNetworkWebSocket
 
 actor LiveChatTransport: ChatTransport {
+  enum TransportError: Error {
+    case notConnected
+  }
+
   private let manager = WebSocketManager(configuration: .safeDefaults())
   private let url: URL
   private var task: WebSocketTask?
+  private var isConnecting = false
 
   init(url: URL) {
     self.url = url
   }
 
   func connect() async {
+    guard task == nil, isConnecting == false else { return }
+    isConnecting = true
+    defer { isConnecting = false }
     task = await manager.connect(url: url)
   }
 
   func disconnect() async {
     guard let task else { return }
-    await manager.disconnect(task)
     self.task = nil
+    await manager.disconnect(task)
   }
 
   func send(text: String) async throws {
-    guard let task else { return }
+    guard let task else { throw TransportError.notConnected }
     try await manager.send(task, string: text)
   }
 
