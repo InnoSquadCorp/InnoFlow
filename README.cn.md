@@ -106,7 +106,7 @@ Stepper(
 - `IfLet`: optional child state
 - `IfCaseLet`: enum-backed child state
 - `ForEachReducer`: collection child state
-- `SelectedStore`: 只读派生模型。1 到 6 个显式 key path 使用 `dependingOn:` overload，更大的显式 dependency set 使用 `select(dependingOnAll:)`；无法声明 dependency 时，`select { ... }` 是 always-refresh fallback
+- `SelectedStore`: 只读派生模型。单个显式 key path 使用 `select(dependingOn:)`，两个或更多使用可变参数的 `select(dependingOnAll:)`；无法声明 dependency 时，`select { ... }` 是 always-refresh fallback
 
 ## 样例目录
 

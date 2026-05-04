@@ -180,6 +180,19 @@ count_line_matches() {
   printf '%s\n' "$output" | sed '/^$/d' | wc -l | tr -d ' '
 }
 
+warn_if_optimize_none_workaround_should_be_retested() {
+  local version_line
+  version_line="$(swift --version 2>/dev/null | head -n 1 || true)"
+
+  if [[ "$version_line" =~ Swift\ version\ ([0-9]+)\.([0-9]+) ]]; then
+    local major="${BASH_REMATCH[1]}"
+    local minor="${BASH_REMATCH[2]}"
+    if (( major > 6 || (major == 6 && minor >= 4) )); then
+      echo "[principle-gates] Warning: Swift ${major}.${minor} detected; retest removing @_optimize(none) from Store/TestStore deinits (swiftlang/swift#88173)."
+    fi
+  fi
+}
+
 validate_doc_parity_contract_shape() {
   local contract_path="$1"
 
@@ -403,8 +416,8 @@ main() {
     echo "[principle-gates] Failed: SelectedStore dependency-annotated selection overload is missing"
     exit 1
   fi
-  if ! search_multiline 'public func select<[\s\S]{0,260}dependingOn dependencies:\s*\([\s\S]{0,180}KeyPath<[^>]+,[^>]+>[\s\S]{0,120}KeyPath<[^>]+,[^>]+>' Sources/InnoFlow/SelectedStore.swift; then
-    echo "[principle-gates] Failed: SelectedStore multi-field selection overload is missing"
+  if ! search_multiline 'public func select<each Dep: Equatable & Sendable[\s\S]{0,200}dependingOnAll dependencies:\s*repeat KeyPath<' Sources/InnoFlow/SelectedStore.swift; then
+    echo "[principle-gates] Failed: SelectedStore variadic dependingOnAll overload is missing"
     exit 1
   fi
   if search_multiline 'public init\([\s\S]{0,240}extractAction:\s*@escaping' Sources/InnoFlow/ReducerComposition.swift; then
@@ -500,6 +513,37 @@ main() {
     exit 1
   fi
 
+  echo "[principle-gates] Checking ADR document format"
+  local adr_dir="docs/adr"
+  if [[ ! -d "$adr_dir" ]]; then
+    echo "[principle-gates] Failed: $adr_dir directory is missing"
+    exit 1
+  fi
+  shopt -s nullglob
+  local -a adr_files=("$adr_dir"/ADR-*.md)
+  shopt -u nullglob
+  if [[ "${#adr_files[@]}" -eq 0 ]]; then
+    echo "[principle-gates] Failed: $adr_dir contains no ADR-*.md files"
+    exit 1
+  fi
+  local adr_file
+  local adr_basename
+  local adr_section
+  local -a adr_required_sections=("## Status" "## Context" "## Decision" "## Consequences")
+  for adr_file in "${adr_files[@]}"; do
+    adr_basename="$(basename "$adr_file")"
+    if [[ ! "$adr_basename" =~ ^ADR-[a-z0-9]+(-[a-z0-9]+)*\.md$ ]]; then
+      echo "[principle-gates] Failed: $adr_file filename must match ADR-{kebab-case}.md"
+      exit 1
+    fi
+    for adr_section in "${adr_required_sections[@]}"; do
+      if ! grep -qF -- "$adr_section" "$adr_file"; then
+        echo "[principle-gates] Failed: $adr_file is missing required section '$adr_section'"
+        exit 1
+      fi
+    done
+  done
+
   echo "[principle-gates] Checking release surface sync"
   release_sync_output=""
   release_sync_status=0
@@ -579,6 +623,7 @@ main() {
   fi
 
   echo "[principle-gates] Verifying release build succeeds (SIL inliner regression guard)"
+  warn_if_optimize_none_workaround_should_be_retested
   # Use an isolated build path so release object files do not leak into the
   # main .build/ tree. The stale-scope and phase-map subprocess harnesses
   # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
@@ -638,7 +683,12 @@ main() {
   echo "[principle-gates] Running sample package tests"
   local sample_test_root
   sample_test_root="$(canonical_root_for_sample_package_tests)"
-  swift test --package-path "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" -Xswiftc -warnings-as-errors
+  local sample_package_path
+  sample_package_path="$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
+  # The sample package has its own .build cache. Clean it before testing so
+  # local branch switches cannot reuse a stale source-file graph for InnoFlow.
+  swift package --package-path "$sample_package_path" clean
+  swift test --package-path "$sample_package_path" -Xswiftc -warnings-as-errors
 
   echo "[principle-gates] Building canonical sample app"
   xcodebuild \

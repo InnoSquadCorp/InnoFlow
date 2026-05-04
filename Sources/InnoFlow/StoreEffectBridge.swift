@@ -24,9 +24,9 @@ package final class StoreEffectBridge<Action: Sendable> {
 
   private var lastIssuedSequence: UInt64 = 0
   private var cancelledUpToAll: UInt64 = 0
-  private var cancelledUpToByID: [EffectID: UInt64] = [:]
-  private var debounceDelayTasksByID: [EffectID: Task<Void, Never>] = [:]
-  private var debounceGenerationByID: [EffectID: UInt64] = [:]
+  private var cancelledUpToByID: [AnyEffectID: UInt64] = [:]
+  private var debounceDelayTasksByID: [AnyEffectID: Task<Void, Never>] = [:]
+  private var debounceGenerationByID: [AnyEffectID: UInt64] = [:]
   private var nextDebounceGenerationValue: UInt64 = 0
 
   package init() {}
@@ -40,7 +40,7 @@ package final class StoreEffectBridge<Action: Sendable> {
     return lastIssuedSequence
   }
 
-  package func shouldStart(sequence: UInt64, cancellationID: EffectID?) -> Bool {
+  package func shouldStart(sequence: UInt64, cancellationID: AnyEffectID?) -> Bool {
     if sequence <= cancelledUpToAll {
       return false
     }
@@ -55,7 +55,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   }
 
   @discardableResult
-  package func markCancelled(id: EffectID, upTo sequence: UInt64? = nil) -> UInt64 {
+  package func markCancelled(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
     let sequence = sequence ?? lastIssuedSequence
     cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, sequence)
     return sequence
@@ -75,7 +75,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   /// Concurrency: this read-modify-write is atomic by virtue of the class-level
   /// `@MainActor` isolation. Callers do not need additional synchronization.
   @discardableResult
-  package func markCancelledInFlight(id: EffectID, upTo sequence: UInt64? = nil) -> UInt64 {
+  package func markCancelledInFlight(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
     let sequence = sequence ?? lastIssuedSequence
     let previousSequence = sequence == 0 ? 0 : sequence - 1
     cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, previousSequence)
@@ -91,26 +91,26 @@ package final class StoreEffectBridge<Action: Sendable> {
   }
 
   @discardableResult
-  package func nextDebounceGeneration(for id: EffectID) -> UInt64 {
+  package func nextDebounceGeneration(for id: AnyEffectID) -> UInt64 {
     nextDebounceGenerationValue &+= 1
     debounceGenerationByID[id] = nextDebounceGenerationValue
     return nextDebounceGenerationValue
   }
 
-  package func debounceGeneration(for id: EffectID) -> UInt64? {
+  package func debounceGeneration(for id: AnyEffectID) -> UInt64? {
     debounceGenerationByID[id]
   }
 
   package func setDebounceDelayTask(
     _ task: Task<Void, Never>,
-    for id: EffectID,
+    for id: AnyEffectID,
     generation: UInt64
   ) {
     guard debounceGenerationByID[id] == generation else { return }
     debounceDelayTasksByID[id] = task
   }
 
-  package func clearDebounceState(for id: EffectID, generation: UInt64? = nil) {
+  package func clearDebounceState(for id: AnyEffectID, generation: UInt64? = nil) {
     if let generation, debounceGenerationByID[id] != generation {
       return
     }
@@ -119,7 +119,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   }
 
   @discardableResult
-  package func finishDebounceState(for id: EffectID, generation: UInt64) -> Bool {
+  package func finishDebounceState(for id: AnyEffectID, generation: UInt64) -> Bool {
     guard debounceGenerationByID[id] == generation else { return false }
     debounceDelayTasksByID.removeValue(forKey: id)
     debounceGenerationByID.removeValue(forKey: id)
@@ -135,13 +135,13 @@ package final class StoreEffectBridge<Action: Sendable> {
     throttleState.clearAll()
   }
 
-  package func cancelEffects(id: EffectID, upTo sequence: UInt64) async {
+  package func cancelEffects(id: AnyEffectID, upTo sequence: UInt64) async {
     await runtime.cancel(id: id, upTo: sequence)
     clearDebounceState(for: id)
     throttleState.clearState(for: id)
   }
 
-  package func cancelInFlightEffects(id: EffectID, upTo sequence: UInt64) async {
+  package func cancelInFlightEffects(id: AnyEffectID, upTo sequence: UInt64) async {
     await runtime.cancelInFlight(id: id, upTo: sequence)
     clearDebounceState(for: id)
     throttleState.clearState(for: id)

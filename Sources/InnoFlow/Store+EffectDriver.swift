@@ -143,13 +143,13 @@ extension Store: EffectDriver {
     }
   }
 
-  package func cancelEffects(id: EffectID, context: EffectExecutionContext?) async {
+  package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
     let sequence = effectBridge.markCancelled(id: id, upTo: context?.sequence)
     recordCancellation(id: id, sequence: sequence)
     await effectBridge.cancelEffects(id: id, upTo: sequence)
   }
 
-  package func cancelInFlightEffects(id: EffectID, context: EffectExecutionContext?) async {
+  package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
     let sequence = effectBridge.markCancelledInFlight(id: id, upTo: context?.sequence)
     recordCancellation(id: id, sequence: sequence)
     await effectBridge.cancelInFlightEffects(id: id, upTo: sequence)
@@ -161,7 +161,7 @@ extension Store: EffectDriver {
 
   package func debounce(
     _ nested: EffectTask<R.Action>,
-    id: EffectID,
+    id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
     awaited: Bool,
@@ -209,7 +209,7 @@ extension Store: EffectDriver {
   }
 
   package func scheduleTrailingDrain(
-    for id: EffectID,
+    for id: AnyEffectID,
     interval: Duration,
     recurse:
       @escaping @MainActor @Sendable (

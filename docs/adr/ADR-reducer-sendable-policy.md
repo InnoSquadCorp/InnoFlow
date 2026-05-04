@@ -90,6 +90,30 @@ Choose option 2: keep the asymmetric policy.
 need to conform to `Sendable`. The store's `@MainActor` isolation is the runtime guarantee
 that makes the asymmetry safe.
 
+### Interaction with generic EffectID
+
+`EffectID<RawValue>` follows the same boundary rule: the identifier can cross from reducer code
+into effect runtime storage only when `RawValue: Hashable & Sendable`.
+
+That means dynamic identifiers remain safe without forcing the enclosing reducer to be
+`Sendable`:
+
+```swift
+let requestID = EffectID(row.id)
+
+return .run(sequence: makeEvents, transform: Action.event)
+  .cancellable(requestID, cancelInFlight: true)
+```
+
+The reducer may construct the identifier from feature state, route data, or dependency output on
+the main actor. Once the identifier is attached to an effect, the `RawValue: Sendable`
+constraint is the load-bearing guarantee for runtime cancellation maps, instrumentation events,
+and `TestStore` effect bookkeeping.
+
+This does not change the reducer policy. A reducer still does not need to be `Sendable` merely
+because it creates `EffectID` values. Only the values captured by the effect and sent through the
+runtime boundary must satisfy the effect's `Sendable` requirements.
+
 ## Consequences
 
 - the `Sendable` requirement lives where it is load-bearing: on the values that actually move
@@ -100,6 +124,9 @@ that makes the asymmetry safe.
   cannot pretend a non-`Sendable` value is safe to send
 - documentation must keep stating, where authors learn the reducer model, that the
   `Sendable` boundary is on `State`/`Action`/effects, not on reducers themselves
+- dynamic cancellation identifiers are allowed when their raw values are `Hashable & Sendable`;
+  authors should prefer stable domain keys such as UUIDs, database IDs, route IDs, or explicit
+  request tokens over ad-hoc string interpolation when the ID has domain meaning
 - if a future feature needs to share reducer values across isolation domains, that feature
   introduces its own conformance constraint rather than retroactively requiring it framework
   wide

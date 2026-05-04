@@ -3,19 +3,23 @@
 ## 4.0.0 Release
 
 This release promotes the current InnoFlow implementation and documentation contract to 4.0.0
-without changing the runtime public API surface.
+with the public API updates captured below.
 
 ### Changed
 
 1. Rebaselined README, localized READMEs, architecture contract, migration notes, release notes,
    release checklist, and doc parity metadata around the current public contract.
-2. Clarified `SelectedStore` guidance: fixed-arity `dependingOn:` selection covers one through six
-   explicit state slices, `select(dependingOnAll:)` covers larger explicit sets, and closure
+2. Clarified `SelectedStore` guidance: `select(dependingOn:)` covers a single explicit state
+   slice, the variadic `select(dependingOnAll:)` covers two or more explicit slices, and closure
    selection remains the always-refresh fallback.
 3. Fixed Markdown `.run` examples so throwing work is wrapped inside `do/catch` in non-throwing
    effect closures.
 4. Strengthened local release-readiness gates for localized install snippets, release target docs,
    localized `SelectedStore` guidance, and bare throwing `.run` snippets.
+5. Generalized `EffectID` to accept typed `Hashable & Sendable` raw values while keeping
+   `StaticEffectID` as the string-literal convenience alias.
+6. Added `EffectTask.run` overloads for consuming `AsyncSequence` streams directly or through an
+   optional element-to-action transform.
 
 ## Migration Note
 
@@ -23,11 +27,18 @@ without changing the runtime public API surface.
 
 - The 4.0.0 surface is a contract and documentation rebaseline for the implementation already in
   the repository.
-- Runtime semantics, reducer authoring, import paths, and current public APIs are unchanged.
+- Runtime semantics, reducer authoring, and import paths are unchanged. Selection, effect ID, and
+  instrumentation event APIs have the source updates listed above.
 
 ### What you may need to update
 
-- No source migration is required from the current public APIs.
+- Multi-slice `SelectedStore` call sites should migrate from tuple-packed
+  `select(dependingOn: (\.a, \.b))` to `select(dependingOnAll: \.a, \.b)`.
+- Explicit `EffectID` type annotations should use `StaticEffectID` for string identifiers or
+  `EffectID<RawValue>` for typed dynamic identifiers.
+- Instrumentation consumers should treat event cancellation identifiers as `AnyEffectID?`; typed
+  `EffectID` values remain accepted by event initializers and `AnyEffectID.rawValue` exposes the
+  erased raw value for logging.
 - Consumers that pin exact tags can move to `4.0.0` once that tag is published later.
 
 ## 3.0.3 Release
@@ -185,7 +196,7 @@ This release extends effect orchestration while preserving cancellation guarante
 
 1. `Store` and `TestStore` now track pending trailing throttle events per `EffectID`.
 2. Trailing throttle state is cleaned up on ID cancellation and global cancellation.
-3. Effect execution context now carries animation metadata without introducing dynamic `EffectID` values.
+3. Effect execution context now carries animation metadata through the shared runtime context.
 
 ## 2.3.0 Patch (Coverage + Combinators + Diagnostics)
 
@@ -232,7 +243,8 @@ v2 prioritizes ideal API design over backward compatibility, and allows breaking
 5. Restrict `Store.binding` to `@BindableField`-backed fields
 6. Update the `@InnoFlow` macro contract to the v2 reducer form
 7. Encapsulate `EffectTask.Operation` and remove it from the public surface
-8. Redefine `EffectID` as a `StaticString`-backed `Sendable` type and disallow dynamic `String` IDs
+8. Redefine `EffectID` as a typed `Hashable & Sendable` identifier, with `StaticEffectID` as the
+   string-literal convenience alias
 9. Change `Store.cancelEffects` and `Store.cancelAllEffects` to `async`
 10. Shift macro signature validation toward structural checks (`reduce` + `into`/`action` + `inout`)
 11. Simplify cancellation-boundary runtime handling by removing `pendingCancellableRunsByID` and tightening the emission gate

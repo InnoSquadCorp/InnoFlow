@@ -7,6 +7,47 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+
+- `EffectTask.run` now has `AsyncSequence` helpers for streams that emit
+  actions directly or transform elements into optional actions.
+- `EffectID<RawValue>` supports dynamic cancellation identifiers when
+  `RawValue: Hashable & Sendable`; `StaticEffectID` remains the string-literal
+  convenience alias.
+- `IfLet` and `IfCaseLet` accept an `onMissing:` `OnMissingPolicy` parameter
+  that controls behavior when a child action arrives while child state is
+  unavailable. The default `.assertOnly` preserves the existing contract
+  (debug `assertionFailure`, release silent no-op). New options: `.ignore`
+  drops the action silently in every build configuration, and `.crash` traps
+  with `preconditionFailure` in every build configuration.
+
+### Changed (BREAKING)
+
+- `EffectID` is now generic. Existing explicit `EffectID` type annotations
+  should migrate to `StaticEffectID` for string identifiers or
+  `EffectID<RawValue>` for typed dynamic identifiers.
+- `StoreInstrumentation` event payloads expose cancellation identifiers as
+  `AnyEffectID?` so typed effect IDs can be observed uniformly. Event
+  initializers still accept typed `EffectID` values, and `AnyEffectID.rawValue`
+  exposes the erased raw value for instrumentation consumers.
+- `SelectedStore` no longer ships fixed-arity `select(dependingOn:)` overloads
+  for two through six tuple-packed slices. The single-slice `select(dependingOn:)`
+  convenience and the variadic `select(dependingOnAll:)` parameter-pack
+  overload are now the only typed-dependency selection forms; multi-slice
+  call sites must migrate from `dependingOn: (\.a, \.b)` to
+  `dependingOnAll: \.a, \.b`. Closure-based `select { ... }` is unchanged.
+
+### Documentation
+
+- Projection lifecycle contract now documents `ScopedStore.optionalState` /
+  `SelectedStore.optionalValue` (and the `isAlive` flags) as the recommended
+  read path for non-SwiftUI call sites. The cached-fallback `state` / `value`
+  accessors are unchanged in behavior but are now framed as a SwiftUI
+  observer-race tolerance, not a stable lifecycle-aware read path. Affected
+  surfaces: `ARCHITECTURE_CONTRACT.md`, `docs/MIGRATION_3_1.md`,
+  `Sources/InnoFlow/InnoFlow.docc/InnoFlow.md`, and the doc comments on
+  `SelectedStore.value` / `ScopedStore.state`.
+
 ## [4.0.0] - 2026-04-29
 
 This release rebaselines the current InnoFlow implementation, documentation, and release-readiness

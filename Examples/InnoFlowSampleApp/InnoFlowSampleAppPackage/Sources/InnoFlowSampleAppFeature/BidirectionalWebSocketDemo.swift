@@ -322,7 +322,7 @@ struct BidirectionalWebSocketFeature {
     case reconnect
   }
 
-  private static let streamCancellationID: EffectID = "bidirectional-websocket-stream"
+  private static let streamCancellationID: StaticEffectID = "bidirectional-websocket-stream"
   static let defaultIntegrationNote = BidirectionalWebSocketDemoDependencies.defaultIntegrationNote
 
   let dependencies: Dependencies

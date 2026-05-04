@@ -106,7 +106,7 @@ Stepper(
 - `IfLet`: optional child state
 - `IfCaseLet`: enum-backed child state
 - `ForEachReducer`: collection child state
-- `SelectedStore`: 読み取り専用の派生モデル。1〜6 個の明示的な key path には `dependingOn:` overload を使い、より大きな明示的 dependency set には `select(dependingOnAll:)` を使います。dependency を宣言できない場合の `select { ... }` は always-refresh fallback です
+- `SelectedStore`: 読み取り専用の派生モデル。単一の明示的な key path には `select(dependingOn:)` を使い、2 つ以上の key path には可変長引数の `select(dependingOnAll:)` を使います。dependency を宣言できない場合の `select { ... }` は always-refresh fallback です
 
 ## サンプルカタログ
 

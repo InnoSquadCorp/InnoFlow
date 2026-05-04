@@ -17,7 +17,7 @@ struct StoreEffectBridgeIsolationTests {
   @Test("markCancelledInFlight rolls the boundary back by exactly one sequence")
   func markCancelledInFlightRollsBackByOne() {
     let bridge = StoreEffectBridge<Int>()
-    let id: EffectID = "isolation.in-flight"
+    let id = AnyEffectID(StaticEffectID("isolation.in-flight"))
 
     let s1 = bridge.nextSequence()
     let s2 = bridge.nextSequence()
@@ -32,7 +32,7 @@ struct StoreEffectBridgeIsolationTests {
   @Test("markCancelledInFlight is monotonic — earlier calls cannot lower the boundary")
   func markCancelledInFlightIsMonotonic() {
     let bridge = StoreEffectBridge<Int>()
-    let id: EffectID = "isolation.monotonic"
+    let id = AnyEffectID(StaticEffectID("isolation.monotonic"))
 
     _ = bridge.nextSequence()
     let s2 = bridge.nextSequence()
@@ -52,7 +52,7 @@ struct StoreEffectBridgeIsolationTests {
   @Test("markCancelledInFlight saturates at zero when no sequences have been issued")
   func markCancelledInFlightSaturatesAtZero() {
     let bridge = StoreEffectBridge<Int>()
-    let id: EffectID = "isolation.saturate"
+    let id = AnyEffectID(StaticEffectID("isolation.saturate"))
 
     let boundary = bridge.markCancelledInFlight(id: id, upTo: 0)
 
@@ -65,7 +65,7 @@ struct StoreEffectBridgeIsolationTests {
   @Test("markCancelled and markCancelledInFlight maintain independent semantics")
   func cancelVariantsHaveDistinctSemantics() {
     let bridge = StoreEffectBridge<Int>()
-    let id: EffectID = "isolation.distinct"
+    let id = AnyEffectID(StaticEffectID("isolation.distinct"))
 
     let s1 = bridge.nextSequence()
     let s2 = bridge.nextSequence()

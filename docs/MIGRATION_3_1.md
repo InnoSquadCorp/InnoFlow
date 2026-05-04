@@ -6,17 +6,17 @@ selection dependencies, and instrumentation.
 
 ## Selected Projections
 
-Use fixed-arity `select(dependingOn:..., transform:)` for one through six
-explicit `Equatable` slices.
+Use `select(dependingOn:)` for a single explicit `Equatable` slice and
+`select(dependingOnAll:)` (parameter-pack variadic) for two or more slices.
 
 ```swift
-let badge = store.select(dependingOn: (\.profile, \.permissions)) { profile, permissions in
+let badge = store.select(dependingOnAll: \.profile, \.permissions) { profile, permissions in
   DashboardBadge(name: profile.name, canEdit: permissions.canEdit)
 }
 ```
 
-Use `select(dependingOnAll:)` when a projection legitimately depends on more
-than six slices and still needs selective invalidation.
+The variadic form preserves explicit dependency tracking and selective
+invalidation regardless of how many slices a projection consumes.
 
 ```swift
 let summary = store.select(
@@ -26,8 +26,8 @@ let summary = store.select(
 }
 ```
 
-`ScopedStore` exposes the same fixed-arity and `dependingOnAll:` selection
-shape against child state.
+`ScopedStore` exposes the same one-field `dependingOn:` and variadic
+`dependingOnAll:` selection shape against child state.
 
 ## Projection Liveness
 
@@ -35,8 +35,12 @@ shape against child state.
 `optionalValue` expose the projection lifecycle contract without relying on a
 debug assertion or a release-time cached fallback.
 
-Use these accessors when code needs to distinguish "fresh projection" from
-"parent store has gone away".
+**Recommended for new code:** prefer `optionalState` / `optionalValue` (or
+gate on `isAlive`) over the cached-fallback `state` / `value` accessors when
+reading from non-SwiftUI call sites. The cached read exists so SwiftUI observer
+races do not crash release builds; treat `nil` as "regenerate the projection."
+Reserve `state` / `value` for tick-bounded observers (SwiftUI view bodies,
+dynamic member lookups) that must always return something.
 
 ## Phase-managed Features
 

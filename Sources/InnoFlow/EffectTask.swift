@@ -5,26 +5,101 @@
 import Foundation
 
 /// A typed effect identifier used for cancellation.
-public struct EffectID: Hashable, Sendable, ExpressibleByStringLiteral {
-  public typealias StringLiteralType = StaticString
-  public let rawValue: StaticString
-  private let normalizedValue: String
+public struct EffectID<RawValue: Hashable & Sendable>: Hashable, Sendable {
+  public let rawValue: RawValue
 
-  public init(_ rawValue: StaticString) {
+  public init(_ rawValue: RawValue) {
     self.rawValue = rawValue
-    self.normalizedValue = rawValue.description
+  }
+}
+
+extension EffectID: ExpressibleByUnicodeScalarLiteral where RawValue == String {
+  public typealias UnicodeScalarLiteralType = String
+
+  public init(unicodeScalarLiteral value: String) {
+    self.init(value)
+  }
+}
+
+extension EffectID: ExpressibleByExtendedGraphemeClusterLiteral where RawValue == String {
+  public typealias ExtendedGraphemeClusterLiteralType = String
+
+  public init(extendedGraphemeClusterLiteral value: String) {
+    self.init(value)
+  }
+}
+
+extension EffectID: ExpressibleByStringLiteral where RawValue == String {
+  public typealias StringLiteralType = String
+
+  public init(stringLiteral value: String) {
+    self.init(value)
+  }
+}
+
+/// The default string-literal effect identifier.
+public typealias StaticEffectID = EffectID<String>
+
+/// A type-erased effect identifier used by runtime storage and instrumentation.
+public struct AnyEffectID: Hashable, Sendable, CustomStringConvertible {
+  private let box: any AnyEffectIDBox
+
+  public init<RawValue: Hashable & Sendable>(_ id: EffectID<RawValue>) {
+    self.box = EffectIDBox(rawValue: id.rawValue)
   }
 
-  public init(stringLiteral value: StaticString) {
-    self.init(value)
+  /// The erased raw identifier value.
+  ///
+  /// Equality and hashing still include the original raw value type, so two
+  /// erased IDs with the same rendered value but different raw value types
+  /// remain distinct.
+  public var rawValue: AnyHashable {
+    box.rawValue
+  }
+
+  public var description: String {
+    box.description
   }
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.normalizedValue == rhs.normalizedValue
+    lhs.box.isEqual(to: rhs.box)
   }
 
   public func hash(into hasher: inout Hasher) {
-    hasher.combine(normalizedValue)
+    box.hash(into: &hasher)
+  }
+}
+
+private protocol AnyEffectIDBox: Sendable {
+  var rawValue: AnyHashable { get }
+  var description: String { get }
+  func isEqual(to other: any AnyEffectIDBox) -> Bool
+  func hash(into hasher: inout Hasher)
+}
+
+private struct EffectIDBox<RawValue: Hashable & Sendable>: AnyEffectIDBox {
+  let typedRawValue: RawValue
+
+  init(rawValue: RawValue) {
+    self.typedRawValue = rawValue
+  }
+
+  var rawValue: AnyHashable {
+    AnyHashable(typedRawValue)
+  }
+
+  var description: String {
+    String(describing: typedRawValue)
+  }
+
+  func isEqual(to other: any AnyEffectIDBox) -> Bool {
+    guard let other = other as? Self else { return false }
+    return typedRawValue == other.typedRawValue
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(ObjectIdentifier(Self.self))
+    hasher.combine(typedRawValue)
   }
 }
 
@@ -117,20 +192,20 @@ public struct EffectTask<Action: Sendable>: Sendable {
       priority: TaskPriority?, operation: @Sendable (Send<Action>, EffectContext) async -> Void)
     case merge([EffectTask<Action>])
     case concatenate([EffectTask<Action>])
-    case cancel(EffectID)
+    case cancel(AnyEffectID)
     case cancellable(
       effect: EffectTask<Action>,
-      id: EffectID,
+      id: AnyEffectID,
       cancelInFlight: Bool
     )
     case debounce(
       effect: EffectTask<Action>,
-      id: EffectID,
+      id: AnyEffectID,
       interval: Duration
     )
     case throttle(
       effect: EffectTask<Action>,
-      id: EffectID,
+      id: AnyEffectID,
       interval: Duration,
       leading: Bool,
       trailing: Bool
@@ -178,6 +253,49 @@ public struct EffectTask<Action: Sendable>: Sendable {
     .init(operation: .run(priority: priority, operation: operation))
   }
 
+  /// Runs an async sequence and emits each element as an action.
+  ///
+  /// The sequence is built from the active ``EffectContext`` so producers can use the
+  /// store-controlled clock and cancellation checks. Thrown errors stop the effect.
+  public static func run<S: AsyncSequence & Sendable>(
+    priority: TaskPriority? = nil,
+    _ makeSequence: @escaping @Sendable (EffectContext) async throws -> S
+  ) -> Self where S.Element == Action, S.AsyncIterator: Sendable {
+    run(priority: priority) { send, context in
+      do {
+        let sequence = try await makeSequence(context)
+        for try await action in sequence {
+          try await context.checkCancellation()
+          await send(action)
+        }
+      } catch {
+        return
+      }
+    }
+  }
+
+  /// Runs an async sequence and transforms each element into an optional action.
+  ///
+  /// Returning `nil` from `transform` drops that element without ending the effect.
+  public static func run<S: AsyncSequence & Sendable>(
+    priority: TaskPriority? = nil,
+    sequence makeSequence: @escaping @Sendable (EffectContext) async throws -> S,
+    transform: @escaping @Sendable (S.Element) -> Action?
+  ) -> Self where S.AsyncIterator: Sendable {
+    run(priority: priority) { send, context in
+      do {
+        let sequence = try await makeSequence(context)
+        for try await element in sequence {
+          try await context.checkCancellation()
+          guard let action = transform(element) else { continue }
+          await send(action)
+        }
+      } catch {
+        return
+      }
+    }
+  }
+
   /// Runs effects concurrently.
   public static func merge(_ effects: Self...) -> Self {
     merge(effects)
@@ -205,26 +323,48 @@ public struct EffectTask<Action: Sendable>: Sendable {
   }
 
   /// Cancels effects tied to an identifier.
-  public static func cancel(_ id: EffectID) -> Self {
+  public static func cancel<ID: Hashable & Sendable>(_ id: EffectID<ID>) -> Self {
+    cancel(AnyEffectID(id))
+  }
+
+  package static func cancel(_ id: AnyEffectID) -> Self {
     .init(operation: .cancel(id))
   }
 
   /// Marks this effect as cancellable.
-  public func cancellable(_ id: EffectID, cancelInFlight: Bool = false) -> Self {
+  public func cancellable<ID: Hashable & Sendable>(
+    _ id: EffectID<ID>,
+    cancelInFlight: Bool = false
+  ) -> Self {
+    cancellable(AnyEffectID(id), cancelInFlight: cancelInFlight)
+  }
+
+  package func cancellable(_ id: AnyEffectID, cancelInFlight: Bool = false) -> Self {
     .init(operation: .cancellable(effect: self, id: id, cancelInFlight: cancelInFlight))
   }
 
   /// Delays effect execution and keeps only the latest run for the same id.
   ///
   /// New runs cancel prior in-flight or delayed runs sharing the same id.
-  public func debounce(_ id: EffectID, for interval: Duration) -> Self {
+  public func debounce<ID: Hashable & Sendable>(_ id: EffectID<ID>, for interval: Duration)
+    -> Self
+  {
+    debounce(AnyEffectID(id), for: interval)
+  }
+
+  package func debounce(_ id: AnyEffectID, for interval: Duration) -> Self {
     .init(operation: .debounce(effect: self, id: id, interval: interval))
   }
 
   /// Runs the first effect in a window and drops subsequent runs for the same id.
   ///
   /// Leading-only semantics: first event passes, in-window events are dropped.
-  public func throttle(_ id: EffectID, for interval: Duration) -> Self {
+  public func throttle<ID: Hashable & Sendable>(_ id: EffectID<ID>, for interval: Duration) -> Self
+  {
+    throttle(id, for: interval, leading: true, trailing: false)
+  }
+
+  package func throttle(_ id: AnyEffectID, for interval: Duration) -> Self {
     throttle(id, for: interval, leading: true, trailing: false)
   }
 
@@ -237,8 +377,17 @@ public struct EffectTask<Action: Sendable>: Sendable {
   ///   - trailing: Whether to execute the latest in-window event at window end.
   ///
   /// `leading` and `trailing` cannot both be `false`.
-  public func throttle(
-    _ id: EffectID,
+  public func throttle<ID: Hashable & Sendable>(
+    _ id: EffectID<ID>,
+    for interval: Duration,
+    leading: Bool = true,
+    trailing: Bool = false
+  ) -> Self {
+    throttle(AnyEffectID(id), for: interval, leading: leading, trailing: trailing)
+  }
+
+  package func throttle(
+    _ id: AnyEffectID,
     for interval: Duration,
     leading: Bool = true,
     trailing: Bool = false
