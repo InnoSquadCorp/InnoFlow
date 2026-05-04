@@ -5,7 +5,8 @@
 This hardening pass removes retired evaluation artifacts, tightens the public
 surface around reducer builders and effect cancellation, lowers supported
 platform floors where the current APIs allow it, and makes canonical sample
-validation stricter.
+validation stricter. It also finalizes the 4.0.0 public split between the core
+`InnoFlow` product and the SwiftUI integration product `InnoFlowSwiftUI`.
 
 ### Changed
 
@@ -13,15 +14,24 @@ validation stricter.
    supported API surface. Public feature authoring remains
    `var body: some Reducer<State, Action>` composed from `Reduce`,
    `CombineReducers`, `Scope`, and the other public reducer combinators.
-2. Removed `EffectContext.isCancelled`; effects should use
+2. Moved SwiftUI-only helpers into `InnoFlowSwiftUI`: `Store.binding`,
+   `ScopedStore.binding`, `Store.preview`, and
+   `EffectTask.animation(Animation?)`. SwiftUI apps should depend on both
+   `InnoFlow` and `InnoFlowSwiftUI`; non-UI feature/domain targets can depend
+   on `InnoFlow` alone.
+3. Removed `EffectContext.isCancelled`; effects should use
    `try await context.checkCancellation()` or the async
    `await context.isCancellationRequested()` probe.
-3. Lowered root and canonical sample package floors to iOS 17, macOS 14,
+4. Lowered root and canonical sample package floors to iOS 17, macOS 14,
    tvOS 17, watchOS 10, and visionOS 1.
-4. Removed the sample package's compiled `InnoNetworkWebSocket` dependency and
+5. Removed the sample package's compiled `InnoNetworkWebSocket` dependency and
    kept concrete transport integration as a non-compiled app-boundary snippet.
-5. Hardened CI and principle gates so canonical sample logs fail on Swift
-   macro/plugin internal diagnostic corruption.
+6. Enabled the Swift 6 package contract, pinned `swift-syntax` exactly to
+   `603.0.1`, added a ThreadSanitizer CI job, and hardened principle gates so
+   README core patterns, core SwiftUI-import boundaries, and Swift macro/plugin
+   diagnostic corruption cannot drift silently.
+7. Added OSS contribution templates for security reports, conduct, issues, and
+   pull requests.
 
 ## Migration Note
 
@@ -29,6 +39,8 @@ validation stricter.
 
 - Direct references to `_EmptyReducer`, `_ReducerSequence`, `_OptionalReducer`,
   `_ConditionalReducer`, or `_ArrayReducer` are no longer supported.
+- SwiftUI binding, preview, and animation helpers are imported from
+  `InnoFlowSwiftUI` instead of the core `InnoFlow` target.
 - Cancellation is checked through the async runtime boundary instead of a
   synchronous boolean snapshot.
 - `FRAMEWORK_EVALUATION*` documents were retired; adjacent-library comparison
@@ -38,6 +50,9 @@ validation stricter.
 
 - Replace direct underscore wrapper type references with public reducer
   composition.
+- Add `InnoFlowSwiftUI` as a target dependency and import it from SwiftUI code
+  that calls `Store.binding`, `ScopedStore.binding`, `Store.preview`, or
+  `EffectTask.animation(Animation?)`.
 - Replace `context.isCancelled` with `checkCancellation()` or
   `isCancellationRequested()`.
 - Run canonical sample package tests with `--jobs 1` and sample Xcode builds

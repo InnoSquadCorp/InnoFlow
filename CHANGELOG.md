@@ -9,6 +9,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
+  conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
+  `EffectTask.animation(Animation?)`.
 - `EffectTask.run` now has `AsyncSequence` helpers for streams that emit
   actions directly or transform elements into optional actions.
 - `EffectID<RawValue>` supports dynamic cancellation identifiers when
@@ -20,9 +23,16 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   (debug `assertionFailure`, release silent no-op). New options: `.ignore`
   drops the action silently in every build configuration, and `.crash` traps
   with `preconditionFailure` in every build configuration.
+- OSS contribution templates now cover security reporting, conduct,
+  bug reports, feature requests, and pull-request verification.
 
 ### Changed (BREAKING)
 
+- SwiftUI-specific APIs moved out of the core `InnoFlow` product and into
+  `InnoFlowSwiftUI`. SwiftUI app targets that use bindings, previews, or
+  animation helpers must add the `InnoFlowSwiftUI` product dependency and
+  import it. Non-UI feature/domain targets can keep depending on `InnoFlow`
+  alone.
 - `ReducerBuilder` no longer exposes implementation-only underscore wrapper
   types such as `_EmptyReducer`, `_ReducerSequence`, `_OptionalReducer`,
   `_ConditionalReducer`, and `_ArrayReducer` as public API. Builder entry
@@ -57,6 +67,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   `InnoNetworkWebSocket`. Scripted/protocol-backed clients remain compiled
   sample coverage; the concrete InnoNetwork adapter now lives as a
   non-compiled app-boundary integration snippet.
+- The root package now opts targets into the Swift 6 package contract
+  (`.swiftLanguageMode(.v6)`, `ExistentialAny`, and
+  `InternalImportsByDefault`) while keeping library evolution out of this PR.
+- `swift-syntax` is pinned exactly to `603.0.1`, with the upgrade policy
+  documented in `RELEASING.md`.
 
 ### Fixed
 
@@ -67,12 +82,20 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   serially and fail if sample logs contain Swift macro/plugin internal
   diagnostic noise such as `Internal Error:`, `DecodingError.dataCorrupted`,
   or `Corrupted JSON`.
+- CI now includes a ThreadSanitizer package-test job, and principle gates
+  enforce README core-pattern synchronization plus the absence of `SwiftUI`
+  imports in the core `InnoFlow` target.
+- Added weak-retention coverage proving `ScopedStore` and `SelectedStore`
+  projections do not retain their parent `Store` after release.
 
 ### Documentation
 
 - Removed the retired `FRAMEWORK_EVALUATION*` documents and their localized
   README links. Adjacent-library positioning now lives in
   `docs/FRAMEWORK_COMPARISON.md`.
+- Refreshed the TCA comparison and README positioning to document when to
+  choose InnoFlow's smaller explicit-boundary model over TCA's broader
+  application architecture.
 - Projection lifecycle contract now documents `ScopedStore.optionalState` /
   `SelectedStore.optionalValue` (and the `isAlive` flags) as the recommended
   read path for non-SwiftUI call sites. The cached-fallback `state` / `value`
