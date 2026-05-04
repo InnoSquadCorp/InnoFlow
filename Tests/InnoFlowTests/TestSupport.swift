@@ -85,6 +85,11 @@ enum TimingScenarioStep: Sendable {
   case advance(Int)
 }
 
+struct TimingScenarioExpectation: Equatable, Sendable {
+  var outputs: [Int]
+  var emissionCountsAfterSteps: [Int]
+}
+
 func makeTimingScenario(
   seed: UInt64,
   maxSteps: Int = 100
@@ -109,9 +114,20 @@ func expectedDebounceOutputs(
   for steps: [TimingScenarioStep],
   intervalMilliseconds: Int
 ) -> [Int] {
+  expectedDebounceTimeline(
+    for: steps,
+    intervalMilliseconds: intervalMilliseconds
+  ).outputs
+}
+
+func expectedDebounceTimeline(
+  for steps: [TimingScenarioStep],
+  intervalMilliseconds: Int
+) -> TimingScenarioExpectation {
   var time = 0
   var pending: (value: Int, due: Int)?
   var emitted: [Int] = []
+  var countsAfterSteps: [Int] = []
 
   for step in steps {
     switch step {
@@ -125,9 +141,14 @@ func expectedDebounceOutputs(
         pending = nil
       }
     }
+
+    countsAfterSteps.append(emitted.count)
   }
 
-  return emitted
+  return .init(
+    outputs: emitted,
+    emissionCountsAfterSteps: countsAfterSteps
+  )
 }
 
 func expectedThrottleOutputs(
@@ -136,12 +157,27 @@ func expectedThrottleOutputs(
   leading: Bool,
   trailing: Bool
 ) -> [Int] {
+  expectedThrottleTimeline(
+    for: steps,
+    intervalMilliseconds: intervalMilliseconds,
+    leading: leading,
+    trailing: trailing
+  ).outputs
+}
+
+func expectedThrottleTimeline(
+  for steps: [TimingScenarioStep],
+  intervalMilliseconds: Int,
+  leading: Bool,
+  trailing: Bool
+) -> TimingScenarioExpectation {
   precondition(leading || trailing)
 
   var time = 0
   var windowEnd: Int?
   var pending: Int?
   var emitted: [Int] = []
+  var countsAfterSteps: [Int] = []
 
   for step in steps {
     switch step {
@@ -150,6 +186,7 @@ func expectedThrottleOutputs(
         if trailing {
           pending = value
         }
+        countsAfterSteps.append(emitted.count)
         continue
       }
 
@@ -172,9 +209,14 @@ func expectedThrottleOutputs(
         pending = nil
       }
     }
+
+    countsAfterSteps.append(emitted.count)
   }
 
-  return emitted
+  return .init(
+    outputs: emitted,
+    emissionCountsAfterSteps: countsAfterSteps
+  )
 }
 
 @MainActor
@@ -183,12 +225,17 @@ func runTimingScenario<R: Reducer>(
   steps: [TimingScenarioStep],
   trigger: @escaping (Int) -> R.Action,
   emitted: KeyPath<R.State, [Int]>,
-  expectedCount: Int
+  expectedCount: Int,
+  expectedCountAfterEachStep: [Int]? = nil
 ) async -> [Int]
 where
   R.State: Equatable & Sendable & DefaultInitializable,
   R.Action: Sendable
 {
+  if let expectedCountAfterEachStep {
+    precondition(expectedCountAfterEachStep.count == steps.count)
+  }
+
   let clock = ManualTestClock()
   let store = Store(
     reducer: reducer,
@@ -196,7 +243,7 @@ where
     clock: .manual(clock)
   )
 
-  for step in steps {
+  for (index, step) in steps.enumerated() {
     switch step {
     case .trigger(let value):
       store.send(trigger(value))
@@ -206,6 +253,14 @@ where
       await settleTimingScenarioWork()
       await clock.advance(by: .milliseconds(milliseconds))
       await settleTimingScenarioWork()
+    }
+
+    if let expectedCountAfterEachStep {
+      await waitForEmissionCount(
+        store,
+        emitted: emitted,
+        minimumCount: expectedCountAfterEachStep[index]
+      )
     }
   }
 

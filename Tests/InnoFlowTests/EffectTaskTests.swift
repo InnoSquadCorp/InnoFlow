@@ -379,16 +379,17 @@ struct EffectTaskTests {
   )
   func effectDebounceLatestWinsProperty(seed: Int) async {
     let steps = makeTimingScenario(seed: UInt64(seed + 101))
-    let expected = expectedDebounceOutputs(for: steps, intervalMilliseconds: 60)
+    let expected = expectedDebounceTimeline(for: steps, intervalMilliseconds: 60)
     let actual = await runTimingScenario(
       reducer: DebounceFeature(),
       steps: steps,
       trigger: DebounceFeature.Action.trigger,
       emitted: \.emitted,
-      expectedCount: expected.count
+      expectedCount: expected.outputs.count,
+      expectedCountAfterEachStep: expected.emissionCountsAfterSteps
     )
 
-    #expect(actual == expected)
+    #expect(actual == expected.outputs)
   }
 
   @Test(
@@ -397,7 +398,7 @@ struct EffectTaskTests {
   )
   func effectThrottleLeadingOnlyProperty(seed: Int) async {
     let steps = makeTimingScenario(seed: UInt64(seed + 201))
-    let expected = expectedThrottleOutputs(
+    let expected = expectedThrottleTimeline(
       for: steps,
       intervalMilliseconds: 80,
       leading: true,
@@ -408,10 +409,11 @@ struct EffectTaskTests {
       steps: steps,
       trigger: ThrottleFeature.Action.trigger,
       emitted: \.emitted,
-      expectedCount: expected.count
+      expectedCount: expected.outputs.count,
+      expectedCountAfterEachStep: expected.emissionCountsAfterSteps
     )
 
-    #expect(actual == expected)
+    #expect(actual == expected.outputs)
   }
 
   @Test(
@@ -420,7 +422,7 @@ struct EffectTaskTests {
   )
   func effectThrottleTrailingOnlyProperty(seed: Int) async {
     let steps = makeTimingScenario(seed: UInt64(seed + 301))
-    let expected = expectedThrottleOutputs(
+    let expected = expectedThrottleTimeline(
       for: steps,
       intervalMilliseconds: 80,
       leading: false,
@@ -431,10 +433,11 @@ struct EffectTaskTests {
       steps: steps,
       trigger: ThrottleTrailingFeature.Action.trigger,
       emitted: \.emitted,
-      expectedCount: expected.count
+      expectedCount: expected.outputs.count,
+      expectedCountAfterEachStep: expected.emissionCountsAfterSteps
     )
 
-    #expect(actual == expected)
+    #expect(actual == expected.outputs)
   }
 
   @Test(
@@ -443,7 +446,7 @@ struct EffectTaskTests {
   )
   func effectThrottleLeadingTrailingProperty(seed: Int) async {
     let steps = makeTimingScenario(seed: UInt64(seed + 401))
-    let expected = expectedThrottleOutputs(
+    let expected = expectedThrottleTimeline(
       for: steps,
       intervalMilliseconds: 80,
       leading: true,
@@ -454,10 +457,11 @@ struct EffectTaskTests {
       steps: steps,
       trigger: ThrottleLeadingTrailingFeature.Action.trigger,
       emitted: \.emitted,
-      expectedCount: expected.count
+      expectedCount: expected.outputs.count,
+      expectedCountAfterEachStep: expected.emissionCountsAfterSteps
     )
 
-    #expect(actual == expected)
+    #expect(actual == expected.outputs)
   }
 }
 

@@ -55,8 +55,11 @@ struct StoreInstrumentationTests {
     )
 
     store.send(.startDelayed)
-    await waitUntil {
-      probe.events.contains("finish:instrumented-delayed")
+    await waitUntil(timeout: .seconds(10), pollInterval: .milliseconds(10)) {
+      store.state.log == ["delayed"]
+        && probe.events.contains("start:instrumented-delayed")
+        && probe.events.contains("emit:received(\"delayed\")")
+        && probe.events.contains("finish:instrumented-delayed")
     }
 
     #expect(store.state.log == ["delayed"])
