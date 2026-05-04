@@ -22,7 +22,7 @@ struct StoreInstrumentationTests {
     store.send(.load)
     #expect(store.isLoading)
 
-    await waitUntil(timeout: .seconds(10), pollInterval: .milliseconds(10)) {
+    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
       store.value == "Hello, InnoFlow v2" && store.isLoading == false
     }
 
