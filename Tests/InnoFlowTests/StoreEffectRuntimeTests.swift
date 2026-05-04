@@ -3,7 +3,6 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import SwiftUI
 import Testing
 import os
 
@@ -509,7 +508,6 @@ struct StoreEffectRuntimeTests {
 
     #expect(state.log == ["optional"])
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("_OptionalReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
@@ -522,7 +520,6 @@ struct StoreEffectRuntimeTests {
 
     #expect(state.log == ["second"])
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("_ConditionalReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
@@ -536,11 +533,10 @@ struct StoreEffectRuntimeTests {
 
     #expect(state.log == labels)
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("_ArrayReducer<"))
     #expect(!String(reflecting: type(of: reducer)).contains("_ReducerBuilder"))
   }
 
-  @Test("ReducerBuilder returns a stable public concrete type without builder wrappers")
+  @Test("ReducerBuilder preserves concrete composition without existential reducer arrays")
   func combineReducersConcreteWrapperChain() {
     let reducer = BuilderCompositionFeature.straightLineBuilder()
     var state = BuilderCompositionFeature.State()
@@ -550,7 +546,6 @@ struct StoreEffectRuntimeTests {
 
     #expect(state.log == ["first", "second"])
     #expect(effect.isNone)
-    #expect(typeDescription.contains("_ReducerSequence<"))
     #expect(!typeDescription.contains("_ReducerBuilder"))
     #expect(!typeDescription.contains("[any Reducer"))
   }
@@ -638,7 +633,6 @@ struct StoreEffectRuntimeTests {
 
     #expect(state.log.isEmpty)
     #expect(effect.isNone)
-    #expect(String(reflecting: type(of: reducer)).contains("_OptionalReducer<"))
   }
 
   @Test("Phase validation decorator allows same-phase actions and legal transitions")

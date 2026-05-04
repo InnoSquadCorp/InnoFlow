@@ -14,7 +14,7 @@ app shell:
 - `Offline-First`: debounced persistence, repository ownership, and optimistic draft state
 - `Realtime Stream`: long-lived subscription effects driven by `EffectContext.sleep`
 - `Form Validation`: multiple `@BindableField` values, cross-field validation, submit-or-reset flow, and diagnostics-friendly form state
-- `Bidirectional WebSocket`: sample-only cross-framework transport integration where a websocket adapter owns connection lifecycle, retryable peer-close policy, reconnect budget, and reconnect semantics while the reducer owns business reactions
+- `Bidirectional WebSocket`: scripted cross-framework transport integration where a websocket adapter owns connection lifecycle, retryable peer-close policy, reconnect budget, and reconnect semantics while the reducer owns business reactions
 
 Stable hub accessibility identifiers:
 
@@ -72,7 +72,7 @@ InnoFlowSampleApp/
 
 1. Open [`InnoFlowSampleApp.xcworkspace`](./InnoFlowSampleApp.xcworkspace)
 2. Select the `InnoFlowSampleApp` scheme
-3. Run on an iOS 18 simulator
+3. Run on an iOS 17 or newer simulator
 
 Most feature work lives in
 [`InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature`](./InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature).

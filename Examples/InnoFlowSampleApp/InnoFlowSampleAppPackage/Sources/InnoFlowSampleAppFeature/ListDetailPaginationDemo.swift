@@ -15,6 +15,7 @@
 
 import Foundation
 import InnoFlow
+import InnoFlowSwiftUI
 import SwiftUI
 
 // MARK: - Service
@@ -100,12 +101,17 @@ struct ListDetailPaginationFeature {
     var errorMessage: String?
   }
 
+  struct LoadedPage: Equatable, Sendable {
+    let articles: [SampleArticle]
+    let page: Int
+  }
+
   enum Action: Equatable, Sendable {
     case loadFirstPage
     case loadNextPage
     case retryAfterError
     case article(id: UUID, action: SampleArticleRowFeature.Action)
-    case _loaded([SampleArticle], page: Int)
+    case _loaded(LoadedPage)
     case _failed(String)
   }
 
@@ -145,7 +151,7 @@ struct ListDetailPaginationFeature {
           return .run { send, _ in
             do {
               let page = try await service.loadPage(nextPage, pageSize: 4)
-              await send(._loaded(page, page: nextPage))
+              await send(._loaded(.init(articles: page, page: nextPage)))
             } catch {
               await send(._failed(error.localizedDescription))
             }
@@ -156,13 +162,13 @@ struct ListDetailPaginationFeature {
           state.errorMessage = nil
           return .send(.loadNextPage)
 
-        case ._loaded(let articles, let page):
+        case ._loaded(let loadedPage):
           state.isLoading = false
-          state.currentPage = page
-          if articles.isEmpty {
+          state.currentPage = loadedPage.page
+          if loadedPage.articles.isEmpty {
             state.hasReachedEnd = true
           } else {
-            state.articles.append(contentsOf: articles)
+            state.articles.append(contentsOf: loadedPage.articles)
           }
           return .none
 

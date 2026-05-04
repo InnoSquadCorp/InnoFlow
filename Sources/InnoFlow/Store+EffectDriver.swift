@@ -104,6 +104,17 @@ extension Store: EffectDriver {
         }
       }
 
+      let checkCancellation: @Sendable () async throws -> Void = {
+        if lifetime.isReleased {
+          throw CancellationError()
+        }
+        try await runtime.checkCancellation(
+          token: token,
+          id: context?.cancellationID,
+          sequence: sequence
+        )
+      }
+
       let effectContext = EffectContext(
         now: {
           await clock.now()
@@ -111,19 +122,15 @@ extension Store: EffectDriver {
         sleep: { duration in
           try await clock.sleep(duration)
         },
-        isCancelled: {
-          Task.isCancelled
-        },
-        checkCancellation: {
-          if lifetime.isReleased {
-            throw CancellationError()
+        isCancellationRequested: {
+          do {
+            try await checkCancellation()
+            return false
+          } catch {
+            return true
           }
-          try await runtime.checkCancellation(
-            token: token,
-            id: context?.cancellationID,
-            sequence: sequence
-          )
-        }
+        },
+        checkCancellation: checkCancellation
       )
 
       await operation(send, effectContext)

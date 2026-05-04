@@ -1,5 +1,6 @@
 import Foundation
 import InnoFlow
+import InnoFlowSwiftUI
 import SwiftUI
 
 struct SampleTodo: Identifiable, Equatable, Sendable {

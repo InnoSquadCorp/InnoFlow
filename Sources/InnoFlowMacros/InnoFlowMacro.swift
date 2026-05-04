@@ -3,9 +3,9 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import SwiftCompilerPlugin
-import SwiftSyntax
+public import SwiftSyntax
 import SwiftSyntaxBuilder
-import SwiftSyntaxMacros
+public import SwiftSyntaxMacros
 
 public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
 
@@ -182,7 +182,7 @@ public struct InnoFlowActionPathsMacro: MemberMacro {
 
 @main
 struct InnoFlowMacrosPlugin: CompilerPlugin {
-  let providingMacros: [Macro.Type] = [
+  let providingMacros: [any Macro.Type] = [
     InnoFlowMacro.self,
     InnoFlowActionPathsMacro.self,
   ]

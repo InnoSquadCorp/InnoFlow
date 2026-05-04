@@ -11,7 +11,7 @@ Before tagging a release:
 1. Update [CHANGELOG.md](CHANGELOG.md).
 2. Decide whether [MIGRATION.md](MIGRATION.md) needs a new entry.
 3. Run the main package test suite.
-4. Run the sample package test suite in `Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage`.
+4. Run the sample package test suite in `Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage` with `--jobs 1`.
 5. Run [scripts/principle-gates.sh](scripts/principle-gates.sh).
 6. Generate DocC through [Tools/generate-docc.sh](Tools/generate-docc.sh).
 7. Confirm the README and localized README installation snippets match the intended public tag.
@@ -41,6 +41,15 @@ Each release should leave these entrypoints consistent:
 6. [Sources/InnoFlow/InnoFlow.docc/InnoFlow.md](Sources/InnoFlow/InnoFlow.docc/InnoFlow.md)
 
 If a release changes package-consumer behavior or authoring contracts, update those docs in the same change.
+
+## SwiftSyntax Upgrade Policy
+
+`swift-syntax` is pinned with an exact version because InnoFlow ships compiler macros and macro diagnostics can drift across SwiftSyntax releases. Upgrade it only in an intentional release-hardening change that includes:
+
+1. Updating `Package.swift` and `Package.resolved` together.
+2. Running the macro test suite and compile-contract tests with warnings as errors.
+3. Running `swift format lint --strict --recursive Sources Tests Examples` with the Swift toolchain used by CI.
+4. Updating macro diagnostic expectations, migration notes, or release notes when the public authoring surface changes.
 
 ## Automated Release Artifacts
 

@@ -72,12 +72,18 @@ struct OfflineFirstFeature {
     var errorMessage: String?
   }
 
+  struct SaveRollback: Equatable, Sendable {
+    let previous: String
+    let failedTitle: String
+    let reason: String
+  }
+
   enum Action: Equatable, Sendable {
     case titleChanged(String)
     case saveNow
     case _persistPendingSave
-    case _saveConfirmed(title: String)
-    case _saveRolledBack(previous: String, failedTitle: String, reason: String)
+    case _saveConfirmed(String)
+    case _saveRolledBack(SaveRollback)
   }
 
   let dependencies: Dependencies
@@ -146,15 +152,17 @@ struct OfflineFirstFeature {
             try await context.checkCancellation()
             try await repository.save(id: id, title: pendingTitle)
             try await context.checkCancellation()
-            await send(._saveConfirmed(title: pendingTitle))
+            await send(._saveConfirmed(pendingTitle))
           } catch is CancellationError {
             return
           } catch {
             await send(
               ._saveRolledBack(
-                previous: previousTitle,
-                failedTitle: pendingTitle,
-                reason: error.localizedDescription
+                .init(
+                  previous: previousTitle,
+                  failedTitle: pendingTitle,
+                  reason: error.localizedDescription
+                )
               )
             )
           }
@@ -168,7 +176,10 @@ struct OfflineFirstFeature {
         state.log.append("confirmed: '\(title)'")
         return .none
 
-      case ._saveRolledBack(let previous, let failedTitle, let reason):
+      case ._saveRolledBack(let rollback):
+        let previous = rollback.previous
+        let failedTitle = rollback.failedTitle
+        let reason = rollback.reason
         let isInFlight = state.draft.inFlightTitle == failedTitle
         let isCurrent = state.draft.title == failedTitle
 

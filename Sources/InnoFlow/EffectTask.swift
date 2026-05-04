@@ -123,19 +123,19 @@ public struct Send<Action: Sendable>: Sendable {
 public struct EffectContext: Sendable {
   private let nowProvider: @Sendable () async -> StoreClock.Instant
   private let sleepProvider: @Sendable (Duration) async throws -> Void
-  private let isCancelledProvider: @Sendable () -> Bool
+  private let isCancellationRequestedProvider: @Sendable () async -> Bool
   private let checkCancellationProvider: @Sendable () async throws -> Void
 
   public init(
     now: @escaping @Sendable () async -> StoreClock.Instant,
     sleep: @escaping @Sendable (Duration) async throws -> Void,
-    isCancelled: @escaping @Sendable () -> Bool
+    isCancellationRequested: @escaping @Sendable () async -> Bool
   ) {
     self.nowProvider = now
     self.sleepProvider = sleep
-    self.isCancelledProvider = isCancelled
+    self.isCancellationRequestedProvider = isCancellationRequested
     self.checkCancellationProvider = {
-      if isCancelled() {
+      if await isCancellationRequested() {
         throw CancellationError()
       }
     }
@@ -144,12 +144,12 @@ public struct EffectContext: Sendable {
   package init(
     now: @escaping @Sendable () async -> StoreClock.Instant,
     sleep: @escaping @Sendable (Duration) async throws -> Void,
-    isCancelled: @escaping @Sendable () -> Bool,
+    isCancellationRequested: @escaping @Sendable () async -> Bool,
     checkCancellation: @escaping @Sendable () async throws -> Void
   ) {
     self.nowProvider = now
     self.sleepProvider = sleep
-    self.isCancelledProvider = isCancelled
+    self.isCancellationRequestedProvider = isCancellationRequested
     self.checkCancellationProvider = checkCancellation
   }
 
@@ -161,8 +161,9 @@ public struct EffectContext: Sendable {
     try await sleepProvider(duration)
   }
 
-  public var isCancelled: Bool {
-    isCancelledProvider()
+  /// Returns whether the effect should cooperatively stop without throwing.
+  public func isCancellationRequested() async -> Bool {
+    await isCancellationRequestedProvider()
   }
 
   /// Throws `CancellationError` when the current effect should cooperatively stop.

@@ -296,8 +296,8 @@ InnoFlow/
 
 ```bash
 swift test --package-path .
-swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage
-xcodebuild -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1
+xcodebuild -jobs 1 -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 ./scripts/principle-gates.sh
 ```
 

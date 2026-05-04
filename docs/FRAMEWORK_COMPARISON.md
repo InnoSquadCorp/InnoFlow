@@ -5,13 +5,32 @@ libraries. It is not a replacement for choosing a framework by team fit.
 
 ## TCA
 
-TCA remains the broadest ecosystem choice when a team wants a mature dependency
-system, navigation helpers, extensive documentation, and a large community.
+TCA remains the broadest ecosystem choice when a team wants a mature application
+architecture rather than only a reducer runtime. Its public surface centers on
+`@Reducer` features, `@ObservableState` state, `Store`/`TestStore`, dependency
+values, and first-party guidance for tree- and stack-based navigation. That is
+the right tradeoff when the team wants one opinionated package to cover state,
+effects, dependencies, navigation, testing, and ecosystem conventions.
 
-InnoFlow is narrower: reducer-first state, explicit dependency bundles, macro
-ergonomics, `PhaseMap`, projection caches, and lightweight instrumentation.
-Choose InnoFlow when the project wants a smaller core and explicit ownership
-boundaries over an all-in-one application architecture.
+InnoFlow is intentionally narrower. The core product contains reducer-first
+business transitions, explicit dependency bundles, `PhaseMap`, projection
+caches, cooperative effect cancellation, and lightweight instrumentation.
+SwiftUI-only conveniences such as `Store.binding`, `Store.preview`, and
+`EffectTask.animation(Animation?)` live in `InnoFlowSwiftUI`, so non-UI feature
+modules can keep depending on `InnoFlow` alone.
+
+Choose InnoFlow over TCA when the project wants explicit ownership boundaries
+more than an all-in-one architecture:
+
+- concrete navigation stacks stay in the app shell or another navigation
+  library
+- transport/session lifecycle stays behind adapters
+- dependency graph construction happens outside reducers and enters as explicit
+  constructor-injected bundles
+- phase-heavy flows can document legal transitions with `PhaseMap` without
+  turning the framework into a general FSM runtime
+- read-only view models use `SelectedStore` projection caches instead of
+  expanding mutable child scopes
 
 ## ReactorKit
 

@@ -196,11 +196,13 @@ The *clock implementation* is swapped at the `Store` / `TestStore` boundary:
 
 ### `EffectContext.checkCancellation`
 
-`context.checkCancellation()` is the only cooperative cancellation point
-reducers need. It reads the task-local cancel flag set by `.cancel("id")` and
-throws `CancellationError` when that flag fires. Reducers should place a
+`context.checkCancellation()` is the primary cooperative cancellation point
+reducers need. It reads task cancellation plus the store/runtime boundary set
+by `.cancel("id")`, `cancelInFlight`, and store release, then throws
+`CancellationError` when that boundary is closed. Reducers should place a
 `try await context.checkCancellation()` before any `await send(...)` that
-follows a non-trivial `await`.
+follows a non-trivial `await`. Use `await context.isCancellationRequested()`
+only when the effect needs a non-throwing probe.
 
 ### `StoreInstrumentation`
 

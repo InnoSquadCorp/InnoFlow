@@ -35,6 +35,19 @@ Boundary references:
 For stable framework guarantees that should not drift with scorecards or line counts, see
 [`ARCHITECTURE_CONTRACT.md`](./ARCHITECTURE_CONTRACT.md).
 
+## Why InnoFlow over TCA?
+
+TCA remains the stronger default when a team wants a broad application
+architecture with integrated dependency management, navigation patterns,
+testing conventions, and a large ecosystem. Choose InnoFlow when the framework
+boundary should stay smaller: reducers own business transitions, dependencies
+are constructor-injected bundles, navigation and transport stay at the app
+boundary, and SwiftUI-specific conveniences live in the optional
+`InnoFlowSwiftUI` product.
+
+See [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for the
+longer comparison against TCA, ReactorKit, ReSwift, and SwiftRex.
+
 ## Installation
 
 ### Swift Package Manager
@@ -47,8 +60,13 @@ dependencies: [
 
 ```swift
 .target(
-  name: "YourApp",
+  name: "YourDomain",
   dependencies: ["InnoFlow"]
+)
+
+.target(
+  name: "YourSwiftUIApp",
+  dependencies: ["InnoFlow", "InnoFlowSwiftUI"]
 )
 
 .testTarget(
@@ -56,6 +74,12 @@ dependencies: [
   dependencies: ["InnoFlow", "InnoFlowTesting"]
 )
 ```
+
+Non-UI feature and domain targets can depend on `InnoFlow` alone. SwiftUI app
+targets should also depend on `InnoFlowSwiftUI`, which provides
+`Store.binding`, `ScopedStore.binding`, `Store.preview`, and
+`EffectTask.animation(Animation?)` without making the core target import
+SwiftUI.
 
 ## Quick Start
 
@@ -101,6 +125,7 @@ struct CounterFeature {
 
 ```swift
 import InnoFlow
+import InnoFlowSwiftUI
 import SwiftUI
 
 struct CounterView: View {
@@ -432,7 +457,9 @@ return .run { send, context in
 
 The older `.run { send in ... }` overload still works, but new code should prefer
 `context.sleep(for:)` and `context.checkCancellation()` over `Task.sleep(...)` plus ad-hoc
-cancellation checks.
+cancellation checks. If an effect needs a non-throwing probe, call
+`await context.isCancellationRequested()`; it uses the same store/runtime boundary as
+`checkCancellation()`.
 
 Store deinit and explicit effect cancellation are still cooperative. InnoFlow guarantees
 that late emissions are dropped immediately, but runtime teardown continues as best-effort
@@ -776,8 +803,8 @@ Use these commands locally:
 
 ```bash
 swift test --package-path .
-swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage
-xcodebuild -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1
+xcodebuild -jobs 1 -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 ```
 
 Principles are enforced through macro diagnostics, architecture tests, and `scripts/principle-gates.sh`.
@@ -798,9 +825,9 @@ production store semantics.
 }
 ```
 
-Package support is declared for iOS, macOS, tvOS, watchOS, and visionOS. The canonical sample
-still treats iOS as the primary interactive shell, while CI package builds cover the package-level
-visionOS contract.
+Package support is declared for iOS 17, macOS 14, tvOS 17, watchOS 10, and visionOS 1 or newer.
+The canonical sample still treats iOS as the primary interactive shell, while CI package builds
+cover the package-level visionOS contract.
 
 For visionOS-specific guidance, keep the same ownership split:
 

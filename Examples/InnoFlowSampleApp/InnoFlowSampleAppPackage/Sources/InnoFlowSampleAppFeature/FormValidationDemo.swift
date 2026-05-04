@@ -5,6 +5,7 @@
 // reducer-owned and fully testable through `TestStore`.
 
 import InnoFlow
+import InnoFlowSwiftUI
 import SwiftUI
 
 @InnoFlow

@@ -3,8 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import InnoFlow
-import SwiftUI
+package import InnoFlow
 
 package actor ActionQueue<Action: Sendable> {
   struct QueuedAction: Sendable {
@@ -213,6 +212,16 @@ extension TestStore {
         await runBridge.emit(action)
       }
 
+      let checkCancellation: @Sendable () async throws -> Void = {
+        let canContinue = await MainActor.run {
+          endpoint.isTaskActive(token: token)
+            && endpoint.shouldProceed(context: context)
+        }
+        if Task.isCancelled || canContinue == false {
+          throw CancellationError()
+        }
+      }
+
       let effectContext = EffectContext(
         now: {
           if let manualClock {
@@ -227,18 +236,15 @@ extension TestStore {
             try await Task.sleep(for: duration)
           }
         },
-        isCancelled: {
-          Task.isCancelled
+        isCancellationRequested: {
+          do {
+            try await checkCancellation()
+            return false
+          } catch {
+            return true
+          }
         },
-        checkCancellation: {
-          let canContinue = await MainActor.run {
-            endpoint.isTaskActive(token: token)
-              && endpoint.shouldProceed(context: context)
-          }
-          if Task.isCancelled || canContinue == false {
-            throw CancellationError()
-          }
-        }
+        checkCancellation: checkCancellation
       )
 
       await operation(send, effectContext)

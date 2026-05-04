@@ -3,8 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import InnoFlow
-import SwiftUI
+public import InnoFlow
 
 /// A deterministic test harness for InnoFlow v2 reducers.
 ///

@@ -3,7 +3,6 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import SwiftUI
 import Testing
 import os
 
@@ -38,6 +37,151 @@ struct CompileContractTests {
     )
 
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("ReducerBuilder implementation wrappers are not public API")
+  func reducerBuilderImplementationWrappersAreNotPublicAPI() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let snippets = [
+      """
+      import InnoFlow
+
+      let _ = _EmptyReducer<Int, Int>()
+      """,
+      """
+      import InnoFlow
+
+      let first = Reduce<Int, Int> { _, _ in .none }
+      let second = Reduce<Int, Int> { _, _ in .none }
+      let _ = _ReducerSequence(first: first, second: second)
+      """,
+      """
+      import InnoFlow
+
+      let reducer = Reduce<Int, Int> { _, _ in .none }
+      let _ = _OptionalReducer(reducer)
+      """,
+      """
+      import InnoFlow
+
+      let first = Reduce<Int, Int> { _, _ in .none }
+      let second = Reduce<Int, Int> { _, _ in .none }
+      let _ = _ConditionalReducer(branch: .first(first))
+      """,
+      """
+      import InnoFlow
+
+      let reducer = Reduce<Int, Int> { _, _ in .none }
+      let _ = _ArrayReducer([reducer])
+      """,
+    ]
+
+    for source in snippets {
+      let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+      #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+      #expect(
+        !result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'")
+      )
+    }
+  }
+
+  @Test("EffectContext exposes async cancellation probe")
+  func effectContextExposesAsyncCancellationProbe() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import Foundation
+      import InnoFlow
+
+      let context = EffectContext(
+          now: { ContinuousClock().now },
+          sleep: { _ in },
+          isCancellationRequested: { false }
+      )
+
+      func probe() async throws {
+          let _ = await context.isCancellationRequested()
+          try await context.checkCancellation()
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("EffectContext no longer exposes synchronous isCancelled")
+  func effectContextDoesNotExposeSynchronousIsCancelled() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import Foundation
+      import InnoFlow
+
+      let context = EffectContext(
+          now: { ContinuousClock().now },
+          sleep: { _ in },
+          isCancellationRequested: { false }
+      )
+      let _ = context.isCancelled
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+    #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
+  }
+
+  @Test("Module lookup supports custom SwiftPM build paths")
+  func moduleLookupSupportsCustomSwiftPMBuildPaths() throws {
+    let temporaryRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let packageRoot = temporaryRoot.appendingPathComponent("Package", isDirectory: true)
+    let buildRoot = temporaryRoot.appendingPathComponent("custom-build", isDirectory: true)
+    let moduleDirectory = buildRoot.appendingPathComponent("debug/Modules", isDirectory: true)
+    let executableDirectory =
+      buildRoot
+      .appendingPathComponent(
+        "debug/InnoFlowPackageTests.xctest/Contents/MacOS",
+        isDirectory: true
+      )
+
+    try FileManager.default.createDirectory(
+      at: moduleDirectory,
+      withIntermediateDirectories: true
+    )
+    try FileManager.default.createDirectory(
+      at: executableDirectory,
+      withIntermediateDirectories: true
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+    FileManager.default.createFile(
+      atPath: moduleDirectory.appendingPathComponent("InnoFlow.swiftmodule").path,
+      contents: Data()
+    )
+
+    let resolved = try findBuiltModuleDirectory(
+      named: "InnoFlow",
+      in: packageRoot,
+      additionalSearchRoots: [executableDirectory]
+    )
+
+    #expect(resolved.path == moduleDirectory.path)
   }
 
   @Test("StoreInstrumentation events accept typed EffectID values")
@@ -117,6 +261,89 @@ struct CompileContractTests {
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
+  @Test("InnoFlow core typechecks without SwiftUI bridge")
+  func innoFlowCoreTypechecksWithoutSwiftUIBridge() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct CoreFeature: Reducer {
+          struct State: Equatable, Sendable, DefaultInitializable {
+              var count = 0
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case increment
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              state.count += 1
+              return .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: CoreFeature(), initialState: .init())
+          store.send(.increment)
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("Store.binding is isolated to InnoFlowSwiftUI")
+  func storeBindingRequiresInnoFlowSwiftUIImport() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct BindableFeature: Reducer {
+          struct State: Sendable, DefaultInitializable {
+              @BindableField var step = 1
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: BindableFeature(), initialState: .init())
+          _ = store.binding(\\.$step, send: { .setStep($0) })
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+    #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module"))
+    #expect(
+      result.normalizedOutput.localizedCaseInsensitiveContains("binding")
+        || result.normalizedOutput.localizedCaseInsensitiveContains("no exact matches")
+        || result.normalizedOutput.localizedCaseInsensitiveContains("has no member")
+    )
+  }
+
   @Test("Store.binding rejects non-bindable key paths at compile time")
   func bindingRejectsNonBindableKeyPathAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
@@ -127,6 +354,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct NonBindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -162,7 +390,7 @@ struct CompileContractTests {
       diagnostics.localizedCaseInsensitiveContains("error")
         || diagnostics.localizedCaseInsensitiveContains("failed")
     )
-    #expect(!diagnostics.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
+    #expect(!diagnostics.localizedCaseInsensitiveContains("no such module"))
     #expect(
       diagnostics.localizedCaseInsensitiveContains("binding")
         || diagnostics.contains("BindableProperty")
@@ -187,6 +415,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
           struct Child: Equatable, Sendable {
@@ -255,6 +484,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -298,6 +528,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -339,6 +570,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -380,6 +612,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
           struct Child: Equatable, Sendable {
@@ -438,6 +671,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
           struct Child: Equatable, Sendable {

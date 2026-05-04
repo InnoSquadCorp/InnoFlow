@@ -1,7 +1,6 @@
 import Foundation
 import InnoFlow
 import InnoFlowTesting
-import InnoNetworkWebSocket
 import Testing
 
 @testable import InnoFlowSampleAppFeature
@@ -530,7 +529,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     await store.receive(
-      ._loaded(MockArticlesService.page0, page: 0)
+      ._loaded(.init(articles: MockArticlesService.page0, page: 0))
     ) {
       $0.isLoading = false
       $0.currentPage = 0
@@ -559,7 +558,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
     }
 
-    await store.receive(._loaded([], page: 1)) {
+    await store.receive(._loaded(.init(articles: [], page: 1))) {
       $0.isLoading = false
       $0.currentPage = 1
       $0.hasReachedEnd = true
@@ -633,7 +632,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.log = ["edit: 'Edited title'", "save attempt: 'Edited title'"]
     }
 
-    await store.receive(._saveConfirmed(title: "Edited title")) {
+    await store.receive(._saveConfirmed("Edited title")) {
       $0.draft.lastSavedTitle = "Edited title"
       $0.draft.inFlightTitle = nil
       $0.errorMessage = nil
@@ -673,9 +672,11 @@ struct InnoFlowSampleAppFeatureTests {
 
     await store.receive(
       ._saveRolledBack(
-        previous: "Offline-first draft",
-        failedTitle: "Broken edit",
-        reason: "mock-rejected"
+        .init(
+          previous: "Offline-first draft",
+          failedTitle: "Broken edit",
+          reason: "mock-rejected"
+        )
       )
     ) {
       $0.draft.title = "Offline-first draft"
@@ -713,7 +714,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.log = ["edit: 'Edited title'", "save attempt: 'Edited title'"]
     }
 
-    await store.receive(._saveConfirmed(title: "Edited title")) {
+    await store.receive(._saveConfirmed("Edited title")) {
       $0.draft.lastSavedTitle = "Edited title"
       $0.draft.inFlightTitle = nil
       $0.errorMessage = nil
@@ -767,9 +768,11 @@ struct InnoFlowSampleAppFeatureTests {
 
     await store.receive(
       ._saveRolledBack(
-        previous: "Offline-first draft",
-        failedTitle: "Broken edit",
-        reason: "mock-rejected"
+        .init(
+          previous: "Offline-first draft",
+          failedTitle: "Broken edit",
+          reason: "mock-rejected"
+        )
       )
     ) {
       $0.draft.inFlightTitle = nil
@@ -1170,57 +1173,66 @@ struct InnoFlowSampleAppFeatureTests {
     await store.assertNoMoreActions()
   }
 
-  @Test("Bidirectional websocket live mapper surfaces reconnecting for retryable transport errors")
-  func bidirectionalWebSocketLiveMapperMapsRetryableTransportError() {
-    let error = WebSocketError.pingTimeout
-
-    let mapped = BidirectionalSocketLiveEventMapper.map(
-      .error(error),
-      taskState: .reconnecting,
+  @Test("Bidirectional websocket adapter mapper surfaces reconnecting for retryable errors")
+  func bidirectionalWebSocketAdapterMapperMapsRetryableTransportError() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
+      .failure("ping timeout"),
+      adapterState: .reconnecting,
       willRetry: true
     )
 
-    #expect(mapped == .reconnecting(String(describing: error)))
+    #expect(mapped == .reconnecting("ping timeout"))
   }
 
-  @Test("Bidirectional websocket live mapper surfaces reconnecting for retryable peer closes")
-  func bidirectionalWebSocketLiveMapperMapsRetryablePeerClose() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+  @Test("Bidirectional websocket adapter mapper surfaces terminal failures while reconnecting")
+  func bidirectionalWebSocketAdapterMapperMapsTerminalFailureWhileReconnecting() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
+      .failure("retry budget exhausted"),
+      adapterState: .reconnecting,
+      willRetry: false
+    )
+
+    #expect(mapped == .transportFailure("retry budget exhausted"))
+  }
+
+  @Test("Bidirectional websocket adapter mapper surfaces reconnecting for retryable peer closes")
+  func bidirectionalWebSocketAdapterMapperMapsRetryablePeerClose() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: true
     )
 
     #expect(mapped == .reconnecting("Socket disconnected."))
   }
 
-  @Test("Bidirectional websocket live mapper keeps terminal peer closes disconnected")
-  func bidirectionalWebSocketLiveMapperMapsTerminalPeerClose() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+  @Test("Bidirectional websocket adapter mapper keeps terminal peer closes disconnected")
+  func bidirectionalWebSocketAdapterMapperMapsTerminalPeerClose() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: false
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
   }
 
-  @Test("Bidirectional websocket live mapper requires retry metadata for reconnecting")
-  func bidirectionalWebSocketLiveMapperRequiresRetryMetadata() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+  @Test("Bidirectional websocket adapter mapper requires retry metadata for reconnecting")
+  func bidirectionalWebSocketAdapterMapperRequiresRetryMetadata() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: false
     )
 
     #expect(mapped == .disconnected("Socket disconnected."))
   }
 
-  @Test("Bidirectional websocket live mapper keeps exhausted retry budgets disconnected")
-  func bidirectionalWebSocketLiveMapperKeepsExhaustedRetryBudgetDisconnected() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+  @Test("Bidirectional websocket adapter mapper keeps exhausted retry budgets disconnected")
+  func bidirectionalWebSocketAdapterMapperKeepsExhaustedRetryBudgetDisconnected() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: false
     )
 
@@ -1228,11 +1240,11 @@ struct InnoFlowSampleAppFeatureTests {
   }
 
   @Test(
-    "Bidirectional websocket live mapper keeps auto-reconnect disabled peer closes disconnected")
-  func bidirectionalWebSocketLiveMapperKeepsAutoReconnectDisabledPeerCloseDisconnected() {
-    let mapped = BidirectionalSocketLiveEventMapper.map(
+    "Bidirectional websocket adapter mapper keeps auto-reconnect disabled peer closes disconnected")
+  func bidirectionalWebSocketAdapterMapperKeepsAutoReconnectDisabledPeerCloseDisconnected() {
+    let mapped = BidirectionalSocketAdapterEventMapper.map(
       .disconnected(nil),
-      taskState: .disconnected,
+      adapterState: .disconnected,
       willRetry: false
     )
 

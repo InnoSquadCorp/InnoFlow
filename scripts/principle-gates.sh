@@ -3,6 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CANONICAL_ROOT_DIR=""
+SWIFTPM_JOBS="${PRINCIPLE_GATES_SWIFTPM_JOBS:-1}"
+PROCESS_NICE="${PRINCIPLE_GATES_NICE:-15}"
+SWIFT_FRONTEND_THREADS="${PRINCIPLE_GATES_SWIFT_FRONTEND_THREADS:-1}"
+SWIFT_FRONTEND_THREAD_FLAGS=()
+if [[ "$SWIFT_FRONTEND_THREADS" != "0" ]]; then
+  SWIFT_FRONTEND_THREAD_FLAGS=(-Xswiftc -num-threads -Xswiftc "$SWIFT_FRONTEND_THREADS")
+fi
 
 cd "$ROOT_DIR"
 
@@ -76,6 +83,17 @@ enumerate_target_files() {
   done
 }
 
+enumerate_swift_files() {
+  local target
+  for target in "$@"; do
+    if [[ -d "$target" ]]; then
+      find "$target" -type f -name '*.swift' | sort
+    elif [[ -f "$target" && "$target" == *.swift ]]; then
+      printf '%s\n' "$target"
+    fi
+  done
+}
+
 search_lines() {
   local pattern="$1"
   shift
@@ -92,6 +110,25 @@ search_lines() {
       matched=0
     fi
   done < <(enumerate_target_files "$@")
+  return "$matched"
+}
+
+search_swift_lines() {
+  local pattern="$1"
+  shift
+
+  if [[ "$HAS_RG" == "1" ]]; then
+    "$RG_BIN" -H -n --glob '*.swift' -- "$pattern" "$@"
+    return $?
+  fi
+
+  local matched=1
+  local file
+  while IFS= read -r file; do
+    if grep -Hn -E -- "$pattern" "$file"; then
+      matched=0
+    fi
+  done < <(enumerate_swift_files "$@")
   return "$matched"
 }
 
@@ -122,6 +159,14 @@ search_multiline() {
   return "$matched"
 }
 
+run_low_priority() {
+  if [[ "$PROCESS_NICE" == "0" ]]; then
+    "$@"
+  else
+    nice -n "$PROCESS_NICE" "$@"
+  fi
+}
+
 search_lines_excluding() {
   local include_pattern="$1"
   local exclude_pattern="$2"
@@ -140,6 +185,40 @@ search_lines_excluding() {
   fi
 
   printf '%s\n' "$filtered"
+}
+
+reject_toolchain_internal_diagnostics() {
+  local label="$1"
+  local log_file="$2"
+
+  if grep -E "Internal Error:|DecodingError\\.dataCorrupted|Corrupted JSON" "$log_file" >/dev/null; then
+    echo "[principle-gates] Failed: $label emitted Swift toolchain internal diagnostics"
+    grep -E "Internal Error:|DecodingError\\.dataCorrupted|Corrupted JSON" "$log_file" || true
+    return 1
+  fi
+}
+
+run_logged_gate_command() {
+  local label="$1"
+  shift
+
+  local log_file
+  log_file="$(mktemp "${TMPDIR:-/tmp}/innoflow-principle-gate-log.XXXXXX")"
+
+  if ! "$@" >"$log_file" 2>&1; then
+    cat "$log_file"
+    echo "[principle-gates] Failed: $label command failed"
+    rm -f "$log_file"
+    return 1
+  fi
+
+  if ! reject_toolchain_internal_diagnostics "$label" "$log_file"; then
+    cat "$log_file"
+    rm -f "$log_file"
+    return 1
+  fi
+
+  rm -f "$log_file"
 }
 
 require_pattern_in_every_file() {
@@ -204,6 +283,7 @@ validate_doc_parity_contract_shape() {
 
     non_empty_array("requiredPatterns")
     and non_empty_array("sectionCounts")
+    and non_empty_array("readmeCorePatterns")
     and non_empty_array("localizedHeaderParity")
     and non_empty_array("sampleIdentifiers")
     and all(
@@ -218,6 +298,15 @@ validate_doc_parity_contract_shape() {
       and typed_field("label"; "string")
       and typed_field("pattern"; "string")
       and typed_field("count"; "number")
+    )
+    and all(
+      .readmeCorePatterns[];
+      typed_field("label"; "string")
+      and typed_field("pattern"; "string")
+      and has("files")
+      and (.files | type == "array")
+      and (.files | length > 0)
+      and all(.files[]; type == "string")
     )
     and all(
       .localizedHeaderParity[];
@@ -297,6 +386,22 @@ verify_doc_parity_contract() {
       return 1
     fi
   done < <(jq -c '.sectionCounts[]' "$contract_path")
+
+  local readme_file
+  while IFS= read -r item; do
+    label="$(jq -r '.label' <<<"$item")"
+    pattern="$(jq -r '.pattern' <<<"$item")"
+    while IFS= read -r readme_file; do
+      if [[ ! -f "$readme_file" ]]; then
+        echo "[principle-gates] Failed: $readme_file not found"
+        return 1
+      fi
+      if ! search_lines "$pattern" "$readme_file" >/dev/null; then
+        echo "[principle-gates] Failed: $readme_file must include README core pattern '$label'"
+        return 1
+      fi
+    done < <(jq -r '.files[]' <<<"$item")
+  done < <(jq -c '.readmeCorePatterns[]' "$contract_path")
 
   local sample_id
   while IFS= read -r item; do
@@ -410,8 +515,13 @@ main() {
   search_lines "public final class SelectedStore<" Sources/InnoFlow/SelectedStore.swift >/dev/null
   search_lines "public struct EffectContext" Sources/InnoFlow/EffectTask.swift >/dev/null
   search_lines "public actor ManualTestClock" Sources/InnoFlowTesting/ManualTestClock.swift >/dev/null
-  search_lines "public static func preview\\(" Sources/InnoFlow/Store+SwiftUIPreviews.swift >/dev/null
+  search_lines "public static func preview\\(" Sources/InnoFlowSwiftUI/Store+SwiftUIPreviews.swift >/dev/null
   search_lines "public func map<" Sources/InnoFlow/EffectTask.swift >/dev/null
+  search_lines 'name: "InnoFlowSwiftUI"' Package.swift >/dev/null
+  if search_swift_lines '^[[:space:]]*(@_exported[[:space:]]+)?(public[[:space:]]+)?import[[:space:]]+SwiftUI$' Sources/InnoFlow >/dev/null; then
+    echo "[principle-gates] Failed: core InnoFlow target must not import SwiftUI"
+    exit 1
+  fi
   if ! search_multiline 'public func select<[\s\S]{0,220}dependingOn dependency:' Sources/InnoFlow/SelectedStore.swift; then
     echo "[principle-gates] Failed: SelectedStore dependency-annotated selection overload is missing"
     exit 1
@@ -628,17 +738,21 @@ main() {
   # main .build/ tree. The stale-scope and phase-map subprocess harnesses
   # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
   # debug and release artifacts there causes duplicate-symbol failures.
-  RELEASE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
-  if ! swift build --package-path "$ROOT_DIR" --build-path "$RELEASE_BUILD_PATH" -c release >/dev/null 2>&1; then
+  RELEASE_GATE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
+  if ! run_low_priority swift build \
+      --package-path "$ROOT_DIR" \
+      --build-path "$RELEASE_GATE_BUILD_PATH" \
+      -c release \
+      --jobs "$SWIFTPM_JOBS" \
+      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" >/dev/null 2>&1; then
     echo "[principle-gates] Failed: 'swift build -c release' crashed or failed — SIL inliner regression suspected"
     swift --version || true
-    rm -rf "$RELEASE_BUILD_PATH"
+    rm -rf "$RELEASE_GATE_BUILD_PATH"
     exit 1
   fi
-  rm -rf "$RELEASE_BUILD_PATH"
 
   echo "[principle-gates] Running package tests"
-  swift test --package-path "$ROOT_DIR" -Xswiftc -warnings-as-errors
+  run_low_priority swift test --package-path "$ROOT_DIR" --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors
 
   echo "[principle-gates] Running package tests in release configuration"
   # Release-mode test gate. Uses an isolated build path for the same reason as
@@ -650,35 +764,38 @@ main() {
   # baseline comparison uses absolute timings, so running it alongside the
   # rest of the release suite creates cross-suite scheduler contention and can
   # produce false regressions even when the implementation is healthy.
-  RELEASE_TEST_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-test"
-  if ! swift test \
+  if ! run_low_priority swift test \
       --package-path "$ROOT_DIR" \
-      --build-path "$RELEASE_TEST_BUILD_PATH" \
+      --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
+      --jobs "$SWIFTPM_JOBS" \
+      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" \
       -Xswiftc -warnings-as-errors; then
     echo "[principle-gates] Failed: 'swift test -c release' failed — release-mode regression"
-    rm -rf "$RELEASE_TEST_BUILD_PATH"
+    rm -rf "$RELEASE_GATE_BUILD_PATH"
     exit 1
   fi
-  rm -rf "$RELEASE_TEST_BUILD_PATH"
 
   echo "[principle-gates] Running isolated release timing baseline gate"
   # `INNOFLOW_CHECK_EFFECT_BASELINE=1` opts the `EffectTimingBaselineGate` in
   # for this dedicated release-only run so malformed or incomplete timing
   # captures still fail CI. Metric regressions are reported as non-blocking
-  # trend output because wall-clock effect timings are runner-sensitive.
-  RELEASE_BASELINE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release-baseline"
-  if ! INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
+  # trend output because wall-clock effect timings are runner-sensitive. Reuse
+  # the release gate build path from the full release suite so SwiftSyntax does
+  # not need to be compiled repeatedly on local machines.
+  if ! run_low_priority env INNOFLOW_CHECK_EFFECT_BASELINE=1 swift test \
       --package-path "$ROOT_DIR" \
-      --build-path "$RELEASE_BASELINE_BUILD_PATH" \
+      --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
+      --jobs "$SWIFTPM_JOBS" \
+      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" \
       -Xswiftc -warnings-as-errors \
       --filter EffectTimingBaselineGate; then
     echo "[principle-gates] Failed: isolated release timing baseline gate regressed"
-    rm -rf "$RELEASE_BASELINE_BUILD_PATH"
+    rm -rf "$RELEASE_GATE_BUILD_PATH"
     exit 1
   fi
-  rm -rf "$RELEASE_BASELINE_BUILD_PATH"
+  rm -rf "$RELEASE_GATE_BUILD_PATH"
 
   echo "[principle-gates] Running sample package tests"
   local sample_test_root
@@ -687,17 +804,26 @@ main() {
   sample_package_path="$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
   # The sample package has its own .build cache. Clean it before testing so
   # local branch switches cannot reuse a stale source-file graph for InnoFlow.
-  swift package --package-path "$sample_package_path" clean
-  swift test --package-path "$sample_package_path" -Xswiftc -warnings-as-errors
+  run_low_priority swift package --package-path "$sample_package_path" clean
+  if ! run_logged_gate_command \
+      "sample package tests" \
+      run_low_priority swift test --package-path "$sample_package_path" --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors; then
+    exit 1
+  fi
 
   echo "[principle-gates] Building canonical sample app"
-  xcodebuild \
-    -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
-    -scheme InnoFlowSampleApp \
-    -destination 'generic/platform=iOS' \
-    CODE_SIGNING_ALLOWED=NO \
-    CODE_SIGNING_REQUIRED=NO \
-    build >/dev/null
+  if ! run_logged_gate_command \
+      "canonical sample app build" \
+      run_low_priority xcodebuild \
+      -jobs 1 \
+      -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
+      -scheme InnoFlowSampleApp \
+      -destination 'generic/platform=iOS' \
+      CODE_SIGNING_ALLOWED=NO \
+      CODE_SIGNING_REQUIRED=NO \
+      build; then
+    exit 1
+  fi
 
   echo "[principle-gates] All checks passed"
 }
