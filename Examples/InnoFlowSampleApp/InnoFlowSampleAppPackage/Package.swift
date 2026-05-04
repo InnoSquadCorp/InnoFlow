@@ -25,7 +25,8 @@ let package = Package(
     .target(
       name: "InnoFlowSampleAppFeature",
       dependencies: [
-        .product(name: "InnoFlow", package: "InnoFlow")
+        .product(name: "InnoFlow", package: "InnoFlow"),
+        .product(name: "InnoFlowSwiftUI", package: "InnoFlow"),
       ]
     ),
     .testTarget(

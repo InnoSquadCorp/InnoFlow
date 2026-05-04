@@ -3,7 +3,6 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import SwiftUI
 import Testing
 import os
 
@@ -262,6 +261,89 @@ struct CompileContractTests {
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
+  @Test("InnoFlow core typechecks without SwiftUI bridge")
+  func innoFlowCoreTypechecksWithoutSwiftUIBridge() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct CoreFeature: Reducer {
+          struct State: Equatable, Sendable, DefaultInitializable {
+              var count = 0
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case increment
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              state.count += 1
+              return .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: CoreFeature(), initialState: .init())
+          store.send(.increment)
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("Store.binding is isolated to InnoFlowSwiftUI")
+  func storeBindingRequiresInnoFlowSwiftUIImport() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlow
+
+      struct BindableFeature: Reducer {
+          struct State: Sendable, DefaultInitializable {
+              @BindableField var step = 1
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: BindableFeature(), initialState: .init())
+          _ = store.binding(\\.$step, send: { .setStep($0) })
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+    #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module"))
+    #expect(
+      result.normalizedOutput.localizedCaseInsensitiveContains("binding")
+        || result.normalizedOutput.localizedCaseInsensitiveContains("no exact matches")
+        || result.normalizedOutput.localizedCaseInsensitiveContains("has no member")
+    )
+  }
+
   @Test("Store.binding rejects non-bindable key paths at compile time")
   func bindingRejectsNonBindableKeyPathAtCompileTime() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
@@ -272,6 +354,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct NonBindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -307,7 +390,7 @@ struct CompileContractTests {
       diagnostics.localizedCaseInsensitiveContains("error")
         || diagnostics.localizedCaseInsensitiveContains("failed")
     )
-    #expect(!diagnostics.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
+    #expect(!diagnostics.localizedCaseInsensitiveContains("no such module"))
     #expect(
       diagnostics.localizedCaseInsensitiveContains("binding")
         || diagnostics.contains("BindableProperty")
@@ -332,6 +415,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
           struct Child: Equatable, Sendable {
@@ -400,6 +484,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -443,6 +528,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -484,6 +570,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -525,6 +612,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
           struct Child: Equatable, Sendable {
@@ -583,6 +671,7 @@ struct CompileContractTests {
 
     let source = """
       import InnoFlow
+      import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
           struct Child: Equatable, Sendable {

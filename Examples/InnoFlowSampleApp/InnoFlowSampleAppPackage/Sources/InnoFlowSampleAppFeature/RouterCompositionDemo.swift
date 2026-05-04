@@ -1,4 +1,5 @@
 import InnoFlow
+import InnoFlowSwiftUI
 import SwiftUI
 
 enum RouterDemoRoute: Hashable, Sendable {

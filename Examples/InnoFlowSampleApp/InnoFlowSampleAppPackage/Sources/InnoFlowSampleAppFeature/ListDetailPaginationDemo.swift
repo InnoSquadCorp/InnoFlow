@@ -15,6 +15,7 @@
 
 import Foundation
 import InnoFlow
+import InnoFlowSwiftUI
 import SwiftUI
 
 // MARK: - Service

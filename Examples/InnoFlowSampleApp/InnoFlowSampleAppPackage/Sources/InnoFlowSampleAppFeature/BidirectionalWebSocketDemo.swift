@@ -7,6 +7,7 @@
 
 import Foundation
 import InnoFlow
+import InnoFlowSwiftUI
 import SwiftUI
 
 public protocol BidirectionalSocketClient: Sendable {
