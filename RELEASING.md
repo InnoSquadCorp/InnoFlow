@@ -17,11 +17,12 @@ Before tagging a release:
 7. Confirm the README and localized README installation snippets match the intended public tag.
 8. Confirm [ARCHITECTURE_CONTRACT.md](ARCHITECTURE_CONTRACT.md) and localized README selection guidance match the current public contract.
 9. Confirm the GitHub Actions `Release Gate` workflow will run from the intended tag.
-10. Confirm the matching `## [<tag>]` section exists in [CHANGELOG.md](CHANGELOG.md); the release workflow publishes that body automatically.
+10. Confirm tag-triggered release gates run [scripts/principle-gates.sh](scripts/principle-gates.sh) with release-tag enforcement enabled.
+11. Confirm the matching `## [<tag>]` section exists in [CHANGELOG.md](CHANGELOG.md); the release workflow publishes that body automatically.
 
 ## GitHub Release Notes
 
-The tag-driven `Release Gate` workflow automatically creates the GitHub Release and uses the matching changelog section from [CHANGELOG.md](CHANGELOG.md) as the release body.
+The tag-driven `Release Gate` workflow automatically runs the principle gate with release-tag enforcement, creates the GitHub Release, and uses the matching changelog section from [CHANGELOG.md](CHANGELOG.md) as the release body.
 
 That changelog section should summarize:
 

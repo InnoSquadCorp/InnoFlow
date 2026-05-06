@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-## InnoFlow 3.0.0 authoring rules
+## InnoFlow 4.0.0 authoring rules
 
 These are repository rules, not suggestions.
 

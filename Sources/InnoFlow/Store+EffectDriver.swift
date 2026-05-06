@@ -3,6 +3,30 @@ import Foundation
 extension Store: EffectDriver {
   package typealias Action = R.Action
 
+  @discardableResult
+  private func startCompositeTask(
+    cancellationIDs: [AnyEffectID],
+    operation: @escaping @MainActor @Sendable () async -> Void
+  ) -> Task<Void, Never> {
+    let token = UUID()
+    let gate = RunStartGate()
+    let bridge = effectBridge
+    let task = Task { @MainActor in
+      await gate.wait()
+      defer {
+        bridge.finishCompositeTask(token: token)
+      }
+      guard !Task.isCancelled else { return }
+      await operation()
+    }
+
+    bridge.registerCompositeTask(token: token, ids: cancellationIDs, task: task)
+    Task {
+      await gate.open()
+    }
+    return task
+  }
+
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
     guard effectBridge.shouldProceed(context: context) else {
       recordDrop(action, reason: .cancellationBoundary, context: context)
@@ -37,7 +61,7 @@ extension Store: EffectDriver {
         guard
           await runtime.canStartOperation(
             token: token,
-            id: context?.cancellationID,
+            ids: context?.cancellationIDs ?? [],
             sequence: sequence
           )
         else {
@@ -64,7 +88,7 @@ extension Store: EffectDriver {
 
         switch await runtime.emissionDecision(
           token: token,
-          id: context?.cancellationID,
+          ids: context?.cancellationIDs ?? [],
           sequence: sequence
         ) {
         case .allow:
@@ -110,7 +134,7 @@ extension Store: EffectDriver {
         }
         try await runtime.checkCancellation(
           token: token,
-          id: context?.cancellationID,
+          ids: context?.cancellationIDs ?? [],
           sequence: sequence
         )
       }
@@ -140,7 +164,7 @@ extension Store: EffectDriver {
 
     await runtime.registerAndStart(
       token: token,
-      id: context?.cancellationID,
+      ids: context?.cancellationIDs ?? [],
       task: task,
       gate: gate
     )
@@ -283,10 +307,19 @@ extension Store: EffectDriver {
         await group.waitForAll()
       }
     } else {
-      for child in children {
-        Task { [weak self] in
-          guard self != nil else { return }
-          await recurse(child, context, false)
+      let bridge = effectBridge
+      startCompositeTask(cancellationIDs: context?.cancellationIDs ?? []) {
+        await withTaskGroup(of: Void.self) { group in
+          for child in children {
+            group.addTask {
+              guard !Task.isCancelled else { return }
+              guard await MainActor.run(body: { bridge.shouldProceed(context: context) }) else {
+                return
+              }
+              await recurse(child, context, false)
+            }
+          }
+          await group.waitForAll()
         }
       }
     }
@@ -306,9 +339,11 @@ extension Store: EffectDriver {
         await recurse(child, context, true)
       }
     } else {
-      Task { [weak self] in
-        guard self != nil else { return }
+      let bridge = effectBridge
+      startCompositeTask(cancellationIDs: context?.cancellationIDs ?? []) {
         for child in children {
+          guard !Task.isCancelled else { return }
+          guard bridge.shouldProceed(context: context) else { return }
           await recurse(child, context, true)
         }
       }

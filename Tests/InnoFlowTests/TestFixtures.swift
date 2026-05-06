@@ -519,6 +519,71 @@ struct LongRunningOrchestrationFeature: Reducer {
   }
 }
 
+struct NonCancellableSequentialCompositeFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var finished = false
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _finished
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      return .concatenate(
+        .run { _, context in
+          do {
+            try await context.sleep(for: .milliseconds(100))
+            try await context.checkCancellation()
+          } catch is CancellationError {
+            return
+          } catch {
+            return
+          }
+        },
+        .send(._finished)
+      )
+
+    case ._finished:
+      state.finished = true
+      return .none
+    }
+  }
+}
+
+struct NestedCancellableFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var finished = false
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _finished
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      return .run { send, context in
+        do {
+          try await context.sleep(for: .milliseconds(100))
+        } catch {
+          return
+        }
+        await send(._finished)
+      }
+      .cancellable("inner-cancellation")
+      .cancellable("outer-cancellation")
+
+    case ._finished:
+      state.finished = true
+      return .none
+    }
+  }
+}
+
 struct CancellableFeature: Reducer {
   let delay: Duration
 

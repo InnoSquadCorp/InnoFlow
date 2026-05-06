@@ -84,6 +84,27 @@ struct TestStoreCoreTests {
     await store.assertNoMoreActions()
   }
 
+  @Test("TestStore outer cancellation reaches nested cancellable run tasks")
+  func testStoreOuterCancellationReachesNestedCancellableRunTasks() async {
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: NestedCancellableFeature(),
+      initialState: .init(),
+      clock: clock,
+      effectTimeout: .milliseconds(20)
+    )
+
+    await store.send(.start)
+    _ = await waitUntilAsync {
+      await clock.sleeperCount == 1
+    }
+
+    await store.cancelEffects(identifiedBy: "outer-cancellation")
+    await clock.advance(by: .milliseconds(100))
+
+    await store.assertNoMoreActions()
+  }
+
   @Test("TestStore drops direct .send actions after a cancellation boundary")
   func testStoreDirectSendDropsAfterCancellationBoundary() async {
     let store = TestStore(

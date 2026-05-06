@@ -15,7 +15,7 @@ import Foundation
 @MainActor
 package struct EffectWalker<D: EffectDriver> {
 
-  private let driver: D
+  private weak var driver: D?
 
   package init(driver: D) {
     self.driver = driver
@@ -29,6 +29,8 @@ package struct EffectWalker<D: EffectDriver> {
     context: EffectExecutionContext? = nil,
     awaited: Bool = false
   ) async {
+    guard let driver else { return }
+
     switch effect.operation {
     case .none:
       return
@@ -122,6 +124,8 @@ package struct EffectWalker<D: EffectDriver> {
     context: EffectExecutionContext?,
     awaited: Bool
   ) async {
+    guard let driver else { return }
+
     let throttleContext = EffectExecutionContext.withCancellation(id, on: context)
     let now = await driver.now
 

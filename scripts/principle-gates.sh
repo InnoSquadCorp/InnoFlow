@@ -522,11 +522,11 @@ main() {
     echo "[principle-gates] Failed: core InnoFlow target must not import SwiftUI"
     exit 1
   fi
-  if ! search_multiline 'public func select<[\s\S]{0,220}dependingOn dependency:' Sources/InnoFlow/SelectedStore.swift; then
+  if ! search_multiline 'public func select<[\s\S]{0,220}dependingOn dependency:' Sources/InnoFlow/SelectedStore.swift >/dev/null; then
     echo "[principle-gates] Failed: SelectedStore dependency-annotated selection overload is missing"
     exit 1
   fi
-  if ! search_multiline 'public func select<each Dep: Equatable & Sendable[\s\S]{0,200}dependingOnAll dependencies:\s*repeat KeyPath<' Sources/InnoFlow/SelectedStore.swift; then
+  if ! search_multiline 'public func select<each Dep: Equatable & Sendable[\s\S]{0,200}dependingOnAll dependencies:\s*repeat KeyPath<' Sources/InnoFlow/SelectedStore.swift >/dev/null; then
     echo "[principle-gates] Failed: SelectedStore variadic dependingOnAll overload is missing"
     exit 1
   fi

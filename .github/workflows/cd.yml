@@ -39,6 +39,9 @@ jobs:
       - name: Run principle gates
         run: |
           set -eo pipefail
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            export INNOFLOW_REQUIRE_RELEASE_TAG=1
+          fi
           "$GITHUB_WORKSPACE/scripts/principle-gates.sh"
 
       - name: Generate DocC

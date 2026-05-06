@@ -51,7 +51,7 @@ extension InnoFlowMacro {
       return
     }
 
-    let referencedNames = collectMemberAccessNames(in: phaseMapMember)
+    let referencedNames = collectPhaseMapDSLPhaseReferences(in: phaseMapMember)
 
     for element in phaseElements where !referencedNames.contains(element.name.text) {
       context.diagnose(
@@ -71,7 +71,7 @@ extension InnoFlowMacro {
       return .missingStaticPhaseMap
     }
 
-    if collectMemberAccessNames(in: bodyProperty).contains("phaseMap") {
+    if containsPhaseMapCall(in: bodyProperty) {
       return .bodyAlreadyAppliesPhaseMap
     }
 
@@ -118,6 +118,47 @@ extension InnoFlowMacro {
       }
   }
 
+  private static func collectPhaseMapDSLPhaseReferences(in node: some SyntaxProtocol)
+    -> Set<String>
+  {
+    var names: Set<String> = []
+    collectPhaseMapDSLPhaseReferences(in: Syntax(node), into: &names)
+    return names
+  }
+
+  private static func collectPhaseMapDSLPhaseReferences(
+    in node: Syntax,
+    into names: inout Set<String>
+  ) {
+    if let call = node.as(FunctionCallExprSyntax.self) {
+      collectPhaseReferences(from: call, into: &names)
+    }
+
+    for child in node.children(viewMode: .sourceAccurate) {
+      collectPhaseMapDSLPhaseReferences(in: child, into: &names)
+    }
+  }
+
+  private static func collectPhaseReferences(
+    from call: FunctionCallExprSyntax,
+    into names: inout Set<String>
+  ) {
+    let callee = call.calledExpression.trimmedDescription
+
+    if callee == "From", let firstArgument = call.arguments.first {
+      collectMemberAccessNames(in: Syntax(firstArgument.expression), into: &names)
+      return
+    }
+
+    guard callee == "On" else { return }
+    for argument in call.arguments {
+      guard let label = argument.label?.text, label == "to" || label == "targets" else {
+        continue
+      }
+      collectMemberAccessNames(in: Syntax(argument.expression), into: &names)
+    }
+  }
+
   private static func collectMemberAccessNames(in node: some SyntaxProtocol) -> Set<String> {
     var names: Set<String> = []
     collectMemberAccessNames(in: Syntax(node), into: &names)
@@ -132,6 +173,24 @@ extension InnoFlowMacro {
     for child in node.children(viewMode: .sourceAccurate) {
       collectMemberAccessNames(in: child, into: &names)
     }
+  }
+
+  private static func containsPhaseMapCall(in node: some SyntaxProtocol) -> Bool {
+    containsPhaseMapCall(in: Syntax(node))
+  }
+
+  private static func containsPhaseMapCall(in node: Syntax) -> Bool {
+    if let call = node.as(FunctionCallExprSyntax.self),
+      let memberAccess = call.calledExpression.as(MemberAccessExprSyntax.self),
+      memberAccess.declName.baseName.text == "phaseMap"
+    {
+      return true
+    }
+
+    for child in node.children(viewMode: .sourceAccurate) where containsPhaseMapCall(in: child) {
+      return true
+    }
+    return false
   }
 }
 
