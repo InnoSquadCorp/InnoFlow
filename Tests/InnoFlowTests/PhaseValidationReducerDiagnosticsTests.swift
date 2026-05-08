@@ -3,9 +3,9 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
+import OSLog
 import Testing
 import os
-import OSLog
 
 @testable import InnoFlowCore
 
@@ -37,7 +37,7 @@ private struct PhaseValidationFeature: Reducer {
 private let phaseGraph = PhaseTransitionGraph<PhaseValidationFeature.Phase>([
   .idle: [.loading],
   .loading: [.loaded, .failed],
-  .failed: [.loading]
+  .failed: [.loading],
 ])
 
 private final class ViolationProbe: Sendable {
@@ -151,14 +151,16 @@ struct PhaseValidationReducerDiagnosticsTests {
 
   @Test(".combined without active reporters preserves disabled semantics")
   func combinedWithoutActiveReportersRemainsDisabled() {
-    let empty: PhaseValidationDiagnostics<
-      PhaseValidationFeature.Action,
-      PhaseValidationFeature.Phase
-    > = .combined()
-    let disabledOnly: PhaseValidationDiagnostics<
-      PhaseValidationFeature.Action,
-      PhaseValidationFeature.Phase
-    > = .combined(.disabled)
+    let empty:
+      PhaseValidationDiagnostics<
+        PhaseValidationFeature.Action,
+        PhaseValidationFeature.Phase
+      > = .combined()
+    let disabledOnly:
+      PhaseValidationDiagnostics<
+        PhaseValidationFeature.Action,
+        PhaseValidationFeature.Phase
+      > = .combined(.disabled)
 
     #expect(empty.report == nil)
     #expect(disabledOnly.report == nil)
@@ -167,7 +169,8 @@ struct PhaseValidationReducerDiagnosticsTests {
   @Test(".osLog and .signpost adapters evaluate without crashing")
   func standardLoggingAdaptersEvaluate() {
     let logger = Logger(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
-    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let signposter = OSSignposter(
+      subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
     let reducer = PhaseValidationFeature().validatePhaseTransitions(
       tracking: \.phase,
       through: phaseGraph,
@@ -185,10 +188,11 @@ struct PhaseValidationReducerDiagnosticsTests {
   func osLogRedactionDoesNotEvaluateActionDescription() {
     let counter = DescriptionCounter()
     let logger = Logger(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
-    let diagnostics: PhaseValidationDiagnostics<
-      DescriptionCountingAction,
-      PhaseValidationFeature.Phase
-    > = .osLog(logger: logger)
+    let diagnostics:
+      PhaseValidationDiagnostics<
+        DescriptionCountingAction,
+        PhaseValidationFeature.Phase
+      > = .osLog(logger: logger)
 
     diagnostics.report?(
       .undeclaredTransition(
@@ -205,11 +209,13 @@ struct PhaseValidationReducerDiagnosticsTests {
   @Test(".signpost redaction does not evaluate action descriptions")
   func signpostRedactionDoesNotEvaluateActionDescription() {
     let counter = DescriptionCounter()
-    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
-    let diagnostics: PhaseValidationDiagnostics<
-      DescriptionCountingAction,
-      PhaseValidationFeature.Phase
-    > = .signpost(signposter: signposter)
+    let signposter = OSSignposter(
+      subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let diagnostics:
+      PhaseValidationDiagnostics<
+        DescriptionCountingAction,
+        PhaseValidationFeature.Phase
+      > = .signpost(signposter: signposter)
 
     diagnostics.report?(
       .undeclaredTransition(
@@ -227,10 +233,11 @@ struct PhaseValidationReducerDiagnosticsTests {
   func osLogIncludeActionPayloadEvaluatesActionDescription() {
     let counter = DescriptionCounter()
     let logger = Logger(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
-    let diagnostics: PhaseValidationDiagnostics<
-      DescriptionCountingAction,
-      PhaseValidationFeature.Phase
-    > = .osLog(logger: logger, includeActionPayload: true)
+    let diagnostics:
+      PhaseValidationDiagnostics<
+        DescriptionCountingAction,
+        PhaseValidationFeature.Phase
+      > = .osLog(logger: logger, includeActionPayload: true)
 
     diagnostics.report?(
       .undeclaredTransition(

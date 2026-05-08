@@ -3,9 +3,9 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
+import OSLog
 import Testing
 import os
-import OSLog
 
 @testable import InnoFlowCore
 
@@ -42,7 +42,8 @@ private struct DescriptionCountingAction: Sendable, CustomStringConvertible {
 }
 
 private final class ViolationProbe: Sendable {
-  private let lock = OSAllocatedUnfairLock<[PhaseMapViolation<TestAction, TestPhase>]>(initialState: [])
+  private let lock = OSAllocatedUnfairLock<[PhaseMapViolation<TestAction, TestPhase>]>(
+    initialState: [])
 
   var events: [PhaseMapViolation<TestAction, TestPhase>] {
     lock.withLock { $0 }
@@ -74,7 +75,8 @@ struct PhaseMapDiagnosticsAdaptersTests {
     }
 
     diagnostics.report(sampleViolation())
-    diagnostics.report(.directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .loaded))
+    diagnostics.report(
+      .directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .loaded))
 
     #expect(probe.events.count == 2)
   }
@@ -101,7 +103,8 @@ struct PhaseMapDiagnosticsAdaptersTests {
     let diagnostics: PhaseMapDiagnostics<TestAction, TestPhase> = .osLog(logger: logger)
 
     diagnostics.report(sampleViolation())
-    diagnostics.report(.directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .loaded))
+    diagnostics.report(
+      .directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .loaded))
     // Reaching this point means the closure ran for both cases without trapping.
   }
 
@@ -159,7 +162,8 @@ struct PhaseMapDiagnosticsAdaptersTests {
     let diagnostics: PhaseMapDiagnostics<TestAction, TestPhase> = .signpost(signposter: signposter)
 
     diagnostics.report(sampleViolation())
-    diagnostics.report(.directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .loaded))
+    diagnostics.report(
+      .directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .loaded))
   }
 
   @Test(".signpost redaction does not evaluate action descriptions")

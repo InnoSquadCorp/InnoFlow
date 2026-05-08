@@ -3,9 +3,9 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
+import OSLog
 import Testing
 import os
-import OSLog
 
 @testable import InnoFlowCore
 @testable import InnoFlowTesting
