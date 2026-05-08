@@ -10,6 +10,10 @@ import os
 
 private struct MetricsTestError: Error, Equatable {}
 
+/// `AsyncThrowingStream.Iterator: Sendable` requires `Failure: Sendable`, which
+/// rules out the common `any Error` spelling we want to mix with
+/// `CancellationError`. A hand-rolled sequence keeps the iterator
+/// unconditionally `Sendable` regardless of deployment target.
 private struct EmitOnceThenFailSequence: AsyncSequence, Sendable {
   typealias Element = Int
 

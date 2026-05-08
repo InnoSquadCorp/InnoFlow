@@ -826,7 +826,7 @@ production store semantics.
 }
 ```
 
-Package support is declared for iOS 17, macOS 14, tvOS 17, watchOS 10, and visionOS 1 or newer.
+Package support is declared for iOS 18, macOS 15, tvOS 18, watchOS 11, and visionOS 2 or newer. The 4.0.0 release raised the floor from iOS 17 / macOS 14 to take advantage of Swift 6.0 standard-library primitives (typed throws, `sending` parameters, `~Copyable` generics) without availability branches.
 The canonical sample still treats iOS as the primary interactive shell, while CI package builds
 cover the package-level visionOS contract.
 

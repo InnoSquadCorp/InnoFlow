@@ -22,8 +22,11 @@ validation stricter. It also finalizes the 4.0.0 public split between the core
 3. Removed `EffectContext.isCancelled`; effects should use
    `try await context.checkCancellation()` or the async
    `await context.isCancellationRequested()` probe.
-4. Lowered root and canonical sample package floors to iOS 17, macOS 14,
-   tvOS 17, watchOS 10, and visionOS 1.
+4. Raised root and canonical sample package floors to iOS 18, macOS 15,
+   tvOS 18, watchOS 11, and visionOS 2 (Swift 6.0 standard library) so the
+   framework can adopt typed throws, `sending` parameters, and other Swift
+   6.0 modernization without availability branches. Apps that still need
+   iOS 17 / macOS 14 support must stay on 3.x.
 5. Removed the sample package's compiled `InnoNetworkWebSocket` dependency and
    kept concrete transport integration as a non-compiled app-boundary snippet.
 6. Enabled the Swift 6 package contract, pinned `swift-syntax` exactly to

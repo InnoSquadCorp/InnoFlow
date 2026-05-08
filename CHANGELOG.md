@@ -98,9 +98,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed
 
-- Root and canonical sample package platform floors now target iOS 17,
-  macOS 14, tvOS 17, watchOS 10, and visionOS 1 where the current API surface
-  builds without availability branches.
+- Root and canonical sample package platform floors now target iOS 18,
+  macOS 15, tvOS 18, watchOS 11, and visionOS 2 (Swift 6.0 standard library).
+  The bump unlocks direct use of typed throws, `sending` parameters, and
+  other Swift 6.0 modernization without availability branches. Apps that
+  still need to support iOS 17 / macOS 14 must stay on the 3.x line.
 - The canonical sample package no longer has a hard dependency on
   `InnoNetworkWebSocket`. Scripted/protocol-backed clients remain compiled
   sample coverage; the concrete InnoNetwork adapter now lives as a

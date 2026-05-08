@@ -17,8 +17,12 @@ private struct SequenceTestError: Error, Equatable {
   let message: String
 }
 
-/// A hand-rolled async sequence whose iterator is `Sendable` even on platforms
-/// where `AsyncThrowingStream.Iterator` is not. Emits one element, then throws.
+/// A hand-rolled async sequence whose iterator is unconditionally `Sendable`.
+///
+/// `AsyncThrowingStream.Iterator` only conforms to `Sendable` when its `Failure`
+/// is itself `Sendable`, which excludes the common `any Error` spelling. Mixing
+/// `CancellationError()` with a domain error in the same stream therefore
+/// requires a hand-rolled sequence regardless of the deployment-target floor.
 private struct EmitOnceThenThrowSequence<Element: Sendable>: AsyncSequence, Sendable {
   let element: Element
   let mode: SequenceErrorMode
