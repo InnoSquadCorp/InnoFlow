@@ -44,7 +44,7 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   when adopting the release.
 - The retired `FRAMEWORK_EVALUATION*` documents were removed. Use
   `docs/FRAMEWORK_COMPARISON.md` for adjacent-library positioning.
-- Exact package pins can move to `4.0.0` once the tag is published.
+- Exact package pins can move to `4.0.0`.
 
 ## 3.0.2
 

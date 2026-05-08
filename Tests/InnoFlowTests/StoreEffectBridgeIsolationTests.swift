@@ -83,4 +83,17 @@ struct StoreEffectBridgeIsolationTests {
     #expect(inFlight == s2 - 1)
     #expect(bridge.shouldStart(sequence: s2, cancellationID: id) == false)
   }
+
+  @Test("nested cancellation contexts honor every active boundary")
+  func nestedCancellationContextChecksEveryBoundary() {
+    let bridge = StoreEffectBridge<Int>()
+    let outer = AnyEffectID(StaticEffectID("isolation.outer"))
+    let inner = AnyEffectID(StaticEffectID("isolation.inner"))
+    let sequence = bridge.nextSequence()
+    let context = EffectExecutionContext(cancellationIDs: [outer, inner], sequence: sequence)
+
+    bridge.markCancelled(id: outer, upTo: sequence)
+
+    #expect(bridge.shouldProceed(context: context) == false)
+  }
 }

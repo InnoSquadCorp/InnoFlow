@@ -76,12 +76,12 @@ package actor ActionQueue<Action: Sendable> {
 private final class TestStoreRunEndpoint<Action: Sendable> {
   private let isTaskActiveImpl: (UUID) -> Bool
   private let shouldProceedImpl: (EffectExecutionContext?) -> Bool
-  private let finishTrackedTaskImpl: (UUID, AnyEffectID?) -> Void
+  private let finishTrackedTaskImpl: (UUID) -> Void
 
   init(
     isTaskActive: @escaping (UUID) -> Bool,
     shouldProceed: @escaping (EffectExecutionContext?) -> Bool,
-    finishTrackedTask: @escaping (UUID, AnyEffectID?) -> Void
+    finishTrackedTask: @escaping (UUID) -> Void
   ) {
     self.isTaskActiveImpl = isTaskActive
     self.shouldProceedImpl = shouldProceed
@@ -96,8 +96,8 @@ private final class TestStoreRunEndpoint<Action: Sendable> {
     shouldProceedImpl(context)
   }
 
-  func finishTrackedTask(token: UUID, cancellationID: AnyEffectID?) {
-    finishTrackedTaskImpl(token, cancellationID)
+  func finishTrackedTask(token: UUID) {
+    finishTrackedTaskImpl(token)
   }
 }
 
@@ -126,7 +126,7 @@ private actor TestStoreRunBridge<Action: Sendable> {
   }
 
   func finish() async {
-    await endpoint.finishTrackedTask(token: token, cancellationID: context?.cancellationID)
+    await endpoint.finishTrackedTask(token: token)
   }
 }
 
@@ -181,8 +181,8 @@ extension TestStore {
       shouldProceed: { [weak self] context in
         self?.shouldProceed(context: context) ?? false
       },
-      finishTrackedTask: { [weak self] token, cancellationID in
-        self?.finishTrackedRunTask(token: token, cancellationID: cancellationID)
+      finishTrackedTask: { [weak self] token in
+        self?.finishTrackedRunTask(token: token)
       }
     )
     let runBridge = TestStoreRunBridge(
@@ -253,7 +253,8 @@ extension TestStore {
 
     runningTasks[token] = task
 
-    if let id = context?.cancellationID {
+    let uniqueIDs = Set(context?.cancellationIDs ?? [])
+    for id in uniqueIDs {
       taskIDsByEffectID[id, default: []].insert(token)
     }
 
@@ -272,6 +273,7 @@ extension TestStore {
 
     for token in ids {
       runningTasks.removeValue(forKey: token)?.cancel()
+      removeTrackedTask(token: token)
     }
   }
 
@@ -289,17 +291,17 @@ extension TestStore {
     debounceGenerationByID.removeAll()
   }
 
-  private func removeTrackedTask(token: UUID, cancellationID: AnyEffectID?) {
+  private func removeTrackedTask(token: UUID) {
     runningTasks.removeValue(forKey: token)
 
-    guard let id = cancellationID,
-      var tokens = taskIDsByEffectID[id]
-    else { return }
-    tokens.remove(token)
-    if tokens.isEmpty {
-      taskIDsByEffectID.removeValue(forKey: id)
-    } else {
-      taskIDsByEffectID[id] = tokens
+    for id in Array(taskIDsByEffectID.keys) {
+      guard var tokens = taskIDsByEffectID[id] else { continue }
+      tokens.remove(token)
+      if tokens.isEmpty {
+        taskIDsByEffectID.removeValue(forKey: id)
+      } else {
+        taskIDsByEffectID[id] = tokens
+      }
     }
   }
 
@@ -351,8 +353,8 @@ extension TestStore {
     runningTasks[token] != nil
   }
 
-  private func finishTrackedRunTask(token: UUID, cancellationID: AnyEffectID?) {
-    removeTrackedTask(token: token, cancellationID: cancellationID)
+  private func finishTrackedRunTask(token: UUID) {
+    removeTrackedTask(token: token)
   }
 
   private func sleepForDriver(_ duration: Duration) async throws {
@@ -405,7 +407,7 @@ extension TestStore: EffectDriver {
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
     guard let sequence = context?.sequence else { return true }
-    return shouldStart(sequence: sequence, cancellationID: context?.cancellationID)
+    return shouldStart(sequence: sequence, cancellationIDs: context?.cancellationIDs ?? [])
   }
 
   package func debounce(
@@ -536,7 +538,7 @@ extension TestStore: EffectDriver {
       }
     } else {
       let token = UUID()
-      let cancellationID = context?.cancellationID
+      let cancellationIDs = context?.cancellationIDs ?? []
       let startGate = TestStoreRunStartGate()
       let task = Task { @MainActor [weak self] in
         guard await startGate.wait() else {
@@ -544,7 +546,7 @@ extension TestStore: EffectDriver {
         }
         guard let self else { return }
         defer {
-          self.removeTrackedTask(token: token, cancellationID: cancellationID)
+          self.removeTrackedTask(token: token)
         }
         for child in children {
           guard !Task.isCancelled else { break }
@@ -553,7 +555,7 @@ extension TestStore: EffectDriver {
         }
       }
       runningTasks[token] = task
-      if let id = cancellationID {
+      for id in Set(cancellationIDs) {
         taskIDsByEffectID[id, default: []].insert(token)
       }
       Task { @MainActor in

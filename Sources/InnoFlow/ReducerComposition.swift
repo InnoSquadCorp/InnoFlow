@@ -365,15 +365,14 @@ where
       return .none
     }
 
-    var collection = state[keyPath: self.state]
-    guard let index = collection.firstIndex(where: { $0.id == id }) else {
+    guard let index = state[keyPath: self.state].firstIndex(where: { $0.id == id }) else {
       return .none
     }
 
-    var childState = collection[index]
-    let childEffect = reducer.reduce(into: &childState, action: childAction)
-    collection[index] = childState
-    state[keyPath: self.state] = collection
+    let childEffect = reducer.reduce(
+      into: &state[keyPath: self.state][index],
+      action: childAction
+    )
     let actionPath = self.action
     let elementID = id
     return childEffect.map { followUpAction in

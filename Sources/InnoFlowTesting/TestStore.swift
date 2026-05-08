@@ -29,9 +29,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]
   package var debounceDelayTasksByID: [AnyEffectID: Task<Void, Never>] = [:]
   package var debounceGenerationByID: [AnyEffectID: UUID] = [:]
-  package var lastIssuedSequence: UInt64 = 0
-  package var cancelledUpToAll: UInt64 = 0
-  package var cancelledUpToByID: [AnyEffectID: UInt64] = [:]
+  package let effectBoundaries = EffectCancellationBoundaries()
   package let throttleState = ThrottleStateMap<R.Action>()
 
   package var walker: EffectWalker<TestStore<R>> {
@@ -92,39 +90,30 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   // MARK: - Sequence Boundaries
 
   package func nextSequence() -> UInt64 {
-    lastIssuedSequence &+= 1
-    return lastIssuedSequence
+    effectBoundaries.nextSequence()
   }
 
   package func shouldStart(sequence: UInt64, cancellationID: AnyEffectID?) -> Bool {
-    if sequence <= cancelledUpToAll {
-      return false
-    }
-    guard let cancellationID else { return true }
-    return sequence > (cancelledUpToByID[cancellationID] ?? 0)
+    effectBoundaries.shouldStart(sequence: sequence, cancellationID: cancellationID)
+  }
+
+  package func shouldStart(sequence: UInt64, cancellationIDs: [AnyEffectID]) -> Bool {
+    effectBoundaries.shouldStart(sequence: sequence, cancellationIDs: cancellationIDs)
   }
 
   @discardableResult
   package func markCancelled(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
-    let sequence = sequence ?? lastIssuedSequence
-    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, sequence)
-    return sequence
+    effectBoundaries.markCancelled(id: id, upTo: sequence)
   }
 
   @discardableResult
   package func markCancelledInFlight(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
-    let sequence = sequence ?? lastIssuedSequence
-    let previousSequence = sequence == 0 ? 0 : sequence - 1
-    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, previousSequence)
-    return previousSequence
+    effectBoundaries.markCancelledInFlight(id: id, upTo: sequence)
   }
 
   @discardableResult
   package func markCancelledAll(upTo sequence: UInt64? = nil) -> UInt64 {
-    let sequence = sequence ?? lastIssuedSequence
-    cancelledUpToAll = max(cancelledUpToAll, sequence)
-    cancelledUpToByID.removeAll(keepingCapacity: true)
-    return sequence
+    effectBoundaries.markCancelledAll(upTo: sequence)
   }
 
 }

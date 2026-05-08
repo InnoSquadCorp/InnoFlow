@@ -24,17 +24,28 @@ package struct EffectAnimation: Sendable, CustomStringConvertible {
 ///
 /// Extracted to eliminate duplication between production and testing runtimes.
 package struct EffectExecutionContext: Sendable {
-  package let cancellationID: AnyEffectID?
+  package let cancellationIDs: [AnyEffectID]
   package let animation: EffectAnimation?
   /// Store/TestStore sequence number for cancellation boundary tracking.
   package let sequence: UInt64?
 
+  package var cancellationID: AnyEffectID? {
+    cancellationIDs.last
+  }
+
   package init(
     cancellationID: AnyEffectID? = nil,
+    cancellationIDs: [AnyEffectID]? = nil,
     animation: EffectAnimation? = nil,
     sequence: UInt64? = nil
   ) {
-    self.cancellationID = cancellationID
+    if let cancellationIDs {
+      self.cancellationIDs = cancellationIDs
+    } else if let cancellationID {
+      self.cancellationIDs = [cancellationID]
+    } else {
+      self.cancellationIDs = []
+    }
     self.animation = animation
     self.sequence = sequence
   }
@@ -43,7 +54,11 @@ package struct EffectExecutionContext: Sendable {
     _ id: AnyEffectID,
     on existing: Self?
   ) -> Self {
-    .init(cancellationID: id, animation: existing?.animation, sequence: existing?.sequence)
+    .init(
+      cancellationIDs: (existing?.cancellationIDs ?? []) + [id],
+      animation: existing?.animation,
+      sequence: existing?.sequence
+    )
   }
 
   package static func withAnimation(
@@ -51,7 +66,10 @@ package struct EffectExecutionContext: Sendable {
     on existing: Self?
   ) -> Self {
     .init(
-      cancellationID: existing?.cancellationID, animation: animation, sequence: existing?.sequence)
+      cancellationIDs: existing?.cancellationIDs ?? [],
+      animation: animation,
+      sequence: existing?.sequence
+    )
   }
 }
 

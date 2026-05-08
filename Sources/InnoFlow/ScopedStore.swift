@@ -114,13 +114,11 @@ extension Store {
     let bucket = collectionScopeCache.validatedBucket(for: anyKeyPath, callsite: callsite)
     bucket.revision &+= 1
     let elements = state[keyPath: collection]
-    var liveIDs: Set<AnyHashable> = []
     var stores: [ScopedStore<R, CollectionState.Element, ChildAction>] = []
 
     for (offset, element) in elements.enumerated() {
       let scopedElementID = element.id
       let elementID = AnyHashable(scopedElementID)
-      liveIDs.insert(elementID)
 
       let offsetBox =
         bucket.offsetsByID[elementID]
@@ -158,8 +156,15 @@ extension Store {
       stores.append(scopedStore)
     }
 
-    bucket.storesByID = bucket.storesByID.filter { liveIDs.contains($0.key) }
-    bucket.offsetsByID = bucket.offsetsByID.filter { liveIDs.contains($0.key) }
+    var staleIDs: [AnyHashable] = []
+    for (elementID, offsetBox) in bucket.offsetsByID where offsetBox.revision != bucket.revision {
+      staleIDs.append(elementID)
+    }
+    for elementID in staleIDs {
+      bucket.offsetsByID.removeValue(forKey: elementID)
+      bucket.storesByID.removeValue(forKey: elementID)
+    }
+
     collectionScopeCache.store(bucket, for: anyKeyPath)
     return stores
   }

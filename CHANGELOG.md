@@ -126,6 +126,19 @@ APIs.
 - The phase totality diagnostic no longer subclasses `SyntaxVisitor`. The diagnostic now walks
   `Syntax` recursively, avoiding a SwiftSyntax internal visitor symbol link failure that surfaced
   when the canonical sample package built the macro tool through the path dependency graph.
+- Phase-managed totality diagnostics now count only the `PhaseMap` DSL locations that actually
+  declare graph coverage (`From(...)`, `On(..., to:)`, and `On(..., targets:)`). Unrelated member
+  accesses inside the phase-map body no longer hide a missing `Phase` case warning.
+- Store effect cancellation now also tracks non-awaited `.merge` / `.concatenate` wrapper tasks.
+  `cancelAllEffects()` and scoped cancellation can tear down composite wrappers even when the
+  wrapper itself was not made explicitly `.cancellable(...)`, preventing child sends from escaping
+  after the store boundary has been cancelled.
+- Nested `.cancellable(...)` wrappers now preserve every active cancellation boundary internally.
+  Cancelling an outer id reaches already-started inner run tasks in both `Store` and `TestStore`,
+  rather than only checking the innermost id.
+- `EffectRuntime.finish(token:)` is now idempotent for cancellation races. A token that is cancelled
+  while in flight is still counted as finished once when its task unwinds, but duplicate finish
+  calls no longer inflate runtime instrumentation counters.
 - `swift build -c release` now succeeds on the current Swift 6.3 toolchain. The SIL `EarlyPerfInliner` previously segfaulted in `isCallerAndCalleeLayoutConstraintsCompatible` while scanning `Store.deinit` and `TestStore.deinit` for inlining candidates. Both deinits are now annotated with `@_optimize(none)`, which sidesteps the crash without changing `@MainActor isolated deinit` semantics or the public API. Deinit is not a hot path, so the localized optimization loss is negligible. Upstream tracker: [swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173) (and adjacent #87077 / #87736 / #87462). A minimal in-tree reproducer lives at `Repro/SILCrashRepro/` with the full crash dump in `Repro/SILCrashRepro/CRASH.txt`; retest on toolchain bumps to retire the workaround.
 - `swift test -c release` now passes the full InnoFlow test suite (212 tests). Five crash-contract subprocess tests (`StaleScope*CrashContractTests`, `PhaseMap*CrashContractTests`) previously failed in release because `runStaleScopedStoreHarness` and `runPhaseMapCrashHarness` linked against enumerated `.build/**/InnoFlow.build/*.o` object files — which pulls in whichever configuration happened to be in `.build/`. When the outer runner was invoked with `-c release`, the harness picked up release-optimized objects where `assertionFailure` had been elided, so the subprocess could not abort and the crash contract could not be verified. Both harnesses now inline-compile InnoFlow sources with `-Onone` + `-package-name InnoFlow` via the existing `innoFlowCoreSourcePaths` helper, matching the pattern already used by the release-harness counterparts and removing any dependency on the outer test-runner's build configuration.
 - Five timing-sensitive tests (`effectContextUsesStoreClock`, `effectContextCheckCancellationPassesWhileActive`, `effectContextCheckCancellationThrowsAfterCancelEffects`, `storeCombinatorComposition`, and `manualTestClockResumesSameDeadlineSleepersInInsertionOrder`) previously asserted state after a fixed number of `await Task.yield()` calls. That count was sufficient in debug but not in release — release-mode WMO eliminates some scheduling boundaries, and the remaining actor hops inside `Store.executeEffect → Task { walker.walk → driver.startRun → inner Task { gate.wait }}` still need scheduler turns. The tests now poll for the observable outcome (e.g., `store.throttled == [1]`, `await probe.started == 1`, `await clock.sleeperCount == N`), which is the idiomatic pattern for async-effect tests and was already used for the `_completed` probe flows elsewhere in the suite. The `Store.send(_:)` scheduling contract is now documented in `ARCHITECTURE_CONTRACT.md` under "Store.send(_:) scheduling contract".
@@ -168,6 +181,15 @@ APIs.
 - The canonical `Phase-Driven FSM` sample now uses `@InnoFlow(phaseManaged: true)`, making the
   sample app demonstrate the preferred phase-managed authoring path instead of the legacy explicit
   `.phaseMap(Self.phaseMap)` wrapper.
+- `Store` and `TestStore` now share a single cancellation-boundary implementation, keeping run
+  sequencing, cancel-in-flight, and cancel-all semantics aligned between production and test
+  runtimes.
+- `ForEachReducer` now mutates the matched collection element in place instead of copying the whole
+  collection before writing the result back.
+- Collection-scoped store caching now prunes stale IDs by revision, avoiding the per-refresh live-ID
+  set and dictionary filter pass while preserving stale-scope cleanup behavior.
+- Tag-triggered release gates now run the principle gate with release-tag enforcement enabled, and
+  successful multiline contract searches stay quiet so gate output stays focused on failures.
 - `.github/workflows/ci.yml` now splits package tests into two parallel jobs — `Package Tests (Core)` and `Package Tests (Sample)`. Sample-only failures no longer hold up core test feedback, and platform builds depend on the core test job alone, while sample-package builds depend on the sample test job. The principle-gates job depends on both since it runs the full canonical suite.
 - `scripts/principle-gates.sh` now excludes `Repro/` and any `.build-*` working directory when rsyncing the project into the canonical sample test root. The reproducer is not exercised by CI, and broader `.build-*` exclusion keeps stray release-build caches out of the staged copy used for sample-package tests.
 - Sample app, DocC walkthrough, `.cursor` authoring rules, README, and `CLAUDE.md` now document the new `store.binding(_:to:)` alias when forwarding an enum case constructor. `store.binding(\.$step, to: Feature.Action.setStep)` is the recommended form, `send:` remains supported indefinitely as an explicit labeled alternative, and the old unlabeled closure spelling remains a compatibility shim only.

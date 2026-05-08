@@ -426,6 +426,48 @@ struct StoreEffectRuntimeTests {
     #expect(store.completed.isEmpty)
   }
 
+  @Test("Store cancelAll cancels non-cancellable sequential composite wrappers")
+  func storeCancelAllCancelsNonCancellableSequentialCompositeWrapper() async {
+    let clock = ManualTestClock()
+    let store = Store(
+      reducer: NonCancellableSequentialCompositeFeature(),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+
+    store.send(.start)
+    _ = await waitUntilAsync {
+      await clock.sleeperCount == 1
+    }
+
+    await store.cancelAllEffects()
+    await clock.advance(by: .milliseconds(100))
+    await drainAsyncWork()
+
+    #expect(store.finished == false)
+  }
+
+  @Test("Store outer cancellation reaches already-started nested cancellable runs")
+  func storeOuterCancellationCancelsNestedCancellableRun() async {
+    let clock = ManualTestClock()
+    let store = Store(
+      reducer: NestedCancellableFeature(),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+
+    store.send(.start)
+    _ = await waitUntilAsync {
+      await clock.sleeperCount == 1
+    }
+
+    await store.cancelEffects(identifiedBy: "outer-cancellation")
+    await clock.advance(by: .milliseconds(100))
+    await drainAsyncWork()
+
+    #expect(store.finished == false)
+  }
+
   @Test("Store combinator composition keeps debounce and throttle semantics")
   func storeCombinatorComposition() async {
     let clock = ManualTestClock()
@@ -663,20 +705,19 @@ struct StoreEffectRuntimeTests {
 
     store.send(.trigger(1))
     store.send(.trigger(2))
-    for _ in 0..<10 {
-      await Task.yield()
-    }
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
+      }
+    )
     #expect(store.emitted.isEmpty)
 
     await clock.advance(by: .milliseconds(79))
     #expect(store.emitted.isEmpty)
 
     await clock.advance(by: .milliseconds(1))
-    for _ in 0..<10 {
-      if store.emitted == [2] {
-        break
-      }
-      await Task.yield()
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+      store.emitted == [2]
     }
     #expect(store.emitted == [2])
   }
@@ -692,22 +733,20 @@ struct StoreEffectRuntimeTests {
 
     store.send(.trigger(1))
     store.send(.trigger(2))
-    for _ in 0..<10 {
-      await Task.yield()
-    }
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
+      }
+    )
     #expect(store.emitted.isEmpty)
 
     await clock.advance(by: .milliseconds(59))
     #expect(store.emitted.isEmpty)
 
     await clock.advance(by: .milliseconds(1))
-    for _ in 0..<10 {
-      if store.emitted == [2] {
-        break
-      }
-      await Task.yield()
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+      store.emitted == [2]
     }
-
     #expect(store.emitted == [2])
   }
 
@@ -824,22 +863,20 @@ struct StoreEffectRuntimeTests {
 
     store.send(.trigger(1))
     store.send(.trigger(2))
-    for _ in 0..<10 {
-      await Task.yield()
-    }
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
+      }
+    )
     #expect(store.emitted.isEmpty)
 
     await clock.advance(by: .milliseconds(79))
     #expect(store.emitted.isEmpty)
 
     await clock.advance(by: .milliseconds(1))
-    for _ in 0..<10 {
-      if store.emitted == [2] {
-        break
-      }
-      await Task.yield()
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+      store.emitted == [2]
     }
-
     #expect(store.emitted == [2])
   }
 
@@ -1181,6 +1218,25 @@ struct StoreEffectRuntimeTests {
     #expect(metrics.finishedRuns == 1)
     #expect(metrics.cancellations == 1)
     #expect(await probe.started == 0)
+  }
+
+  @Test("EffectRuntime counts a cancelled token finish only once")
+  func effectRuntimeCancelledTokenFinishIsIdempotent() async {
+    let runtime = EffectRuntime<CounterFeature.Action>()
+    let token = UUID()
+    let gate = RunStartGate()
+    let task = Task<Void, Never> {}
+
+    await runtime.registerAndStart(token: token, id: nil, task: task, gate: gate)
+    await runtime.cancelAll(upTo: 1)
+    await runtime.finish(token: token)
+    await runtime.finish(token: token)
+
+    let metrics = await runtime.metricsSnapshot()
+    #expect(metrics.preparedRuns == 1)
+    #expect(metrics.attachedRuns == 1)
+    #expect(metrics.finishedRuns == 1)
+    #expect(metrics.cancellations == 1)
   }
 
   @Test("Store cancelled run effects do not start after public cancellation")

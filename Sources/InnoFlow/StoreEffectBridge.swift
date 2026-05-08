@@ -21,44 +21,36 @@ import Foundation
 package final class StoreEffectBridge<Action: Sendable> {
   package let runtime = EffectRuntime<Action>()
   package let throttleState = ThrottleStateMap<Action>()
+  private let boundaries = EffectCancellationBoundaries()
 
-  private var lastIssuedSequence: UInt64 = 0
-  private var cancelledUpToAll: UInt64 = 0
-  private var cancelledUpToByID: [AnyEffectID: UInt64] = [:]
   private var debounceDelayTasksByID: [AnyEffectID: Task<Void, Never>] = [:]
   private var debounceGenerationByID: [AnyEffectID: UInt64] = [:]
   private var nextDebounceGenerationValue: UInt64 = 0
+  private var compositeTasksByToken: [UUID: Task<Void, Never>] = [:]
+  private var compositeTokensByID: [AnyEffectID: Set<UUID>] = [:]
+  private var compositeIDsByToken: [UUID: Set<AnyEffectID>] = [:]
 
   package init() {}
 
   package var currentSequence: UInt64 {
-    lastIssuedSequence
+    boundaries.currentSequence
   }
 
   package func nextSequence() -> UInt64 {
-    lastIssuedSequence &+= 1
-    return lastIssuedSequence
+    boundaries.nextSequence()
   }
 
   package func shouldStart(sequence: UInt64, cancellationID: AnyEffectID?) -> Bool {
-    if sequence <= cancelledUpToAll {
-      return false
-    }
-    guard let cancellationID else { return true }
-    let boundary = cancelledUpToByID[cancellationID] ?? 0
-    return sequence > boundary
+    boundaries.shouldStart(sequence: sequence, cancellationID: cancellationID)
   }
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
-    guard let sequence = context?.sequence else { return true }
-    return shouldStart(sequence: sequence, cancellationID: context?.cancellationID)
+    boundaries.shouldProceed(context: context)
   }
 
   @discardableResult
   package func markCancelled(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
-    let sequence = sequence ?? lastIssuedSequence
-    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, sequence)
-    return sequence
+    boundaries.markCancelled(id: id, upTo: sequence)
   }
 
   /// Cancels every prior sequence for `id` while leaving the in-flight effect at
@@ -76,18 +68,12 @@ package final class StoreEffectBridge<Action: Sendable> {
   /// `@MainActor` isolation. Callers do not need additional synchronization.
   @discardableResult
   package func markCancelledInFlight(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
-    let sequence = sequence ?? lastIssuedSequence
-    let previousSequence = sequence == 0 ? 0 : sequence - 1
-    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, previousSequence)
-    return previousSequence
+    boundaries.markCancelledInFlight(id: id, upTo: sequence)
   }
 
   @discardableResult
   package func markCancelledAll(upTo sequence: UInt64? = nil) -> UInt64 {
-    let sequence = sequence ?? lastIssuedSequence
-    cancelledUpToAll = max(cancelledUpToAll, sequence)
-    cancelledUpToByID.removeAll(keepingCapacity: true)
-    return sequence
+    boundaries.markCancelledAll(upTo: sequence)
   }
 
   @discardableResult
@@ -135,19 +121,77 @@ package final class StoreEffectBridge<Action: Sendable> {
     throttleState.clearAll()
   }
 
+  package func registerCompositeTask(
+    token: UUID,
+    id: AnyEffectID?,
+    task: Task<Void, Never>
+  ) {
+    registerCompositeTask(token: token, ids: id.map { [$0] } ?? [], task: task)
+  }
+
+  package func registerCompositeTask(
+    token: UUID,
+    ids: [AnyEffectID],
+    task: Task<Void, Never>
+  ) {
+    compositeTasksByToken[token] = task
+    let uniqueIDs = Set(ids)
+    if uniqueIDs.isEmpty == false {
+      compositeIDsByToken[token] = uniqueIDs
+    }
+    for id in uniqueIDs {
+      compositeTokensByID[id, default: []].insert(token)
+    }
+  }
+
+  package func finishCompositeTask(token: UUID) {
+    compositeTasksByToken.removeValue(forKey: token)
+    let ids = compositeIDsByToken.removeValue(forKey: token) ?? []
+
+    for id in ids {
+      guard var tokens = compositeTokensByID[id] else { continue }
+      tokens.remove(token)
+      if tokens.isEmpty {
+        compositeTokensByID.removeValue(forKey: id)
+      } else {
+        compositeTokensByID[id] = tokens
+      }
+    }
+  }
+
+  package func cancelCompositeTasks(id: AnyEffectID) {
+    guard let tokens = compositeTokensByID[id] else { return }
+    for token in tokens {
+      compositeTasksByToken[token]?.cancel()
+      finishCompositeTask(token: token)
+    }
+  }
+
+  package func cancelAllCompositeTasks() {
+    for task in compositeTasksByToken.values {
+      task.cancel()
+    }
+    compositeTasksByToken.removeAll(keepingCapacity: true)
+    compositeTokensByID.removeAll(keepingCapacity: true)
+    compositeIDsByToken.removeAll(keepingCapacity: true)
+  }
+
   package func cancelEffects(id: AnyEffectID, upTo sequence: UInt64) async {
+    cancelCompositeTasks(id: id)
     await runtime.cancel(id: id, upTo: sequence)
     clearDebounceState(for: id)
     throttleState.clearState(for: id)
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, upTo sequence: UInt64) async {
+    cancelCompositeTasks(id: id)
     await runtime.cancelInFlight(id: id, upTo: sequence)
     clearDebounceState(for: id)
     throttleState.clearState(for: id)
   }
 
   package func cancelAllEffects(upTo sequence: UInt64) async {
+    cancelAllCompositeTasks()
     await runtime.cancelAll(upTo: sequence)
     clearAllDelayedState()
   }
@@ -160,6 +204,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   /// boundary used for instrumentation and tests.
   @discardableResult
   package func shutdown() -> UInt64 {
+    cancelAllCompositeTasks()
     clearAllDelayedState()
     let runtime = self.runtime
     let sequence = self.currentSequence

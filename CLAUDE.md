@@ -16,7 +16,7 @@ This file explains the current InnoFlow authoring model and repository rules.
 - Respect unidirectional flow and explicit side-effect boundaries.
 - Prefer general-purpose architecture changes over case-specific patches.
 
-## InnoFlow 3.0.0 rules
+## InnoFlow 4.0.0 rules
 
 These rules are source-of-truth and are enforced by macro diagnostics, tests, and principle gates.
 

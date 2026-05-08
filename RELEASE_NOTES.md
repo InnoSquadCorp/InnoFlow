@@ -32,6 +32,18 @@ validation stricter. It also finalizes the 4.0.0 public split between the core
    diagnostic corruption cannot drift silently.
 7. Added OSS contribution templates for security reports, conduct, issues, and
    pull requests.
+8. Hardened effect cancellation so non-awaited `.merge` / `.concatenate`
+   wrapper tasks are tracked and cancelled with their store boundary.
+9. Preserved every active cancellation boundary through nested `.cancellable`
+   wrappers so cancelling an outer id also reaches already-started inner runs.
+10. Shared cancellation-boundary sequencing between `Store` and `TestStore`,
+   including idempotent finish accounting for cancelled in-flight tokens.
+11. Tightened phase-managed macro diagnostics so unrelated member accesses in a
+    `phaseMap` body no longer suppress missing-phase warnings.
+12. Reduced collection hot-path overhead in `ForEachReducer` and
+    collection-scoped store cache pruning.
+13. Enabled tag-triggered release gates to run principle validation with release
+    tag enforcement.
 
 ## Migration Note
 
@@ -78,6 +90,15 @@ with the public API updates captured below.
    `StaticEffectID` as the string-literal convenience alias.
 6. Added `EffectTask.run` overloads for consuming `AsyncSequence` streams directly or through an
    optional element-to-action transform.
+7. Hardened store effect cancellation for non-awaited composite effects and
+   nested `.cancellable` boundaries, and aligned production/test
+   cancellation-boundary accounting.
+8. Tightened phase-managed totality diagnostics to count only `PhaseMap` DSL
+   graph declarations.
+9. Reduced collection reducer and scoped-store cache overhead on repeated list
+   refreshes.
+10. Strengthened tag-driven release validation so 4.0.0 publication fails when
+    release-target documentation and tags drift.
 
 ## Migration Note
 
@@ -98,7 +119,9 @@ with the public API updates captured below.
 - Instrumentation consumers should treat event cancellation identifiers as `AnyEffectID?`; typed
   `EffectID` values remain accepted by event initializers and `AnyEffectID.rawValue` exposes the
   erased raw value for logging.
-- Consumers that pin exact tags can move to `4.0.0` once that tag is published later.
+- The runtime and diagnostic hardening in this pass does not require source
+  migration.
+- Consumers that pin exact tags can move to `4.0.0`.
 
 ## 3.0.3 Release
 

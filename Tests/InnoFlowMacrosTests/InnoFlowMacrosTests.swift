@@ -1575,4 +1575,165 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test(
+    "@InnoFlow(phaseManaged:) ignores unrelated member access when checking phase coverage"
+  )
+  func phaseManagedTotalityIgnoresUnrelatedMemberAccess() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: true)
+        struct UnrelatedMemberAccessFeature {
+            struct State: Sendable {
+                enum Phase: Hashable, Sendable {
+                    case idle
+                    case loaded
+                }
+                var phase: Phase = .idle
+            }
+            enum Marker {
+                case loaded
+            }
+            enum Action: Sendable, Equatable {
+                case load
+            }
+            static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                _ = Marker.loaded
+                return PhaseMap(\\State.phase) {
+                    From(.idle) {
+                        On(.load, to: .idle)
+                    }
+                }
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct UnrelatedMemberAccessFeature {
+              struct State: Sendable {
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                      case loaded
+                  }
+                  var phase: Phase = .idle
+              }
+              enum Marker {
+                  case loaded
+              }
+              enum Action: Sendable, Equatable {
+                  case load
+              }
+              static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  _ = Marker.loaded
+                  return PhaseMap(\\State.phase) {
+                      From(.idle) {
+                          On(.load, to: .idle)
+                      }
+                  }
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
+              }
+          }
+
+          extension UnrelatedMemberAccessFeature: Reducer {
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "`Phase.loaded` is declared but never referenced from the static `phaseMap` — add a `From(.loaded) { ... }` rule, an `On(..., to: .loaded)` target, or remove the case if it is unused",
+            line: 6,
+            column: 18,
+            severity: .warning
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow(phaseManaged:) counts On targets set references as phase coverage")
+  func phaseManagedTotalityCountsTargetsSetReferences() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: true)
+        struct TargetSetPhaseFeature {
+            struct State: Sendable {
+                enum Phase: Hashable, Sendable {
+                    case idle
+                    case loaded
+                    case failed
+                }
+                var phase: Phase = .idle
+                var shouldFail = false
+            }
+            enum Action: Sendable, Equatable {
+                case load
+            }
+            static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                PhaseMap(\\State.phase) {
+                    From(.idle) {
+                        On(.load, targets: [.loaded, .failed]) { state in
+                            state.shouldFail ? .failed : .loaded
+                        }
+                    }
+                }
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct TargetSetPhaseFeature {
+              struct State: Sendable {
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                      case loaded
+                      case failed
+                  }
+                  var phase: Phase = .idle
+                  var shouldFail = false
+              }
+              enum Action: Sendable, Equatable {
+                  case load
+              }
+              static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  PhaseMap(\\State.phase) {
+                      From(.idle) {
+                          On(.load, targets: [.loaded, .failed]) { state in
+                              state.shouldFail ? .failed : .loaded
+                          }
+                      }
+                  }
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
+              }
+          }
+
+          extension TargetSetPhaseFeature: Reducer {
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
 }
