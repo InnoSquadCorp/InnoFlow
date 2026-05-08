@@ -309,20 +309,23 @@ func drainAsyncWork(iterations: Int = 128) async {
 }
 
 @MainActor
+@discardableResult
 func waitUntil(
   timeout: Duration = .seconds(2),
   pollInterval: Duration = .milliseconds(20),
   condition: @escaping @MainActor () -> Bool
-) async {
+) async -> Bool {
   let clock = ContinuousClock()
   let deadline = clock.now.advanced(by: timeout)
 
   while clock.now < deadline {
     if condition() {
-      return
+      return true
     }
     try? await Task.sleep(for: pollInterval)
   }
+
+  return condition()
 }
 
 func waitUntilAsync(

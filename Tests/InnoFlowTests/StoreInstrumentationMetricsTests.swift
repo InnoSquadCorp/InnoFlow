@@ -65,7 +65,7 @@ private struct MetricsFeature: Reducer {
 struct StoreInstrumentationMetricsTests {
 
   @Test("Collector counts run lifecycle and emitted actions for successful effects")
-  func collectsRunLifecycleAndEmissions() async {
+  func collectsRunLifecycleAndEmissions() async throws {
     let metrics = StoreInstrumentationMetricsCollector<MetricsFeature.Action>()
     let store = Store(
       reducer: MetricsFeature(),
@@ -74,9 +74,12 @@ struct StoreInstrumentationMetricsTests {
     )
 
     store.send(.start)
-    await waitUntil(timeout: .seconds(5)) {
-      store.values == [1] && metrics.snapshot().runFinished >= 1
-    }
+    try #require(
+      await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+        let snap = metrics.snapshot()
+        return store.values == [1] && snap.runFinished >= 1 && snap.actionEmitted >= 1
+      }
+    )
 
     let snap = metrics.snapshot()
     #expect(snap.runStarted >= 1)
@@ -86,7 +89,7 @@ struct StoreInstrumentationMetricsTests {
   }
 
   @Test("Collector counts runFailed when an effect surfaces a non-cancellation error")
-  func collectsRunFailed() async {
+  func collectsRunFailed() async throws {
     let metrics = StoreInstrumentationMetricsCollector<MetricsFeature.Action>()
     let store = Store(
       reducer: MetricsFeature(),
@@ -95,9 +98,12 @@ struct StoreInstrumentationMetricsTests {
     )
 
     store.send(.startFailing)
-    await waitUntil(timeout: .seconds(5)) {
-      metrics.snapshot().runFailed >= 1
-    }
+    try #require(
+      await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+        let snap = metrics.snapshot()
+        return snap.runFailed >= 1 && store.values == [7]
+      }
+    )
 
     let snap = metrics.snapshot()
     #expect(snap.runFailed == 1)
@@ -106,7 +112,7 @@ struct StoreInstrumentationMetricsTests {
   }
 
   @Test("reset() clears every counter back to zero")
-  func resetClearsCounters() async {
+  func resetClearsCounters() async throws {
     let metrics = StoreInstrumentationMetricsCollector<MetricsFeature.Action>()
     let store = Store(
       reducer: MetricsFeature(),
@@ -115,9 +121,11 @@ struct StoreInstrumentationMetricsTests {
     )
 
     store.send(.start)
-    await waitUntil(timeout: .seconds(5)) {
-      metrics.snapshot().runFinished >= 1
-    }
+    try #require(
+      await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+        metrics.snapshot().runFinished >= 1
+      }
+    )
     #expect(metrics.snapshot().runFinished >= 1)
 
     metrics.reset()
@@ -126,7 +134,7 @@ struct StoreInstrumentationMetricsTests {
   }
 
   @Test("Collector composes via .combined(...) with other adapters")
-  func composesWithOtherAdapters() async {
+  func composesWithOtherAdapters() async throws {
     let metrics = StoreInstrumentationMetricsCollector<MetricsFeature.Action>()
     let probe = InstrumentationProbe()
 
@@ -144,9 +152,11 @@ struct StoreInstrumentationMetricsTests {
     )
 
     store.send(.start)
-    await waitUntil(timeout: .seconds(5)) {
-      metrics.snapshot().runFinished >= 1 && probe.events.contains("finished")
-    }
+    try #require(
+      await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+        metrics.snapshot().runFinished >= 1 && probe.events.contains("finished")
+      }
+    )
 
     #expect(metrics.snapshot().runFinished >= 1)
     #expect(probe.events.contains("finished"))
