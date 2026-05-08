@@ -32,6 +32,39 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .init(
 (both `String`) instead of `any Error`, so adapters cannot accidentally cross
 the Swift 6 `Sendable` boundary by capturing the original error reference.
 
+## Built-in Metrics Counter
+
+`StoreInstrumentationMetricsCollector` aggregates lifecycle events into a
+counter snapshot so projects do not have to hand-roll a `OSAllocatedUnfairLock`
++ `.sink` pair just to count `runStarted` / `runFailed` / `actionEmitted`. The
+collector itself is `Sendable` and exposes:
+
+- `instrumentation()` — pluggable adapter that increments the counters
+- `snapshot()` — copies the current counters into an immutable
+  `StoreInstrumentationMetricsSnapshot`
+- `reset()` — zeroes the counters (for per-window collection or test isolation)
+
+```swift
+let metrics = StoreInstrumentationMetricsCollector<Feature.Action>()
+let store = Store(
+  reducer: Feature(),
+  initialState: .init(),
+  instrumentation: .combined(
+    metrics.instrumentation(),
+    .osLog(logger: Logger(subsystem: "app", category: "innoflow"))
+  )
+)
+
+// At any later point — typically a timer or a metrics-backend flush:
+let snap = metrics.snapshot()
+metricsBackend.gauge("innoflow.run.failed", value: snap.runFailed)
+metricsBackend.gauge("innoflow.action.dropped", value: snap.actionDropped)
+```
+
+The collector is intentionally optional. If you already ship a vendor SDK
+(Datadog, Prometheus, swift-metrics) prefer the `.sink { event in ... }`
+adapter and emit counters directly into that backend.
+
 ## Phase Map Violations
 
 `PhaseMapDiagnostics` is the matching observability surface for `PhaseMap`-

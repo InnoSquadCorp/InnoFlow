@@ -25,6 +25,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - `scripts/principle-gates.sh` now enforces `assertPhaseMapCovers(...)`
   coverage for any phase-managed feature introduced in `Sources/InnoFlow`.
   Examples and macro fixtures are intentionally excluded.
+- `StoreInstrumentationMetricsCollector` ships a built-in metrics counter
+  that aggregates `StoreInstrumentation` events into a `Sendable`
+  `StoreInstrumentationMetricsSnapshot`. Pair via `.combined(...)` with any
+  other adapter (`.osLog`, `.signpost`, `.sink`).
 - `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
   conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
   `EffectTask.animation(Animation?)`.
