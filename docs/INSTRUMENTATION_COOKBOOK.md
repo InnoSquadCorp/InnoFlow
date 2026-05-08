@@ -126,6 +126,9 @@ let reducer = Feature()
 
 As with `PhaseMapDiagnostics`, action payloads are redacted by default and
 `includeActionPayload: true` should stay limited to local debugging sessions.
+Phase labels are also redacted by default in the standard logging adapters; pass
+`includePhaseInfo: true` only when those enum values are safe to show in Console
+or Instruments traces.
 
 ## Capture Events In Tests
 
@@ -240,8 +243,9 @@ let store = Store(
 ```
 
 Keep `includeActions` false unless action payloads are safe to show in traces.
-The signpost adapter opens intervals for effect runs and emits inline events
-for action emissions, drops, and cancellations.
+Keep `includeErrorPayload` false unless effect error descriptions are safe to
+show in traces. The signpost adapter opens intervals for effect runs and emits
+inline events for action emissions, run failures, drops, and cancellations.
 
 ## Fan Out To Multiple Adapters
 

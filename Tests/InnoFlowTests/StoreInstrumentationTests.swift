@@ -308,6 +308,43 @@ struct StoreInstrumentationTests {
     #expect(counter.count == 0)
   }
 
+  @Test("StoreInstrumentation.signpost supports redacted and explicit error payload paths")
+  func signpostErrorPayloadOptionEvaluates() {
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "storeInstrumentation")
+    let redacted = StoreInstrumentation<DescriptionCountingAction>.signpost(signposter: signposter)
+    let explicit = StoreInstrumentation<DescriptionCountingAction>.signpost(
+      signposter: signposter,
+      includeErrorPayload: true
+    )
+    let redactedToken = UUID()
+    let explicitToken = UUID()
+
+    redacted.didStartRun(
+      .init(token: redactedToken, cancellationID: Optional<AnyEffectID>.none, sequence: 1)
+    )
+    redacted.didFailRun(
+      .init(
+        token: redactedToken,
+        cancellationID: Optional<AnyEffectID>.none,
+        sequence: 1,
+        errorDescription: "sensitive-error",
+        errorTypeName: "TestError"
+      )
+    )
+    explicit.didStartRun(
+      .init(token: explicitToken, cancellationID: Optional<AnyEffectID>.none, sequence: 2)
+    )
+    explicit.didFailRun(
+      .init(
+        token: explicitToken,
+        cancellationID: Optional<AnyEffectID>.none,
+        sequence: 2,
+        errorDescription: "sensitive-error",
+        errorTypeName: "TestError"
+      )
+    )
+  }
+
   @Test("StoreInstrumentation.osLog includeActions evaluates action descriptions")
   func osLogIncludeActionsEvaluatesActionDescription() {
     let counter = DescriptionCounter()

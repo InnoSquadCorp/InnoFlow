@@ -85,16 +85,24 @@ struct PhaseMapDiagnosticsAdaptersTests {
   func combinedFansOut() {
     let firstProbe = ViolationProbe()
     let secondProbe = ViolationProbe()
+    let deliveryOrder = OSAllocatedUnfairLock<[String]>(initialState: [])
 
     let diagnostics: PhaseMapDiagnostics<TestAction, TestPhase> = .combined(
-      .sink { violation in firstProbe.record(violation) },
-      .sink { violation in secondProbe.record(violation) }
+      .sink { violation in
+        deliveryOrder.withLock { $0.append("first") }
+        firstProbe.record(violation)
+      },
+      .sink { violation in
+        deliveryOrder.withLock { $0.append("second") }
+        secondProbe.record(violation)
+      }
     )
 
     diagnostics.report(sampleViolation())
 
     #expect(firstProbe.events.count == 1)
     #expect(secondProbe.events.count == 1)
+    #expect(deliveryOrder.withLock { $0 } == ["first", "second"])
   }
 
   @Test(".osLog evaluates without crashing for both violation cases")

@@ -73,6 +73,24 @@ private struct DescriptionCountingAction: Sendable, CustomStringConvertible {
   }
 }
 
+private struct DescriptionCountingPhase: Hashable, Sendable, CustomStringConvertible {
+  let id: String
+  let counter: DescriptionCounter
+
+  var description: String {
+    counter.increment()
+    return "sensitive-phase-\(id)"
+  }
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.id == rhs.id
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(id)
+  }
+}
+
 @Suite("PhaseValidationReducer diagnostics", .serialized)
 @MainActor
 struct PhaseValidationReducerDiagnosticsTests {
@@ -186,47 +204,51 @@ struct PhaseValidationReducerDiagnosticsTests {
 
   @Test(".osLog redaction does not evaluate action descriptions")
   func osLogRedactionDoesNotEvaluateActionDescription() {
-    let counter = DescriptionCounter()
+    let actionCounter = DescriptionCounter()
+    let phaseCounter = DescriptionCounter()
     let logger = Logger(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
     let diagnostics:
       PhaseValidationDiagnostics<
         DescriptionCountingAction,
-        PhaseValidationFeature.Phase
+        DescriptionCountingPhase
       > = .osLog(logger: logger)
 
     diagnostics.report?(
       .undeclaredTransition(
-        action: DescriptionCountingAction(counter: counter),
-        previousPhase: .idle,
-        nextPhase: .loaded,
-        allowedNextPhases: [.loading]
+        action: DescriptionCountingAction(counter: actionCounter),
+        previousPhase: DescriptionCountingPhase(id: "idle", counter: phaseCounter),
+        nextPhase: DescriptionCountingPhase(id: "loaded", counter: phaseCounter),
+        allowedNextPhases: [DescriptionCountingPhase(id: "loading", counter: phaseCounter)]
       )
     )
 
-    #expect(counter.count == 0)
+    #expect(actionCounter.count == 0)
+    #expect(phaseCounter.count == 0)
   }
 
   @Test(".signpost redaction does not evaluate action descriptions")
   func signpostRedactionDoesNotEvaluateActionDescription() {
-    let counter = DescriptionCounter()
+    let actionCounter = DescriptionCounter()
+    let phaseCounter = DescriptionCounter()
     let signposter = OSSignposter(
       subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
     let diagnostics:
       PhaseValidationDiagnostics<
         DescriptionCountingAction,
-        PhaseValidationFeature.Phase
+        DescriptionCountingPhase
       > = .signpost(signposter: signposter)
 
     diagnostics.report?(
       .undeclaredTransition(
-        action: DescriptionCountingAction(counter: counter),
-        previousPhase: .idle,
-        nextPhase: .loaded,
-        allowedNextPhases: [.loading]
+        action: DescriptionCountingAction(counter: actionCounter),
+        previousPhase: DescriptionCountingPhase(id: "idle", counter: phaseCounter),
+        nextPhase: DescriptionCountingPhase(id: "loaded", counter: phaseCounter),
+        allowedNextPhases: [DescriptionCountingPhase(id: "loading", counter: phaseCounter)]
       )
     )
 
-    #expect(counter.count == 0)
+    #expect(actionCounter.count == 0)
+    #expect(phaseCounter.count == 0)
   }
 
   @Test(".osLog includeActionPayload evaluates action descriptions")
@@ -249,6 +271,55 @@ struct PhaseValidationReducerDiagnosticsTests {
     )
 
     #expect(counter.count == 1)
+  }
+
+  @Test(".osLog includePhaseInfo evaluates phase descriptions")
+  func osLogIncludePhaseInfoEvaluatesPhaseDescriptions() {
+    let actionCounter = DescriptionCounter()
+    let phaseCounter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let diagnostics:
+      PhaseValidationDiagnostics<
+        DescriptionCountingAction,
+        DescriptionCountingPhase
+      > = .osLog(logger: logger, includePhaseInfo: true)
+
+    diagnostics.report?(
+      .undeclaredTransition(
+        action: DescriptionCountingAction(counter: actionCounter),
+        previousPhase: DescriptionCountingPhase(id: "idle", counter: phaseCounter),
+        nextPhase: DescriptionCountingPhase(id: "loaded", counter: phaseCounter),
+        allowedNextPhases: [DescriptionCountingPhase(id: "loading", counter: phaseCounter)]
+      )
+    )
+
+    #expect(actionCounter.count == 0)
+    #expect(phaseCounter.count >= 3)
+  }
+
+  @Test(".signpost includePhaseInfo evaluates phase descriptions")
+  func signpostIncludePhaseInfoEvaluatesPhaseDescriptions() {
+    let actionCounter = DescriptionCounter()
+    let phaseCounter = DescriptionCounter()
+    let signposter = OSSignposter(
+      subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let diagnostics:
+      PhaseValidationDiagnostics<
+        DescriptionCountingAction,
+        DescriptionCountingPhase
+      > = .signpost(signposter: signposter, includePhaseInfo: true)
+
+    diagnostics.report?(
+      .undeclaredTransition(
+        action: DescriptionCountingAction(counter: actionCounter),
+        previousPhase: DescriptionCountingPhase(id: "idle", counter: phaseCounter),
+        nextPhase: DescriptionCountingPhase(id: "loaded", counter: phaseCounter),
+        allowedNextPhases: [DescriptionCountingPhase(id: "loading", counter: phaseCounter)]
+      )
+    )
+
+    #expect(actionCounter.count == 0)
+    #expect(phaseCounter.count >= 3)
   }
 
   @Test("Custom diagnostics reporter is silent on legal transitions")

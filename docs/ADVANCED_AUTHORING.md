@@ -79,7 +79,7 @@ For phase-managed features the matching surface is `PhaseMapDiagnostics` — see
 
 ### 6. Validate phase contracts in tests
 
-If the feature is `@InnoFlow(phaseManaged: true)`, lock the legal transitions with `assertPhaseMapCovers(...)`. The principle gates enforce this for every phase-managed feature in `Sources/InnoFlowCore`; it is recommended for sample apps too.
+If the feature is `@InnoFlow(phaseManaged: true)`, lock the legal transitions with `assertPhaseMapCovers(...)`. The principle gates enforce this for every phase-managed feature in `Sources/InnoFlow`; it is recommended for sample apps too.
 
 ## Where to read next
 

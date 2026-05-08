@@ -2,4 +2,4 @@
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-@_exported import Foundation
+@_exported public import Foundation

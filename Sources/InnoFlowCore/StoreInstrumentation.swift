@@ -274,13 +274,16 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   /// when you want both Console-readable output and signpost-driven Instruments
   /// traces from the same store.
   ///
-  /// Action payloads are redacted by default because `String(describing:)` can
-  /// expose user data in Instruments traces. Opt in with `includeActions: true`
-  /// only for local debugging sessions where payload visibility is intentional.
+  /// Action and error payloads are redacted by default because
+  /// `String(describing:)` and error descriptions can expose user data in
+  /// Instruments traces. Opt in with `includeActions: true` and
+  /// `includeErrorPayload: true` only for local debugging sessions where payload
+  /// visibility is intentional.
   public static func signpost(
     signposter: OSSignposter,
     name: StaticString = "InnoFlow.run",
-    includeActions: Bool = false
+    includeActions: Bool = false,
+    includeErrorPayload: Bool = false
   ) -> Self {
     let intervalStates = OSSignpostIntervalStateRegistry()
 
@@ -311,9 +314,11 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
             "token=\(event.token.uuidString) failed cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
           )
         }
+        let renderedErrorDescription =
+          includeErrorPayload ? event.errorDescription : "<redacted>"
         signposter.emitEvent(
           name,
-          "fail token=\(event.token.uuidString) errorType=\(event.errorTypeName) errorDescription=\(event.errorDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+          "fail token=\(event.token.uuidString) errorType=\(event.errorTypeName) errorDescription=\(renderedErrorDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
       didEmitAction: { event in

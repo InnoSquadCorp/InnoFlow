@@ -41,9 +41,9 @@ struct StoreEffectBridgeIsolationTests {
     _ = bridge.markCancelledInFlight(id: id, upTo: s3)
     let lowered = bridge.markCancelledInFlight(id: id, upTo: s2)
 
-    // The earlier call returns its own previousSequence, but the stored
-    // boundary keeps the higher value, so s2 (already <= the stored boundary)
-    // remains cancelled.
+    // The second call returns upTo - 1 (= s2 - 1), but the stored boundary
+    // was already set to s3 - 1 by the first call and is not lowered,
+    // so s2 (<= s3 - 1) remains cancelled.
     #expect(lowered == s2 - 1)
     #expect(bridge.shouldStart(sequence: s2, cancellationID: id) == false)
     #expect(bridge.shouldStart(sequence: s3, cancellationID: id) == true)

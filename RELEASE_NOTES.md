@@ -3,8 +3,8 @@
 ## Unreleased Release Hardening
 
 This hardening pass removes retired evaluation artifacts, tightens the public
-surface around reducer builders and effect cancellation, lowers supported
-platform floors where the current APIs allow it, and makes canonical sample
+surface around reducer builders and effect cancellation, raises supported
+platform floors for Swift 6.0 modernization, and makes canonical sample
 validation stricter. It also finalizes the 4.0.0 public split between the core
 `InnoFlow` product and the SwiftUI integration product `InnoFlowSwiftUI`.
 
