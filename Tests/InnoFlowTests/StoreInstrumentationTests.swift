@@ -190,6 +190,8 @@ struct StoreInstrumentationTests {
           probe.record("run-started")
         case .runFinished:
           probe.record("run-finished")
+        case .runFailed:
+          probe.record("run-failed")
         case .actionEmitted(let actionEvent):
           probe.record("emit:\(actionEvent.action)")
         case .actionDropped:

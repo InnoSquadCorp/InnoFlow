@@ -9,11 +9,26 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- `StoreInstrumentation.didFailRun` and `StoreInstrumentationEvent.runFailed`
+  surface non-cancellation errors that escape `EffectTask.run(sequence:)` and
+  `EffectTask.run(sequence:transform:)`. Adapters `.sink`, `.combined`,
+  `.osLog`, and `.signpost` all fan the new event out without changing existing
+  signatures (additive default closure on the initializer).
 - `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
   conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
   `EffectTask.animation(Animation?)`.
 - `EffectTask.run` now has `AsyncSequence` helpers for streams that emit
   actions directly or transform elements into optional actions.
+
+### Changed
+
+- `EffectTask.run(sequence:)` and `EffectTask.run(sequence:transform:)` no
+  longer swallow arbitrary thrown errors. `CancellationError` continues to stop
+  the effect silently; any other error is forwarded to
+  `StoreInstrumentation.didFailRun` (with the error description and type name
+  preserved as `Sendable` strings) before the effect terminates. The terminate
+  behavior is unchanged, so reducers that previously relied on silent failure
+  still see no spurious actions.
 - `EffectID<RawValue>` supports dynamic cancellation identifiers when
   `RawValue: Hashable & Sendable`; `StaticEffectID` remains the string-literal
   convenience alias.

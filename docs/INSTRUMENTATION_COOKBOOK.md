@@ -4,6 +4,34 @@
 or effect semantics. Keep adapters thin: convert InnoFlow events into the
 logging, tracing, or metrics backend owned by the app.
 
+## Effect Run Failures
+
+`StoreInstrumentation.didFailRun` surfaces non-cancellation errors thrown from
+`EffectTask.run(sequence:)` (and the `transform` overload) that previously
+terminated the effect silently. Cancellation still propagates without firing
+the hook so cooperative shutdown paths stay clean.
+
+```swift
+let instrumentation: StoreInstrumentation<Feature.Action> = .init(
+  didFailRun: { event in
+    metrics.increment(
+      "feature.effect.failed",
+      tags: [
+        "errorType": event.errorTypeName,
+        "cancellationID": event.cancellationID?.description ?? "<none>"
+      ]
+    )
+    logger.error(
+      "effect failed: \(event.errorTypeName) — \(event.errorDescription)"
+    )
+  }
+)
+```
+
+`RunFailedEvent` carries the error as `errorDescription` and `errorTypeName`
+(both `String`) instead of `any Error`, so adapters cannot accidentally cross
+the Swift 6 `Sendable` boundary by capturing the original error reference.
+
 ## Capture Events In Tests
 
 ```swift
