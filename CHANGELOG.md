@@ -29,6 +29,14 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   that aggregates `StoreInstrumentation` events into a `Sendable`
   `StoreInstrumentationMetricsSnapshot`. Pair via `.combined(...)` with any
   other adapter (`.osLog`, `.signpost`, `.sink`).
+- [`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md)
+  inventories every `@_optimize(none)` and other compiler workaround,
+  including the upstream issue link and the retest trigger. The principle
+  gates already emit a warning when a newer toolchain is detected; this
+  document is the human-readable companion.
+- [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bundles the
+  authoring → dependencies → instrumentation → cross-framework flow into a
+  single guide.
 - `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
   conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
   `EffectTask.animation(Animation?)`.
