@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-public import os
+import os
 
 /// A snapshot of effect-runtime metrics observed by
 /// ``StoreInstrumentationMetricsCollector``.
