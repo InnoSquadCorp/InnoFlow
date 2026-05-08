@@ -18,6 +18,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   `PhaseValidationDiagnostics` reporter that surfaces undeclared transitions
   in every build configuration. The historical `.disabled` default still
   preserves the debug-only `assertionFailure` behaviour.
+- `PhaseMapDiagnostics` now ships standard adapters: `.sink`, `.combined`,
+  `.osLog(logger:)`, and `.signpost(signposter:name:)`. The shape mirrors
+  `StoreInstrumentation` so projects can wire phase-map violations into the
+  same observability backend as effect lifecycle events.
 - `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
   conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
   `EffectTask.animation(Animation?)`.

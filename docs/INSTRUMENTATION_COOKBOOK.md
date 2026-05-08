@@ -32,6 +32,40 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .init(
 (both `String`) instead of `any Error`, so adapters cannot accidentally cross
 the Swift 6 `Sendable` boundary by capturing the original error reference.
 
+## Phase Map Violations
+
+`PhaseMapDiagnostics` is the matching observability surface for `PhaseMap`-
+managed features. The default value `.disabled` keeps phase-map violations
+silent in release builds, which is fine for prototypes but is rarely the right
+choice in production. Pick one of the supplied adapters or compose them:
+
+```swift
+let diagnostics: PhaseMapDiagnostics<Feature.Action, Feature.State.Phase> = .combined(
+  .osLog(logger: Logger(subsystem: "app", category: "phaseMap")),
+  .signpost(signposter: OSSignposter(subsystem: "app", category: "phaseMap")),
+  .sink { violation in
+    metrics.increment(
+      "feature.phaseMap.violation",
+      tags: ["case": "\(violation)"]
+    )
+  }
+)
+
+@InnoFlow(phaseManaged: true)
+struct Feature {
+  // ...
+  static var phaseMap: PhaseMap<State, Action, State.Phase> {
+    PhaseMap(\.phase, diagnostics: diagnostics) {
+      // ...
+    }
+  }
+}
+```
+
+Action payloads are redacted by default in `.osLog` and `.signpost` because
+violation traces routinely escape the device. Pass `includeActionPayload:
+true` only in local debugging sessions.
+
 ## Capture Events In Tests
 
 ```swift
