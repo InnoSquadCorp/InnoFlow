@@ -9,7 +9,7 @@
 import Foundation
 import Testing
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 
 private var isProjectionObserverRegistryPerfBenchmarkEnabled: Bool {
   ProcessInfo.processInfo.environment["INNOFLOW_PERF_BENCHMARKS"] == "1"

@@ -6,7 +6,7 @@ import Foundation
 import Testing
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowTesting
 
 // MARK: - TestStore Core Tests
@@ -30,8 +30,8 @@ struct TestStoreCoreTests {
       $0.isLoading = true
     }
 
-    await store.receive(._loaded("Hello, InnoFlow v2")) {
-      $0.value = "Hello, InnoFlow v2"
+    await store.receive(._loaded("Hello, InnoFlow")) {
+      $0.value = "Hello, InnoFlow"
       $0.isLoading = false
     }
 
@@ -51,8 +51,8 @@ struct TestStoreCoreTests {
         $0.isLoading = true
       }
 
-      await store.receive(._loaded("Hello, InnoFlow v2")) {
-        $0.value = "Hello, InnoFlow v2"
+      await store.receive(._loaded("Hello, InnoFlow")) {
+        $0.value = "Hello, InnoFlow"
         $0.isLoading = false
       }
 

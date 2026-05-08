@@ -2,7 +2,8 @@
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-@_exported import Foundation
+@_exported public import Foundation
+@_exported public import InnoFlowCore
 
 // MARK: - InnoFlow Macro
 
@@ -119,11 +120,3 @@ public macro _InnoFlowActionPaths() =
     module: "InnoFlowMacros",
     type: "InnoFlowActionPathsMacro"
   )
-
-// MARK: - BindableField
-
-/// Marks a `State` property as intentionally bindable from SwiftUI.
-///
-/// Properties marked with `@BindableField` remain reducer-friendly value fields,
-/// while exposing a projected ``BindableProperty`` via `\.$field` for
-/// `store.binding(_:send:)`.

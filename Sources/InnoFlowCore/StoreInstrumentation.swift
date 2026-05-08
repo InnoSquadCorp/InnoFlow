@@ -40,6 +40,7 @@ public enum ActionDropReason: Sendable, Equatable {
 public enum StoreInstrumentationEvent<Action: Sendable>: Sendable {
   case runStarted(StoreInstrumentation<Action>.RunEvent)
   case runFinished(StoreInstrumentation<Action>.RunEvent)
+  case runFailed(StoreInstrumentation<Action>.RunFailedEvent)
   case actionEmitted(StoreInstrumentation<Action>.ActionEvent)
   case actionDropped(StoreInstrumentation<Action>.ActionDropEvent)
   case effectsCancelled(StoreInstrumentation<Action>.CancellationEvent)
@@ -128,6 +129,49 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     }
   }
 
+  /// An error escaped from `EffectTask.run(...)` work. Carried as descriptions
+  /// rather than the raw error because `any Error` is not unconditionally
+  /// `Sendable` under Swift 6 strict concurrency, and instrumentation is an
+  /// observation hook (e.g., logs, metrics, traces) that does not need to
+  /// re-throw or inspect the concrete error type.
+  public struct RunFailedEvent: Sendable {
+    public let token: UUID
+    public let cancellationID: AnyEffectID?
+    public let sequence: UInt64?
+    public let errorDescription: String
+    public let errorTypeName: String
+
+    public init(
+      token: UUID,
+      cancellationID: AnyEffectID?,
+      sequence: UInt64?,
+      errorDescription: String,
+      errorTypeName: String
+    ) {
+      self.token = token
+      self.cancellationID = cancellationID
+      self.sequence = sequence
+      self.errorDescription = errorDescription
+      self.errorTypeName = errorTypeName
+    }
+
+    public init<ID: Hashable & Sendable>(
+      token: UUID,
+      cancellationID: EffectID<ID>?,
+      sequence: UInt64?,
+      errorDescription: String,
+      errorTypeName: String
+    ) {
+      self.init(
+        token: token,
+        cancellationID: cancellationID.map(AnyEffectID.init),
+        sequence: sequence,
+        errorDescription: errorDescription,
+        errorTypeName: errorTypeName
+      )
+    }
+  }
+
   public struct CancellationEvent: Sendable {
     public let id: AnyEffectID?
     public let sequence: UInt64
@@ -144,6 +188,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
 
   public var didStartRun: @Sendable (RunEvent) -> Void
   public var didFinishRun: @Sendable (RunEvent) -> Void
+  public var didFailRun: @Sendable (RunFailedEvent) -> Void
   public var didEmitAction: @Sendable (ActionEvent) -> Void
   public var didDropAction: @Sendable (ActionDropEvent) -> Void
   public var didCancelEffects: @Sendable (CancellationEvent) -> Void
@@ -151,12 +196,14 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   public init(
     didStartRun: @escaping @Sendable (RunEvent) -> Void = { _ in },
     didFinishRun: @escaping @Sendable (RunEvent) -> Void = { _ in },
+    didFailRun: @escaping @Sendable (RunFailedEvent) -> Void = { _ in },
     didEmitAction: @escaping @Sendable (ActionEvent) -> Void = { _ in },
     didDropAction: @escaping @Sendable (ActionDropEvent) -> Void = { _ in },
     didCancelEffects: @escaping @Sendable (CancellationEvent) -> Void = { _ in }
   ) {
     self.didStartRun = didStartRun
     self.didFinishRun = didFinishRun
+    self.didFailRun = didFailRun
     self.didEmitAction = didEmitAction
     self.didDropAction = didDropAction
     self.didCancelEffects = didCancelEffects
@@ -172,6 +219,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     .init(
       didStartRun: { receive(.runStarted($0)) },
       didFinishRun: { receive(.runFinished($0)) },
+      didFailRun: { receive(.runFailed($0)) },
       didEmitAction: { receive(.actionEmitted($0)) },
       didDropAction: { receive(.actionDropped($0)) },
       didCancelEffects: { receive(.effectsCancelled($0)) }
@@ -188,6 +236,11 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       didFinishRun: { event in
         for instrumentation in instrumentations {
           instrumentation.didFinishRun(event)
+        }
+      },
+      didFailRun: { event in
+        for instrumentation in instrumentations {
+          instrumentation.didFailRun(event)
         }
       },
       didEmitAction: { event in
@@ -221,13 +274,16 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   /// when you want both Console-readable output and signpost-driven Instruments
   /// traces from the same store.
   ///
-  /// Action payloads are redacted by default because `String(describing:)` can
-  /// expose user data in Instruments traces. Opt in with `includeActions: true`
-  /// only for local debugging sessions where payload visibility is intentional.
+  /// Action and error payloads are redacted by default because
+  /// `String(describing:)` and error descriptions can expose user data in
+  /// Instruments traces. Opt in with `includeActions: true` and
+  /// `includeErrorPayload: true` only for local debugging sessions where payload
+  /// visibility is intentional.
   public static func signpost(
     signposter: OSSignposter,
     name: StaticString = "InnoFlow.run",
-    includeActions: Bool = false
+    includeActions: Bool = false,
+    includeErrorPayload: Bool = false
   ) -> Self {
     let intervalStates = OSSignpostIntervalStateRegistry()
 
@@ -248,34 +304,60 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
           "token=\(event.token.uuidString) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
+      didFailRun: { event in
+        // Close the interval so signposter pairing remains balanced even when
+        // the run terminates abnormally, then surface the failure as an event.
+        if let state = intervalStates.take(token: event.token) {
+          signposter.endInterval(
+            name,
+            state,
+            "token=\(event.token.uuidString) failed cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+          )
+        }
+        let renderedErrorDescription =
+          includeErrorPayload ? event.errorDescription : "<redacted>"
+        signposter.emitEvent(
+          name,
+          id: .exclusive,
+          "fail token=\(event.token.uuidString) errorType=\(event.errorTypeName) errorDescription=\(renderedErrorDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+        )
+      },
       didEmitAction: { event in
         let actionDescription =
           includeActions ? String(describing: event.action) : "<redacted>"
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "emit action=\(actionDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
       didDropAction: { event in
-        let actionDescription = event.action.map(String.init(describing:)) ?? "<none>"
-        let renderedAction = includeActions ? actionDescription : "<redacted>"
+        let renderedAction =
+          includeActions ? event.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
       didCancelEffects: { event in
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "cancel id=\(String(describing: event.id)) sequence=\(event.sequence)"
         )
       }
     )
   }
 
+  /// Bridges store instrumentation to `Logger` for Console-readable runtime
+  /// events.
+  ///
+  /// Action payloads are redacted by default. Set `includeActions` to `true`
+  /// only when action descriptions are safe to expose in public Console output.
   public static func osLog(
     logger: Logger,
-    includeActions: Bool = true
+    includeActions: Bool = false
   ) -> Self {
     .sink { event in
       switch event {
@@ -289,18 +371,23 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
           "InnoFlow run finished token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(String(describing: runEvent.cancellationID), privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
         )
 
+      case .runFailed(let failedEvent):
+        logger.error(
+          "InnoFlow run failed token=\(failedEvent.token.uuidString, privacy: .public) errorType=\(failedEvent.errorTypeName, privacy: .public) errorDescription=\(failedEvent.errorDescription, privacy: .private) cancellationID=\(String(describing: failedEvent.cancellationID), privacy: .public) sequence=\(String(describing: failedEvent.sequence), privacy: .public)"
+        )
+
       case .actionEmitted(let actionEvent):
         let actionDescription =
           includeActions ? String(describing: actionEvent.action) : "<redacted>"
         logger.debug(
-          "InnoFlow emitted action=\(actionDescription, privacy: .private) cancellationID=\(String(describing: actionEvent.cancellationID), privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
+          "InnoFlow emitted action=\(actionDescription, privacy: .public) cancellationID=\(String(describing: actionEvent.cancellationID), privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
         )
 
       case .actionDropped(let dropEvent):
-        let actionDescription = dropEvent.action.map(String.init(describing:)) ?? "<none>"
-        let renderedAction = includeActions ? actionDescription : "<redacted>"
+        let renderedAction =
+          includeActions ? dropEvent.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
         logger.debug(
-          "InnoFlow dropped action=\(renderedAction, privacy: .private) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(String(describing: dropEvent.cancellationID), privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
+          "InnoFlow dropped action=\(renderedAction, privacy: .public) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(String(describing: dropEvent.cancellationID), privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
         )
 
       case .effectsCancelled(let cancellationEvent):

@@ -9,11 +9,49 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- `StoreInstrumentation.didFailRun` and `StoreInstrumentationEvent.runFailed`
+  surface non-cancellation errors that escape `EffectTask.run(sequence:)` and
+  `EffectTask.run(sequence:transform:)`. Adapters `.sink`, `.combined`,
+  `.osLog`, and `.signpost` all fan the new event out without changing existing
+  signatures (additive default closure on the initializer).
+- `validatePhaseTransitions(tracking:through:diagnostics:)` accepts an optional
+  `PhaseValidationDiagnostics` reporter that surfaces undeclared transitions
+  in every build configuration. The historical `.disabled` default still
+  preserves the debug-only `assertionFailure` behaviour.
+- `PhaseMapDiagnostics` now ships standard adapters: `.sink`, `.combined`,
+  `.osLog(logger:)`, and `.signpost(signposter:name:)`. The shape mirrors
+  `StoreInstrumentation` so projects can wire phase-map violations into the
+  same observability backend as effect lifecycle events.
+- `scripts/principle-gates.sh` now enforces `assertPhaseMapCovers(...)`
+  coverage for any phase-managed feature introduced in `Sources/InnoFlow`.
+  Examples and macro fixtures are intentionally excluded.
+- `StoreInstrumentationMetricsCollector` ships a built-in metrics counter
+  that aggregates `StoreInstrumentation` events into a `Sendable`
+  `StoreInstrumentationMetricsSnapshot`. Pair via `.combined(...)` with any
+  other adapter (`.osLog`, `.signpost`, `.sink`).
+- [`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md)
+  inventories every `@_optimize(none)` and other compiler workaround,
+  including the upstream issue link and the retest trigger. The principle
+  gates already emit a warning when a newer toolchain is detected; this
+  document is the human-readable companion.
+- [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bundles the
+  authoring → dependencies → instrumentation → cross-framework flow into a
+  single guide.
 - `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
   conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
   `EffectTask.animation(Animation?)`.
 - `EffectTask.run` now has `AsyncSequence` helpers for streams that emit
   actions directly or transform elements into optional actions.
+
+### Changed
+
+- `EffectTask.run(sequence:)` and `EffectTask.run(sequence:transform:)` no
+  longer swallow arbitrary thrown errors. `CancellationError` continues to stop
+  the effect silently; any other error is forwarded to
+  `StoreInstrumentation.didFailRun` (with the error description and type name
+  preserved as `Sendable` strings) before the effect terminates. The terminate
+  behavior is unchanged, so reducers that previously relied on silent failure
+  still see no spurious actions.
 - `EffectID<RawValue>` supports dynamic cancellation identifiers when
   `RawValue: Hashable & Sendable`; `StaticEffectID` remains the string-literal
   convenience alias.
@@ -60,9 +98,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed
 
-- Root and canonical sample package platform floors now target iOS 17,
-  macOS 14, tvOS 17, watchOS 10, and visionOS 1 where the current API surface
-  builds without availability branches.
+- Root and canonical sample package platform floors now target iOS 18,
+  macOS 15, tvOS 18, watchOS 11, and visionOS 2 (Swift 6.0 standard library).
+  The bump unlocks direct use of typed throws, `sending` parameters, and
+  other Swift 6.0 modernization without availability branches. Apps that
+  still need to support iOS 17 / macOS 14 must stay on the 3.x line.
 - The canonical sample package no longer has a hard dependency on
   `InnoNetworkWebSocket`. Scripted/protocol-backed clients remain compiled
   sample coverage; the concrete InnoNetwork adapter now lives as a

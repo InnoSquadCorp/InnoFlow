@@ -6,7 +6,7 @@ import Foundation
 import Testing
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowTesting
 
 @Suite("Phase Transition Graph Tests")
@@ -34,6 +34,40 @@ struct PhaseTransitionGraphTests {
         terminalPhases: [.loaded]
       ).isEmpty
     )
+  }
+
+  @Test("Single-phase linear graph preserves the inferred root")
+  func singlePhaseLinearGraphPreservesRoot() {
+    let graph = PhaseTransitionGraph<PhaseDrivenFeature.Phase>.linear(.idle)
+
+    let issues = graph.validate(
+      allPhases: [.idle],
+      terminalPhases: [.idle]
+    )
+
+    #expect(issues.isEmpty)
+    let report = graph.validationReport(
+      allPhases: [.idle],
+      terminalPhases: [.idle]
+    )
+    #expect(report.reachable == [.idle])
+    #expect(report.unreachable.isEmpty)
+  }
+
+  @Test("Rootless graph validation reports missing root instead of passing silently")
+  func rootlessGraphValidationReportsMissingRoot() {
+    let graph: PhaseTransitionGraph<PhaseDrivenFeature.Phase> = [
+      .idle: [.loading]
+    ]
+
+    let report = graph.validationReport(
+      allPhases: [.idle, .loading],
+      terminalPhases: [.loading]
+    )
+
+    #expect(report.issues.contains(.missingRoot))
+    #expect(report.reachable.isEmpty)
+    #expect(report.unreachable == [.idle, .loading])
   }
 
   @Test("Graph supports dictionary literal declaration")

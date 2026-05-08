@@ -72,7 +72,7 @@ InnoFlowSampleApp/
 
 1. Open [`InnoFlowSampleApp.xcworkspace`](./InnoFlowSampleApp.xcworkspace)
 2. Select the `InnoFlowSampleApp` scheme
-3. Run on an iOS 17 or newer simulator
+3. Run on an iOS 18 or newer simulator
 
 Most feature work lives in
 [`InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature`](./InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature).

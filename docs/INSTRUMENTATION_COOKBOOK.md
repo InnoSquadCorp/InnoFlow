@@ -4,6 +4,132 @@
 or effect semantics. Keep adapters thin: convert InnoFlow events into the
 logging, tracing, or metrics backend owned by the app.
 
+## Effect Run Failures
+
+`StoreInstrumentation.didFailRun` surfaces non-cancellation errors thrown from
+`EffectTask.run(sequence:)` (and the `transform` overload) that previously
+terminated the effect silently. Cancellation still propagates without firing
+the hook so cooperative shutdown paths stay clean.
+
+```swift
+let instrumentation: StoreInstrumentation<Feature.Action> = .init(
+  didFailRun: { event in
+    metrics.increment(
+      "feature.effect.failed",
+      tags: [
+        "errorType": event.errorTypeName,
+        "cancellationID": event.cancellationID?.description ?? "<none>"
+      ]
+    )
+    logger.error(
+      "effect failed: \(event.errorTypeName) — \(event.errorDescription)"
+    )
+  }
+)
+```
+
+`RunFailedEvent` carries the error as `errorDescription` and `errorTypeName`
+(both `String`) instead of `any Error`, so adapters cannot accidentally cross
+the Swift 6 `Sendable` boundary by capturing the original error reference.
+
+## Built-in Metrics Counter
+
+`StoreInstrumentationMetricsCollector` aggregates lifecycle events into a
+counter snapshot so projects do not have to hand-roll a `OSAllocatedUnfairLock`
++ `.sink` pair just to count `runStarted` / `runFailed` / `actionEmitted`. The
+collector itself is `Sendable` and exposes:
+
+- `instrumentation()` — pluggable adapter that increments the counters
+- `snapshot()` — copies the current counters into an immutable
+  `StoreInstrumentationMetricsSnapshot`
+- `reset()` — zeroes the counters (for per-window collection or test isolation)
+
+```swift
+let metrics = StoreInstrumentationMetricsCollector<Feature.Action>()
+let store = Store(
+  reducer: Feature(),
+  initialState: .init(),
+  instrumentation: .combined(
+    metrics.instrumentation(),
+    .osLog(logger: Logger(subsystem: "app", category: "innoflow"))
+  )
+)
+
+// At any later point — typically a timer or a metrics-backend flush:
+let snap = metrics.snapshot()
+metricsBackend.gauge("innoflow.run.failed", value: snap.runFailed)
+metricsBackend.gauge("innoflow.action.dropped", value: snap.actionDropped)
+```
+
+The collector is intentionally optional. If you already ship a vendor SDK
+(Datadog, Prometheus, swift-metrics) prefer the `.sink { event in ... }`
+adapter and emit counters directly into that backend.
+
+## Phase Map Violations
+
+`PhaseMapDiagnostics` is the matching observability surface for `PhaseMap`-
+managed features. The default value `.disabled` keeps phase-map violations
+silent in release builds, which is fine for prototypes but is rarely the right
+choice in production. Pick one of the supplied adapters or compose them:
+
+```swift
+let diagnostics: PhaseMapDiagnostics<Feature.Action, Feature.State.Phase> = .combined(
+  .osLog(logger: Logger(subsystem: "app", category: "phaseMap")),
+  .signpost(signposter: OSSignposter(subsystem: "app", category: "phaseMap")),
+  .sink { violation in
+    metrics.increment(
+      "feature.phaseMap.violation",
+      tags: ["case": "\(violation)"]
+    )
+  }
+)
+
+@InnoFlow(phaseManaged: true)
+struct Feature {
+  // ...
+  static var phaseMap: PhaseMap<State, Action, State.Phase> {
+    PhaseMap(\.phase, diagnostics: diagnostics) {
+      // ...
+    }
+  }
+}
+```
+
+Action payloads are redacted by default in `.osLog` and `.signpost` because
+violation traces routinely escape the device. Pass `includeActionPayload:
+true` only in local debugging sessions.
+
+## Phase Transition Validation Violations
+
+`validatePhaseTransitions(...)` has the same adapter surface for projects still
+using explicit `PhaseTransitionGraph` guards instead of `PhaseMap`:
+
+```swift
+let diagnostics: PhaseValidationDiagnostics<Feature.Action, Feature.State.Phase> = .combined(
+  .osLog(logger: Logger(subsystem: "app", category: "phaseValidation")),
+  .signpost(signposter: OSSignposter(subsystem: "app", category: "phaseValidation")),
+  .sink { violation in
+    metrics.increment(
+      "feature.phaseValidation.violation",
+      tags: ["case": "\(violation)"]
+    )
+  }
+)
+
+let reducer = Feature()
+  .validatePhaseTransitions(
+    tracking: \.phase,
+    through: Feature.graph,
+    diagnostics: diagnostics
+  )
+```
+
+As with `PhaseMapDiagnostics`, action payloads are redacted by default and
+`includeActionPayload: true` should stay limited to local debugging sessions.
+Phase labels are also redacted by default in the standard logging adapters; pass
+`includePhaseInfo: true` only when those enum values are safe to show in Console
+or Instruments traces.
+
 ## Capture Events In Tests
 
 ```swift
@@ -117,8 +243,9 @@ let store = Store(
 ```
 
 Keep `includeActions` false unless action payloads are safe to show in traces.
-The signpost adapter opens intervals for effect runs and emits inline events
-for action emissions, drops, and cancellations.
+Keep `includeErrorPayload` false unless effect error descriptions are safe to
+show in traces. The signpost adapter opens intervals for effect runs and emits
+inline events for action emissions, run failures, drops, and cancellations.
 
 ## Fan Out To Multiple Adapters
 

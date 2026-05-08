@@ -13,6 +13,7 @@ extension InnoFlowMacro {
     for declaration: StructDeclSyntax,
     context: some MacroExpansionContext
   ) {
+    emitTypealiasInfoDiagnostics(in: declaration, context: context)
     diagnoseMissingBindableFieldSetters(in: declaration, context: context)
     diagnoseDirectBindablePropertyUses(in: declaration, context: context)
   }

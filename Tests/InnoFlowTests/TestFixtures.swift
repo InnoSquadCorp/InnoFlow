@@ -3,12 +3,13 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
+import InnoFlow
 import InnoFlowSwiftUI
 import SwiftUI
 import Testing
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowTesting
 
 // MARK: - Fixtures
@@ -57,7 +58,7 @@ struct AsyncFeature: Reducer {
     case .load:
       state.isLoading = true
       return .run { send in
-        await send(._loaded("Hello, InnoFlow v2"))
+        await send(._loaded("Hello, InnoFlow"))
       }
     case ._loaded(let value):
       state.value = value

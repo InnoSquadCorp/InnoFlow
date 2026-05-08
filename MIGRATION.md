@@ -28,15 +28,29 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   `try await context.checkCancellation()` when cancellation should abort the
   effect, or `await context.isCancellationRequested()` when a non-throwing
   probe is needed.
+- `validatePhaseTransitions(tracking:through:)` now accepts an optional
+  `diagnostics:` parameter (defaults to `.disabled` for source compatibility).
+  Pass a non-`.disabled` `PhaseValidationDiagnostics` to surface undeclared
+  transitions in release builds; the historical `assertionFailure`-only
+  behavior is preserved when the parameter is omitted, but new code should
+  prefer `PhaseMap` with `PhaseMapDiagnostics` for runtime-observable phase
+  contracts.
 - Run canonical sample package tests and sample Xcode builds serially
   (`--jobs 1` / `-jobs 1`) so CI fails on real diagnostics instead of Swift
   macro worker log corruption.
 
 ### Notes
 
-- Lowered platform floors are source-compatible: the root package and
-  canonical sample now build down to iOS 17, macOS 14, tvOS 17, watchOS 10, and
-  visionOS 1 without availability branches.
+- Platform floors raised to iOS 18, macOS 15, tvOS 18, watchOS 11, and
+  visionOS 2 (Swift 6.0 standard library). The 4.0.0 release dropped the
+  prior iOS 17 / macOS 14 floor — apps that still need iOS 17 support must
+  stay on the 3.x line. The bump unlocks direct use of Swift 6.0 standard
+  library primitives (typed throws, `sending` parameters, `~Copyable`
+  generics) without availability branches. Note that `AsyncThrowingStream
+  .Iterator: Sendable` still requires `Failure: Sendable`, so the common
+  `any Error` spelling continues to need a hand-rolled sequence — the
+  bump removes that constraint for typed-failure stream wrappers but does
+  not eliminate it universally.
 - The sample package no longer compiles against `InnoNetworkWebSocket`; concrete
   transport/session ownership remains an app-boundary integration concern.
 - The root package now enforces the Swift 6 package contract and pins

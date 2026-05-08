@@ -96,6 +96,7 @@ public final class Store<R: Reducer> {
   // (`@MainActor isolated deinit`) are unchanged. Retest when
   // swiftlang/swift#88173 is fixed:
   // https://github.com/swiftlang/swift/issues/88173
+  // Tracked in docs/SWIFT_TOOLCHAIN_TRACKING.md.
   @_optimize(none)
   isolated deinit {
     lifetime.markReleased()

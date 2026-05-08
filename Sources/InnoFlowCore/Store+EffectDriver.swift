@@ -154,7 +154,18 @@ extension Store: EffectDriver {
             return true
           }
         },
-        checkCancellation: checkCancellation
+        checkCancellation: checkCancellation,
+        reportError: { error in
+          instrumentation.didFailRun(
+            .init(
+              token: token,
+              cancellationID: context?.cancellationID,
+              sequence: context?.sequence,
+              errorDescription: String(describing: error),
+              errorTypeName: String(describing: type(of: error))
+            )
+          )
+        }
       )
 
       await operation(send, effectContext)

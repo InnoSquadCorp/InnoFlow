@@ -46,6 +46,17 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
     component
   }
 
+  /// Cumulative-mutation semantics: every reducer in a `ReducerBuilder` block
+  /// runs in declaration order on the **same** `State` value, so each later
+  /// reducer observes the mutations produced by every earlier one. This is
+  /// identical to the contract documented for `CombineReducers`, and matches
+  /// the runtime behaviour for `Reduce` reducers added through `Scope`,
+  /// `IfLet`, `IfCaseLet`, and `ForEachReducer`.
+  ///
+  /// Effects from each step are merged with `.merge`, which means follow-up
+  /// actions from sibling effects observe completion order, not declaration
+  /// order. Use `.concatenate(...)` inside a single reducer when ordering
+  /// matters.
   @inlinable
   public static func buildPartialBlock(
     accumulated: Reduce<State, Action>,

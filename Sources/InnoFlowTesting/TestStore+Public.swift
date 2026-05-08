@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-public import InnoFlow
+@_exported public import InnoFlowCore
 
 extension TestStore {
   // MARK: - Public APIs
@@ -256,6 +256,32 @@ extension TestStore {
     )
   }
 
+  /// Projects the parent harness onto a single identifiable child element of a
+  /// collection slice (`\.todos[id: targetID]`-style targeting).
+  ///
+  /// ## Identity caching
+  ///
+  /// The returned `ScopedTestStore` caches its child snapshot keyed by `id`.
+  /// Sibling updates within the same collection do not invalidate this row's
+  /// observers — only state changes that touch the *element matching `id`*
+  /// trigger refresh. This mirrors the runtime `ScopedStore` collection
+  /// scoping contract so test harnesses observe the same per-element
+  /// invalidation surface as the production runtime.
+  ///
+  /// ## Stale-row policy
+  ///
+  /// Once the parent reducer removes the element with the supplied `id`, any
+  /// further interaction with the previously returned `ScopedTestStore` is
+  /// treated as programmer error and traps via `preconditionFailure`. The
+  /// recommended pattern is:
+  ///
+  /// 1. assert removal at the parent `TestStore` level (`store.send(...)`)
+  /// 2. discard the old row-scoped handle
+  /// 3. recreate any later projection from the parent `TestStore`
+  ///
+  /// Direct access to a removed row's `ScopedTestStore` is intentionally
+  /// loud, not silently no-op, because tests that hold stale row handles
+  /// almost always reflect a real bug in the feature under test.
   public func scope<CollectionState, ChildAction>(
     collection: WritableKeyPath<R.State, CollectionState>,
     id: CollectionState.Element.ID,

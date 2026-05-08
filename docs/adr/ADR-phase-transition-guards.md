@@ -77,3 +77,11 @@ domain logic has executed.
 - Runtime and static validation continue to work without turning InnoFlow into a general state-machine runtime.
 - Future FSM expansion requires a new ADR rather than incremental drift.
 - If teams need richer conditional modeling, the first follow-up should be testing or diagnostic helpers around reducer logic, not new guard execution inside the graph type.
+
+## Follow-up: release-build observability (post-decision)
+
+The decision above keeps the topology-only stance. A separate observability gap was identified after the original ADR landed: `validatePhaseTransitions(...)` only reported violations through `assertionFailure`, which collapses to a no-op in release builds, and there was no symmetric reporting hook for backends like signposts, logs, or metrics.
+
+The follow-up adds an opt-in `PhaseValidationDiagnostics<Action, Phase>` parameter to `validatePhaseTransitions(...)`. When supplied, it receives a `PhaseValidationViolation` value in every build configuration (debug *and* release) and suppresses the legacy debug-only `assertionFailure` so the reporter is treated as the authoritative observation surface. The default value remains `.disabled`, which keeps the historical debug-assert behavior verbatim — source compatibility is preserved.
+
+This change is consistent with the original decision: it adds an observation hook around the existing validation contract without expanding `PhaseTransitionGraph` into a guard-execution runtime. New code is encouraged to prefer `PhaseMap` with `PhaseMapDiagnostics` for phase-heavy features; the legacy entry point keeps its observability gap closed for projects still on it.

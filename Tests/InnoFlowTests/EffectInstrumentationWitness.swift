@@ -5,7 +5,7 @@
 import Foundation
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 
 struct EffectInstrumentationWitnessSnapshot: Sendable {
   let runStartedCount: UInt64
@@ -44,7 +44,7 @@ final class EffectInstrumentationWitness: Sendable {
       case .effectsCancelled:
         recordCancellation()
 
-      case .actionEmitted, .actionDropped:
+      case .actionEmitted, .actionDropped, .runFailed:
         break
       }
     }

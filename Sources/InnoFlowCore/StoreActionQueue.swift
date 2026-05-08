@@ -11,6 +11,10 @@ package struct StoreQueuedAction<Action> {
 
 @MainActor
 package final class StoreActionQueue<Action> {
+  // Back-pressure policy: see docs/adr/ADR-store-action-queue-burst.md.
+  // The queue intentionally has no drop / collapse / hard-cap policy because
+  // those decisions are domain-shaped and belong in EffectTask.throttle,
+  // EffectTask.debounce, or a collapsing reducer.
   private var buffered: [StoreQueuedAction<Action>] = []
   private var head = 0
   private var isDraining = false

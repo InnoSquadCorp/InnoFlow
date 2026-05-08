@@ -65,6 +65,7 @@ public struct PhaseTransitionGraph<Phase: Hashable & Sendable>: Sendable {
   }
 
   public enum ValidationIssue: Hashable, Sendable {
+    case missingRoot
     case rootNotDeclared(Phase)
     case unreachablePhase(Phase)
     case unknownSuccessor(from: Phase, to: Phase)
@@ -175,7 +176,9 @@ extension PhaseTransitionGraph {
   /// let graph = PhaseTransitionGraph.linear(.idle, .loading, .loaded)
   /// ```
   public static func linear(_ phases: Phase...) -> Self {
-    guard phases.count > 1 else { return .init([:]) }
+    guard phases.count > 1 else {
+      return .init([:], suggestedRoot: phases.first)
+    }
 
     var adjacency: [Phase: Set<Phase>] = [:]
     for index in phases.indices.dropLast() {
@@ -189,8 +192,7 @@ extension PhaseTransitionGraph {
     allPhases: Set<Phase>,
     terminalPhases: Set<Phase> = []
   ) -> [ValidationIssue] {
-    guard let suggestedRoot else { return [] }
-    return validate(allPhases: allPhases, root: suggestedRoot, terminalPhases: terminalPhases)
+    validationReport(allPhases: allPhases, terminalPhases: terminalPhases).issues
   }
 
   /// Returns a detailed validation report using the root inferred by `linear(_:)`.
@@ -198,12 +200,14 @@ extension PhaseTransitionGraph {
     allPhases: Set<Phase>,
     terminalPhases: Set<Phase> = []
   ) -> ValidationReport {
+    let declaredPhases = allPhases.union(terminalPhases)
     guard let suggestedRoot else {
+      let issues: [ValidationIssue] = declaredPhases.isEmpty ? [] : [.missingRoot]
       return .init(
-        issues: [],
+        issues: issues,
         reachable: [],
-        unreachable: [],
-        declaredPhases: allPhases.union(terminalPhases),
+        unreachable: declaredPhases,
+        declaredPhases: declaredPhases,
         terminalPhases: terminalPhases
       )
     }

@@ -125,6 +125,7 @@ public struct EffectContext: Sendable {
   private let sleepProvider: @Sendable (Duration) async throws -> Void
   private let isCancellationRequestedProvider: @Sendable () async -> Bool
   private let checkCancellationProvider: @Sendable () async throws -> Void
+  private let errorReporter: @Sendable (any Error) async -> Void
 
   public init(
     now: @escaping @Sendable () async -> StoreClock.Instant,
@@ -139,18 +140,21 @@ public struct EffectContext: Sendable {
         throw CancellationError()
       }
     }
+    self.errorReporter = { _ in }
   }
 
   package init(
     now: @escaping @Sendable () async -> StoreClock.Instant,
     sleep: @escaping @Sendable (Duration) async throws -> Void,
     isCancellationRequested: @escaping @Sendable () async -> Bool,
-    checkCancellation: @escaping @Sendable () async throws -> Void
+    checkCancellation: @escaping @Sendable () async throws -> Void,
+    reportError: @escaping @Sendable (any Error) async -> Void = { _ in }
   ) {
     self.nowProvider = now
     self.sleepProvider = sleep
     self.isCancellationRequestedProvider = isCancellationRequested
     self.checkCancellationProvider = checkCancellation
+    self.errorReporter = reportError
   }
 
   public func now() async -> StoreClock.Instant {
@@ -170,9 +174,15 @@ public struct EffectContext: Sendable {
   public func checkCancellation() async throws {
     try await checkCancellationProvider()
   }
+
+  /// Reports a non-cancellation error escaping an effect to the host store's
+  /// instrumentation. Cancellation errors must be propagated by `throw` instead.
+  package func reportError(_ error: any Error) async {
+    await errorReporter(error)
+  }
 }
 
-/// A unified effect model for asynchronous work in InnoFlow v2.
+/// A unified effect model for asynchronous work in InnoFlow.
 public struct EffectTask<Action: Sendable>: Sendable {
   package struct LazyMappedEffect: Sendable {
     private let materializeEffect: @Sendable () -> EffectTask<Action>
@@ -257,7 +267,9 @@ public struct EffectTask<Action: Sendable>: Sendable {
   /// Runs an async sequence and emits each element as an action.
   ///
   /// The sequence is built from the active ``EffectContext`` so producers can use the
-  /// store-controlled clock and cancellation checks. Thrown errors stop the effect.
+  /// store-controlled clock and cancellation checks. Cancellation stops the effect
+  /// silently; any other thrown error is forwarded to the host store's instrumentation
+  /// (`StoreInstrumentation.didFailRun`) before the effect terminates.
   public static func run<S: AsyncSequence & Sendable>(
     priority: TaskPriority? = nil,
     _ makeSequence: @escaping @Sendable (EffectContext) async throws -> S
@@ -269,8 +281,10 @@ public struct EffectTask<Action: Sendable>: Sendable {
           try await context.checkCancellation()
           await send(action)
         }
-      } catch {
+      } catch is CancellationError {
         return
+      } catch {
+        await context.reportError(error)
       }
     }
   }
@@ -278,6 +292,9 @@ public struct EffectTask<Action: Sendable>: Sendable {
   /// Runs an async sequence and transforms each element into an optional action.
   ///
   /// Returning `nil` from `transform` drops that element without ending the effect.
+  /// Cancellation stops the effect silently; any other thrown error is forwarded to
+  /// the host store's instrumentation (`StoreInstrumentation.didFailRun`) before the
+  /// effect terminates.
   public static func run<S: AsyncSequence & Sendable>(
     priority: TaskPriority? = nil,
     sequence makeSequence: @escaping @Sendable (EffectContext) async throws -> S,
@@ -291,8 +308,10 @@ public struct EffectTask<Action: Sendable>: Sendable {
           guard let action = transform(element) else { continue }
           await send(action)
         }
-      } catch {
+      } catch is CancellationError {
         return
+      } catch {
+        await context.reportError(error)
       }
     }
   }
