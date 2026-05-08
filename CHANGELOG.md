@@ -14,6 +14,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   `EffectTask.run(sequence:transform:)`. Adapters `.sink`, `.combined`,
   `.osLog`, and `.signpost` all fan the new event out without changing existing
   signatures (additive default closure on the initializer).
+- `validatePhaseTransitions(tracking:through:diagnostics:)` accepts an optional
+  `PhaseValidationDiagnostics` reporter that surfaces undeclared transitions
+  in every build configuration. The historical `.disabled` default still
+  preserves the debug-only `assertionFailure` behaviour.
 - `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
   conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
   `EffectTask.animation(Animation?)`.

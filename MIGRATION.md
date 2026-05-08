@@ -28,6 +28,13 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   `try await context.checkCancellation()` when cancellation should abort the
   effect, or `await context.isCancellationRequested()` when a non-throwing
   probe is needed.
+- `validatePhaseTransitions(tracking:through:)` now accepts an optional
+  `diagnostics:` parameter (defaults to `.disabled` for source compatibility).
+  Pass a non-`.disabled` `PhaseValidationDiagnostics` to surface undeclared
+  transitions in release builds; the historical `assertionFailure`-only
+  behavior is preserved when the parameter is omitted, but new code should
+  prefer `PhaseMap` with `PhaseMapDiagnostics` for runtime-observable phase
+  contracts.
 - Run canonical sample package tests and sample Xcode builds serially
   (`--jobs 1` / `-jobs 1`) so CI fails on real diagnostics instead of Swift
   macro worker log corruption.
