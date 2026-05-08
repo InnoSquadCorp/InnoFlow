@@ -22,6 +22,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   `.osLog(logger:)`, and `.signpost(signposter:name:)`. The shape mirrors
   `StoreInstrumentation` so projects can wire phase-map violations into the
   same observability backend as effect lifecycle events.
+- `scripts/principle-gates.sh` now enforces `assertPhaseMapCovers(...)`
+  coverage for any phase-managed feature introduced in `Sources/InnoFlow`.
+  Examples and macro fixtures are intentionally excluded.
 - `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
   conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
   `EffectTask.animation(Animation?)`.

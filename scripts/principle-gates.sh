@@ -825,6 +825,41 @@ main() {
     exit 1
   fi
 
+  echo "[principle-gates] Checking PhaseMap totality enforcement"
+  # Phase-managed reducers in the core (Sources/InnoFlow) live behind a
+  # post-reduce contract (`@InnoFlow(phaseManaged: true)` + `static var
+  # phaseMap`). The opt-in `PhaseMapDiagnostics` reporter surfaces *runtime*
+  # drift, but only `assertPhaseMapCovers(...)` catches *missing transitions*
+  # at test time. If anyone introduces a phase-managed feature inside the core
+  # we want an explicit totality assertion landing alongside it; otherwise the
+  # contract silently drifts on every new action case.
+  #
+  # The line-head anchor (`^[[:space:]]*@InnoFlow`) skips doccomment matches
+  # because doccomment lines start with `///`. Examples and macro definitions
+  # are intentionally excluded — sample-app totality is product polish, not
+  # a core contract.
+  set +e
+  phase_managed_uses=$(
+    find Sources/InnoFlow \
+      -name '*.swift' \
+      -not -path '*/InnoFlow.docc/*' \
+      -print0 \
+      | xargs -0 grep -lE "^[[:space:]]*@InnoFlow\(phaseManaged: true\)" 2>/dev/null
+  )
+  phase_managed_status=$?
+  set -e
+
+  if [[ $phase_managed_status -le 1 && -n "$phase_managed_uses" ]]; then
+    if ! grep -RqE "assertPhaseMapCovers" Tests/InnoFlowTests 2>/dev/null; then
+      echo "[principle-gates] Failed: phase-managed features found in Sources/InnoFlow but Tests/InnoFlowTests has no assertPhaseMapCovers(...) call"
+      echo "[principle-gates] Files containing @InnoFlow(phaseManaged: true):"
+      printf '  %s\n' "${phase_managed_uses}"
+      echo "[principle-gates] Remediation: add 'assertPhaseMapCovers(YourFeature.phaseMap, expectedTriggersByPhase: [...])' to a test in Tests/InnoFlowTests."
+      echo "[principle-gates] Reason: phase-managed contracts are easy to drift silently. Totality is the only test path that surfaces missing legal transitions in every build configuration."
+      exit 1
+    fi
+  fi
+
   echo "[principle-gates] All checks passed"
 }
 
