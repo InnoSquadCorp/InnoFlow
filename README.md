@@ -25,6 +25,7 @@ Cross-framework ownership stays explicit:
 
 Boundary references:
 
+- [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bridges dependencies, instrumentation, and cross-framework boundaries for non-trivial features
 - [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
 - [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
 - [`MIGRATION.md`](MIGRATION.md) for 4.0.0 source-compatibility and release-readiness notes
