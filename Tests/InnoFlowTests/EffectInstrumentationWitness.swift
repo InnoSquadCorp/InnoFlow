@@ -5,7 +5,7 @@
 import Foundation
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 
 struct EffectInstrumentationWitnessSnapshot: Sendable {
   let runStartedCount: UInt64

@@ -27,7 +27,8 @@ Do not leave a rule enforced only by prose.
 
 ## Project structure
 
-- Core runtime: `Sources/InnoFlow`
+- Core runtime: `Sources/InnoFlowCore`
+- Macro facade: `Sources/InnoFlow`
 - Macros: `Sources/InnoFlowMacros`
 - Testing utilities: `Sources/InnoFlowTesting`
 - Canonical sample: `Examples/InnoFlowSampleApp`

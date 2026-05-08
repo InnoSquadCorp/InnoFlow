@@ -54,10 +54,12 @@ struct CounterView: View {
 }
 ```
 
-SwiftUI app targets should depend on both `InnoFlow` and `InnoFlowSwiftUI`.
-Non-UI domain targets can depend on `InnoFlow` alone. `InnoFlowSwiftUI` contains
-the SwiftUI-only helpers: `Store.binding`, `ScopedStore.binding`,
-`Store.preview`, and `EffectTask.animation(Animation?)`.
+SwiftUI app targets that use the `@InnoFlow` macro should depend on both
+`InnoFlow` and `InnoFlowSwiftUI`. Runtime-only domain targets can depend on
+`InnoFlowCore` alone. `InnoFlowSwiftUI` contains the SwiftUI-only helpers:
+`Store.binding`, `ScopedStore.binding`, `Store.preview`, and
+`EffectTask.animation(Animation?)`; it reexports `InnoFlowCore` but not the
+macro declarations, so macro users must import `InnoFlow` directly.
 
 `binding(_:to:)` is an alias for `binding(_:send:)`. Prefer explicit labels in new code; existing trailing-closure calls such as `store.binding(\.$step) { .setStep($0) }` continue to resolve to `send:` for source compatibility.
 

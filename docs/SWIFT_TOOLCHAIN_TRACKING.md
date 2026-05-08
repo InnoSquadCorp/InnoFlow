@@ -8,7 +8,7 @@ When a workaround is removed, delete the matching row, the corresponding source 
 
 ### `@_optimize(none)` on `Store.deinit`
 
-- **Location:** [`Sources/InnoFlow/Store.swift`](../Sources/InnoFlow/Store.swift) (around the `isolated deinit` block)
+- **Location:** [`Sources/InnoFlowCore/Store.swift`](../Sources/InnoFlowCore/Store.swift) (around the `isolated deinit` block)
 - **Symptom:** Swift 6.3 release optimization crashes in `EarlyPerfInliner` (`isCallerAndCalleeLayoutConstraintsCompatible`) when scanning the generic `R.Action`-typed `Store` for inlining candidates.
 - **Upstream issue:** [swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173)
 - **Why this is the right surface:** the deinit is **not** a hot path (lifetime markRelease + bridge.shutdown only), so the lost optimization is negligible. Lifecycle semantics (`@MainActor isolated deinit`) are unchanged.

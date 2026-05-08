@@ -14,8 +14,10 @@ Use InnoFlow when you want:
 InnoFlow is the right layer for **domain and feature lifecycle**.
 Concrete navigation stacks, transport/session lifecycle, and dependency graph construction
 stay in the app layer or in other dedicated libraries.
-SwiftUI app targets should use `InnoFlow` plus `InnoFlowSwiftUI`; non-UI domain
-targets can depend on `InnoFlow` alone.
+SwiftUI app targets that use the `@InnoFlow` macro should use `InnoFlow` plus
+`InnoFlowSwiftUI`; runtime-only domain targets can depend on `InnoFlowCore`
+alone. `InnoFlowSwiftUI` and `InnoFlowTesting` reexport `InnoFlowCore`, but
+macro declarations stay in `InnoFlow`.
 
 `Store` executes actions through a single FIFO dispatch queue. Immediate follow-up actions from
 ``EffectTask/send(_:)`` are queued rather than reducer-reentrant, async emissions from

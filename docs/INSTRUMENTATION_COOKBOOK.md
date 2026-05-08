@@ -99,6 +99,34 @@ Action payloads are redacted by default in `.osLog` and `.signpost` because
 violation traces routinely escape the device. Pass `includeActionPayload:
 true` only in local debugging sessions.
 
+## Phase Transition Validation Violations
+
+`validatePhaseTransitions(...)` has the same adapter surface for projects still
+using explicit `PhaseTransitionGraph` guards instead of `PhaseMap`:
+
+```swift
+let diagnostics: PhaseValidationDiagnostics<Feature.Action, Feature.State.Phase> = .combined(
+  .osLog(logger: Logger(subsystem: "app", category: "phaseValidation")),
+  .signpost(signposter: OSSignposter(subsystem: "app", category: "phaseValidation")),
+  .sink { violation in
+    metrics.increment(
+      "feature.phaseValidation.violation",
+      tags: ["case": "\(violation)"]
+    )
+  }
+)
+
+let reducer = Feature()
+  .validatePhaseTransitions(
+    tracking: \.phase,
+    through: Feature.graph,
+    diagnostics: diagnostics
+  )
+```
+
+As with `PhaseMapDiagnostics`, action payloads are redacted by default and
+`includeActionPayload: true` should stay limited to local debugging sessions.
+
 ## Capture Events In Tests
 
 ```swift

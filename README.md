@@ -62,7 +62,7 @@ dependencies: [
 ```swift
 .target(
   name: "YourDomain",
-  dependencies: ["InnoFlow"]
+  dependencies: ["InnoFlowCore"]
 )
 
 .target(
@@ -72,15 +72,18 @@ dependencies: [
 
 .testTarget(
   name: "YourAppTests",
-  dependencies: ["InnoFlow", "InnoFlowTesting"]
+  dependencies: ["InnoFlowCore", "InnoFlowTesting"]
 )
 ```
 
-Non-UI feature and domain targets can depend on `InnoFlow` alone. SwiftUI app
-targets should also depend on `InnoFlowSwiftUI`, which provides
+Runtime-only feature and domain targets can depend on `InnoFlowCore` alone.
+Use `InnoFlow` when a target needs the `@InnoFlow` macro; it reexports
+`InnoFlowCore` and owns the macro declarations. SwiftUI app targets should also
+depend on `InnoFlowSwiftUI`, which provides
 `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
-`EffectTask.animation(Animation?)` without making the core target import
-SwiftUI.
+`EffectTask.animation(Animation?)` without making the core runtime import
+SwiftUI. `InnoFlowSwiftUI` and `InnoFlowTesting` reexport `InnoFlowCore`, but
+macro users must still import `InnoFlow` directly.
 
 ## Quick Start
 
@@ -675,7 +678,7 @@ await child.receive(.finished) {
 
 That projection assumes `ParentFeature.Action.childCasePath`, which `@InnoFlow` now synthesizes for matching single-payload child action cases.
 Collection-scoped projections keep per-element `ScopedStore` identity stable by `id`, and row observers only invalidate when their own element snapshot changes.
-If an element is removed, discard any old row-scoped handle and recreate projections from the parent store; direct access to a stale collection-scoped store is treated as programmer error and traps via `preconditionFailure`.
+If an element is removed, discard any old row-scoped handle and recreate projections from the parent store. Runtime direct reads return the last cached snapshot and assert in debug builds, while stale sends no-op in release. `ScopedTestStore` keeps the testing contract louder and traps stale direct access via `preconditionFailure`.
 
 For store-level debounce and throttle tests, inject a `StoreClock`:
 

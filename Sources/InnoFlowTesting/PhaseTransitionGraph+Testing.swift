@@ -1,5 +1,5 @@
 import Foundation
-public import InnoFlow
+@_exported public import InnoFlowCore
 
 public func assertValidGraph<Phase: Hashable & Sendable>(
   _ graph: PhaseTransitionGraph<Phase>,

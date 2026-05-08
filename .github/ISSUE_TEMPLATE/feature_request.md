@@ -16,7 +16,7 @@ assignees: ""
 
 ## Ownership Boundary
 
-<!-- Explain whether this belongs in core InnoFlow, InnoFlowSwiftUI, InnoFlowTesting, docs, or an app-level integration. -->
+<!-- Explain whether this belongs in InnoFlowCore runtime, InnoFlow macro facade, InnoFlowSwiftUI, InnoFlowTesting, docs, or an app-level integration. -->
 
 ## Alternatives Considered
 

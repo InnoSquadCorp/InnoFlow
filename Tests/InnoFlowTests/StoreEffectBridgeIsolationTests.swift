@@ -4,7 +4,7 @@
 
 import Testing
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 
 /// Regression suite for the documented MainActor isolation contract on
 /// ``StoreEffectBridge``. The test bodies assert behavior, but their main value

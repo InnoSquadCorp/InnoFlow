@@ -5,8 +5,9 @@
 import Foundation
 import Testing
 import os
+import OSLog
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 
 private struct PhaseValidationFeature: Reducer {
   enum Phase: Hashable, Sendable {
@@ -51,6 +52,27 @@ private final class ViolationProbe: Sendable {
   }
 }
 
+private final class DescriptionCounter: Sendable {
+  private let lock = OSAllocatedUnfairLock<Int>(initialState: 0)
+
+  var count: Int {
+    lock.withLock { $0 }
+  }
+
+  func increment() {
+    lock.withLock { $0 += 1 }
+  }
+}
+
+private struct DescriptionCountingAction: Sendable, CustomStringConvertible {
+  let counter: DescriptionCounter
+
+  var description: String {
+    counter.increment()
+    return "sensitive-action"
+  }
+}
+
 @Suite("PhaseValidationReducer diagnostics", .serialized)
 @MainActor
 struct PhaseValidationReducerDiagnosticsTests {
@@ -84,6 +106,142 @@ struct PhaseValidationReducerDiagnosticsTests {
     #expect(event.contains("loading"))
     // Reducer keeps the (now-violating) post-reduce state as-is.
     #expect(state.phase == .loaded)
+  }
+
+  @Test(".sink forwards undeclared transitions to the supplied closure")
+  func sinkForwardsUndeclaredTransitions() {
+    let probe = ViolationProbe()
+    let reducer = PhaseValidationFeature().validatePhaseTransitions(
+      tracking: \.phase,
+      through: phaseGraph,
+      diagnostics: .sink { violation in
+        switch violation {
+        case .undeclaredTransition(_, let previous, let next, _):
+          probe.record("previous=\(previous) next=\(next)")
+        }
+      }
+    )
+
+    var state = PhaseValidationFeature.State()
+    _ = reducer.reduce(into: &state, action: .forcePhase(.loaded))
+
+    #expect(probe.events.count == 1)
+    #expect(probe.events.first?.contains("previous=idle") == true)
+  }
+
+  @Test(".combined fans out to every diagnostics adapter")
+  func combinedFansOut() {
+    let firstProbe = ViolationProbe()
+    let secondProbe = ViolationProbe()
+    let reducer = PhaseValidationFeature().validatePhaseTransitions(
+      tracking: \.phase,
+      through: phaseGraph,
+      diagnostics: .combined(
+        .sink { _ in firstProbe.record("first") },
+        .sink { _ in secondProbe.record("second") }
+      )
+    )
+
+    var state = PhaseValidationFeature.State()
+    _ = reducer.reduce(into: &state, action: .forcePhase(.loaded))
+
+    #expect(firstProbe.events == ["first"])
+    #expect(secondProbe.events == ["second"])
+  }
+
+  @Test(".combined without active reporters preserves disabled semantics")
+  func combinedWithoutActiveReportersRemainsDisabled() {
+    let empty: PhaseValidationDiagnostics<
+      PhaseValidationFeature.Action,
+      PhaseValidationFeature.Phase
+    > = .combined()
+    let disabledOnly: PhaseValidationDiagnostics<
+      PhaseValidationFeature.Action,
+      PhaseValidationFeature.Phase
+    > = .combined(.disabled)
+
+    #expect(empty.report == nil)
+    #expect(disabledOnly.report == nil)
+  }
+
+  @Test(".osLog and .signpost adapters evaluate without crashing")
+  func standardLoggingAdaptersEvaluate() {
+    let logger = Logger(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let reducer = PhaseValidationFeature().validatePhaseTransitions(
+      tracking: \.phase,
+      through: phaseGraph,
+      diagnostics: .combined(
+        .osLog(logger: logger),
+        .signpost(signposter: signposter)
+      )
+    )
+
+    var state = PhaseValidationFeature.State()
+    _ = reducer.reduce(into: &state, action: .forcePhase(.loaded))
+  }
+
+  @Test(".osLog redaction does not evaluate action descriptions")
+  func osLogRedactionDoesNotEvaluateActionDescription() {
+    let counter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let diagnostics: PhaseValidationDiagnostics<
+      DescriptionCountingAction,
+      PhaseValidationFeature.Phase
+    > = .osLog(logger: logger)
+
+    diagnostics.report?(
+      .undeclaredTransition(
+        action: DescriptionCountingAction(counter: counter),
+        previousPhase: .idle,
+        nextPhase: .loaded,
+        allowedNextPhases: [.loading]
+      )
+    )
+
+    #expect(counter.count == 0)
+  }
+
+  @Test(".signpost redaction does not evaluate action descriptions")
+  func signpostRedactionDoesNotEvaluateActionDescription() {
+    let counter = DescriptionCounter()
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let diagnostics: PhaseValidationDiagnostics<
+      DescriptionCountingAction,
+      PhaseValidationFeature.Phase
+    > = .signpost(signposter: signposter)
+
+    diagnostics.report?(
+      .undeclaredTransition(
+        action: DescriptionCountingAction(counter: counter),
+        previousPhase: .idle,
+        nextPhase: .loaded,
+        allowedNextPhases: [.loading]
+      )
+    )
+
+    #expect(counter.count == 0)
+  }
+
+  @Test(".osLog includeActionPayload evaluates action descriptions")
+  func osLogIncludeActionPayloadEvaluatesActionDescription() {
+    let counter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "phaseValidationDiagnostics")
+    let diagnostics: PhaseValidationDiagnostics<
+      DescriptionCountingAction,
+      PhaseValidationFeature.Phase
+    > = .osLog(logger: logger, includeActionPayload: true)
+
+    diagnostics.report?(
+      .undeclaredTransition(
+        action: DescriptionCountingAction(counter: counter),
+        previousPhase: .idle,
+        nextPhase: .loaded,
+        allowedNextPhases: [.loading]
+      )
+    )
+
+    #expect(counter.count == 1)
   }
 
   @Test("Custom diagnostics reporter is silent on legal transitions")

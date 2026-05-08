@@ -325,8 +325,8 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
         )
       },
       didDropAction: { event in
-        let actionDescription = event.action.map(String.init(describing:)) ?? "<none>"
-        let renderedAction = includeActions ? actionDescription : "<redacted>"
+        let renderedAction =
+          includeActions ? event.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
         signposter.emitEvent(
           name,
           "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
@@ -341,9 +341,14 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     )
   }
 
+  /// Bridges store instrumentation to `Logger` for Console-readable runtime
+  /// events.
+  ///
+  /// Action payloads are redacted by default. Set `includeActions` to `true`
+  /// only when action descriptions are safe to expose in public Console output.
   public static func osLog(
     logger: Logger,
-    includeActions: Bool = true
+    includeActions: Bool = false
   ) -> Self {
     .sink { event in
       switch event {
@@ -366,14 +371,14 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
         let actionDescription =
           includeActions ? String(describing: actionEvent.action) : "<redacted>"
         logger.debug(
-          "InnoFlow emitted action=\(actionDescription, privacy: .private) cancellationID=\(String(describing: actionEvent.cancellationID), privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
+          "InnoFlow emitted action=\(actionDescription, privacy: .public) cancellationID=\(String(describing: actionEvent.cancellationID), privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
         )
 
       case .actionDropped(let dropEvent):
-        let actionDescription = dropEvent.action.map(String.init(describing:)) ?? "<none>"
-        let renderedAction = includeActions ? actionDescription : "<redacted>"
+        let renderedAction =
+          includeActions ? dropEvent.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
         logger.debug(
-          "InnoFlow dropped action=\(renderedAction, privacy: .private) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(String(describing: dropEvent.cancellationID), privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
+          "InnoFlow dropped action=\(renderedAction, privacy: .public) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(String(describing: dropEvent.cancellationID), privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
         )
 
       case .effectsCancelled(let cancellationEvent):

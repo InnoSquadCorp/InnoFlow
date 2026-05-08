@@ -5,11 +5,33 @@
 import Foundation
 import Testing
 import os
+import OSLog
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowTesting
 
 // MARK: - Store Instrumentation Tests
+
+private final class DescriptionCounter: Sendable {
+  private let lock = OSAllocatedUnfairLock<Int>(initialState: 0)
+
+  var count: Int {
+    lock.withLock { $0 }
+  }
+
+  func increment() {
+    lock.withLock { $0 += 1 }
+  }
+}
+
+private struct DescriptionCountingAction: Sendable, CustomStringConvertible {
+  let counter: DescriptionCounter
+
+  var description: String {
+    counter.increment()
+    return "sensitive-action"
+  }
+}
 
 @Suite("Store Instrumentation Tests", .serialized)
 @MainActor
@@ -22,10 +44,10 @@ struct StoreInstrumentationTests {
     #expect(store.isLoading)
 
     await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      store.value == "Hello, InnoFlow v2" && store.isLoading == false
+      store.value == "Hello, InnoFlow" && store.isLoading == false
     }
 
-    #expect(store.value == "Hello, InnoFlow v2")
+    #expect(store.value == "Hello, InnoFlow")
     #expect(store.isLoading == false)
   }
 
@@ -144,13 +166,13 @@ struct StoreInstrumentationTests {
     let timeoutClock = ContinuousClock()
     let deadline = timeoutClock.now.advanced(by: .seconds(2))
     while timeoutClock.now < deadline {
-      if store.value == "Hello, InnoFlow v2" {
+      if store.value == "Hello, InnoFlow" {
         break
       }
       try? await Task.sleep(for: .milliseconds(20))
     }
 
-    #expect(store.value == "Hello, InnoFlow v2")
+    #expect(store.value == "Hello, InnoFlow")
     #expect(store.isLoading == false)
   }
 
@@ -168,13 +190,13 @@ struct StoreInstrumentationTests {
     let timeoutClock = ContinuousClock()
     let deadline = timeoutClock.now.advanced(by: .seconds(2))
     while timeoutClock.now < deadline {
-      if store.value == "Hello, InnoFlow v2" {
+      if store.value == "Hello, InnoFlow" {
         break
       }
       try? await Task.sleep(for: .milliseconds(20))
     }
 
-    #expect(store.value == "Hello, InnoFlow v2")
+    #expect(store.value == "Hello, InnoFlow")
     #expect(store.isLoading == false)
   }
 
@@ -208,7 +230,7 @@ struct StoreInstrumentationTests {
     }
 
     #expect(probe.events.first == "run-started")
-    #expect(probe.events.contains("emit:_loaded(\"Hello, InnoFlow v2\")"))
+    #expect(probe.events.contains("emit:_loaded(\"Hello, InnoFlow\")"))
     #expect(probe.events.last == "run-finished")
   }
 
@@ -236,8 +258,76 @@ struct StoreInstrumentationTests {
     store.send(.load)
     try? await Task.sleep(for: .milliseconds(80))
 
-    #expect(firstProbe.events == ["emit:_loaded(\"Hello, InnoFlow v2\")"])
-    #expect(secondProbe.events == ["emit:_loaded(\"Hello, InnoFlow v2\")"])
+    #expect(firstProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
+    #expect(secondProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
+  }
+
+  @Test("StoreInstrumentation.osLog redaction does not evaluate action descriptions")
+  func osLogRedactionDoesNotEvaluateActionDescription() {
+    let counter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "storeInstrumentation")
+    let instrumentation = StoreInstrumentation<DescriptionCountingAction>.osLog(logger: logger)
+    let action = DescriptionCountingAction(counter: counter)
+
+    instrumentation.didEmitAction(
+      .init(action: action, cancellationID: Optional<AnyEffectID>.none, sequence: 1)
+    )
+    instrumentation.didDropAction(
+      .init(
+        action: action,
+        reason: .cancellationBoundary,
+        cancellationID: Optional<AnyEffectID>.none,
+        sequence: 2
+      )
+    )
+
+    #expect(counter.count == 0)
+  }
+
+  @Test("StoreInstrumentation.signpost redaction does not evaluate action descriptions")
+  func signpostRedactionDoesNotEvaluateActionDescription() {
+    let counter = DescriptionCounter()
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "storeInstrumentation")
+    let instrumentation = StoreInstrumentation<DescriptionCountingAction>.signpost(
+      signposter: signposter
+    )
+    let action = DescriptionCountingAction(counter: counter)
+
+    instrumentation.didEmitAction(
+      .init(action: action, cancellationID: Optional<AnyEffectID>.none, sequence: 1)
+    )
+    instrumentation.didDropAction(
+      .init(
+        action: action,
+        reason: .cancellationBoundary,
+        cancellationID: Optional<AnyEffectID>.none,
+        sequence: 2
+      )
+    )
+
+    #expect(counter.count == 0)
+  }
+
+  @Test("StoreInstrumentation.osLog includeActions evaluates action descriptions")
+  func osLogIncludeActionsEvaluatesActionDescription() {
+    let counter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "storeInstrumentation")
+    let instrumentation = StoreInstrumentation<DescriptionCountingAction>.osLog(
+      logger: logger,
+      includeActions: true
+    )
+    let action = DescriptionCountingAction(counter: counter)
+
+    instrumentation.didDropAction(
+      .init(
+        action: action,
+        reason: .cancellationBoundary,
+        cancellationID: Optional<AnyEffectID>.none,
+        sequence: 1
+      )
+    )
+
+    #expect(counter.count == 1)
   }
 
   @Test("Store instrumentation records cancellation and trailing throttle drop events")

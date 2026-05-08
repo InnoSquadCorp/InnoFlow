@@ -2,7 +2,7 @@
 // InnoFlow - SwiftUI integration
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-public import InnoFlow
+@_exported public import InnoFlowCore
 public import SwiftUI
 
 extension EffectTask {

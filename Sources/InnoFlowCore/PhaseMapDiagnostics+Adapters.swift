@@ -30,10 +30,12 @@ extension PhaseMapDiagnostics {
     }
   }
 
-  /// Logs every violation through the supplied `Logger`. Action and phase
-  /// values are rendered with `String(describing:)` and emitted at `.private`
-  /// privacy by default — set `includeActionPayload` to `true` only in local
-  /// debugging contexts where payload visibility in Console is intentional.
+  /// Logs every violation through the supplied `Logger`.
+  ///
+  /// Action payloads are redacted by default. Set `includeActionPayload` to
+  /// `true` only in local debugging contexts where public Console visibility is
+  /// intentional. Phase labels are emitted publicly because they are expected to
+  /// be operational enum names rather than user payloads.
   public static func osLog(
     logger: Logger,
     includeActionPayload: Bool = false
@@ -41,17 +43,15 @@ extension PhaseMapDiagnostics {
     .sink { violation in
       switch violation {
       case .directPhaseMutation(let action, let previous, let postReduce):
-        let actionDescription = String(describing: action)
-        let renderedAction = includeActionPayload ? actionDescription : "<redacted>"
+        let renderedAction = includeActionPayload ? String(describing: action) : "<redacted>"
         logger.error(
-          "InnoFlow phaseMap direct mutation action=\(renderedAction, privacy: .private) previous=\(String(describing: previous), privacy: .public) postReduce=\(String(describing: postReduce), privacy: .public)"
+          "InnoFlow phaseMap direct mutation action=\(renderedAction, privacy: .public) previous=\(String(describing: previous), privacy: .public) postReduce=\(String(describing: postReduce), privacy: .public)"
         )
 
       case .undeclaredTarget(let action, let source, let target, let declared):
-        let actionDescription = String(describing: action)
-        let renderedAction = includeActionPayload ? actionDescription : "<redacted>"
+        let renderedAction = includeActionPayload ? String(describing: action) : "<redacted>"
         logger.error(
-          "InnoFlow phaseMap undeclared target action=\(renderedAction, privacy: .private) sourcePhase=\(String(describing: source), privacy: .public) target=\(String(describing: target), privacy: .public) declaredTargets=\(String(describing: declared), privacy: .public)"
+          "InnoFlow phaseMap undeclared target action=\(renderedAction, privacy: .public) sourcePhase=\(String(describing: source), privacy: .public) target=\(String(describing: target), privacy: .public) declaredTargets=\(String(describing: declared), privacy: .public)"
         )
       }
     }
@@ -73,16 +73,14 @@ extension PhaseMapDiagnostics {
     .sink { violation in
       switch violation {
       case .directPhaseMutation(let action, let previous, let postReduce):
-        let actionDescription = String(describing: action)
-        let renderedAction = includeActionPayload ? actionDescription : "<redacted>"
+        let renderedAction = includeActionPayload ? String(describing: action) : "<redacted>"
         signposter.emitEvent(
           name,
           "directPhaseMutation action=\(renderedAction) previous=\(String(describing: previous)) postReduce=\(String(describing: postReduce))"
         )
 
       case .undeclaredTarget(let action, let source, let target, let declared):
-        let actionDescription = String(describing: action)
-        let renderedAction = includeActionPayload ? actionDescription : "<redacted>"
+        let renderedAction = includeActionPayload ? String(describing: action) : "<redacted>"
         signposter.emitEvent(
           name,
           "undeclaredTarget action=\(renderedAction) sourcePhase=\(String(describing: source)) target=\(String(describing: target)) declaredTargets=\(String(describing: declared))"

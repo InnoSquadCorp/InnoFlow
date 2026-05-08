@@ -6,7 +6,7 @@ import Foundation
 import Testing
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowTesting
 
 @Suite("Compile Contract Tests")
@@ -22,7 +22,7 @@ struct CompileContractTests {
 
     let source = """
       import Foundation
-      import InnoFlow
+      import InnoFlowCore
 
       let dynamic = String("dynamic-id")
       let stringID = StaticEffectID(dynamic)
@@ -49,32 +49,32 @@ struct CompileContractTests {
 
     let snippets = [
       """
-      import InnoFlow
+      import InnoFlowCore
 
       let _ = _EmptyReducer<Int, Int>()
       """,
       """
-      import InnoFlow
+      import InnoFlowCore
 
       let first = Reduce<Int, Int> { _, _ in .none }
       let second = Reduce<Int, Int> { _, _ in .none }
       let _ = _ReducerSequence(first: first, second: second)
       """,
       """
-      import InnoFlow
+      import InnoFlowCore
 
       let reducer = Reduce<Int, Int> { _, _ in .none }
       let _ = _OptionalReducer(reducer)
       """,
       """
-      import InnoFlow
+      import InnoFlowCore
 
       let first = Reduce<Int, Int> { _, _ in .none }
       let second = Reduce<Int, Int> { _, _ in .none }
       let _ = _ConditionalReducer(branch: .first(first))
       """,
       """
-      import InnoFlow
+      import InnoFlowCore
 
       let reducer = Reduce<Int, Int> { _, _ in .none }
       let _ = _ArrayReducer([reducer])
@@ -101,7 +101,7 @@ struct CompileContractTests {
 
     let source = """
       import Foundation
-      import InnoFlow
+      import InnoFlowCore
 
       let context = EffectContext(
           now: { ContinuousClock().now },
@@ -130,7 +130,7 @@ struct CompileContractTests {
 
     let source = """
       import Foundation
-      import InnoFlow
+      import InnoFlowCore
 
       let context = EffectContext(
           now: { ContinuousClock().now },
@@ -194,7 +194,7 @@ struct CompileContractTests {
 
     let source = """
       import Foundation
-      import InnoFlow
+      import InnoFlowCore
 
       let token = UUID()
       let staticID: StaticEffectID = "legacy-id"
@@ -270,6 +270,45 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
+      import InnoFlowCore
+
+      struct CoreFeature: Reducer {
+          struct State: Equatable, Sendable, DefaultInitializable {
+              var count = 0
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case increment
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              state.count += 1
+              return .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: CoreFeature(), initialState: .init())
+          store.send(.increment)
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("InnoFlow facade reexports core runtime types")
+  func innoFlowFacadeReexportsCoreRuntimeTypes() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
       import InnoFlow
 
       struct CoreFeature: Reducer {
@@ -300,6 +339,437 @@ struct CompileContractTests {
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
+  @Test("InnoFlowCore does not expose macro declarations")
+  func innoFlowCoreDoesNotExposeMacroDeclarations() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlowCore
+
+      @InnoFlow
+      struct MacroOnlyFeature {
+          struct State: Equatable, Sendable, DefaultInitializable {
+              var count = 0
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case increment
+          }
+
+          var body: some Reducer<State, Action> {
+              Reduce { state, action in
+                  state.count += 1
+                  return .none
+              }
+          }
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+    #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module"))
+    #expect(
+      result.normalizedOutput.localizedCaseInsensitiveContains("unknown attribute")
+        || result.normalizedOutput.localizedCaseInsensitiveContains("cannot find")
+        || result.normalizedOutput.contains("InnoFlow")
+    )
+  }
+
+  @Test("SwiftUI product reexports core runtime types")
+  func swiftUIProductReexportsCoreRuntimeTypes() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlowSwiftUI
+
+      struct BindableFeature: Reducer {
+          struct State: Sendable, DefaultInitializable {
+              @BindableField var step = 1
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case setStep(Int)
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: BindableFeature(), initialState: .init())
+          _ = store.binding(\\.$step, send: { .setStep($0) })
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("SwiftUI product does not expose macro declarations")
+  func swiftUIProductDoesNotExposeMacroDeclarations() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlowSwiftUI
+
+      @InnoFlow
+      struct MacroOnlyFeature {
+          struct State: Equatable, Sendable, DefaultInitializable {
+              var count = 0
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case increment
+          }
+
+          var body: some Reducer<State, Action> {
+              Reduce { state, action in
+                  state.count += 1
+                  return .none
+              }
+          }
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+    #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module"))
+    #expect(
+      result.normalizedOutput.localizedCaseInsensitiveContains("unknown attribute")
+        || result.normalizedOutput.localizedCaseInsensitiveContains("cannot find")
+        || result.normalizedOutput.contains("InnoFlow")
+    )
+  }
+
+  @Test("Testing product reexports core runtime types")
+  func testingProductReexportsCoreRuntimeTypes() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let temporaryRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let clientRoot = temporaryRoot.appendingPathComponent("TestingClient", isDirectory: true)
+    let sourceRoot = clientRoot.appendingPathComponent("Sources/TestingClient", isDirectory: true)
+    let buildPath = temporaryRoot.appendingPathComponent("build", isDirectory: true)
+    try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+    let escapedPackagePath = packageRoot.path
+      .replacingOccurrences(of: "\\", with: "\\\\")
+      .replacingOccurrences(of: "\"", with: "\\\"")
+
+    let manifest = """
+      // swift-tools-version: 6.2
+      import PackageDescription
+
+      let package = Package(
+          name: "TestingClient",
+          platforms: [
+              .iOS(.v18),
+              .macOS(.v15),
+              .tvOS(.v18),
+              .watchOS(.v11),
+              .visionOS(.v2)
+          ],
+          products: [
+              .executable(name: "TestingClient", targets: ["TestingClient"])
+          ],
+          dependencies: [
+              .package(path: "\(escapedPackagePath)")
+          ],
+          targets: [
+              .executableTarget(
+                  name: "TestingClient",
+                  dependencies: [
+                      .product(name: "InnoFlowTesting", package: "InnoFlow")
+                  ]
+              )
+          ]
+      )
+      """
+    try manifest.write(
+      to: clientRoot.appendingPathComponent("Package.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let source = """
+      import InnoFlowTesting
+
+      struct LoadFeature: Reducer {
+          struct State: Equatable, Sendable, DefaultInitializable {
+              var didLoad = false
+              init() {}
+          }
+
+          enum Action: Equatable, Sendable {
+              case load
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              state.didLoad = true
+              return .none
+          }
+      }
+
+      @MainActor
+      func compileContract() {
+          let store = TestStore(reducer: LoadFeature())
+          _ = store.state
+      }
+      """
+    try source.write(
+      to: sourceRoot.appendingPathComponent("main.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let result = try runProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+      arguments: [
+        "swift",
+        "build",
+        "--package-path",
+        clientRoot.path,
+        "--build-path",
+        buildPath.path,
+        "--product",
+        "TestingClient",
+      ]
+    )
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("Testing product does not expose macro declarations")
+  func testingProductDoesNotExposeMacroDeclarations() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let temporaryRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let clientRoot = temporaryRoot.appendingPathComponent("TestingMacroClient", isDirectory: true)
+    let sourceRoot = clientRoot.appendingPathComponent(
+      "Sources/TestingMacroClient",
+      isDirectory: true
+    )
+    let buildPath = temporaryRoot.appendingPathComponent("build", isDirectory: true)
+    try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+    let escapedPackagePath = packageRoot.path
+      .replacingOccurrences(of: "\\", with: "\\\\")
+      .replacingOccurrences(of: "\"", with: "\\\"")
+
+    let manifest = """
+      // swift-tools-version: 6.2
+      import PackageDescription
+
+      let package = Package(
+          name: "TestingMacroClient",
+          platforms: [
+              .iOS(.v18),
+              .macOS(.v15),
+              .tvOS(.v18),
+              .watchOS(.v11),
+              .visionOS(.v2)
+          ],
+          products: [
+              .executable(name: "TestingMacroClient", targets: ["TestingMacroClient"])
+          ],
+          dependencies: [
+              .package(path: "\(escapedPackagePath)")
+          ],
+          targets: [
+              .executableTarget(
+                  name: "TestingMacroClient",
+                  dependencies: [
+                      .product(name: "InnoFlowTesting", package: "InnoFlow")
+                  ]
+              )
+          ]
+      )
+      """
+    try manifest.write(
+      to: clientRoot.appendingPathComponent("Package.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let source = """
+      import InnoFlowTesting
+
+      @InnoFlow
+      struct MacroOnlyFeature {
+          struct State: Equatable, Sendable, DefaultInitializable {
+              var count = 0
+              init() {}
+          }
+
+          enum Action: Sendable {
+              case increment
+          }
+
+          var body: some Reducer<State, Action> {
+              Reduce { state, action in
+                  state.count += 1
+                  return .none
+              }
+          }
+      }
+      """
+    try source.write(
+      to: sourceRoot.appendingPathComponent("main.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let result = try runProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+      arguments: [
+        "swift",
+        "build",
+        "--package-path",
+        clientRoot.path,
+        "--build-path",
+        buildPath.path,
+        "--product",
+        "TestingMacroClient",
+      ]
+    )
+
+    #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+    #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module"))
+    #expect(
+      result.normalizedOutput.localizedCaseInsensitiveContains("unknown attribute")
+        || result.normalizedOutput.localizedCaseInsensitiveContains("cannot find")
+        || result.normalizedOutput.contains("InnoFlow")
+    )
+  }
+
+  @Test("InnoFlowCore product builds without compiling macro implementation targets")
+  func innoFlowCoreProductBuildsWithoutCompilingMacroImplementationTargets() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let temporaryRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let clientRoot = temporaryRoot.appendingPathComponent("CoreClient", isDirectory: true)
+    let sourceRoot = clientRoot.appendingPathComponent("Sources/CoreClient", isDirectory: true)
+    let buildPath = temporaryRoot.appendingPathComponent("build", isDirectory: true)
+    try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+    let escapedPackagePath = packageRoot.path
+      .replacingOccurrences(of: "\\", with: "\\\\")
+      .replacingOccurrences(of: "\"", with: "\\\"")
+
+    let manifest = """
+      // swift-tools-version: 6.2
+      import PackageDescription
+
+      let package = Package(
+          name: "CoreClient",
+          platforms: [
+              .iOS(.v18),
+              .macOS(.v15),
+              .tvOS(.v18),
+              .watchOS(.v11),
+              .visionOS(.v2)
+          ],
+          products: [
+              .executable(name: "CoreClient", targets: ["CoreClient"])
+          ],
+          dependencies: [
+              .package(path: "\(escapedPackagePath)")
+          ],
+          targets: [
+              .executableTarget(
+                  name: "CoreClient",
+                  dependencies: [
+                      .product(name: "InnoFlowCore", package: "InnoFlow")
+                  ]
+              )
+          ]
+      )
+      """
+    try manifest.write(
+      to: clientRoot.appendingPathComponent("Package.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let source = """
+      import InnoFlowCore
+
+      var count = 0
+      let reducer = Reduce<Int, Int> { state, action in
+          state += action
+          return .none
+      }
+      _ = reducer.reduce(into: &count, action: 1)
+      """
+    try source.write(
+      to: sourceRoot.appendingPathComponent("main.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let result = try runProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+      arguments: [
+        "swift",
+        "build",
+        "--package-path",
+        clientRoot.path,
+        "--build-path",
+        buildPath.path,
+        "--product",
+        "CoreClient",
+        "-v",
+      ]
+    )
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+    // SwiftPM still resolves package-level dependencies from this single
+    // manifest. This contract guards the build graph: a core-only client must
+    // not compile macro implementation or SwiftSyntax product targets.
+    let output = result.normalizedOutput
+    let forbiddenCompileMarkers = [
+      "InnoFlowMacros.build",
+      "Compiling InnoFlowMacros",
+      "SwiftSyntax.build",
+      "SwiftSyntaxMacros.build",
+      "SwiftCompilerPlugin.build",
+    ]
+    for marker in forbiddenCompileMarkers {
+      #expect(!output.contains(marker), "Unexpected macro dependency compile marker: \(marker)")
+    }
+  }
+
   @Test("Store.binding is isolated to InnoFlowSwiftUI")
   func storeBindingRequiresInnoFlowSwiftUIImport() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
@@ -309,7 +779,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
 
       struct BindableFeature: Reducer {
           struct State: Sendable, DefaultInitializable {
@@ -353,7 +823,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
       import InnoFlowSwiftUI
 
       struct NonBindableFeature: Reducer {
@@ -414,7 +884,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
       import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
@@ -483,7 +953,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
       import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
@@ -527,7 +997,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
       import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
@@ -569,7 +1039,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
       import InnoFlowSwiftUI
 
       struct BindableFeature: Reducer {
@@ -611,7 +1081,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
       import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
@@ -670,7 +1140,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
       import InnoFlowSwiftUI
 
       struct ParentFeature: Reducer {
@@ -729,7 +1199,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
 
       struct ChildReducer: Reducer {
           struct State: Equatable, Sendable {}
@@ -820,7 +1290,7 @@ struct CompileContractTests {
     let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
 
     let source = """
-      import InnoFlow
+      import InnoFlowCore
 
       struct Todo: Equatable, Identifiable, Sendable {
           let id: UUID

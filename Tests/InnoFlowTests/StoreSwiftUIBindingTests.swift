@@ -6,7 +6,7 @@ import Foundation
 import SwiftUI
 import Testing
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowSwiftUI
 
 private struct SwiftUIBindingFeature: Reducer {

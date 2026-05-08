@@ -20,6 +20,10 @@ let package = Package(
     ],
     products: [
         .library(
+            name: "InnoFlowCore",
+            targets: ["InnoFlowCore"]
+        ),
+        .library(
             name: "InnoFlow",
             targets: ["InnoFlow"]
         ),
@@ -38,13 +42,30 @@ let package = Package(
     targets: [
         // MARK: - Core Library
         .target(
+            name: "InnoFlowCore",
+            dependencies: [],
+            resources: [
+                .process("PrivacyInfo.xcprivacy"),
+            ],
+            swiftSettings: swift6PackageContract
+        ),
+        .target(
             name: "InnoFlow",
-            dependencies: ["InnoFlowMacros"],
+            dependencies: [
+                "InnoFlowCore",
+                "InnoFlowMacros",
+            ],
+            resources: [
+                .process("PrivacyInfo.xcprivacy"),
+            ],
             swiftSettings: swift6PackageContract
         ),
         .target(
             name: "InnoFlowSwiftUI",
-            dependencies: ["InnoFlow"],
+            dependencies: ["InnoFlowCore"],
+            resources: [
+                .process("PrivacyInfo.xcprivacy"),
+            ],
             swiftSettings: swift6PackageContract
         ),
 
@@ -64,7 +85,10 @@ let package = Package(
         // MARK: - Testing Utilities
         .target(
             name: "InnoFlowTesting",
-            dependencies: ["InnoFlow"],
+            dependencies: ["InnoFlowCore"],
+            resources: [
+                .process("PrivacyInfo.xcprivacy"),
+            ],
             swiftSettings: swift6PackageContract
         ),
         
@@ -72,6 +96,7 @@ let package = Package(
         .testTarget(
             name: "InnoFlowTests",
             dependencies: [
+                "InnoFlowCore",
                 "InnoFlow",
                 "InnoFlowSwiftUI",
                 "InnoFlowTesting",

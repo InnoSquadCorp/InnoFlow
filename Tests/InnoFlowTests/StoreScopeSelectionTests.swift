@@ -7,7 +7,7 @@ import InnoFlowSwiftUI
 import Testing
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowTesting
 
 // MARK: - Store Scope and Selection Tests

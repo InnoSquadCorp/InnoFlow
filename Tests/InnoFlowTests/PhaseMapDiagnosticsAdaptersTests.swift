@@ -7,7 +7,7 @@ import Testing
 import os
 import OSLog
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 
 private enum TestPhase: Hashable, Sendable {
   case idle
@@ -18,6 +18,27 @@ private enum TestPhase: Hashable, Sendable {
 private enum TestAction: Equatable, Sendable {
   case load
   case finish
+}
+
+private final class DescriptionCounter: Sendable {
+  private let lock = OSAllocatedUnfairLock<Int>(initialState: 0)
+
+  var count: Int {
+    lock.withLock { $0 }
+  }
+
+  func increment() {
+    lock.withLock { $0 += 1 }
+  }
+}
+
+private struct DescriptionCountingAction: Sendable, CustomStringConvertible {
+  let counter: DescriptionCounter
+
+  var description: String {
+    counter.increment()
+    return "sensitive-action"
+  }
 }
 
 private final class ViolationProbe: Sendable {
@@ -84,6 +105,54 @@ struct PhaseMapDiagnosticsAdaptersTests {
     // Reaching this point means the closure ran for both cases without trapping.
   }
 
+  @Test(".osLog redaction does not evaluate action descriptions")
+  func osLogRedactionDoesNotEvaluateActionDescription() {
+    let counter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "phaseMapDiagnostics")
+    let diagnostics: PhaseMapDiagnostics<DescriptionCountingAction, TestPhase> = .osLog(
+      logger: logger
+    )
+
+    diagnostics.report(
+      .undeclaredTarget(
+        action: DescriptionCountingAction(counter: counter),
+        sourcePhase: .loading,
+        target: .idle,
+        declaredTargets: [.loaded]
+      )
+    )
+    diagnostics.report(
+      .directPhaseMutation(
+        action: DescriptionCountingAction(counter: counter),
+        previousPhase: .idle,
+        postReducePhase: .loaded
+      )
+    )
+
+    #expect(counter.count == 0)
+  }
+
+  @Test(".osLog includeActionPayload evaluates action descriptions")
+  func osLogIncludeActionPayloadEvaluatesActionDescription() {
+    let counter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "phaseMapDiagnostics")
+    let diagnostics: PhaseMapDiagnostics<DescriptionCountingAction, TestPhase> = .osLog(
+      logger: logger,
+      includeActionPayload: true
+    )
+
+    diagnostics.report(
+      .undeclaredTarget(
+        action: DescriptionCountingAction(counter: counter),
+        sourcePhase: .loading,
+        target: .idle,
+        declaredTargets: [.loaded]
+      )
+    )
+
+    #expect(counter.count == 1)
+  }
+
   @Test(".signpost evaluates without crashing for both violation cases")
   func signpostEmitsBothCases() {
     let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "phaseMapDiagnostics")
@@ -91,6 +160,26 @@ struct PhaseMapDiagnosticsAdaptersTests {
 
     diagnostics.report(sampleViolation())
     diagnostics.report(.directPhaseMutation(action: .load, previousPhase: .idle, postReducePhase: .loaded))
+  }
+
+  @Test(".signpost redaction does not evaluate action descriptions")
+  func signpostRedactionDoesNotEvaluateActionDescription() {
+    let counter = DescriptionCounter()
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "phaseMapDiagnostics")
+    let diagnostics: PhaseMapDiagnostics<DescriptionCountingAction, TestPhase> = .signpost(
+      signposter: signposter
+    )
+
+    diagnostics.report(
+      .undeclaredTarget(
+        action: DescriptionCountingAction(counter: counter),
+        sourcePhase: .loading,
+        target: .idle,
+        declaredTargets: [.loaded]
+      )
+    )
+
+    #expect(counter.count == 0)
   }
 
   @Test("Adapter composition: combined(.sink, .osLog) still routes to the sink probe")

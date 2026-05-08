@@ -52,7 +52,7 @@ Then accept it via the reducer's initializer. See [`docs/DEPENDENCY_PATTERNS.md`
 
 ### 3. Compose with primitives
 
-`body` is a result-builder block. Within a single block reducers run in declaration order on the same state, with effects merged together (see [`Sources/InnoFlow/ReducerComposition.swift`](../Sources/InnoFlow/ReducerComposition.swift) for `buildPartialBlock`). Pick the smallest primitive that fits:
+`body` is a result-builder block. Within a single block reducers run in declaration order on the same state, with effects merged together (see [`Sources/InnoFlowCore/ReducerComposition.swift`](../Sources/InnoFlowCore/ReducerComposition.swift) for `buildPartialBlock`). Pick the smallest primitive that fits:
 
 - `Reduce` — closure-backed, the leaf primitive
 - `CombineReducers` — explicit grouping when you want emphasis (also runs in declaration order)
@@ -79,7 +79,7 @@ For phase-managed features the matching surface is `PhaseMapDiagnostics` — see
 
 ### 6. Validate phase contracts in tests
 
-If the feature is `@InnoFlow(phaseManaged: true)`, lock the legal transitions with `assertPhaseMapCovers(...)`. The principle gates enforce this for every phase-managed feature in `Sources/InnoFlow`; it is recommended for sample apps too.
+If the feature is `@InnoFlow(phaseManaged: true)`, lock the legal transitions with `assertPhaseMapCovers(...)`. The principle gates enforce this for every phase-managed feature in `Sources/InnoFlowCore`; it is recommended for sample apps too.
 
 ## Where to read next
 

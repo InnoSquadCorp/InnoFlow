@@ -182,7 +182,7 @@ public struct EffectContext: Sendable {
   }
 }
 
-/// A unified effect model for asynchronous work in InnoFlow v2.
+/// A unified effect model for asynchronous work in InnoFlow.
 public struct EffectTask<Action: Sendable>: Sendable {
   package struct LazyMappedEffect: Sendable {
     private let materializeEffect: @Sendable () -> EffectTask<Action>

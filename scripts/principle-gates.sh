@@ -504,37 +504,37 @@ main() {
   fi
 
   echo "[principle-gates] Checking official composition primitives"
-  search_lines "public struct Reduce<" Sources/InnoFlow/ReducerComposition.swift >/dev/null
-  search_lines "public struct CombineReducers<" Sources/InnoFlow/ReducerComposition.swift >/dev/null
-  search_lines "public struct Scope<" Sources/InnoFlow/ReducerComposition.swift >/dev/null
-  search_lines "public struct IfLet<" Sources/InnoFlow/ReducerComposition.swift >/dev/null
-  search_lines "public struct IfCaseLet<" Sources/InnoFlow/ReducerComposition.swift >/dev/null
-  search_lines "public struct ForEachReducer<" Sources/InnoFlow/ReducerComposition.swift >/dev/null
-  search_lines "public struct StoreClock" Sources/InnoFlow/StoreClock.swift >/dev/null
-  search_lines "public struct StoreInstrumentation" Sources/InnoFlow/StoreInstrumentation.swift >/dev/null
-  search_lines "public final class SelectedStore<" Sources/InnoFlow/SelectedStore.swift >/dev/null
-  search_lines "public struct EffectContext" Sources/InnoFlow/EffectTask.swift >/dev/null
+  search_lines "public struct Reduce<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
+  search_lines "public struct CombineReducers<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
+  search_lines "public struct Scope<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
+  search_lines "public struct IfLet<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
+  search_lines "public struct IfCaseLet<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
+  search_lines "public struct ForEachReducer<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
+  search_lines "public struct StoreClock" Sources/InnoFlowCore/StoreClock.swift >/dev/null
+  search_lines "public struct StoreInstrumentation" Sources/InnoFlowCore/StoreInstrumentation.swift >/dev/null
+  search_lines "public final class SelectedStore<" Sources/InnoFlowCore/SelectedStore.swift >/dev/null
+  search_lines "public struct EffectContext" Sources/InnoFlowCore/EffectTask.swift >/dev/null
   search_lines "public actor ManualTestClock" Sources/InnoFlowTesting/ManualTestClock.swift >/dev/null
   search_lines "public static func preview\\(" Sources/InnoFlowSwiftUI/Store+SwiftUIPreviews.swift >/dev/null
-  search_lines "public func map<" Sources/InnoFlow/EffectTask.swift >/dev/null
+  search_lines "public func map<" Sources/InnoFlowCore/EffectTask.swift >/dev/null
   search_lines 'name: "InnoFlowSwiftUI"' Package.swift >/dev/null
-  if search_swift_lines '^[[:space:]]*(@_exported[[:space:]]+)?(public[[:space:]]+)?import[[:space:]]+SwiftUI$' Sources/InnoFlow >/dev/null; then
-    echo "[principle-gates] Failed: core InnoFlow target must not import SwiftUI"
+  if search_swift_lines '^[[:space:]]*(@_exported[[:space:]]+)?(public[[:space:]]+)?import[[:space:]]+SwiftUI$' Sources/InnoFlowCore Sources/InnoFlow >/dev/null; then
+    echo "[principle-gates] Failed: InnoFlowCore and the InnoFlow facade must not import SwiftUI"
     exit 1
   fi
-  if ! search_multiline 'public func select<[\s\S]{0,220}dependingOn dependency:' Sources/InnoFlow/SelectedStore.swift >/dev/null; then
+  if ! search_multiline 'public func select<[\s\S]{0,220}dependingOn dependency:' Sources/InnoFlowCore/SelectedStore.swift >/dev/null; then
     echo "[principle-gates] Failed: SelectedStore dependency-annotated selection overload is missing"
     exit 1
   fi
-  if ! search_multiline 'public func select<each Dep: Equatable & Sendable[\s\S]{0,200}dependingOnAll dependencies:\s*repeat KeyPath<' Sources/InnoFlow/SelectedStore.swift >/dev/null; then
+  if ! search_multiline 'public func select<each Dep: Equatable & Sendable[\s\S]{0,200}dependingOnAll dependencies:\s*repeat KeyPath<' Sources/InnoFlowCore/SelectedStore.swift >/dev/null; then
     echo "[principle-gates] Failed: SelectedStore variadic dependingOnAll overload is missing"
     exit 1
   fi
-  if search_multiline 'public init\([\s\S]{0,240}extractAction:\s*@escaping' Sources/InnoFlow/ReducerComposition.swift; then
+  if search_multiline 'public init\([\s\S]{0,240}extractAction:\s*@escaping' Sources/InnoFlowCore/ReducerComposition.swift; then
     echo "[principle-gates] Failed: reducer composition still exposes public closure-based action lifting"
     exit 1
   fi
-  if search_multiline 'public func scope<[\s\S]{0,280}action:\s*@escaping\s*@Sendable' Sources/InnoFlow/ScopedStore.swift; then
+  if search_multiline 'public func scope<[\s\S]{0,280}action:\s*@escaping\s*@Sendable' Sources/InnoFlowCore/ScopedStore.swift; then
     echo "[principle-gates] Failed: Store.scope still exposes public closure-based action lifting"
     exit 1
   fi
@@ -826,7 +826,7 @@ main() {
   fi
 
   echo "[principle-gates] Checking PhaseMap totality enforcement"
-  # Phase-managed reducers in the core (Sources/InnoFlow) live behind a
+  # Phase-managed reducers in the core (Sources/InnoFlowCore) live behind a
   # post-reduce contract (`@InnoFlow(phaseManaged: true)` + `static var
   # phaseMap`). The opt-in `PhaseMapDiagnostics` reporter surfaces *runtime*
   # drift, but only `assertPhaseMapCovers(...)` catches *missing transitions*
@@ -840,7 +840,7 @@ main() {
   # a core contract.
   set +e
   phase_managed_uses=$(
-    find Sources/InnoFlow \
+    find Sources/InnoFlowCore \
       -name '*.swift' \
       -not -path '*/InnoFlow.docc/*' \
       -print0 \
@@ -851,7 +851,7 @@ main() {
 
   if [[ $phase_managed_status -le 1 && -n "$phase_managed_uses" ]]; then
     if ! grep -RqE "assertPhaseMapCovers" Tests/InnoFlowTests 2>/dev/null; then
-      echo "[principle-gates] Failed: phase-managed features found in Sources/InnoFlow but Tests/InnoFlowTests has no assertPhaseMapCovers(...) call"
+      echo "[principle-gates] Failed: phase-managed features found in Sources/InnoFlowCore but Tests/InnoFlowTests has no assertPhaseMapCovers(...) call"
       echo "[principle-gates] Files containing @InnoFlow(phaseManaged: true):"
       printf '  %s\n' "${phase_managed_uses}"
       echo "[principle-gates] Remediation: add 'assertPhaseMapCovers(YourFeature.phaseMap, expectedTriggersByPhase: [...])' to a test in Tests/InnoFlowTests."

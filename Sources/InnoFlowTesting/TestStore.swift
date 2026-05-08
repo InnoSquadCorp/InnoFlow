@@ -3,9 +3,9 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-public import InnoFlow
+@_exported public import InnoFlowCore
 
-/// A deterministic test harness for InnoFlow v2 reducers.
+/// A deterministic test harness for InnoFlow reducers.
 ///
 /// `TestStore` asserts state transitions and captures effect-emitted actions.
 /// Timeout behavior is controlled with structured-concurrency races,

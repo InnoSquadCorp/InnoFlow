@@ -2,7 +2,7 @@
 // InnoFlow - SwiftUI preview conveniences
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-public import InnoFlow
+@_exported public import InnoFlowCore
 
 extension Store {
   /// Creates a store for SwiftUI previews with an explicit preview state.

@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-package import InnoFlow
+package import InnoFlowCore
 
 package actor ActionQueue<Action: Sendable> {
   struct QueuedAction: Sendable {

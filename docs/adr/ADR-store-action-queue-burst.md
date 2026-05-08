@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-`StoreActionQueue` ([`Sources/InnoFlow/StoreActionQueue.swift`](../../Sources/InnoFlow/StoreActionQueue.swift)) is the single in-flight action buffer between effect emissions and reducer reentry. It is intentionally minimal:
+`StoreActionQueue` ([`Sources/InnoFlowCore/StoreActionQueue.swift`](../../Sources/InnoFlowCore/StoreActionQueue.swift)) is the single in-flight action buffer between effect emissions and reducer reentry. It is intentionally minimal:
 
 - a `[StoreQueuedAction<Action>]` buffer plus a `head` cursor
 - a `beginDrain()` reentrancy guard

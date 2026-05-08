@@ -6,7 +6,7 @@ import Foundation
 import Testing
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowTesting
 
 // MARK: - EffectTask Tests

@@ -6,7 +6,7 @@ import Foundation
 import Testing
 import os
 
-@testable import InnoFlow
+@testable import InnoFlowCore
 @testable import InnoFlowTesting
 
 // MARK: - Compile Contract Helpers
@@ -916,32 +916,6 @@ func runConditionalReducerReleaseHarness(
   try conditionalReducerReleaseHarnessSource.write(
     to: sourceFile, atomically: true, encoding: .utf8)
 
-  let coreSources = [
-    "BindableField.swift",
-    "BindableProperty.swift",
-    "CasePath.swift",
-    "CollectionActionPath.swift",
-    "EffectRuntime.swift",
-    "EffectDriver.swift",
-    "EffectTask.swift",
-    "EffectExecutionContext.swift",
-    "EffectWalker.swift",
-    "Reducer.swift",
-    "ReducerComposition.swift",
-    "ScopedStore.swift",
-    "SelectedStore.swift",
-    "Store.swift",
-    "Store+EffectDriver.swift",
-    "StoreClock.swift",
-    "StoreEffectBridge.swift",
-    "StoreInstrumentation.swift",
-    "StoreLifetimeToken.swift",
-    "ProjectionObserverRegistry.swift",
-    "StoreActionQueue.swift",
-    "StoreCaches.swift",
-  ]
-  .map { packageRoot.appendingPathComponent("Sources/InnoFlow/\($0)").path }
-
   let compileResult = try runProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
     arguments: [
@@ -951,7 +925,7 @@ func runConditionalReducerReleaseHarness(
       "-package-name",
       "InnoFlow",
       sourceFile.path,
-    ] + coreSources + [
+    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
       "-o",
       executableURL.path,
     ]
@@ -971,11 +945,11 @@ func runConditionalReducerReleaseHarness(
 func innoFlowCoreSourcePaths(in packageRoot: URL) throws -> [String] {
   try FileManager.default
     .contentsOfDirectory(
-      at: packageRoot.appendingPathComponent("Sources/InnoFlow", isDirectory: true),
+      at: packageRoot.appendingPathComponent("Sources/InnoFlowCore", isDirectory: true),
       includingPropertiesForKeys: nil,
       options: [.skipsHiddenFiles]
     )
-    .filter { $0.pathExtension == "swift" && $0.lastPathComponent != "InnoFlow.swift" }
+    .filter { $0.pathExtension == "swift" }
     .sorted { $0.lastPathComponent < $1.lastPathComponent }
     .map(\.path)
 }
