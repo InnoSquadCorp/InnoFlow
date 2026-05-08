@@ -54,7 +54,7 @@ extension PhaseValidationDiagnostics {
           )
         } else {
           logger.error(
-            "InnoFlow phase validation undeclared transition action=\(renderedAction, privacy: .public) previous=\("<redacted>", privacy: .private) next=\("<redacted>", privacy: .private) allowedNextPhases=\("<redacted>", privacy: .private)"
+            "InnoFlow phase validation undeclared transition action=\(renderedAction, privacy: .public) previous=\("<redacted>", privacy: .public) next=\("<redacted>", privacy: .public) allowedNextPhases=\("<redacted>", privacy: .public)"
           )
         }
       }
@@ -81,6 +81,7 @@ extension PhaseValidationDiagnostics {
         let renderedAllowed = includePhaseInfo ? String(describing: allowed) : "<redacted>"
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "undeclaredTransition action=\(renderedAction) previous=\(renderedPrevious) next=\(renderedNext) allowedNextPhases=\(renderedAllowed)"
         )
       }

@@ -76,6 +76,7 @@ extension PhaseMapDiagnostics {
         let renderedAction = includeActionPayload ? String(describing: action) : "<redacted>"
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "directPhaseMutation action=\(renderedAction) previous=\(String(describing: previous)) postReduce=\(String(describing: postReduce))"
         )
 
@@ -83,6 +84,7 @@ extension PhaseMapDiagnostics {
         let renderedAction = includeActionPayload ? String(describing: action) : "<redacted>"
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "undeclaredTarget action=\(renderedAction) sourcePhase=\(String(describing: source)) target=\(String(describing: target)) declaredTargets=\(String(describing: declared))"
         )
       }

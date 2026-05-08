@@ -124,7 +124,7 @@ struct EffectTaskRunSequenceErrorTests {
   }
 
   @Test("Custom error thrown from sequence is forwarded to didFailRun and stops the effect")
-  func customErrorSurfacesAsFailure() async {
+  func customErrorSurfacesAsFailure() async throws {
     let probe = InstrumentationProbe()
     let store = Store(
       reducer: SequenceErrorFeature(),
@@ -143,7 +143,7 @@ struct EffectTaskRunSequenceErrorTests {
 
     let failureEvents = probe.events.filter { $0.hasPrefix("fail:") }
     #expect(failureEvents.count == 1)
-    let event = try! #require(failureEvents.first)
+    let event = try #require(failureEvents.first)
     #expect(event.contains("SequenceTestError"))
     #expect(event.contains("boom"))
     #expect(store.values == [1])
@@ -173,7 +173,7 @@ struct EffectTaskRunSequenceErrorTests {
   }
 
   @Test("transform overload forwards custom errors to didFailRun")
-  func transformCustomErrorSurfacesAsFailure() async {
+  func transformCustomErrorSurfacesAsFailure() async throws {
     let probe = InstrumentationProbe()
     let store = Store(
       reducer: SequenceErrorFeature(),
@@ -192,7 +192,7 @@ struct EffectTaskRunSequenceErrorTests {
 
     let failureEvents = probe.events.filter { $0.hasPrefix("fail:") }
     #expect(failureEvents.count == 1)
-    let event = try! #require(failureEvents.first)
+    let event = try #require(failureEvents.first)
     #expect(event.contains("SequenceTestError"))
     #expect(event.contains("transform-boom"))
     #expect(store.values == [2])

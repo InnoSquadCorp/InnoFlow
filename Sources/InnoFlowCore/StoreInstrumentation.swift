@@ -318,6 +318,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
           includeErrorPayload ? event.errorDescription : "<redacted>"
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "fail token=\(event.token.uuidString) errorType=\(event.errorTypeName) errorDescription=\(renderedErrorDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
@@ -326,6 +327,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
           includeActions ? String(describing: event.action) : "<redacted>"
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "emit action=\(actionDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
@@ -334,12 +336,14 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
           includeActions ? event.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
       didCancelEffects: { event in
         signposter.emitEvent(
           name,
+          id: .exclusive,
           "cancel id=\(String(describing: event.id)) sequence=\(event.sequence)"
         )
       }

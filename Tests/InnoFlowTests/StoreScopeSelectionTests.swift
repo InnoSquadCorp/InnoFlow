@@ -1401,7 +1401,7 @@ struct StoreScopeSelectionTests {
   }
 
   @Test("Collection-scoped stores preserve identity across reorder and prune removed ids")
-  func collectionScopeCachingTracksElementsByID() {
+  func collectionScopeCachingTracksElementsByID() throws {
     let store = Store(reducer: ScopedCollectionFeature(), initialState: .init())
     let callsiteLine: UInt = #line
     let initial = store.scope(
@@ -1436,7 +1436,7 @@ struct StoreScopeSelectionTests {
       line: callsiteLine,
       column: 0
     )
-    let appendedNewStore = try! #require(appended.first(where: { $0.id == newID }))
+    let appendedNewStore = try #require(appended.first(where: { $0.id == newID }))
     for scoped in appended where scoped.id != newID {
       #expect(scoped === initialByID[scoped.id])
     }

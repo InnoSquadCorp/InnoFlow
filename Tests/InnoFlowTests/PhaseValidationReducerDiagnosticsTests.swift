@@ -96,7 +96,7 @@ private struct DescriptionCountingPhase: Hashable, Sendable, CustomStringConvert
 struct PhaseValidationReducerDiagnosticsTests {
 
   @Test("Custom diagnostics reporter receives undeclared transitions in every build configuration")
-  func diagnosticsReceivesUndeclaredTransitions() {
+  func diagnosticsReceivesUndeclaredTransitions() throws {
     let probe = ViolationProbe()
     let reducer = PhaseValidationFeature().validatePhaseTransitions(
       tracking: \.phase,
@@ -116,7 +116,7 @@ struct PhaseValidationReducerDiagnosticsTests {
     _ = reducer.reduce(into: &state, action: .forcePhase(.loaded))
 
     #expect(probe.events.count == 1)
-    let event = try! #require(probe.events.first)
+    let event = try #require(probe.events.first)
     #expect(event.contains("previous=idle"))
     #expect(event.contains("next=") && event.contains(".loaded") || event.contains("next=loaded"))
     // The set may render as `[loading]` or `[Module.Type.Phase.loading]`
