@@ -85,6 +85,20 @@ depend on `InnoFlowSwiftUI`, which provides
 SwiftUI. `InnoFlowSwiftUI` and `InnoFlowTesting` reexport `InnoFlowCore`, but
 macro users must still import `InnoFlow` directly.
 
+### Known toolchain workarounds (Swift 6.3)
+
+`Store.deinit` and `TestStore.deinit` are annotated with `@_optimize(none)` to
+sidestep a Swift 6.3 release-mode SIL crash in `EarlyPerfInliner`
+([swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173))
+that triggers when the compiler tries to inline the generic `R.Action`-typed
+deinit. The deinit path is not a hot loop — the lost optimization is
+negligible — and `@MainActor isolated deinit` semantics are unchanged. If your
+own consumer crashes during release builds with a similar SIL trace, see
+[`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md) for the
+retest procedure and removal trigger. The principle gates also emit a
+non-blocking warning on Swift 6.4+ so the workaround does not silently outlive
+the upstream fix.
+
 ## Quick Start
 
 ### Define a feature
