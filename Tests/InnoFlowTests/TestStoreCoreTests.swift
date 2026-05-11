@@ -38,6 +38,33 @@ struct TestStoreCoreTests {
     await store.assertNoBufferedActions()
   }
 
+  @Test("ActionQueue timeout does not consume actions delivered after timeout")
+  func actionQueueTimeoutDoesNotConsumeLaterAction() async {
+    let queue = ActionQueue<Int>()
+
+    let timedOut = await queue.next(timeout: .milliseconds(1))
+    #expect(timedOut == nil)
+
+    queue.enqueue(42, context: nil)
+    let next = await queue.next(timeout: .seconds(1))
+
+    #expect(next?.action == 42)
+  }
+
+  @Test("ActionQueue returns an action that arrives before timeout")
+  func actionQueueReturnsActionBeforeTimeout() async {
+    let queue = ActionQueue<Int>()
+    let pendingReceive = Task { @MainActor in
+      await queue.next(timeout: .seconds(1))
+    }
+
+    await Task.yield()
+    queue.enqueue(7, context: nil)
+
+    let received = await pendingReceive.value
+    #expect(received?.action == 7)
+  }
+
   @Test("TestStore run effects deliver their first emission deterministically")
   func testStoreRunEffectsDeliverFirstEmissionDeterministically() async {
     for _ in 0..<40 {

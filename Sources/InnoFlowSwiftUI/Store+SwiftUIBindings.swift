@@ -65,7 +65,7 @@ extension ScopedStore {
 
   /// Alias for ``binding(_:send:)`` that reads more naturally when passing an
   /// enum case constructor as the action builder, for example
-  /// `rowStore.binding(\.$isFavorite, to: RowFeature.Action.setFavorite)`.
+  /// `rowStore.binding(\.$isFavorite, to: RowFeature.Action.setIsFavorite)`.
   /// Calls must continue to use an explicit `to:` label when selecting this
   /// alias.
   @_disfavoredOverload
@@ -77,7 +77,7 @@ extension ScopedStore {
   }
 
   /// Compatibility spelling for existing trailing-closure call sites such as
-  /// `rowStore.binding(\.$isFavorite) { RowFeature.Action.setFavorite($0) }`.
+  /// `rowStore.binding(\.$isFavorite) { RowFeature.Action.setIsFavorite($0) }`.
   public func binding<Value>(
     _ keyPath: KeyPath<ChildState, BindableProperty<Value>>,
     _ action: @escaping @Sendable (Value) -> ChildAction

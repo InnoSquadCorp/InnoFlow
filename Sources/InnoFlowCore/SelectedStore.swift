@@ -35,8 +35,8 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// Returns `false` once the parent store or scoped store backing this
   /// selection has been released, or once the selection has been marked
   /// inactive because its source collection entry was removed. Callers
-  /// can consult this before reading `value` to avoid the cached-fallback
-  /// path documented in the lifecycle contract.
+  /// can consult this before using ``requireAlive()`` or read
+  /// ``optionalValue`` when a dead selection should be treated as absence.
   public var isAlive: Bool {
     parentObject != nil && isActive
   }

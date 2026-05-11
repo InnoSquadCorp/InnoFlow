@@ -48,10 +48,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   the new collection for O(1) child lookup; the existing
   `ForEachReducer<[Element]>` overload stays in place for source-compatible
   call sites.
-- `PhaseMap` builders now diagnose duplicate `From(...)` blocks through
-  `validationReport(.duplicateFrom)`, and `On(...)` accepts an explicit
-  `selfTransitionPolicy: .ignore | .forbid | .allow` parameter
-  (default `.ignore`, preserving prior behavior). `derivedGraph` is
+- `PhaseMap.validationReport(expectedTriggersByPhase:)` now also reports
+  duplicate `From(...)` blocks through `duplicateSourcePhases`, and `On(...)`
+  accepts an explicit `selfTransitionPolicy: .ignore | .forbid | .allow`
+  parameter (default `.ignore`, preserving prior behavior). `derivedGraph` is
   precomputed at construction time so repeated reads are free.
 - `StoreInstrumentation.combined(_:)` accepts a flat `[StoreInstrumentation]`
   in addition to the variadic form, enabling dynamic adapter composition.
@@ -184,12 +184,14 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   imports in the core `InnoFlow` target.
 - Added weak-retention coverage proving `ScopedStore` and `SelectedStore`
   projections do not retain their parent `Store` after release.
-- `StoreInstrumentation.didFinishRun` and the OSSignpost slot it owns are
-  now released on cancel and fail paths too, eliminating a leak whenever
-  an in-flight run was cancelled or threw a non-`CancellationError`.
-- `EffectWalker` no longer silently bails when the driver is deallocated
-  mid-walk: actions and child reducers fire
-  `didDropAction(.driverDeallocated)` so observability stays consistent.
+- Effect run lifecycle instrumentation now keeps `didStartRun`,
+  `didFinishRun`, and `didFailRun` mutually exclusive per run: cancel-before-start
+  runs emit no phantom start/finish pair, and `reportError` follows a
+  first-error-wins contract without also emitting `didFinishRun`.
+- Child-action drops from `IfLet` / `IfCaseLet` compositions now route through
+  the internal diagnostic-drop effect path and surface as
+  `didDropAction(.missingChildState)` so release builds preserve observability
+  for parent-child desynchronization.
 - `StoreCaches.validatedBucket` and `SelectionCache.cached` now trap with
   `precondition` in every build configuration when the cache identity
   contract is violated, instead of silently aliasing under release.
@@ -201,7 +203,7 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   `cancelAllEffectsSynchronously` actually cancels them, and waiter
   wakeup is now FIFO (was previously dictionary-order, non-deterministic).
 - `InnoFlow` macros now emit a swift-diagnostics `.error` for
-  `@PhaseManaged(false)` with a non-literal argument, and elevate
+  `@InnoFlow(phaseManaged:)` when the argument is non-literal, and elevate
   unsynthesizable CasePath cases from `.note` to `.warning` with concrete
   remediation text.
 - `PhaseMap` illegal-phase-mutation revert now snapshots and restores the

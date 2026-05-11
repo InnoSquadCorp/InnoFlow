@@ -15,6 +15,7 @@ package final class ActionQueue<Action: Sendable> {
   private struct Waiter {
     let id: UUID
     let continuation: CheckedContinuation<QueuedAction?, Never>
+    let timeoutTask: Task<Void, Never>?
   }
 
   private var buffer: [QueuedAction] = []
@@ -29,6 +30,7 @@ package final class ActionQueue<Action: Sendable> {
     let queuedAction = QueuedAction(action: action, context: context)
     if !waiters.isEmpty {
       let head = waiters.removeFirst()
+      head.timeoutTask?.cancel()
       head.continuation.resume(returning: queuedAction)
       return
     }
@@ -36,7 +38,7 @@ package final class ActionQueue<Action: Sendable> {
     buffer.append(queuedAction)
   }
 
-  func next() async -> QueuedAction? {
+  func next(timeout: Duration) async -> QueuedAction? {
     if headIndex < buffer.count {
       let queuedAction = buffer[headIndex]
       headIndex += 1
@@ -47,11 +49,18 @@ package final class ActionQueue<Action: Sendable> {
     let waiterID = UUID()
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
-        waiters.append(Waiter(id: waiterID, continuation: continuation))
+        let timeoutTask = Task { [weak self] in
+          try? await Task.sleep(for: timeout)
+          guard !Task.isCancelled else { return }
+          self?.resolveWaiter(id: waiterID, returning: nil)
+        }
+        waiters.append(
+          Waiter(id: waiterID, continuation: continuation, timeoutTask: timeoutTask)
+        )
       }
     } onCancel: {
       Task { @MainActor [weak self] in
-        self?.cancelWaiter(waiterID)
+        self?.resolveWaiter(id: waiterID, returning: nil)
       }
     }
   }
@@ -64,10 +73,11 @@ package final class ActionQueue<Action: Sendable> {
     return queuedAction
   }
 
-  private func cancelWaiter(_ waiterID: UUID) {
+  private func resolveWaiter(id waiterID: UUID, returning queuedAction: QueuedAction?) {
     guard let index = waiters.firstIndex(where: { $0.id == waiterID }) else { return }
     let waiter = waiters.remove(at: index)
-    waiter.continuation.resume(returning: nil)
+    waiter.timeoutTask?.cancel()
+    waiter.continuation.resume(returning: queuedAction)
   }
 
   private func compactBufferIfNeeded() {
@@ -319,12 +329,7 @@ extension TestStore {
 
   package func nextActionWithinTimeout() async -> R.Action? {
     let queue = self.queue
-    while let queuedAction = await withTimeout(
-      effectTimeout,
-      operation: {
-        await queue.next()
-      })
-    {
+    while let queuedAction = await queue.next(timeout: effectTimeout) {
       guard shouldProceed(context: queuedAction.context) else { continue }
       return queuedAction.action
     }
@@ -337,26 +342,6 @@ extension TestStore {
       return queuedAction.action
     }
     return nil
-  }
-
-  private func withTimeout<T: Sendable>(
-    _ timeout: Duration,
-    operation: @escaping @Sendable () async -> T?
-  ) async -> T? {
-    await withTaskGroup(of: T?.self) { group in
-      group.addTask {
-        await operation()
-      }
-
-      group.addTask {
-        try? await Task.sleep(for: timeout)
-        return nil
-      }
-
-      let result = await group.next() ?? nil
-      group.cancelAll()
-      return result
-    }
   }
 
   private func isRunTaskActive(token: UUID) -> Bool {

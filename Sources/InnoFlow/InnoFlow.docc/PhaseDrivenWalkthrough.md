@@ -113,7 +113,7 @@ This keeps the parent feature in charge of ownership while allowing row-level bi
 
 ```swift
 Toggle(
-  isOn: store.binding(\.$isDone, to: PhaseDrivenTodoFeature.TodoAction.setDone)
+  isOn: store.binding(\.$isDone, to: PhaseDrivenTodoRowFeature.Action.setIsDone)
 ) {
   Text(store.title)
 }
@@ -152,7 +152,7 @@ let todo = store.scope(
   action: PhaseDrivenTodoFeature.Action.todoActionPath
 )
 
-await todo.send(.setDone(true))
+await todo.send(.setIsDone(true))
 todo.assert {
   $0.isDone.value = true
 }

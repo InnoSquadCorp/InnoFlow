@@ -304,6 +304,8 @@ ForEachReducer(
 
 `SelectedStore` is a read-only derived projection for expensive `Equatable` read models. Use it when
 you want a view to refresh only when the selected value actually changes.
+Read live projections with `requireAlive()` when liveness is a precondition, or use
+`optionalValue` when a released projection should be handled as absence.
 
 ```swift
 let summary = store.select { state in
@@ -714,7 +716,7 @@ let todo = store.scope(
   action: ParentFeature.Action.todoActionPath
 )
 
-await todo.send(.setDone(true))
+await todo.send(.setIsDone(true))
 todo.assert {
   $0.isDone.value = true
 }
@@ -724,7 +726,7 @@ For expensive derived read-models, prefer `SelectedStore` over ad-hoc recomputat
 
 ```swift
 let status = store.select(\.phase)
-#expect(status.value == .idle)
+#expect(status.requireAlive() == .idle)
 ```
 
 If the read model is derived from a single explicit `Equatable` slice, use the
@@ -733,7 +735,7 @@ dependency-annotated form; for two or more slices use the variadic
 
 ```swift
 let title = store.select(dependingOn: \.child.title) { $0.uppercased() }
-#expect(title.value == "CHILD")
+#expect(title.requireAlive() == "CHILD")
 ```
 
 ## Canonical Sample
