@@ -391,3 +391,61 @@ where
     }
   }
 }
+
+/// Lifts a child reducer across an `IdentifiedArray` in parent state using
+/// the array's `id → index` map for O(1) child resolution.
+///
+/// Use this in preference to the generic `ForEachReducer` whenever the
+/// parent stores its rows as an `IdentifiedArray` — the only behavior
+/// difference is that lookup, routing, and the in-place mutation address
+/// resolve in constant time rather than scanning with `firstIndex(where:)`.
+/// Equality, identity, and action-embedding semantics are unchanged so
+/// migration is mechanical.
+public struct ForEachIdentifiedReducer<
+  ParentState: Sendable,
+  ParentAction: Sendable,
+  ElementID: Hashable & Sendable,
+  Child: Reducer
+>: Reducer
+where
+  Child.State: Sendable,
+  Child.State: Identifiable,
+  Child.State.ID == ElementID
+{
+  public typealias State = ParentState
+  public typealias Action = ParentAction
+
+  private let state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>
+  private let action: CollectionActionPath<ParentAction, ElementID, Child.Action>
+  private let reducer: Child
+
+  public init(
+    state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>,
+    action: CollectionActionPath<ParentAction, ElementID, Child.Action>,
+    reducer: Child
+  ) {
+    self.state = state
+    self.action = action
+    self.reducer = reducer
+  }
+
+  public func reduce(into state: inout ParentState, action parentAction: ParentAction)
+    -> EffectTask<ParentAction>
+  {
+    guard let (id, childAction) = action.extract(parentAction) else {
+      return .none
+    }
+    guard var element = state[keyPath: self.state][id: id] else {
+      return .none
+    }
+
+    let childEffect = reducer.reduce(into: &element, action: childAction)
+    state[keyPath: self.state][id: id] = element
+
+    let actionPath = self.action
+    let elementID = id
+    return childEffect.map { followUpAction in
+      actionPath.embed(elementID, followUpAction)
+    }
+  }
+}
