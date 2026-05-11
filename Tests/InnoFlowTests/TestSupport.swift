@@ -48,6 +48,9 @@ func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Action>) ->
 
   case .lazyMap(let lazy):
     return effectOperationSignature(lazy.materialize())
+
+  case .diagnosticDrop(let action, let reason):
+    return "diagnosticDrop(action:\(String(describing: action)),reason:\(String(describing: reason)))"
   }
 }
 
@@ -1041,6 +1044,7 @@ func runPhaseMapReleaseHarness(
 
 private let conditionalReducerReleaseHarnessSource = #"""
   import Foundation
+  import os
 
   struct ReleaseIfLetFeature: Reducer {
     struct ChildState: Equatable, Sendable {
@@ -1148,31 +1152,75 @@ private let conditionalReducerReleaseHarnessSource = #"""
     }
   }
 
+  final class DropRecorder: Sendable {
+    private let storage = OSAllocatedUnfairLock<[String]>(initialState: [])
+    var events: [String] {
+      storage.withLock { $0 }
+    }
+    func record(_ event: String) {
+      storage.withLock { $0.append(event) }
+    }
+  }
+
   @main
   struct ConditionalReducerProbe {
     @MainActor
-    static func main() {
+    static func main() async {
       switch ProcessInfo.processInfo.environment["INNOFLOW_CONDITIONAL_REDUCER_SCENARIO"] {
       case "iflet-absent-state":
+        let recorder = DropRecorder()
+        let instrumentation = StoreInstrumentation<ReleaseIfLetFeature.Action>(
+          didDropAction: { event in
+            recorder.record("drop:\(event.reason)")
+          }
+        )
         let store = Store(
           reducer: ReleaseIfLetFeature(),
-          initialState: .init(child: nil, untouched: 7)
+          initialState: .init(child: nil, untouched: 7),
+          instrumentation: instrumentation
         )
         store.send(.child(.increment))
+        for _ in 0..<256 {
+          if recorder.events.contains("drop:missingChildState") { break }
+          await Task.yield()
+        }
         guard store.state == .init(child: nil, untouched: 7) else {
           fputs("IfLet mutated state unexpectedly\n", stderr)
+          Foundation.exit(1)
+        }
+        guard recorder.events.contains("drop:missingChildState") else {
+          fputs(
+            "Expected didDropAction with .missingChildState, got \(recorder.events)\n",
+            stderr)
           Foundation.exit(1)
         }
         print("ok")
 
       case "ifcase-mismatched-state":
+        let recorder = DropRecorder()
+        let instrumentation = StoreInstrumentation<ReleaseIfCaseLetFeature.Action>(
+          didDropAction: { event in
+            recorder.record("drop:\(event.reason)")
+          }
+        )
         let store = Store(
           reducer: ReleaseIfCaseLetFeature(),
-          initialState: .idle
+          initialState: .idle,
+          instrumentation: instrumentation
         )
         store.send(.child(.increment))
+        for _ in 0..<256 {
+          if recorder.events.contains("drop:missingChildState") { break }
+          await Task.yield()
+        }
         guard store.state == .idle else {
           fputs("IfCaseLet mutated state unexpectedly\n", stderr)
+          Foundation.exit(1)
+        }
+        guard recorder.events.contains("drop:missingChildState") else {
+          fputs(
+            "Expected didDropAction with .missingChildState, got \(recorder.events)\n",
+            stderr)
           Foundation.exit(1)
         }
         print("ok")

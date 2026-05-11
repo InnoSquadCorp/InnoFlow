@@ -226,6 +226,10 @@ public struct EffectTask<Action: Sendable>: Sendable {
       animation: EffectAnimation
     )
     case lazyMap(LazyMappedEffect)
+    /// Routes a drop event through the effect walker so reducers that do not
+    /// own `Send` (e.g., `IfLet`/`IfCaseLet`) can still surface
+    /// `StoreInstrumentation.didDropAction` to the host store.
+    case diagnosticDrop(action: Action, reason: ActionDropReason)
   }
 
   package let operation: Operation
@@ -342,6 +346,14 @@ public struct EffectTask<Action: Sendable>: Sendable {
     return .init(operation: .concatenate(live))
   }
 
+  /// Emits an `ActionDropEvent` through the host store's instrumentation
+  /// without re-delivering the action. Used by composition primitives that
+  /// detect a structurally-invalid action (e.g., `IfLet` with `nil` child
+  /// state) and need to surface the drop in release builds.
+  package static func reportDrop(_ action: Action, reason: ActionDropReason) -> Self {
+    .init(operation: .diagnosticDrop(action: action, reason: reason))
+  }
+
   /// Cancels effects tied to an identifier.
   public static func cancel<ID: Hashable & Sendable>(_ id: EffectID<ID>) -> Self {
     cancel(AnyEffectID(id))
@@ -441,6 +453,9 @@ public struct EffectTask<Action: Sendable>: Sendable {
     case .lazyMap:
       return eagerMap(transform)
 
+    case .diagnosticDrop(let action, let reason):
+      return .reportDrop(transform(action), reason: reason)
+
     case .run, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation:
       let source = self
       return .init(
@@ -501,6 +516,9 @@ public struct EffectTask<Action: Sendable>: Sendable {
 
     case .animation(let effect, let animation):
       return effect.eagerMap(transform).applyingAnimation(animation)
+
+    case .diagnosticDrop(let action, let reason):
+      return .reportDrop(transform(action), reason: reason)
 
     case .lazyMap:
       preconditionFailure(

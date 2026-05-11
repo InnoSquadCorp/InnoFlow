@@ -105,6 +105,15 @@ package protocol EffectDriver<Action>: AnyObject {
   /// Deliver an action back to the reduce cycle.
   func deliverAction(_ action: Action, context: EffectExecutionContext?)
 
+  /// Surface a structural action drop (e.g., `IfLet` child state missing)
+  /// without re-delivering the action. Stores route this to
+  /// `StoreInstrumentation.didDropAction`; test runtimes may no-op.
+  func reportActionDrop(
+    _ action: Action,
+    reason: ActionDropReason,
+    context: EffectExecutionContext?
+  )
+
   /// Start a `.run` effect. If `awaited`, blocks until the operation completes.
   func startRun(
     priority: TaskPriority?,

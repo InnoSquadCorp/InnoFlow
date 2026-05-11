@@ -258,13 +258,13 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
     guard var childState = state[keyPath: self.state] else {
       switch onMissing {
       case .ignore:
-        break
+        return .none
       case .assertOnly:
         assertionFailure("IfLet received a child action while child state was nil.")
+        return .reportDrop(action, reason: .missingChildState)
       case .crash:
         preconditionFailure("IfLet received a child action while child state was nil.")
       }
-      return .none
     }
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
@@ -322,15 +322,15 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
     guard var childState = self.state.extract(state) else {
       switch onMissing {
       case .ignore:
-        break
+        return .none
       case .assertOnly:
         assertionFailure(
           "IfCaseLet received a child action while parent state was in a different case.")
+        return .reportDrop(action, reason: .missingChildState)
       case .crash:
         preconditionFailure(
           "IfCaseLet received a child action while parent state was in a different case.")
       }
-      return .none
     }
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)

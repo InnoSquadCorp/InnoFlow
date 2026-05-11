@@ -110,6 +110,9 @@ package struct EffectWalker<D: EffectDriver> {
         context: context,
         awaited: awaited
       )
+
+    case .diagnosticDrop(let action, let reason):
+      driver.reportActionDrop(action, reason: reason, context: context)
     }
   }
 

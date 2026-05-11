@@ -36,6 +36,14 @@ extension Store: EffectDriver {
     enqueue(action, animation: context?.animation)
   }
 
+  package func reportActionDrop(
+    _ action: R.Action,
+    reason: ActionDropReason,
+    context: EffectExecutionContext?
+  ) {
+    recordDrop(action, reason: reason, context: context)
+  }
+
   package func startRun(
     priority: TaskPriority?,
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,

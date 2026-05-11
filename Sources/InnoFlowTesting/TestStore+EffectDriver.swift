@@ -378,6 +378,16 @@ extension TestStore: EffectDriver {
     }
   }
 
+  package func reportActionDrop(
+    _ action: R.Action,
+    reason: ActionDropReason,
+    context: EffectExecutionContext?
+  ) {
+    // TestStore observes assertion failures via DEBUG `assertionFailure` at the
+    // composition site; the diagnostic effect itself is a no-op here so test
+    // expectations stay deterministic.
+  }
+
   package func startRun(
     priority: TaskPriority?,
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,

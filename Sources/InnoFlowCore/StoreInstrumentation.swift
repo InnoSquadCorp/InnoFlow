@@ -34,6 +34,11 @@ public enum ActionDropReason: Sendable, Equatable {
   case cancellationBoundary
   case inactiveToken
   case throttledOrDebouncedCancellation
+  /// An `IfLet`/`IfCaseLet` composition received a child action while the
+  /// child's state was unavailable. Surfaced even in release builds (where
+  /// `assertOnly`/`ignore` would otherwise drop silently) so dashboards can
+  /// observe parent-child desynchronization.
+  case missingChildState
 }
 
 /// A unified stream of store instrumentation events.
