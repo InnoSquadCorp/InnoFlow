@@ -29,46 +29,43 @@ lifetime is bounded by the parent. SwiftUI observers, however, can read a
 projection on the same run-loop tick that its parent is being released — a
 race that is internal to the integration, not a programming error.
 
-The framework handles this race explicitly:
+The framework handles this race explicitly, but `ScopedStore` and
+`SelectedStore` now expose different read contracts:
 
-- **Reads** (`ScopedStore.state`, `SelectedStore.value`, and their
-  `@dynamicMemberLookup` subscripts) return the **last valid cached snapshot**
-  when the parent is gone or the projection has been marked inactive. The
-  observer refresh pass invalidates dependents within the next tick, so the
-  stale read is bounded to one tick.
-- **Writes** (`ScopedStore.send(_:)`) are **silent no-ops** once the parent is
-  gone or the projection is inactive.
-- Debug builds surface both cases via `assertionFailure`, so the race is
-  immediately visible in development. Release builds do not abort.
+- `ScopedStore.state` and `ScopedStore` dynamic-member reads return the **last
+  valid cached snapshot** when the parent is gone or the projection has been
+  marked inactive. The observer refresh pass invalidates dependents within the
+  next tick, so this fallback is bounded to the SwiftUI observer race it exists
+  to cover.
+- `ScopedStore.send(_:)` is a **silent no-op** once the parent is gone or the
+  projection is inactive.
+- `ScopedStore.optionalState` returns `nil` for the same dead-projection cases
+  where `ScopedStore.state` would use its cached snapshot fallback.
+- `SelectedStore.optionalValue` returns `nil` when the parent is gone or the
+  projection is inactive. Treat `nil` as "regenerate the projection."
+- `SelectedStore.requireAlive()` and `SelectedStore` dynamic-member reads trap
+  with `preconditionFailure` when the projection is dead, including release
+  builds. Use this path only when liveness is a caller-owned precondition.
+- `SelectedStore.value` is removed from the 4.0.0 public surface; it is not a
+  cached-fallback accessor.
+- `ScopedStore.isAlive` and `SelectedStore.isAlive` report the same liveness
+  signal as a `Bool` for sites that only need to gate work and do not read the
+  projected value.
 - Programming errors that are **not** lifecycle races still trap — in
   particular, constructing a `ScopedStore` whose state resolver returns `nil`
   at init time, and reading `ScopedStore.id` when the stable identifier type
   does not match the child state's `Identifiable.ID`.
 
-**Recommended for new code:** branch on liveness explicitly through the
-optional accessors instead of relying on the cached-read fallback. The
-fallback exists so SwiftUI observer races do not crash release builds, not
-as a stable read path:
-
-- `ScopedStore.optionalState` and `SelectedStore.optionalValue` return `nil`
-  in the same situations where `state`/`value` would emit a debug assertion
-  and a cached fallback. Treat `nil` as "regenerate the projection." This is
-  the contract-compliant way to ask "is this projection still meaningful?"
-  from a release-tolerant call site.
-- `ScopedStore.isAlive` and `SelectedStore.isAlive` report the same liveness
-  signal as a `Bool` for sites that only need to gate work and do not read
-  the projected value.
-
-Use the cached-read `state`/`value` accessors when a SwiftUI view body or
-similar tick-bounded observer must always return *something*; reach for the
-optional accessors everywhere else.
-
-These accessors do not change the cached-read or no-op-write semantics above;
-they expose the same lifecycle signal to callers that prefer to branch on
-liveness rather than rely on the cached snapshot.
+**Recommended for new code:** use `optionalState` / `optionalValue` or
+`isAlive` for release-tolerant liveness handling. Reserve `ScopedStore.state`
+for SwiftUI view bodies and similar tick-bounded observers that must always
+return a child snapshot. Reserve `SelectedStore.requireAlive()` and
+dynamic-member reads for ownership paths where a dead projection is a
+programming error.
 
 This contract applies to single-child `Scope`, collection `ForEachReducer`
-children, and derived `SelectedStore` projections alike.
+children, and derived `SelectedStore` projections with the `SelectedStore`
+exceptions listed above.
 
 ## Phase-driven modeling
 

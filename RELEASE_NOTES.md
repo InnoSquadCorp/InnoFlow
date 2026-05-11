@@ -95,22 +95,25 @@ with the public API updates captured below.
 2. Clarified `SelectedStore` guidance: `select(dependingOn:)` covers a single explicit state
    slice, the variadic `select(dependingOnAll:)` covers two or more explicit slices, and closure
    selection remains the always-refresh fallback.
-3. Fixed Markdown `.run` examples so throwing work is wrapped inside `do/catch` in non-throwing
+3. Aligned the projection lifecycle docs with the 4.0.0 API: `ScopedStore.state` keeps its
+   SwiftUI observer-race cached snapshot fallback, while `SelectedStore.value` is removed in favor
+   of `optionalValue` (`nil` when dead) or `requireAlive()` (`preconditionFailure` when dead).
+4. Fixed Markdown `.run` examples so throwing work is wrapped inside `do/catch` in non-throwing
    effect closures.
-4. Strengthened local release-readiness gates for localized install snippets, release target docs,
+5. Strengthened local release-readiness gates for localized install snippets, release target docs,
    localized `SelectedStore` guidance, and bare throwing `.run` snippets.
-5. Generalized `EffectID` to accept typed `Hashable & Sendable` raw values while keeping
+6. Generalized `EffectID` to accept typed `Hashable & Sendable` raw values while keeping
    `StaticEffectID` as the string-literal convenience alias.
-6. Added `EffectTask.run` overloads for consuming `AsyncSequence` streams directly or through an
+7. Added `EffectTask.run` overloads for consuming `AsyncSequence` streams directly or through an
    optional element-to-action transform.
-7. Hardened store effect cancellation for non-awaited composite effects and
+8. Hardened store effect cancellation for non-awaited composite effects and
    nested `.cancellable` boundaries, and aligned production/test
    cancellation-boundary accounting.
-8. Tightened phase-managed totality diagnostics to count only `PhaseMap` DSL
+9. Tightened phase-managed totality diagnostics to count only `PhaseMap` DSL
    graph declarations.
-9. Reduced collection reducer and scoped-store cache overhead on repeated list
+10. Reduced collection reducer and scoped-store cache overhead on repeated list
    refreshes.
-10. Strengthened tag-driven release validation so 4.0.0 publication fails when
+11. Strengthened tag-driven release validation so 4.0.0 publication fails when
     release-target documentation and tags drift.
 
 ## Migration Note
@@ -127,6 +130,9 @@ with the public API updates captured below.
 
 - Multi-slice `SelectedStore` call sites should migrate from tuple-packed
   `select(dependingOn: (\.a, \.b))` to `select(dependingOnAll: \.a, \.b)`.
+- Direct `SelectedStore.value` reads should migrate to `optionalValue` when
+  absence is acceptable, or `requireAlive()` when liveness is an ownership
+  precondition.
 - Explicit `EffectID` type annotations should use `StaticEffectID` for string identifiers or
   `EffectID<RawValue>` for typed dynamic identifiers.
 - Instrumentation consumers should treat event cancellation identifiers as `AnyEffectID?`; typed

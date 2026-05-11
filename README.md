@@ -694,7 +694,7 @@ await child.receive(.finished) {
 
 That projection assumes `ParentFeature.Action.childCasePath`, which `@InnoFlow` now synthesizes for matching single-payload child action cases.
 Collection-scoped projections keep per-element `ScopedStore` identity stable by `id`, and row observers only invalidate when their own element snapshot changes.
-If an element is removed, discard any old row-scoped handle and recreate projections from the parent store. Runtime direct reads return the last cached snapshot and assert in debug builds, while stale sends no-op in release. `ScopedTestStore` keeps the testing contract louder and traps stale direct access via `preconditionFailure`.
+If an element is removed, discard any old row-scoped handle and recreate projections from the parent store. `ScopedStore.state` keeps a cached snapshot fallback for SwiftUI observer races, stale scoped sends no-op in release, and `SelectedStore` callers should use `optionalValue` for graceful absence or `requireAlive()` when a dead projection is a programmer error. `ScopedTestStore` keeps the testing contract louder and traps stale direct access via `preconditionFailure`.
 
 For store-level debounce and throttle tests, inject a `StoreClock`:
 

@@ -4,6 +4,34 @@ This document defines the minimum release quality bar for InnoFlow.
 
 Current stable public release target: `4.0.0`
 
+## 4.0.0 Staged Readiness
+
+The 4.0.0 release tag is exactly `4.0.0`; do not create or document a
+`v4.0.0` tag. Local validation can prove that the staged release surface is
+internally consistent, but it does not make the package publish-ready by
+itself. Publication is ready only after the tag-triggered GitHub Actions
+`Release Gate` succeeds for the `4.0.0` tag.
+
+Before creating the tag, run and confirm:
+
+1. Main package tests: `swift test -Xswiftc -warnings-as-errors`
+2. Release package tests: `swift test -c release -Xswiftc -warnings-as-errors`
+3. Sample package tests: `swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1 -Xswiftc -warnings-as-errors`
+4. DocC generation: `Tools/generate-docc.sh`
+5. Release sync: `scripts/check-release-sync.sh`
+6. Doc parity: `scripts/check-doc-parity.sh`
+7. Full principle gates: `scripts/principle-gates.sh`
+
+After creating or fetching the exact `4.0.0` tag, release-tag enforcement must
+also pass locally:
+
+```bash
+INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=4.0.0 scripts/check-release-sync.sh
+```
+
+That command intentionally requires the actual local tag name to be `4.0.0`.
+It must not normalize or accept `v4.0.0`.
+
 ## Release Checklist
 
 Before tagging a release:
