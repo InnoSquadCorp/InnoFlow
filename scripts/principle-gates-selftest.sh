@@ -213,6 +213,50 @@ run_internal_diagnostic_log_tests() {
   rm -rf "$tmp_root"
 }
 
+run_source_preserves_cwd_test() {
+  local tmp_root
+  tmp_root="$(mktemp -d)"
+  trap "rm -rf '$tmp_root'" RETURN
+
+  echo "[principle-gates-selftest] Running source cwd preservation test"
+  (
+    cd "$tmp_root"
+    assert_success bash -c 'set -euo pipefail; before="$PWD"; source "$1"; [[ "$PWD" == "$before" ]]' bash "$SCRIPT_DIR/principle-gates-lib.sh"
+  )
+
+  trap - RETURN
+  rm -rf "$tmp_root"
+}
+
+run_cleanup_trap_isolation_tests() {
+  echo "[principle-gates-selftest] Running cleanup trap isolation tests"
+  assert_success bash -c '
+    set -euo pipefail
+    source "$1"
+
+    run_authoring_surface_checks() { :; }
+    run_sample_static_contract_checks() { :; }
+    run_doc_contract_checks() { :; }
+    run_authoring_policy_checks() { :; }
+    run_release_build_checks() { :; }
+    run_sample_runtime_contract_checks() { :; }
+
+    trap "echo caller-cleanup >/dev/null" EXIT
+    before="$(trap -p EXIT)"
+
+    run_principle_gates >/dev/null
+    after_principle="$(trap -p EXIT)"
+    [[ "$after_principle" == "$before" ]]
+
+    run_sample_contract_checks >/dev/null
+    after_sample="$(trap -p EXIT)"
+    [[ "$after_sample" == "$before" ]]
+  ' bash "$SCRIPT_DIR/principle-gates-lib.sh"
+}
+
+run_source_preserves_cwd_test
+run_cleanup_trap_isolation_tests
+
 if command -v rg >/dev/null 2>&1; then
   run_search_tests "0" "rg"
 else

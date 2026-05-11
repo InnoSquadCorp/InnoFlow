@@ -11,8 +11,6 @@ if [[ "$SWIFT_FRONTEND_THREADS" != "0" ]]; then
   SWIFT_FRONTEND_THREAD_FLAGS=(-Xswiftc -num-threads -Xswiftc "$SWIFT_FRONTEND_THREADS")
 fi
 
-cd "$ROOT_DIR"
-
 HAS_RG=0
 RG_BIN=""
 
@@ -21,6 +19,11 @@ cleanup_temp_dirs() {
     rm -rf "$(dirname "$CANONICAL_ROOT_DIR")"
   fi
 }
+
+run_with_principle_gate_cleanup() (
+  trap cleanup_temp_dirs EXIT
+  "$@"
+)
 
 canonical_root_for_sample_package_tests() {
   if [[ "$(basename "$ROOT_DIR")" == "InnoFlow" ]]; then
@@ -835,7 +838,6 @@ run_release_build_checks() {
 
 run_sample_runtime_contract_checks() {
   ensure_principle_gate_context
-  trap cleanup_temp_dirs EXIT
 
   echo "[principle-gates] Running sample package tests"
   local sample_test_root
@@ -907,14 +909,16 @@ run_authoring_checks() {
   run_authoring_policy_checks "$@"
 }
 
-run_sample_contract_checks() {
-  trap cleanup_temp_dirs EXIT
+run_sample_contract_checks_impl() {
   run_sample_static_contract_checks "$@"
   run_sample_runtime_contract_checks "$@"
 }
 
-run_principle_gates() {
-  trap cleanup_temp_dirs EXIT
+run_sample_contract_checks() {
+  run_with_principle_gate_cleanup run_sample_contract_checks_impl "$@"
+}
+
+run_principle_gates_impl() {
   run_authoring_surface_checks "$@"
   run_sample_static_contract_checks "$@"
   run_doc_contract_checks "$@"
@@ -922,6 +926,10 @@ run_principle_gates() {
   run_release_build_checks "$@"
   run_sample_runtime_contract_checks "$@"
   echo "[principle-gates] All checks passed"
+}
+
+run_principle_gates() {
+  run_with_principle_gate_cleanup run_principle_gates_impl "$@"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
