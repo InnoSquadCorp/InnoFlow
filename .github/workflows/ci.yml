@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
@@ -171,6 +172,26 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
+
+  address-sanitizer:
+    name: Package Tests (AddressSanitizer)
+    runs-on: macos-26
+    needs: lint
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'run-asan'))
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Run package tests with AddressSanitizer
+        run: |
+          set -eo pipefail
+          swift test --package-path "$GITHUB_WORKSPACE" --sanitize=address -Xswiftc -warnings-as-errors
 
   sample-ui-tests:
     name: Canonical Sample UI Smoke Tests
