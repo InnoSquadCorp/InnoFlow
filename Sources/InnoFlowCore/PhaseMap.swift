@@ -56,6 +56,10 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
   package let rules: [PhaseRule<State, Action, Phase>]
   package let rulesBySourcePhase: [Phase: [PhaseRule<State, Action, Phase>]]
   package let diagnostics: PhaseMapDiagnostics<Action, Phase>
+  /// Source phases that appear in more than one `From(...)` block. Each entry
+  /// is reported at most once and preserves the order the duplicate was first
+  /// observed. Surfaced through `validationReport(...)`.
+  package let duplicateSourcePhases: [Phase]
 
   public init(
     _ phaseKeyPath: WritableKeyPath<State, Phase>,
@@ -67,6 +71,7 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
     let declaredRules = rules()
     self.rules = declaredRules
     self.rulesBySourcePhase = Self.makeRulesBySourcePhase(from: declaredRules)
+    self.duplicateSourcePhases = Self.findDuplicateSourcePhases(in: declaredRules)
   }
 
   public var derivedGraph: PhaseTransitionGraph<Phase> {
@@ -80,12 +85,14 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
   }
 
   /// Returns a lightweight report describing which explicitly expected phase triggers
-  /// are not covered by the current `PhaseMap` declaration.
+  /// are not covered by the current `PhaseMap` declaration, plus any source phases
+  /// that were split across more than one `From(...)` block.
   ///
   /// This helper is intentionally opt-in. `PhaseMap` remains partial by default and
-  /// unmatched actions are still legal runtime no-ops.
+  /// unmatched actions are still legal runtime no-ops. Pass an empty dictionary to
+  /// only surface duplicate-`From` diagnostics.
   public func validationReport(
-    expectedTriggersByPhase: [Phase: [PhaseMapExpectedTrigger<Action>]]
+    expectedTriggersByPhase: [Phase: [PhaseMapExpectedTrigger<Action>]] = [:]
   ) -> PhaseMapValidationReport<Phase> {
     var missingTriggers: [PhaseMapValidationReport<Phase>.MissingTrigger] = []
 
@@ -102,7 +109,10 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
       }
     }
 
-    return .init(missingTriggers: missingTriggers)
+    return .init(
+      missingTriggers: missingTriggers,
+      duplicateSourcePhases: duplicateSourcePhases
+    )
   }
 
   private static func makeRulesBySourcePhase(
@@ -113,6 +123,27 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
       rulesBySourcePhase[rule.sourcePhase, default: []].append(rule)
     }
     return rulesBySourcePhase
+  }
+
+  /// Returns the source phases that appear in more than one `From(...)` block.
+  /// Splitting transitions across separate `From(.x)` blocks for the same `.x`
+  /// is supported at runtime (ordering is preserved) but is almost always a
+  /// declaration mistake; surface it through `validationReport(...)` so authors
+  /// can opt into a hard failure.
+  private static func findDuplicateSourcePhases(
+    in rules: [PhaseRule<State, Action, Phase>]
+  ) -> [Phase] {
+    var seen: Set<Phase> = []
+    var duplicateSet: Set<Phase> = []
+    var duplicateOrder: [Phase] = []
+    for rule in rules {
+      if !seen.insert(rule.sourcePhase).inserted {
+        if duplicateSet.insert(rule.sourcePhase).inserted {
+          duplicateOrder.append(rule.sourcePhase)
+        }
+      }
+    }
+    return duplicateOrder
   }
 }
 
@@ -169,13 +200,20 @@ public struct PhaseMapValidationReport<Phase: Hashable & Sendable>: Sendable, Eq
   }
 
   public let missingTriggers: [MissingTrigger]
+  /// Source phases that were declared via more than one `From(...)` block.
+  /// Empty for the canonical "one `From(.x)` block per phase" layout.
+  public let duplicateSourcePhases: [Phase]
 
-  public init(missingTriggers: [MissingTrigger]) {
+  public init(
+    missingTriggers: [MissingTrigger],
+    duplicateSourcePhases: [Phase] = []
+  ) {
     self.missingTriggers = missingTriggers
+    self.duplicateSourcePhases = duplicateSourcePhases
   }
 
   public var isEmpty: Bool {
-    missingTriggers.isEmpty
+    missingTriggers.isEmpty && duplicateSourcePhases.isEmpty
   }
 }
 

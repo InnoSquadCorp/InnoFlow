@@ -720,8 +720,61 @@ struct TestStoreCoreTests {
       ]
     )
 
-    #expect(report.isEmpty)
+    // Trigger coverage still resolves through the source-phase index even when
+    // the author splits `.loading` across multiple `From(...)` blocks.
     #expect(report.missingTriggers.isEmpty)
+    // The split itself is now surfaced as a duplicate-From diagnostic so the
+    // author can collapse it into a single block.
+    #expect(report.duplicateSourcePhases == [.loading])
+    #expect(report.isEmpty == false)
+  }
+
+  @Test("PhaseMap validation report surfaces duplicate From blocks in first-seen order")
+  func phaseMapValidationReportSurfacesDuplicateFromBlocks() {
+    enum Phase: Hashable, Sendable {
+      case idle
+      case loading
+      case loaded
+      case failed
+    }
+
+    struct State: Equatable, Sendable {
+      var phase: Phase
+    }
+
+    enum Action: Equatable, Sendable {
+      case load
+      case retry
+      case finish
+      case fail
+    }
+
+    let map = PhaseMap<State, Action, Phase>(\.phase) {
+      From(.idle) {
+        On(.load, to: .loading)
+      }
+      From(.loading) {
+        On(.finish, to: .loaded)
+      }
+      From(.idle) {
+        On(.retry, to: .loading)
+      }
+      From(.loading) {
+        On(.fail, to: .failed)
+      }
+    }
+
+    let report = map.validationReport()
+    #expect(report.missingTriggers.isEmpty)
+    #expect(report.duplicateSourcePhases == [.idle, .loading])
+    #expect(report.isEmpty == false)
+  }
+
+  @Test("PhaseMap validation report is clean when each source phase has a single From block")
+  func phaseMapValidationReportCleanWhenNoDuplicateFromBlocks() {
+    let report = PhaseMapHarness.phaseMap.validationReport()
+    #expect(report.duplicateSourcePhases.isEmpty)
+    #expect(report.isEmpty)
   }
 
   @Test("PhaseMap supports predicate-based fixed-target, nil-guard, and same-phase guard paths")
