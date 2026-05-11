@@ -374,7 +374,7 @@ struct StoreScopeSelectionTests {
     }
 
     let baselineSum = 36
-    #expect(selected.value == baselineSum)
+    #expect(selected.requireAlive() == baselineSum)
 
     let initialStats = store.projectionObserverStats
 
@@ -383,10 +383,10 @@ struct StoreScopeSelectionTests {
 
     #expect(afterUntrackedStats.refreshedObservers == initialStats.refreshedObservers)
     #expect(afterUntrackedStats.evaluatedObservers == initialStats.evaluatedObservers)
-    #expect(selected.value == baselineSum)
+    #expect(selected.requireAlive() == baselineSum)
 
     store.send(.bumpG)
-    #expect(selected.value == baselineSum + 1)
+    #expect(selected.requireAlive() == baselineSum + 1)
   }
 
   @Test("Store.select(dependingOnAll:) preserves cached identity without eager recomputation")
@@ -451,7 +451,7 @@ struct StoreScopeSelectionTests {
     }
 
     #expect(first === second)
-    #expect(first.value == 28)
+    #expect(first.requireAlive() == 28)
     #expect(probe.count == 1)
   }
 
@@ -483,8 +483,8 @@ struct StoreScopeSelectionTests {
       column: 1
     )
 
-    #expect(first.value == 1)
-    #expect(second.value == 0)
+    #expect(first.requireAlive() == 1)
+    #expect(second.requireAlive() == 0)
   }
 
   @Test("Store.select cache identity includes the callsite column")
@@ -505,7 +505,7 @@ struct StoreScopeSelectionTests {
     )
 
     #expect(first !== second)
-    #expect(first.value == second.value)
+    #expect(first.requireAlive() == second.requireAlive())
   }
 
   @Test("Store.select(dependingOn:) preserves SelectedStore identity across repeated calls")
@@ -530,7 +530,7 @@ struct StoreScopeSelectionTests {
     }
 
     #expect(first === second)
-    #expect(first.value == "CHILD")
+    #expect(first.requireAlive() == "CHILD")
   }
 
   @Test("Store.select(dependingOn:) cache identity includes dependency key paths")
@@ -550,8 +550,8 @@ struct StoreScopeSelectionTests {
       column: 1
     ) { $0 }
 
-    #expect(first.value == 1)
-    #expect(second.value == 0)
+    #expect(first.requireAlive() == 1)
+    #expect(second.requireAlive() == 0)
   }
 
   @Test(
@@ -577,7 +577,7 @@ struct StoreScopeSelectionTests {
     }
 
     #expect(first === second)
-    #expect(first.value == "Child-1")
+    #expect(first.requireAlive() == "Child-1")
   }
 
   @Test("Store.select(dependingOnAll: ..., ...) invalidates when either dependency changes")
@@ -593,21 +593,21 @@ struct StoreScopeSelectionTests {
     let afterUnrelated = store.projectionObserverStats
     #expect(afterUnrelated.evaluatedObservers == initial.evaluatedObservers)
     #expect(afterUnrelated.refreshedObservers == initial.refreshedObservers)
-    #expect(selected.value == "Child-1")
+    #expect(selected.requireAlive() == "Child-1")
 
     store.send(.child(.setStep(4)))
     try? await Task.sleep(for: .milliseconds(20))
     let afterStep = store.projectionObserverStats
     #expect(afterStep.evaluatedObservers == afterUnrelated.evaluatedObservers + 1)
     #expect(afterStep.refreshedObservers == afterUnrelated.refreshedObservers + 1)
-    #expect(selected.value == "Child-4")
+    #expect(selected.requireAlive() == "Child-4")
 
     store.send(.child(.setTitle("Updated")))
     try? await Task.sleep(for: .milliseconds(20))
     let afterTitle = store.projectionObserverStats
     #expect(afterTitle.evaluatedObservers == afterStep.evaluatedObservers + 1)
     #expect(afterTitle.refreshedObservers == afterStep.refreshedObservers + 1)
-    #expect(selected.value == "Updated-4")
+    #expect(selected.requireAlive() == "Updated-4")
   }
 
   @Test("Store.select(dependingOnAll: ..., ..., ...) tracks three explicit dependency slices")
@@ -622,7 +622,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -631,12 +631,12 @@ struct StoreScopeSelectionTests {
     store.send(.child(.setNote("Still ignored")))
     try? await Task.sleep(for: .milliseconds(20))
     #expect(probe.count == 0)
-    #expect(selected.value == "Child-1-0")
+    #expect(selected.requireAlive() == "Child-1-0")
 
     store.send(.setUnrelated(2))
     try? await Task.sleep(for: .milliseconds(20))
     #expect(probe.count == 1)
-    #expect(selected.value == "Child-1-2")
+    #expect(selected.requireAlive() == "Child-1-2")
   }
 
   @Test(
@@ -663,7 +663,7 @@ struct StoreScopeSelectionTests {
     }
 
     #expect(first === second)
-    #expect(first.value == "Child-1-Ready-0")
+    #expect(first.requireAlive() == "Child-1-Ready-0")
   }
 
   @Test(
@@ -683,7 +683,7 @@ struct StoreScopeSelectionTests {
     let afterUnrelated = store.projectionObserverStats
     #expect(afterUnrelated.evaluatedObservers == initial.evaluatedObservers)
     #expect(afterUnrelated.refreshedObservers == initial.refreshedObservers)
-    #expect(selected.value == "Child-1-Ready-0-true")
+    #expect(selected.requireAlive() == "Child-1-Ready-0-true")
 
     store.send(.child(.setPriority(2)))
     await waitForProjectionObserverStats(store) { stats in
@@ -694,7 +694,7 @@ struct StoreScopeSelectionTests {
     let afterPriority = store.projectionObserverStats
     #expect(afterPriority.evaluatedObservers == afterUnrelated.evaluatedObservers + 1)
     #expect(afterPriority.refreshedObservers == afterUnrelated.refreshedObservers + 1)
-    #expect(selected.value == "Child-1-Ready-2-true")
+    #expect(selected.requireAlive() == "Child-1-Ready-2-true")
 
     store.send(.child(.setEnabled(false)))
     await waitForProjectionObserverStats(store) { stats in
@@ -705,7 +705,7 @@ struct StoreScopeSelectionTests {
     let afterEnabled = store.projectionObserverStats
     #expect(afterEnabled.evaluatedObservers == afterPriority.evaluatedObservers + 1)
     #expect(afterEnabled.refreshedObservers == afterPriority.refreshedObservers + 1)
-    #expect(selected.value == "Child-1-Ready-2-false")
+    #expect(selected.requireAlive() == "Child-1-Ready-2-false")
   }
 
   @Test("Store.select(dependingOnAll: ..., ..., ..., ..., ..., ...) tracks six explicit slices")
@@ -727,7 +727,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -737,14 +737,14 @@ struct StoreScopeSelectionTests {
     store.send(.setUnrelated(2))
     await waitForProjectionRefreshPass(store, after: initial)
     #expect(probe.count == 0)
-    #expect(selected.value == "Child-1-Ready-0-true-1")
+    #expect(selected.requireAlive() == "Child-1-Ready-0-true-1")
 
     store.send(.child(.setVersion(5)))
     await waitUntil {
-      probe.count == 1 && selected.value == "Child-1-Ready-0-true-5"
+      probe.count == 1 && selected.requireAlive() == "Child-1-Ready-0-true-5"
     }
     #expect(probe.count == 1)
-    #expect(selected.value == "Child-1-Ready-0-true-5")
+    #expect(selected.requireAlive() == "Child-1-Ready-0-true-5")
   }
 
   @Test("Store.select ignores parent mutations when the selected value is unchanged")
@@ -799,7 +799,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -811,7 +811,7 @@ struct StoreScopeSelectionTests {
     try? await Task.sleep(for: .milliseconds(20))
 
     #expect(probe.count == 0)
-    #expect(selected.value == "CHILD")
+    #expect(selected.requireAlive() == "CHILD")
   }
 
   @Test("Store.select(dependingOn:) invalidates when the dependency slice changes")
@@ -824,7 +824,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -834,7 +834,7 @@ struct StoreScopeSelectionTests {
     try? await Task.sleep(for: .milliseconds(20))
 
     #expect(probe.count == 1)
-    #expect(selected.value == "UPDATED")
+    #expect(selected.requireAlive() == "UPDATED")
   }
 
   @Test("ScopedStore.select preserves SelectedStore identity across repeated calls")
@@ -847,7 +847,7 @@ struct StoreScopeSelectionTests {
     let second = scoped.select(\.title, fileID: #fileID, line: callsiteLine, column: 0)
 
     #expect(first === second)
-    #expect(first.value == "Child")
+    #expect(first.requireAlive() == "Child")
   }
 
   @Test("ScopedStore.select cache identity includes the selected key path")
@@ -869,8 +869,8 @@ struct StoreScopeSelectionTests {
       column: 1
     )
 
-    #expect(first.value == 1)
-    #expect(second.value == 0)
+    #expect(first.requireAlive() == 1)
+    #expect(second.requireAlive() == 0)
   }
 
   @Test("ScopedStore.select(dependingOn:) preserves SelectedStore identity across repeated calls")
@@ -897,7 +897,7 @@ struct StoreScopeSelectionTests {
     }
 
     #expect(first === second)
-    #expect(first.value == "CHILD")
+    #expect(first.requireAlive() == "CHILD")
   }
 
   @Test("ScopedStore.select(dependingOn:) cache identity includes dependency key paths")
@@ -919,8 +919,8 @@ struct StoreScopeSelectionTests {
       column: 1
     ) { $0 }
 
-    #expect(first.value == 1)
-    #expect(second.value == 0)
+    #expect(first.requireAlive() == 1)
+    #expect(second.requireAlive() == 0)
   }
 
   @Test(
@@ -949,7 +949,7 @@ struct StoreScopeSelectionTests {
     }
 
     #expect(first === second)
-    #expect(first.value == "Child-1")
+    #expect(first.requireAlive() == "Child-1")
   }
 
   @Test("ScopedStore.select ignores child mutations when the derived value is unchanged")
@@ -962,7 +962,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -972,7 +972,7 @@ struct StoreScopeSelectionTests {
     try? await Task.sleep(for: .milliseconds(20))
 
     #expect(probe.count == 0)
-    #expect(selected.value == "Child")
+    #expect(selected.requireAlive() == "Child")
   }
 
   @Test("ScopedStore.select(dependingOn:) ignores mutations outside the dependency slice")
@@ -987,7 +987,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -999,7 +999,7 @@ struct StoreScopeSelectionTests {
     try? await Task.sleep(for: .milliseconds(20))
 
     #expect(probe.count == 0)
-    #expect(selected.value == "CHILD")
+    #expect(selected.requireAlive() == "CHILD")
   }
 
   @Test("ScopedStore.select(dependingOn:) invalidates when the dependency slice changes")
@@ -1014,7 +1014,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -1024,7 +1024,7 @@ struct StoreScopeSelectionTests {
     try? await Task.sleep(for: .milliseconds(20))
 
     #expect(probe.count == 1)
-    #expect(selected.value == "READY")
+    #expect(selected.requireAlive() == "READY")
   }
 
   @Test("ScopedStore.select(dependingOnAll: ..., ..., ...) tracks three explicit dependency slices")
@@ -1039,7 +1039,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -1048,12 +1048,12 @@ struct StoreScopeSelectionTests {
     store.send(.setUnrelated(1))
     try? await Task.sleep(for: .milliseconds(20))
     #expect(probe.count == 0)
-    #expect(selected.value == "Child-1-Ready")
+    #expect(selected.requireAlive() == "Child-1-Ready")
 
     store.send(.child(.setNote("Updated")))
     try? await Task.sleep(for: .milliseconds(20))
     #expect(probe.count == 1)
-    #expect(selected.value == "Child-1-Updated")
+    #expect(selected.requireAlive() == "Child-1-Updated")
   }
 
   @Test(
@@ -1082,7 +1082,7 @@ struct StoreScopeSelectionTests {
     }
 
     #expect(first === second)
-    #expect(first.value == "Child-1-Ready-0")
+    #expect(first.requireAlive() == "Child-1-Ready-0")
   }
 
   @Test(
@@ -1101,7 +1101,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -1111,14 +1111,14 @@ struct StoreScopeSelectionTests {
     store.send(.setUnrelated(1))
     await waitForProjectionRefreshPass(store, after: initial)
     #expect(probe.count == 0)
-    #expect(selected.value == "Child-1-Ready-0-true")
+    #expect(selected.requireAlive() == "Child-1-Ready-0-true")
 
     store.send(.child(.setEnabled(false)))
     await waitUntil {
-      probe.count == 1 && selected.value == "Child-1-Ready-0-false"
+      probe.count == 1 && selected.requireAlive() == "Child-1-Ready-0-false"
     }
     #expect(probe.count == 1)
-    #expect(selected.value == "Child-1-Ready-0-false")
+    #expect(selected.requireAlive() == "Child-1-Ready-0-false")
   }
 
   @Test(
@@ -1137,7 +1137,7 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
@@ -1145,10 +1145,10 @@ struct StoreScopeSelectionTests {
 
     store.send(.child(.setNote("Updated")))
     await waitUntil {
-      probe.count == 1 && selected.value == "Child-1-Updated-0-true-1"
+      probe.count == 1 && selected.requireAlive() == "Child-1-Updated-0-true-1"
     }
     #expect(probe.count == 1)
-    #expect(selected.value == "Child-1-Updated-0-true-1")
+    #expect(selected.requireAlive() == "Child-1-Updated-0-true-1")
 
     let afterTrackedMutation = store.projectionObserverStats
     store.send(.setUnrelated(9))
@@ -1226,27 +1226,27 @@ struct StoreScopeSelectionTests {
 
     withObservationTracking(
       {
-        _ = selected.value
+        _ = selected.requireAlive()
       },
       onChange: {
         probe.recordChange()
       })
 
     let baselineSum = 36
-    #expect(selected.value == baselineSum)
+    #expect(selected.requireAlive() == baselineSum)
 
     let initialStats = store.projectionObserverStats
     store.send(.bumpUnrelated)
     await waitForProjectionRefreshPass(store, after: initialStats)
     #expect(probe.count == 0)
-    #expect(selected.value == baselineSum)
+    #expect(selected.requireAlive() == baselineSum)
 
     scoped.send(.bumpG)
     await waitUntil {
-      probe.count == 1 && selected.value == baselineSum + 1
+      probe.count == 1 && selected.requireAlive() == baselineSum + 1
     }
     #expect(probe.count == 1)
-    #expect(selected.value == baselineSum + 1)
+    #expect(selected.requireAlive() == baselineSum + 1)
   }
 
   @Test("ScopedStore.select(dependingOnAll:) preserves cached identity without eager recomputation")
@@ -1328,7 +1328,7 @@ struct StoreScopeSelectionTests {
     }
 
     #expect(first === second)
-    #expect(first.value == 28)
+    #expect(first.requireAlive() == 28)
     #expect(probe.count == 1)
   }
 

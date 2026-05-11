@@ -1342,7 +1342,10 @@ private let staleScopedStoreHarnessSource = #"""
           let store = Store(reducer: ParentReleasedFeature(), initialState: .init())
           return store.select(\.child.value)
         }()
-        _ = selected.value
+        // requireAlive() crashes loudly (precondition) once the parent
+        // store is released — the new contract after the legacy `value`
+        // cached-fallback accessor was removed.
+        _ = selected.requireAlive()
 
       default:
         fatalError("Unknown stale scope scenario")
@@ -1767,12 +1770,17 @@ private let staleScopedStoreReleaseHarnessSource = #"""
             reducer: ReleaseParentReleasedFeature(), initialState: .init())
           return store.select(\.child.value)
         }()
-        // Release builds must return the cached projected value instead of
-        // aborting.
-        let cachedValue = selected.value
-        guard cachedValue == 42 else {
+        // After H1 removed `value`'s release-mode cached fallback, the
+        // safe-read path is `optionalValue` which must report nil once the
+        // parent store has been released. `isAlive` mirrors the contract.
+        guard selected.isAlive == false else {
+          fputs("Expected selected.isAlive == false after parent release\n", stderr)
+          Foundation.exit(1)
+        }
+        guard selected.optionalValue == nil else {
           fputs(
-            "Expected cached SelectedStore value 42, got \(cachedValue)\n", stderr)
+            "Expected selected.optionalValue == nil after parent release, got \(String(describing: selected.optionalValue))\n",
+            stderr)
           Foundation.exit(1)
         }
         print("ok")

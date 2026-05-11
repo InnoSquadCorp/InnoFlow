@@ -56,7 +56,9 @@ struct StaleScopeReleaseContractTests {
     #expect(result.status == 0)
   }
 
-  @Test("Stale SelectedStore returns cached value after parent release in release-like execution")
+  @Test(
+    "Stale SelectedStore exposes nil optionalValue after parent release in release-like execution"
+  )
   func staleSelectedStoreReleaseNoCrash() throws {
     let result = try runStaleScopedStoreReleaseHarness(scenario: .selectedParentReleased)
 
