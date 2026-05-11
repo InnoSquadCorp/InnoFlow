@@ -353,7 +353,9 @@ struct StoreEffectRuntimeTests {
       try? await Task.sleep(for: .milliseconds(5))
     }
 
-    try? await Task.sleep(for: .milliseconds(80))
+    await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
+      store.values.count == 20
+    }
 
     #expect(store.values.count == 20)
     #expect(store.values.first == 64)

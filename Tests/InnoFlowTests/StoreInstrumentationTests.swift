@@ -256,7 +256,10 @@ struct StoreInstrumentationTests {
     )
 
     store.send(.load)
-    try? await Task.sleep(for: .milliseconds(80))
+    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+      firstProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"]
+        && secondProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"]
+    }
 
     #expect(firstProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
     #expect(secondProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
@@ -285,7 +288,10 @@ struct StoreInstrumentationTests {
     )
 
     store.send(.load)
-    try? await Task.sleep(for: .milliseconds(80))
+    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+      firstProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"]
+        && secondProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"]
+    }
 
     #expect(firstProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
     #expect(secondProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
@@ -403,6 +409,9 @@ struct StoreInstrumentationTests {
       reducer: InstrumentationFeature(),
       initialState: .init(),
       instrumentation: .init(
+        didStartRun: { event in
+          probe.record("start:\(event.cancellationID?.description ?? "nil")")
+        },
         didEmitAction: { event in
           probe.record("emit:\(event.action)")
         },
@@ -416,16 +425,33 @@ struct StoreInstrumentationTests {
     )
 
     store.send(.startDelayed)
-    try? await Task.sleep(for: .milliseconds(10))
+    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+      probe.events.contains("start:instrumented-delayed")
+    }
     await store.cancelEffects(identifiedBy: "instrumented-delayed")
-    try? await Task.sleep(for: .milliseconds(80))
+    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+      probe.events.contains("cancel:instrumented-delayed")
+        && probe.events.contains(where: {
+          $0.contains(
+            "drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):cancellationBoundary"
+          )
+            || $0.contains(
+              "drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):inactiveToken"
+            )
+        })
+    }
 
     store.send(.trailingThrottle(1))
     for _ in 0..<10 {
       await Task.yield()
     }
     await store.cancelEffects(identifiedBy: "instrumented-throttle")
-    try? await Task.sleep(for: .milliseconds(20))
+    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+      probe.events.contains("cancel:instrumented-throttle")
+        && probe.events.contains(where: {
+          $0.contains("drop:nil:throttledOrDebouncedCancellation")
+        })
+    }
 
     #expect(store.state.log.isEmpty)
     #expect(probe.events.contains("cancel:instrumented-delayed"))
@@ -751,6 +777,39 @@ struct StoreInstrumentationTests {
     #expect(afterSecondPass.registeredObservers == 0)
     #expect(afterSecondPass.compactionPassCount == 1)
     #expect(afterSecondPass.prunedObservers == 1)
+  }
+
+  @Test("Projection observer registry honors custom keys inside dependency groups")
+  func projectionObserverRegistryCustomDependenciesDoNotFallbackToAlwaysRefresh() {
+    let registry = ProjectionObserverRegistry<ProjectionObserverSnapshot>()
+    let probe = ProjectionObserverTestProbe()
+    let callsite = SelectionCallsite(fileID: #fileID, line: #line, column: 0)
+
+    registry.register(
+      probe,
+      registration: .dependencies([
+        .init(
+          .keyPath(\ProjectionObserverSnapshot.tracked),
+          hasChanged: { previous, next in previous.tracked != next.tracked }
+        ),
+        .init(
+          .custom(callsite),
+          hasChanged: { previous, next in previous.tracked != next.tracked }
+        ),
+      ])
+    )
+
+    registry.refresh(
+      from: .init(tracked: 0, other: 0),
+      to: .init(tracked: 0, other: 1)
+    )
+    #expect(probe.refreshCount == 0)
+
+    registry.refresh(
+      from: .init(tracked: 0, other: 1),
+      to: .init(tracked: 1, other: 1)
+    )
+    #expect(probe.refreshCount == 1)
   }
 
   @Test("Projection observer registry compacts untouched dependency buckets after stale threshold")

@@ -115,14 +115,6 @@ package final class ProjectionObserverRegistry<Snapshot> {
         return
       }
 
-      if registrations.contains(where: {
-        if case .custom = $0.key { return true }
-        return false
-      }) {
-        alwaysObservers[observerID] = weakObserver
-        return
-      }
-
       var seenDependencies: Set<ProjectionDependencyKey> = []
       for registration in registrations {
         guard seenDependencies.insert(registration.key).inserted else { continue }

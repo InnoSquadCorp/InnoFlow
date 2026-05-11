@@ -9,7 +9,7 @@ Key reminders that earn their own line here so search tooling still surfaces the
 
 - `@InnoFlow` features must declare `var body: some Reducer<State, Action>`.
 - Compose with `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`,
-  `ForEachReducer`.
+  `ForEachReducer`, `ForEachIdentifiedReducer`.
 - Bind through `@BindableField` + `store.binding(\.$field, send:)` /
   `store.binding(\.$field, to:)`. Never author `BindableProperty` directly.
 - `PhaseMap` owns post-reduce phase transitions; `PhaseTransitionGraph` is a

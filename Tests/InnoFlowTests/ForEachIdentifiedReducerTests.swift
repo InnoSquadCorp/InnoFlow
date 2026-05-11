@@ -70,8 +70,11 @@ struct ForEachIdentifiedReducerTests {
 
   @Test("routes child action to the addressed element via id lookup")
   func routesByID() async {
-    let store = Store(reducer: IdentifiedCollectionFeature(), initialState: .init())
-    store.send(.row(id: Self.idB, action: .toggleDone))
+    let store = TestStore(reducer: IdentifiedCollectionFeature(), initialState: .init())
+    await store.send(.row(id: Self.idB, action: .toggleDone)) {
+      $0.rows[id: Self.idB]?.done = true
+    }
+    await store.assertNoMoreActions()
 
     #expect(store.state.rows[id: Self.idA]?.done == false)
     #expect(store.state.rows[id: Self.idB]?.done == true)
@@ -81,8 +84,9 @@ struct ForEachIdentifiedReducerTests {
 
   @Test("ignores unknown ids without mutating the collection")
   func ignoresUnknownIDs() async {
-    let store = Store(reducer: IdentifiedCollectionFeature(), initialState: .init())
-    store.send(.row(id: Self.idMissing, action: .toggleDone))
+    let store = TestStore(reducer: IdentifiedCollectionFeature(), initialState: .init())
+    await store.send(.row(id: Self.idMissing, action: .toggleDone))
+    await store.assertNoMoreActions()
 
     #expect(store.state.rows.values.map(\.done) == [false, false, false])
   }

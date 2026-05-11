@@ -14,11 +14,13 @@ extension View {
   /// reducer can clear the underlying optional state. Pair this with an
   /// `IfLet` child reducer that scopes off the same key path.
   ///
-  /// The content closure receives the *unwrapped* child state captured at the
-  /// moment of presentation; it does not maintain its own subscription. For
-  /// SwiftUI views that need to observe child mutations, scope a child store
-  /// at the call site (`store.scope(state: ..., action: ...)`) and pass it
-  /// to the destination view.
+  /// The content closure receives the currently rendered *unwrapped* child
+  /// state. The helper re-reads `store.state[keyPath: state]` whenever SwiftUI
+  /// evaluates the destination builder, but it does not maintain a child-store
+  /// subscription of its own. For SwiftUI views that need to observe child
+  /// mutations, scope a child store at the call site
+  /// (`store.scope(state: ..., action: ...)`) and pass it to the destination
+  /// view.
   public func innoFlowSheet<R: Reducer, Child>(
     store: Store<R>,
     state stateKeyPath: KeyPath<R.State, Child?>,

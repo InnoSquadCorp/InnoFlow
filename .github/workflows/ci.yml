@@ -27,12 +27,16 @@ jobs:
           xcrun swift --version
           # Pin swift-format major version so style drift surfaces as a lint
           # failure rather than silently re-formatting under a newer toolchain.
-          SWIFT_FORMAT_VERSION="$(swift format --version)"
-          echo "swift-format: ${SWIFT_FORMAT_VERSION}"
+          SWIFT_FORMAT_VERSION_OUTPUT="$(swift format --version)"
+          SWIFT_FORMAT_VERSION="$(
+            printf '%s\n' "${SWIFT_FORMAT_VERSION_OUTPUT}" |
+              awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+([.][0-9]+)*$/) { print $i; exit } }'
+          )"
+          echo "swift-format: ${SWIFT_FORMAT_VERSION_OUTPUT}"
           case "${SWIFT_FORMAT_VERSION}" in
-            6.*) ;;
+            6.*|60[0-9].*) ;;
             *)
-              echo "::error::Unsupported swift-format version ${SWIFT_FORMAT_VERSION} (expected 6.x)"
+              echo "::error::Unsupported swift-format version ${SWIFT_FORMAT_VERSION_OUTPUT} (expected 6.x or 60x.x)"
               exit 1
               ;;
           esac

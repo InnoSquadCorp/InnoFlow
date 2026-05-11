@@ -1466,7 +1466,8 @@ struct InstrumentationFeature: Reducer {
     switch action {
     case .startDelayed:
       return .run { send in
-        try? await Task.sleep(for: .milliseconds(50))
+        let delayedEmissionInterval: Duration = .milliseconds(50)
+        try? await Task.sleep(for: delayedEmissionInterval)
         await send(.received("delayed"))
       }
       .cancellable("instrumented-delayed")

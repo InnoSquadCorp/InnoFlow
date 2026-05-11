@@ -1414,6 +1414,10 @@ struct InnoFlowMacrosTests {
               var body: some Reducer<State, Action> {
                   Reduce { state, action in .none }
               }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
           }
           """,
         diagnostics: [

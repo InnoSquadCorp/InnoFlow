@@ -154,7 +154,7 @@ let todo = store.scope(
 
 await todo.send(.setIsDone(true))
 todo.assert {
-  $0.isDone.value = true
+  $0.isDone = true
 }
 ```
 

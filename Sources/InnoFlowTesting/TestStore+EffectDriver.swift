@@ -26,6 +26,10 @@ package final class ActionQueue<Action: Sendable> {
   // test scenarios non-deterministic across runs.
   private var waiters: [Waiter] = []
 
+  package var pendingWaiterCount: Int {
+    waiters.count
+  }
+
   func enqueue(_ action: Action, context: EffectExecutionContext?) {
     let queuedAction = QueuedAction(action: action, context: context)
     if !waiters.isEmpty {
@@ -49,7 +53,7 @@ package final class ActionQueue<Action: Sendable> {
     let waiterID = UUID()
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
-        let timeoutTask = Task { [weak self] in
+        let timeoutTask = Task { @MainActor [weak self] in
           try? await Task.sleep(for: timeout)
           guard !Task.isCancelled else { return }
           self?.resolveWaiter(id: waiterID, returning: nil)
@@ -525,7 +529,7 @@ extension TestStore: EffectDriver {
         await group.waitForAll()
       }
     } else {
-      let cancellationIDs = context?.cancellationIDs ?? []
+      let uniqueCancellationIDs = Set(context?.cancellationIDs ?? [])
       for child in children {
         let token = UUID()
         let task = Task { @MainActor [weak self] in
@@ -541,7 +545,7 @@ extension TestStore: EffectDriver {
         // cancellation reliably winds the entire effect tree down — a
         // divergence from the Store path that this commit closes.
         runningTasks[token] = task
-        for id in Set(cancellationIDs) {
+        for id in uniqueCancellationIDs {
           taskIDsByEffectID[id, default: []].insert(token)
         }
       }

@@ -58,7 +58,9 @@ struct TestStoreCoreTests {
       await queue.next(timeout: .seconds(1))
     }
 
-    await Task.yield()
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+      queue.pendingWaiterCount == 1
+    }
     queue.enqueue(7, context: nil)
 
     let received = await pendingReceive.value

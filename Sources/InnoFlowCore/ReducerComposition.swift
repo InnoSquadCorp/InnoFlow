@@ -442,7 +442,10 @@ where
 /// difference is that lookup, routing, and the in-place mutation address
 /// resolve in constant time rather than scanning with `firstIndex(where:)`.
 /// Equality, identity, and action-embedding semantics are unchanged so
-/// migration is mechanical.
+/// migration is mechanical. Child reducers must not mutate their own
+/// `Child.State.id`: `reduce(into:action:)` copies the addressed element out of
+/// the parent `IdentifiedArray`, runs the child reducer, then writes it back via
+/// `IdentifiedArray[id:]`, so changing the id can change element location.
 public struct ForEachIdentifiedReducer<
   ParentState: Sendable,
   ParentAction: Sendable,
@@ -461,6 +464,11 @@ where
   private let action: CollectionActionPath<ParentAction, ElementID, Child.Action>
   private let reducer: Child
 
+  /// Creates an identified collection reducer for the parent `state` key path.
+  ///
+  /// The child reducer must treat `Child.State.id` as stable for the duration of
+  /// `reduce(into:action:)`; this reducer writes the copied child state back
+  /// through the same `IdentifiedArray[id:]` address used for lookup.
   public init(
     state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>,
     action: CollectionActionPath<ParentAction, ElementID, Child.Action>,

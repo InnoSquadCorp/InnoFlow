@@ -47,7 +47,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   duplicate-id assertion semantics. `ForEachIdentifiedReducer` routes through
   the new collection for O(1) child lookup; the existing
   `ForEachReducer<[Element]>` overload stays in place for source-compatible
-  call sites.
+  call sites. Child reducers used with `ForEachIdentifiedReducer` must not
+  mutate their own `id`, because the reducer writes copied child state back
+  through `IdentifiedArray[id:]`.
 - `PhaseMap.validationReport(expectedTriggersByPhase:)` now also reports
   duplicate `From(...)` blocks through `duplicateSourcePhases`, and `On(...)`
   accepts an explicit `selfTransitionPolicy: .ignore | .forbid | .allow`
@@ -96,7 +98,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - `IfLet` and `IfCaseLet` `.assertOnly` drops now fire
   `StoreInstrumentation.didDropAction` with the new
   `.missingChildState` reason in release builds. The DEBUG
-  `assertionFailure` is preserved.
+  `assertionFailure` is preserved. This is a public `ActionDropReason` enum
+  case addition; downstream exhaustive switches should handle it or include
+  `@unknown default`.
 - `EffectContext`'s public initializer now exposes `errorReporter:`, so
   AsyncSequence-run failures route through a user-supplied reporter
   before the effect terminates. The default reporter is a no-op.
@@ -205,7 +209,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - `InnoFlow` macros now emit a swift-diagnostics `.error` for
   `@InnoFlow(phaseManaged:)` when the argument is non-literal, and elevate
   unsynthesizable CasePath cases from `.note` to `.warning` with concrete
-  remediation text.
+  remediation text. Projects compiling with `-warnings-as-errors` may need to
+  fix optional, labeled, or multi-payload action cases, or update explicit
+  diagnostic suppressions for the unchanged diagnostic IDs.
 - `PhaseMap` illegal-phase-mutation revert now snapshots and restores the
   full state instead of only the phase keypath, so domain fields touched
   in the same reducer step cannot drift out of sync with the rejected
@@ -226,7 +232,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   `optionalValue` or `requireAlive()`. Affected surfaces:
   `ARCHITECTURE_CONTRACT.md`, `docs/MIGRATION_3_1.md`,
   `Sources/InnoFlow/InnoFlow.docc/InnoFlow.md`, and the doc comments on
-  `ScopedStore.state`.
+  `ScopedStore.state`, `SelectedStore.requireAlive()`,
+  `SelectedStore.optionalValue`, `SelectedStore.isAlive`, and
+  `SelectedStore` dynamic-member reads.
 - README and `RELEASE_NOTES.md` now surface the
   [`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md)
   entry for the `@_optimize(none)` workaround needed when generic

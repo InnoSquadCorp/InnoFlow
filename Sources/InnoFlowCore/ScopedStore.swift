@@ -276,7 +276,6 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package let observerRegistry = ProjectionObserverRegistry<ChildState>()
   @ObservationIgnored package let selectionCache = SelectionCache()
   @ObservationIgnored package var isActive = true
-  @ObservationIgnored package var pendingObserverPrune = false
   @ObservationIgnored package nonisolated(unsafe) let stableID: AnyHashable?
 
   /// The current child state, falling back to the last cached snapshot
@@ -380,10 +379,6 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
 
   private func refreshStateFromParent() -> Bool {
     guard isActive else {
-      if pendingObserverPrune {
-        observerRegistry.pruneAllObservers()
-        pendingObserverPrune = false
-      }
       return false
     }
     guard let parent else { return false }
@@ -399,7 +394,6 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
       isActive = false
       observerRegistry.refreshAll()
       observerRegistry.pruneAllObservers()
-      pendingObserverPrune = false
       return true
     }
     if nextState != previousState {
