@@ -11,16 +11,24 @@ package actor ActionQueue<Action: Sendable> {
     let context: EffectExecutionContext?
   }
 
+  private struct Waiter {
+    let id: UUID
+    let continuation: CheckedContinuation<QueuedAction?, Never>
+  }
+
   private var buffer: [QueuedAction] = []
   private var headIndex = 0
-  private var waiters: [UUID: CheckedContinuation<QueuedAction?, Never>] = [:]
+  // Waiters intentionally use an ordered array instead of a dictionary so
+  // resumption is FIFO. The previous dictionary-based implementation woke
+  // an arbitrary waiter via `waiters.keys.first`, which made multi-waiter
+  // test scenarios non-deterministic across runs.
+  private var waiters: [Waiter] = []
 
   func enqueue(_ action: Action, context: EffectExecutionContext?) {
     let queuedAction = QueuedAction(action: action, context: context)
-    if let waiterID = waiters.keys.first,
-      let continuation = waiters.removeValue(forKey: waiterID)
-    {
-      continuation.resume(returning: queuedAction)
+    if !waiters.isEmpty {
+      let head = waiters.removeFirst()
+      head.continuation.resume(returning: queuedAction)
       return
     }
 
@@ -38,7 +46,7 @@ package actor ActionQueue<Action: Sendable> {
     let waiterID = UUID()
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
-        waiters[waiterID] = continuation
+        waiters.append(Waiter(id: waiterID, continuation: continuation))
       }
     } onCancel: {
       Task {
@@ -56,8 +64,9 @@ package actor ActionQueue<Action: Sendable> {
   }
 
   private func cancelWaiter(_ waiterID: UUID) {
-    guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
-    continuation.resume(returning: nil)
+    guard let index = waiters.firstIndex(where: { $0.id == waiterID }) else { return }
+    let waiter = waiters.remove(at: index)
+    waiter.continuation.resume(returning: nil)
   }
 
   private func compactBufferIfNeeded() {
@@ -524,10 +533,24 @@ extension TestStore: EffectDriver {
         await group.waitForAll()
       }
     } else {
+      let cancellationIDs = context?.cancellationIDs ?? []
       for child in children {
-        Task { [weak self] in
+        let token = UUID()
+        let task = Task { @MainActor [weak self] in
+          defer {
+            self?.removeTrackedTask(token: token)
+          }
           guard self != nil else { return }
           await recurse(child, context, false)
+        }
+        // Track unawaited concurrent children so cancelAllEffectsSynchronously
+        // can reach them. Without this, fire-and-forget Tasks here would
+        // outlive their owning TestStore drain and break the assertion that
+        // cancellation reliably winds the entire effect tree down — a
+        // divergence from the Store path that this commit closes.
+        runningTasks[token] = task
+        for id in Set(cancellationIDs) {
+          taskIDsByEffectID[id, default: []].insert(token)
         }
       }
     }
