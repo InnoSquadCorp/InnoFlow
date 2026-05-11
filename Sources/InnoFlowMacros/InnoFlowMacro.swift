@@ -18,21 +18,35 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     try expansion(of: node, providingMembersOf: declaration, in: context)
   }
 
+  /// Synthesizes the `reduce(into:action:)` member.
+  ///
+  /// Silent `return []` branches here are intentional: the ExtensionMacro
+  /// pass that runs against the same declaration owns the canonical
+  /// diagnostics (`missingState`, `missingAction`, `missingBodyProperty`,
+  /// `invalidBodySignature`, explicit `reduce` rejection, phase-managed
+  /// contract issues). Re-emitting them here would produce duplicate
+  /// diagnostics on the same source range and obscure the root cause.
+  /// If you add a new failure shape, mirror it in the ExtensionMacro
+  /// expansion below so the user still receives an actionable diagnostic.
   public static func expansion(
     of node: AttributeSyntax,
     providingMembersOf declaration: some DeclGroupSyntax,
     in context: some MacroExpansionContext
   ) throws -> [DeclSyntax] {
+    // Mirrored by ExtensionMacro's `.notAStruct` throw.
     guard let structDecl = declaration.as(StructDeclSyntax.self) else {
       return []
     }
 
+    // Mirrored by ExtensionMacro's `.missingState` / `.missingAction` throws.
     guard hasNestedType(named: "State", in: structDecl),
       hasNestedType(named: "Action", in: structDecl)
     else {
       return []
     }
 
+    // Mirrored by ExtensionMacro's explicit-reduce diagnostic and
+    // `.missingBodyProperty` / `.invalidBodySignature` throws.
     guard findReduceFunction(in: structDecl) == nil,
       let bodyProperty = findBodyProperty(in: structDecl),
       bodySignatureIssues(bodyProperty).isEmpty
@@ -41,6 +55,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     }
 
     if isPhaseManaged(node: node) {
+      // Mirrored by `diagnosePhaseManagedContractIssueIfNeeded` in the
+      // ExtensionMacro pass.
       guard !hasPhaseManagedContractIssue(in: structDecl, bodyProperty: bodyProperty) else {
         return []
       }
