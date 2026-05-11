@@ -5,7 +5,8 @@
 import Foundation
 package import InnoFlowCore
 
-package actor ActionQueue<Action: Sendable> {
+@MainActor
+package final class ActionQueue<Action: Sendable> {
   struct QueuedAction: Sendable {
     let action: Action
     let context: EffectExecutionContext?
@@ -49,8 +50,8 @@ package actor ActionQueue<Action: Sendable> {
         waiters.append(Waiter(id: waiterID, continuation: continuation))
       }
     } onCancel: {
-      Task {
-        await self.cancelWaiter(waiterID)
+      Task { @MainActor [weak self] in
+        self?.cancelWaiter(waiterID)
       }
     }
   }
@@ -331,7 +332,7 @@ extension TestStore {
   }
 
   package func popBufferedAction() async -> R.Action? {
-    while let queuedAction = await queue.popBuffered() {
+    while let queuedAction = queue.popBuffered() {
       guard shouldProceed(context: queuedAction.context) else { continue }
       return queuedAction.action
     }
@@ -381,10 +382,16 @@ extension TestStore: EffectDriver {
   package typealias Action = R.Action
 
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
-    Task { @MainActor [weak self] in
-      guard let self, self.shouldProceed(context: context) else { return }
-      await self.queue.enqueue(action, context: context)
-    }
+    // BREAKING (InnoFlow 5.0): deliverAction now enqueues synchronously on
+    // the MainActor, matching Store's enqueue contract exactly. Previously
+    // each delivery hopped through a fire-and-forget `Task { @MainActor }`,
+    // which let actions interleave with subsequent reducer ticks in
+    // non-deterministic ways. Test fixtures that relied on that latency
+    // (e.g. asserting an intermediate state between two scheduled
+    // deliveries) must move the assertion to before the action that would
+    // have raced ahead.
+    guard shouldProceed(context: context) else { return }
+    queue.enqueue(action, context: context)
   }
 
   package func reportActionDrop(
