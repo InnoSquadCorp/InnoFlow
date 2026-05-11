@@ -24,6 +24,17 @@ jobs:
         run: |
           set -eo pipefail
           xcrun swift --version
+          # Pin swift-format major version so style drift surfaces as a lint
+          # failure rather than silently re-formatting under a newer toolchain.
+          SWIFT_FORMAT_VERSION="$(swift format --version)"
+          echo "swift-format: ${SWIFT_FORMAT_VERSION}"
+          case "${SWIFT_FORMAT_VERSION}" in
+            6.*) ;;
+            *)
+              echo "::error::Unsupported swift-format version ${SWIFT_FORMAT_VERSION} (expected 6.x)"
+              exit 1
+              ;;
+          esac
           swift format lint --strict --recursive Sources Tests Examples
 
   tests:

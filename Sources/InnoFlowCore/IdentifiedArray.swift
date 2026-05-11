@@ -230,7 +230,10 @@ extension IdentifiedArray: RandomAccessCollection {
 }
 
 extension IdentifiedArray: Equatable where Element: Equatable {
-  public static func == (lhs: IdentifiedArray<ID, Element>, rhs: IdentifiedArray<ID, Element>) -> Bool {
+  public static func == (
+    lhs: IdentifiedArray<ID, Element>,
+    rhs: IdentifiedArray<ID, Element>
+  ) -> Bool {
     lhs.elements == rhs.elements
   }
 }

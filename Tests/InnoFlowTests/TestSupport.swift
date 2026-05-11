@@ -50,7 +50,9 @@ func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Action>) ->
     return effectOperationSignature(lazy.materialize())
 
   case .diagnosticDrop(let action, let reason):
-    return "diagnosticDrop(action:\(String(describing: action)),reason:\(String(describing: reason)))"
+    let actionDescription = String(describing: action)
+    let reasonDescription = String(describing: reason)
+    return "diagnosticDrop(action:\(actionDescription),reason:\(reasonDescription))"
   }
 }
 
