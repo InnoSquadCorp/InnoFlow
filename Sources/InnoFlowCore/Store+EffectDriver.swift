@@ -46,7 +46,6 @@ extension Store: EffectDriver {
     let token = UUID()
     let gate = RunStartGate()
     let runEvent = makeRunEvent(token: token, context: context)
-    instrumentation.didStartRun(runEvent)
 
     let runtime = effectBridge.runtime
     let instrumentation = self.instrumentation
@@ -68,10 +67,14 @@ extension Store: EffectDriver {
           throw CancellationError()
         }
       } catch {
+        // Run was cancelled before it could start. We never fired `didStartRun`,
+        // so we deliberately do not fire `didFinishRun` either — the
+        // start/finish pair stays balanced.
         await runtime.finish(token: token)
-        instrumentation.didFinishRun(runEvent)
         return
       }
+
+      instrumentation.didStartRun(runEvent)
 
       let send = Send<R.Action> { action in
         if lifetime.isReleased {
