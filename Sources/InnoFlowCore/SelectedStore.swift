@@ -357,7 +357,10 @@ extension Store {
       ? memoizedCustomSelectionRegistration(callsite: callsite)
       : alwaysRefreshSelectionRegistration(callsite: callsite)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .closureSelector(memoized: memoize)),
+      cacheKey: selectionCacheKey(
+        callsite: callsite,
+        signature: .closureSelector(memoized: memoize)
+      ),
       initialValue: selector(state),
       registration: registration,
       valueResolver: { [weak self] in
@@ -539,7 +542,10 @@ extension ScopedStore {
       ? memoizedCustomSelectionRegistration(callsite: callsite)
       : alwaysRefreshSelectionRegistration(callsite: callsite)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .closureSelector(memoized: memoize)),
+      cacheKey: selectionCacheKey(
+        callsite: callsite,
+        signature: .closureSelector(memoized: memoize)
+      ),
       initialValue: selector(state),
       registration: registration,
       valueResolver: { [weak self] in

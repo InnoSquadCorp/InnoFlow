@@ -1,35 +1,4 @@
 import Foundation
-import os
-
-/// Latch that flips from `false` to `true` exactly once. Used to record that
-/// `reportError` fired `didFailRun` during a run so the trailing
-/// `didFinishRun` can be suppressed — the start/finish/fail/cancel contract is
-/// 1:1 per run.
-package final class SingleWriteFlag: Sendable {
-  private let storage = OSAllocatedUnfairLock(initialState: false)
-
-  package init() {}
-
-  package func set() {
-    storage.withLock { $0 = true }
-  }
-
-  /// Atomic compare-and-set: returns `true` if this call flipped the latch,
-  /// `false` if the latch was already set. Lets callers implement
-  /// first-writer-wins policies without a separate read+write race window.
-  @discardableResult
-  package func setIfUnset() -> Bool {
-    storage.withLock { wasSet in
-      if wasSet { return false }
-      wasSet = true
-      return true
-    }
-  }
-
-  package var isSet: Bool {
-    storage.withLock { $0 }
-  }
-}
 
 extension Store: EffectDriver {
   package typealias Action = R.Action
@@ -118,7 +87,7 @@ extension Store: EffectDriver {
       // Tracks whether `reportError` fired `didFailRun` during this run. The
       // start/finish/fail/cancel contract is 1:1 per run, so if the run
       // failed we must not also emit `didFinishRun` below.
-      let runFailedBox = SingleWriteFlag()
+      let runFailedBox = RunFailureLatch()
 
       let send = Send<R.Action> { action in
         if lifetime.isReleased {
