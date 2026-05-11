@@ -91,6 +91,11 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
   /// is reported at most once and preserves the order the duplicate was first
   /// observed. Surfaced through `validationReport(...)`.
   package let duplicateSourcePhases: [Phase]
+  /// Adjacency view precomputed at construction time. `PhaseMap` is immutable
+  /// after init, so the graph never changes; callers (notably the test
+  /// reachability validator) can hit `derivedGraph` repeatedly without
+  /// recomputing the rule walk.
+  private let cachedDerivedGraph: PhaseTransitionGraph<Phase>
 
   public init(
     _ phaseKeyPath: WritableKeyPath<State, Phase>,
@@ -103,9 +108,16 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
     self.rules = declaredRules
     self.rulesBySourcePhase = Self.makeRulesBySourcePhase(from: declaredRules)
     self.duplicateSourcePhases = Self.findDuplicateSourcePhases(in: declaredRules)
+    self.cachedDerivedGraph = Self.makeDerivedGraph(from: declaredRules)
   }
 
   public var derivedGraph: PhaseTransitionGraph<Phase> {
+    cachedDerivedGraph
+  }
+
+  private static func makeDerivedGraph(
+    from rules: [PhaseRule<State, Action, Phase>]
+  ) -> PhaseTransitionGraph<Phase> {
     var adjacency: [Phase: Set<Phase>] = [:]
     for rule in rules {
       for transition in rule.transitions {
