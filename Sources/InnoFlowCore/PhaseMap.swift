@@ -379,6 +379,13 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
   let phaseMap: PhaseMap<State, Action, Phase>
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    // Snapshot the entire state, not just the phase keypath. If the base
+    // reducer illegally mutates the phase, it has very likely also touched
+    // coupled domain fields based on that (illegal) phase transition.
+    // Reverting only the phase keypath leaves those domain fields in an
+    // inconsistent state in release builds where the assertion does not
+    // trap. Atomic full-state revert is the only sound fallback.
+    let previousState = state
     let previousPhase = state[keyPath: phaseMap.phaseKeyPath]
     let effect = base.reduce(into: &state, action: action)
 
@@ -394,13 +401,15 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
       assertionFailure(
         """
         Base reducer must not mutate phase directly when PhaseMap is active.
+        The entire state has been reverted to its pre-reduce value to keep
+        phase and coupled domain fields consistent.
         action: \(String(reflecting: action))
         previousPhase: \(String(reflecting: previousPhase))
         postReducePhase: \(String(reflecting: postReducePhase))
         phaseKeyPath: \(String(reflecting: phaseMap.phaseKeyPath))
         """
       )
-      state[keyPath: phaseMap.phaseKeyPath] = previousPhase
+      state = previousState
     }
 
     for rule in phaseMap.rulesBySourcePhase[previousPhase] ?? [] {

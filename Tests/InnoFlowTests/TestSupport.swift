@@ -1593,8 +1593,14 @@ private let phaseMapReleaseHarnessSource = #"""
         }
 
         store.send(.loaded([1, 2, 3]))
-        guard store.state.phase == .loaded, store.state.values == [1, 2, 3] else {
-          fputs("Expected loaded payload to preserve reducer work and then transition to .loaded\n", stderr)
+        // The base reducer sets `phase=.idle` (illegal) AND `values=[1,2,3]`
+        // in the same call. The illegal phase mutation forces an atomic
+        // full-state revert, which intentionally drops the `values` write
+        // because we cannot distinguish legitimate mutations from those
+        // coupled to the illegal phase transition. After revert, the
+        // PhaseMap rule fires the declared `.loaded` transition.
+        guard store.state.phase == .loaded, store.state.values == [] else {
+          fputs("Expected atomic revert to drop the coupled values write and then transition to .loaded\n", stderr)
           Foundation.exit(1)
         }
         print("ok")
