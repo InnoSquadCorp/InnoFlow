@@ -162,6 +162,19 @@ private func alwaysRefreshSelectionRegistration<Snapshot>(
   )
 }
 
+private func memoizedCustomSelectionRegistration<Snapshot: Equatable>(
+  callsite: SelectionCallsite
+) -> ProjectionObserverRegistration<Snapshot> {
+  // Snapshot-equality short-circuits valueResolver invocation when the
+  // parent state has not changed between refresh passes. Pair this with
+  // `select(_:memoize:)` for closure-only selections whose selector
+  // body is expensive enough that always-rerun pays a real cost.
+  .dependency(
+    .custom(callsite),
+    hasChanged: { $0 != $1 }
+  )
+}
+
 private func selectionCacheKey(
   callsite: SelectionCallsite,
   signature: SelectionSignature
@@ -326,6 +339,33 @@ extension Store {
       }
     )
   }
+
+  /// Memoized closure-only selection: requires `R.State: Equatable` so the
+  /// projection registry can skip a refresh pass entirely when the parent
+  /// snapshot is unchanged. Pass `memoize: false` to retain the legacy
+  /// always-refresh contract.
+  public func select<Value: Equatable & Sendable>(
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column,
+    memoize: Bool,
+    _ selector: @escaping @Sendable (R.State) -> Value
+  ) -> SelectedStore<Value> where R.State: Equatable {
+    let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
+    let registration: ProjectionObserverRegistration<R.State> =
+      memoize
+      ? memoizedCustomSelectionRegistration(callsite: callsite)
+      : alwaysRefreshSelectionRegistration(callsite: callsite)
+    return cachedSelectedStore(
+      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
+      initialValue: selector(state),
+      registration: registration,
+      valueResolver: { [weak self] in
+        guard let self else { return nil }
+        return selector(self.state)
+      }
+    )
+  }
 }
 
 extension ScopedStore {
@@ -475,6 +515,33 @@ extension ScopedStore {
       cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
       initialValue: selector(state),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
+      valueResolver: { [weak self] in
+        guard let self, self.isActive else { return nil }
+        return selector(self.cachedState)
+      }
+    )
+  }
+
+  /// Memoized closure-only selection: ChildState is already required to be
+  /// `Equatable`, so the projection registry can skip refresh passes whose
+  /// child snapshot is unchanged. Pass `memoize: false` to retain the
+  /// legacy always-refresh contract.
+  public func select<Value: Equatable & Sendable>(
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column,
+    memoize: Bool,
+    _ selector: @escaping @Sendable (ChildState) -> Value
+  ) -> SelectedStore<Value> {
+    let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
+    let registration: ProjectionObserverRegistration<ChildState> =
+      memoize
+      ? memoizedCustomSelectionRegistration(callsite: callsite)
+      : alwaysRefreshSelectionRegistration(callsite: callsite)
+    return cachedSelectedStore(
+      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
+      initialValue: selector(state),
+      registration: registration,
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
         return selector(self.cachedState)

@@ -455,6 +455,48 @@ struct StoreScopeSelectionTests {
     #expect(probe.count == 1)
   }
 
+  @Test(
+    "Store.select(memoize: true) skips selector invocation when parent state is unchanged"
+  )
+  func selectedStoreClosureMemoizeSkipsSelectorOnUnchangedState() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let probe = SelectionTransformProbe()
+
+    let memoized = store.select(memoize: true) { state -> Int in
+      probe.record()
+      return state.child.step + state.unrelated
+    }
+
+    #expect(memoized.requireAlive() == 1)
+    let baseline = probe.count
+
+    store.send(.setUnrelated(0))
+    #expect(probe.count == baseline)
+
+    store.send(.setUnrelated(7))
+    #expect(probe.count > baseline)
+    #expect(memoized.requireAlive() == 8)
+  }
+
+  @Test(
+    "Store.select(memoize: false) preserves always-refresh selector semantics"
+  )
+  func selectedStoreClosureMemoizeFalseAlwaysRefreshes() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let probe = SelectionTransformProbe()
+
+    let alwaysRefresh = store.select(memoize: false) { state -> Int in
+      probe.record()
+      return state.child.step
+    }
+
+    #expect(alwaysRefresh.requireAlive() == 1)
+    let baseline = probe.count
+
+    store.send(.setUnrelated(0))
+    #expect(probe.count > baseline)
+  }
+
   @Test("Store.select preserves SelectedStore identity across repeated calls")
   func selectedStoreCachingPreservesIdentity() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())

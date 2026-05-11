@@ -279,20 +279,19 @@ package final class ProjectionObserverRegistry<Snapshot> {
     dependencyKey: ProjectionDependencyKey,
     hasChanged: @escaping (Snapshot, Snapshot) -> Bool
   ) {
-    switch dependencyKey {
-    case .custom:
-      alwaysObservers[observerID] = weakObserver
-
-    case .keyPath:
-      if var bucket = dependencyBuckets[dependencyKey] {
-        bucket.observers[observerID] = weakObserver
-        dependencyBuckets[dependencyKey] = bucket
-      } else {
-        dependencyBuckets[dependencyKey] = DependencyBucket(
-          observers: [observerID: weakObserver],
-          hasChanged: hasChanged
-        )
-      }
+    // Both `.keyPath` and `.custom` keys route through dependency buckets so
+    // their `hasChanged` predicate is honored. A `.custom` key paired with
+    // `{ _, _ in true }` remains semantically "always refresh", while a
+    // `.custom` key paired with `{ $0 != $1 }` opts into snapshot-level
+    // memoization for closure-only selections.
+    if var bucket = dependencyBuckets[dependencyKey] {
+      bucket.observers[observerID] = weakObserver
+      dependencyBuckets[dependencyKey] = bucket
+    } else {
+      dependencyBuckets[dependencyKey] = DependencyBucket(
+        observers: [observerID: weakObserver],
+        hasChanged: hasChanged
+      )
     }
   }
 
