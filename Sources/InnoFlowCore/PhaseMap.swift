@@ -490,7 +490,6 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
     let previousState = state
     let previousPhase = state[keyPath: phaseMap.phaseKeyPath]
     var effect = base.reduce(into: &state, action: action)
-    var didRevert = false
 
     let postReducePhase = state[keyPath: phaseMap.phaseKeyPath]
     if postReducePhase != previousPhase {
@@ -522,7 +521,6 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
       // cleanly on top of the reverted state.
       state = previousState
       effect = .none
-      didRevert = true
     }
 
     for rule in phaseMap.rulesBySourcePhase[previousPhase] ?? [] {
@@ -538,25 +536,22 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
           case .ignore:
             return effect
           case .forbid:
-            // Suppress the secondary self-transition diagnostic when the
-            // primary `directPhaseMutation` diagnostic already fired and
-            // forced an atomic revert this tick. The author has already
-            // been told about the root cause; the trailing self-transition
-            // assertion is symptomatic noise that double-traps the same
-            // authoring mistake.
-            if !didRevert {
-              phaseMap.diagnostics.report(
-                .illegalSelfTransition(action: action, phase: previousPhase)
-              )
-              assertionFailure(
-                """
-                PhaseMap transition resolved to the source phase while \
-                selfTransitionPolicy was `.forbid`.
-                action: \(String(reflecting: action))
-                phase: \(String(reflecting: previousPhase))
-                """
-              )
-            }
+            // Reported even when a prior `.directPhaseMutation` revert
+            // already fired this tick: a dynamic resolver returning
+            // `previousPhase` under `.forbid` is an independent
+            // authoring defect of the rule, not a symptom of the base
+            // reducer's illegal write, and deserves its own diagnostic.
+            phaseMap.diagnostics.report(
+              .illegalSelfTransition(action: action, phase: previousPhase)
+            )
+            assertionFailure(
+              """
+              PhaseMap transition resolved to the source phase while \
+              selfTransitionPolicy was `.forbid`.
+              action: \(String(reflecting: action))
+              phase: \(String(reflecting: previousPhase))
+              """
+            )
             return effect
           case .allow:
             state[keyPath: phaseMap.phaseKeyPath] = target

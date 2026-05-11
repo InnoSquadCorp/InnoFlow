@@ -198,3 +198,62 @@ struct EffectTaskRunSequenceErrorTests {
     #expect(store.values == [2])
   }
 }
+
+private struct DoubleReportFeature: Reducer {
+  enum Action: Equatable, Sendable {
+    case fireTwice
+    case done
+  }
+
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var done = false
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .fireTwice:
+      return .run { send, context in
+        await context.reportError(SequenceTestError(message: "first"))
+        await context.reportError(SequenceTestError(message: "second"))
+        await send(.done)
+      }
+    case .done:
+      state.done = true
+      return .none
+    }
+  }
+}
+
+@Suite("EffectContext.reportError first-error-wins contract", .serialized)
+@MainActor
+struct ReportErrorFirstWinsTests {
+
+  @Test("Multiple reportError calls within a single run emit a single didFailRun event")
+  func firstErrorWinsAcrossMultipleReports() async {
+    let probe = InstrumentationProbe()
+    let store = Store(
+      reducer: DoubleReportFeature(),
+      initialState: .init(),
+      instrumentation: .init(
+        didStartRun: { _ in probe.record("start") },
+        didFinishRun: { _ in probe.record("finish") },
+        didFailRun: { event in probe.record("fail:\(event.errorDescription)") }
+      )
+    )
+
+    store.send(.fireTwice)
+    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
+      store.state.done
+    }
+    try? await Task.sleep(for: .milliseconds(50))
+
+    let starts = probe.events.filter { $0 == "start" }
+    let finishes = probe.events.filter { $0 == "finish" }
+    let failures = probe.events.filter { $0.hasPrefix("fail:") }
+    #expect(starts.count == 1)
+    #expect(failures.count == 1)
+    #expect(finishes.isEmpty)
+    #expect(failures.first?.contains("first") == true)
+    #expect(failures.first?.contains("second") == false)
+  }
+}
