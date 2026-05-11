@@ -232,6 +232,14 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   }
 
   public static func combined(_ instrumentations: Self...) -> Self {
+    combined(instrumentations)
+  }
+
+  /// Array-backed variant of `combined(_:)`. Use this when the set of
+  /// instrumentations is computed dynamically (e.g. assembled from a feature
+  /// flag matrix or a host application's optional adapters) where the
+  /// variadic form would require call-site splatting.
+  public static func combined(_ instrumentations: [Self]) -> Self {
     .init(
       didStartRun: { event in
         for instrumentation in instrumentations {

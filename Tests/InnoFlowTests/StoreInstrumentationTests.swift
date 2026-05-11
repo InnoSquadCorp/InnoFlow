@@ -262,6 +262,35 @@ struct StoreInstrumentationTests {
     #expect(secondProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
   }
 
+  @Test("StoreInstrumentation.combined array overload fans out events to every sink")
+  func storeInstrumentationCombinedArrayFansOut() async {
+    let firstProbe = InstrumentationProbe()
+    let secondProbe = InstrumentationProbe()
+    let adapters: [StoreInstrumentation<AsyncFeature.Action>] = [
+      .sink { event in
+        if case .actionEmitted(let actionEvent) = event {
+          firstProbe.record("emit:\(actionEvent.action)")
+        }
+      },
+      .sink { event in
+        if case .actionEmitted(let actionEvent) = event {
+          secondProbe.record("emit:\(actionEvent.action)")
+        }
+      },
+    ]
+    let store = Store(
+      reducer: AsyncFeature(),
+      initialState: .init(),
+      instrumentation: .combined(adapters)
+    )
+
+    store.send(.load)
+    try? await Task.sleep(for: .milliseconds(80))
+
+    #expect(firstProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
+    #expect(secondProbe.events == ["emit:_loaded(\"Hello, InnoFlow\")"])
+  }
+
   @Test("StoreInstrumentation.osLog redaction does not evaluate action descriptions")
   func osLogRedactionDoesNotEvaluateActionDescription() {
     let counter = DescriptionCounter()
