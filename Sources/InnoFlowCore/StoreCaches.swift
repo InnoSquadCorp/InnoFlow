@@ -19,7 +19,12 @@ package struct SelectionCallsite: Hashable, Equatable {
 package enum SelectionSignature: Hashable {
   case keyPath(AnyKeyPath)
   case dependencies([AnyKeyPath])
-  case alwaysRefresh(memoized: Bool)
+  /// Closure-only selection (no declared keypath dependencies). `memoized`
+  /// reflects whether the cached observer compares snapshots before rerunning
+  /// the selector — false maps to "always refresh", true to memoization. The
+  /// boolean is part of the cache key so two `select(memoize:)` callsites
+  /// with opposite memoize settings cannot collide on the same cache slot.
+  case closureSelector(memoized: Bool)
 }
 
 package struct SelectionCacheKey: Hashable {

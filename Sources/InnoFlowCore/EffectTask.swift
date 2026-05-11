@@ -184,6 +184,11 @@ public struct EffectContext: Sendable {
 
   /// Reports a non-cancellation error escaping an effect to the host store's
   /// instrumentation. Cancellation errors must be propagated by `throw` instead.
+  ///
+  /// First-error-wins per run: the Store driver suppresses the trailing
+  /// `didFinishRun` once `reportError` fires and ignores subsequent calls so
+  /// the `didStartRun`/`didFailRun` pair stays 1:1. Effects that wish to
+  /// surface multiple failures must aggregate them before calling this.
   package func reportError(_ error: any Error) async {
     await errorReporter(error)
   }

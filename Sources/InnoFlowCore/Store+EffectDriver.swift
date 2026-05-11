@@ -14,6 +14,18 @@ package final class SingleWriteFlag: Sendable {
     storage.withLock { $0 = true }
   }
 
+  /// Atomic compare-and-set: returns `true` if this call flipped the latch,
+  /// `false` if the latch was already set. Lets callers implement
+  /// first-writer-wins policies without a separate read+write race window.
+  @discardableResult
+  package func setIfUnset() -> Bool {
+    storage.withLock { wasSet in
+      if wasSet { return false }
+      wasSet = true
+      return true
+    }
+  }
+
   package var isSet: Bool {
     storage.withLock { $0 }
   }
@@ -191,7 +203,10 @@ extension Store: EffectDriver {
         },
         checkCancellation: checkCancellation,
         reportError: { error in
-          runFailedBox.set()
+          // First-error-wins: the start/finish/fail/cancel contract is 1:1
+          // per run, so swallow any subsequent reportError calls instead of
+          // fanning out duplicate didFailRun events.
+          guard runFailedBox.setIfUnset() else { return }
           instrumentation.didFailRun(
             .init(
               token: token,

@@ -52,8 +52,8 @@ public enum PhaseMapViolation<Action: Sendable, Phase: Hashable & Sendable>: Sen
 /// transition.
 public enum SelfTransitionPolicy: Sendable, Hashable {
   /// Same-phase resolution is silently ignored. The transition is treated as
-  /// if it had not matched. This is the default and preserves the pre-5.0
-  /// behavior.
+  /// if it had not matched. This is the default and preserves the historical
+  /// behavior from before the explicit policy parameter was introduced.
   case ignore
   /// Same-phase resolution is reported as a `PhaseMapViolation` and asserts
   /// in debug builds. Use this when the declared transition is meant to

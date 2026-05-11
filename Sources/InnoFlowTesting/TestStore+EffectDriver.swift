@@ -382,7 +382,7 @@ extension TestStore: EffectDriver {
   package typealias Action = R.Action
 
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
-    // BREAKING (InnoFlow 5.0): deliverAction now enqueues synchronously on
+    // BREAKING (InnoFlow 4.0.0): deliverAction now enqueues synchronously on
     // the MainActor, matching Store's enqueue contract exactly. Previously
     // each delivery hopped through a fire-and-forget `Task { @MainActor }`,
     // which let actions interleave with subsequent reducer ticks in
