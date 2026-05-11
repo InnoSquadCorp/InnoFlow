@@ -1,4 +1,23 @@
 import Foundation
+import os
+
+/// Latch that flips from `false` to `true` exactly once. Used to record that
+/// `reportError` fired `didFailRun` during a run so the trailing
+/// `didFinishRun` can be suppressed — the start/finish/fail/cancel contract is
+/// 1:1 per run.
+package final class SingleWriteFlag: Sendable {
+  private let storage = OSAllocatedUnfairLock(initialState: false)
+
+  package init() {}
+
+  package func set() {
+    storage.withLock { $0 = true }
+  }
+
+  package var isSet: Bool {
+    storage.withLock { $0 }
+  }
+}
 
 extension Store: EffectDriver {
   package typealias Action = R.Action
@@ -84,6 +103,11 @@ extension Store: EffectDriver {
 
       instrumentation.didStartRun(runEvent)
 
+      // Tracks whether `reportError` fired `didFailRun` during this run. The
+      // start/finish/fail/cancel contract is 1:1 per run, so if the run
+      // failed we must not also emit `didFinishRun` below.
+      let runFailedBox = SingleWriteFlag()
+
       let send = Send<R.Action> { action in
         if lifetime.isReleased {
           instrumentation.didDropAction(
@@ -167,6 +191,7 @@ extension Store: EffectDriver {
         },
         checkCancellation: checkCancellation,
         reportError: { error in
+          runFailedBox.set()
           instrumentation.didFailRun(
             .init(
               token: token,
@@ -181,7 +206,9 @@ extension Store: EffectDriver {
 
       await operation(send, effectContext)
       await runtime.finish(token: token)
-      instrumentation.didFinishRun(runEvent)
+      if !runFailedBox.isSet {
+        instrumentation.didFinishRun(runEvent)
+      }
     }
 
     await runtime.registerAndStart(

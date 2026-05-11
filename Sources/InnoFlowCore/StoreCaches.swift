@@ -19,7 +19,7 @@ package struct SelectionCallsite: Hashable, Equatable {
 package enum SelectionSignature: Hashable {
   case keyPath(AnyKeyPath)
   case dependencies([AnyKeyPath])
-  case alwaysRefresh
+  case alwaysRefresh(memoized: Bool)
 }
 
 package struct SelectionCacheKey: Hashable {

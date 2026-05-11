@@ -330,7 +330,7 @@ extension Store {
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
+      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh(memoized: false)),
       initialValue: selector(state),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
@@ -357,7 +357,7 @@ extension Store {
       ? memoizedCustomSelectionRegistration(callsite: callsite)
       : alwaysRefreshSelectionRegistration(callsite: callsite)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
+      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh(memoized: memoize)),
       initialValue: selector(state),
       registration: registration,
       valueResolver: { [weak self] in
@@ -512,7 +512,7 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
+      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh(memoized: false)),
       initialValue: selector(state),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
@@ -539,7 +539,7 @@ extension ScopedStore {
       ? memoizedCustomSelectionRegistration(callsite: callsite)
       : alwaysRefreshSelectionRegistration(callsite: callsite)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
+      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh(memoized: memoize)),
       initialValue: selector(state),
       registration: registration,
       valueResolver: { [weak self] in

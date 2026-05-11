@@ -489,7 +489,7 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
     // trap. Atomic full-state revert is the only sound fallback.
     let previousState = state
     let previousPhase = state[keyPath: phaseMap.phaseKeyPath]
-    let effect = base.reduce(into: &state, action: action)
+    var effect = base.reduce(into: &state, action: action)
 
     let postReducePhase = state[keyPath: phaseMap.phaseKeyPath]
     if postReducePhase != previousPhase {
@@ -511,7 +511,16 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
         phaseKeyPath: \(String(reflecting: phaseMap.phaseKeyPath))
         """
       )
+      // Atomic revert: the base reducer's effect was contingent on the
+      // mutation we are throwing away, so the only sound choice is to
+      // drop it too. Keeping the effect would let work scheduled against
+      // the rejected mutation continue running against the pre-reduce
+      // state, exactly the inconsistency the revert exists to prevent.
+      // We still fall through to the transition rules so a declared
+      // PhaseMap transition for `previousPhase + action` can apply
+      // cleanly on top of the reverted state.
       state = previousState
+      effect = .none
     }
 
     for rule in phaseMap.rulesBySourcePhase[previousPhase] ?? [] {

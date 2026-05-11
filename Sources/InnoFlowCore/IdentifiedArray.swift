@@ -92,6 +92,13 @@ where Element: Sendable {
     set {
       switch (index[id], newValue) {
       case (let position?, let value?):
+        let resolvedID = idForElement(value)
+        guard resolvedID == id else {
+          assertionFailure(
+            "IdentifiedArray subscript: replacement element id \(resolvedID) does not match subscript key \(id); write ignored."
+          )
+          return
+        }
         elements[position] = value
       case (let position?, nil):
         elements.remove(at: position)
