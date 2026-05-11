@@ -35,6 +35,37 @@ public enum PhaseMapViolation<Action: Sendable, Phase: Hashable & Sendable>: Sen
     target: Phase,
     declaredTargets: Set<Phase>
   )
+  /// An `On(...)` rule resolved to the source phase while its
+  /// `selfTransitionPolicy` was `.forbid`. The runtime makes no state change
+  /// and asserts in debug builds.
+  case illegalSelfTransition(action: Action, phase: Phase)
+}
+
+/// Controls how a single `On(...)` transition handles a resolution that lands
+/// on the same phase the reducer started in.
+///
+/// Same-phase resolutions occur whenever a dynamic resolver returns the
+/// source phase. The historical behavior is to silently treat that as a
+/// runtime no-op (the phase keypath is not rewritten and no diagnostics are
+/// reported). That stays the default to preserve source compatibility, but
+/// authors can now opt into stricter or more permissive contracts per
+/// transition.
+public enum SelfTransitionPolicy: Sendable, Hashable {
+  /// Same-phase resolution is silently ignored. The transition is treated as
+  /// if it had not matched. This is the default and preserves the pre-5.0
+  /// behavior.
+  case ignore
+  /// Same-phase resolution is reported as a `PhaseMapViolation` and asserts
+  /// in debug builds. Use this when the declared transition is meant to
+  /// always move off the source phase and a same-phase resolution indicates
+  /// a logic error in the resolver.
+  case forbid
+  /// Same-phase resolution is accepted as a declared transition. The phase
+  /// keypath is rewritten with the resolved value even though it equals the
+  /// previous phase. Use this when "tick on the same phase" carries
+  /// observable meaning (e.g. observers that key off identity rather than
+  /// value).
+  case allow
 }
 
 public struct PhaseMapDiagnostics<Action: Sendable, Phase: Hashable & Sendable>: Sendable {
@@ -236,6 +267,7 @@ public struct On<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>:
   package init<Payload: Sendable>(
     matcher: ActionMatcher<Action, Payload>,
     declaredTargets: Set<Phase>,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore,
     resolve: @escaping @Sendable (State, Payload) -> Phase?
   ) {
     self.transition = .init(
@@ -244,66 +276,84 @@ public struct On<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>:
         guard let payload = matcher.match(action) else { return nil }
         return resolve(state, payload)
       },
-      declaredTargets: declaredTargets
+      declaredTargets: declaredTargets,
+      selfTransitionPolicy: selfTransitionPolicy
     )
   }
 }
 
 extension On where Action: Equatable {
-  public init(_ action: Action, to target: Phase) {
+  public init(
+    _ action: Action,
+    to target: Phase,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore
+  ) {
     self.init(
       matcher: .action(action),
-      declaredTargets: [target]
+      declaredTargets: [target],
+      selfTransitionPolicy: selfTransitionPolicy
     ) { _, _ in target }
   }
 
   public init(
     _ action: Action,
     targets: Set<Phase>,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore,
     resolve: @escaping @Sendable (State) -> Phase?
   ) {
     self.init(
       matcher: .action(action),
-      declaredTargets: targets
+      declaredTargets: targets,
+      selfTransitionPolicy: selfTransitionPolicy
     ) { state, _ in resolve(state) }
   }
 }
 
 extension On {
-  public init<Value: Sendable>(_ path: CasePath<Action, Value>, to target: Phase) {
+  public init<Value: Sendable>(
+    _ path: CasePath<Action, Value>,
+    to target: Phase,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore
+  ) {
     self.init(
       matcher: .casePath(path),
-      declaredTargets: [target]
+      declaredTargets: [target],
+      selfTransitionPolicy: selfTransitionPolicy
     ) { _, _ in target }
   }
 
   public init<Value: Sendable>(
     _ path: CasePath<Action, Value>,
     targets: Set<Phase>,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore,
     resolve: @escaping @Sendable (State, Value) -> Phase?
   ) {
     self.init(
       matcher: .casePath(path),
       declaredTargets: targets,
+      selfTransitionPolicy: selfTransitionPolicy,
       resolve: resolve
     )
   }
 
   public init(
     where predicate: @escaping @Sendable (Action) -> Bool,
-    to target: Phase
+    to target: Phase,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore
   ) {
     self.init(
       matcher: .init { action in
         predicate(action) ? action : nil
       },
-      declaredTargets: [target]
+      declaredTargets: [target],
+      selfTransitionPolicy: selfTransitionPolicy
     ) { _, _ in target }
   }
 
   public init(
     where predicate: @escaping @Sendable (Action) -> Bool,
     targets: Set<Phase>,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore,
     resolve: @escaping @Sendable (State, Action) -> Phase?
   ) {
     self.init(
@@ -311,6 +361,7 @@ extension On {
         predicate(action) ? action : nil
       },
       declaredTargets: targets,
+      selfTransitionPolicy: selfTransitionPolicy,
       resolve: resolve
     )
   }
@@ -407,6 +458,7 @@ public struct AnyPhaseTransition<State: Sendable, Action: Sendable, Phase: Hasha
   package let matches: @Sendable (Action) -> Bool
   package let resolve: @Sendable (State, Action) -> Phase?
   package let declaredTargets: Set<Phase>
+  package let selfTransitionPolicy: SelfTransitionPolicy
 }
 
 private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Reducer {
@@ -458,8 +510,27 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
           return effect
         }
 
-        guard target != previousPhase else {
-          return effect
+        if target == previousPhase {
+          switch transition.selfTransitionPolicy {
+          case .ignore:
+            return effect
+          case .forbid:
+            phaseMap.diagnostics.report(
+              .illegalSelfTransition(action: action, phase: previousPhase)
+            )
+            assertionFailure(
+              """
+              PhaseMap transition resolved to the source phase while \
+              selfTransitionPolicy was `.forbid`.
+              action: \(String(reflecting: action))
+              phase: \(String(reflecting: previousPhase))
+              """
+            )
+            return effect
+          case .allow:
+            state[keyPath: phaseMap.phaseKeyPath] = target
+            return effect
+          }
         }
 
         guard transition.declaredTargets.contains(target) else {

@@ -53,6 +53,12 @@ extension PhaseMapDiagnostics {
         logger.error(
           "InnoFlow phaseMap undeclared target action=\(renderedAction, privacy: .public) sourcePhase=\(String(describing: source), privacy: .public) target=\(String(describing: target), privacy: .public) declaredTargets=\(String(describing: declared), privacy: .public)"
         )
+
+      case .illegalSelfTransition(let action, let phase):
+        let renderedAction = includeActionPayload ? String(describing: action) : "<redacted>"
+        logger.error(
+          "InnoFlow phaseMap illegal self-transition action=\(renderedAction, privacy: .public) phase=\(String(describing: phase), privacy: .public)"
+        )
       }
     }
   }
@@ -86,6 +92,14 @@ extension PhaseMapDiagnostics {
           name,
           id: .exclusive,
           "undeclaredTarget action=\(renderedAction) sourcePhase=\(String(describing: source)) target=\(String(describing: target)) declaredTargets=\(String(describing: declared))"
+        )
+
+      case .illegalSelfTransition(let action, let phase):
+        let renderedAction = includeActionPayload ? String(describing: action) : "<redacted>"
+        signposter.emitEvent(
+          name,
+          id: .exclusive,
+          "illegalSelfTransition action=\(renderedAction) phase=\(String(describing: phase))"
         )
       }
     }

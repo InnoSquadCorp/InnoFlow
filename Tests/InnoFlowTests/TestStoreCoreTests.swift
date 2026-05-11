@@ -777,6 +777,105 @@ struct TestStoreCoreTests {
     #expect(report.isEmpty)
   }
 
+  @Test("On(selfTransitionPolicy: .ignore) silently skips same-phase resolutions")
+  func phaseMapSelfTransitionPolicyIgnoreSilent() {
+    enum Phase: Hashable, Sendable {
+      case running
+      case stopped
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .running
+    }
+    enum Action: Equatable, Sendable {
+      case tick
+    }
+
+    let probe = InstrumentationProbe()
+    let map = PhaseMap<State, Action, Phase>(
+      \.phase,
+      diagnostics: .init { _ in probe.record("violation") }
+    ) {
+      From(.running) {
+        On(
+          .tick,
+          targets: [.running, .stopped],
+          resolve: { _ in .running }
+        )
+      }
+    }
+    let reducer = Reduce<State, Action> { _, _ in .none }.phaseMap(map)
+
+    var state = State()
+    _ = reducer.reduce(into: &state, action: .tick)
+
+    #expect(state.phase == .running)
+    #expect(probe.events.isEmpty)
+  }
+
+  @Test("PhaseMap diagnostics exposes illegalSelfTransition events")
+  func phaseMapDiagnosticsReportsIllegalSelfTransition() {
+    enum Phase: Hashable, Sendable {
+      case running
+      case stopped
+    }
+    enum Action: Equatable, Sendable {
+      case tick
+    }
+
+    let probe = InstrumentationProbe()
+    let diagnostics = PhaseMapDiagnostics<Action, Phase> { violation in
+      if case .illegalSelfTransition(action: _, phase: let phase) = violation {
+        probe.record("self:\(phase)")
+      }
+    }
+
+    diagnostics.report(.illegalSelfTransition(action: .tick, phase: .running))
+
+    #expect(probe.events == ["self:running"])
+  }
+
+  @Test("On(selfTransitionPolicy: .allow) writes the resolved phase even when equal to the source")
+  func phaseMapSelfTransitionPolicyAllowWritesPhase() {
+    enum Phase: Hashable, Sendable {
+      case running
+      case stopped
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .running
+      var observerTicks = 0
+    }
+    enum Action: Equatable, Sendable {
+      case tick
+    }
+
+    let probe = InstrumentationProbe()
+    let map = PhaseMap<State, Action, Phase>(
+      \.phase,
+      diagnostics: .init { _ in probe.record("violation") }
+    ) {
+      From(.running) {
+        On(
+          .tick,
+          targets: [.running, .stopped],
+          selfTransitionPolicy: .allow,
+          resolve: { _ in .running }
+        )
+      }
+    }
+    let reducer = Reduce<State, Action> { state, _ in
+      state.observerTicks += 1
+      return .none
+    }
+    .phaseMap(map)
+
+    var state = State()
+    _ = reducer.reduce(into: &state, action: .tick)
+
+    #expect(state.phase == .running)
+    #expect(state.observerTicks == 1)
+    #expect(probe.events.isEmpty)
+  }
+
   @Test("PhaseMap supports predicate-based fixed-target, nil-guard, and same-phase guard paths")
   func phaseMapPredicatePaths() async {
     let map:
