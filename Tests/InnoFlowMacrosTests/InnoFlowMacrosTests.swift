@@ -1495,6 +1495,58 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow(phaseManaged:) rejects non-literal boolean argument")
+  func phaseManagedRejectsNonLiteralArgument() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: someFlag)
+        struct NonLiteralPhaseManagedFeature {
+            struct State: Sendable {
+                enum Phase: Hashable, Sendable {
+                    case idle
+                }
+                var phase: Phase = .idle
+            }
+            enum Action: Sendable {
+                case load
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct NonLiteralPhaseManagedFeature {
+              struct State: Sendable {
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                  }
+                  var phase: Phase = .idle
+              }
+              enum Action: Sendable {
+                  case load
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "@InnoFlow(phaseManaged:) requires a boolean literal (`true` or `false`); non-literal expressions are rejected because they cannot be evaluated at macro-expansion time and would silently disable phase management",
+            line: 1,
+            column: 25
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test(
     "@InnoFlow(phaseManaged:) wraps reduce with phaseMap and warns on unreferenced phase cases"
   )

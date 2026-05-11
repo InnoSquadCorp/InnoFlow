@@ -3,6 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import SwiftCompilerPlugin
+import SwiftDiagnostics
 public import SwiftSyntax
 import SwiftSyntaxBuilder
 public import SwiftSyntaxMacros
@@ -87,6 +88,10 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
   /// `phaseManaged: true`. The argument turns the macro into the
   /// phase-managed form, where the synthesized `reduce(into:action:)`
   /// automatically wraps the declared `body` in `.phaseMap(Self.phaseMap)`.
+  ///
+  /// A non-literal expression silently evaluates to `false` here so the
+  /// MemberMacro pass mirrors the silent fallthrough that the ExtensionMacro
+  /// pass diagnoses canonically via `diagnoseInvalidPhaseManagedArgumentIfNeeded`.
   fileprivate static func isPhaseManaged(node: AttributeSyntax) -> Bool {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else {
       return false
@@ -94,6 +99,33 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     for argument in arguments where argument.label?.text == "phaseManaged" {
       if let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
         return boolLiteral.literal.text == "true"
+      }
+    }
+    return false
+  }
+
+  /// Emits an error diagnostic when `phaseManaged:` is present but not a
+  /// boolean literal. Returns `true` if a diagnostic was emitted so callers
+  /// can stop further expansion. Without this, an expression like
+  /// `phaseManaged: someFlag` silently disables phase management at
+  /// compile time and the resulting reducer never wraps `.phaseMap(...)`
+  /// even though the author plainly intended it to.
+  fileprivate static func diagnoseInvalidPhaseManagedArgumentIfNeeded(
+    node: AttributeSyntax,
+    context: some MacroExpansionContext
+  ) -> Bool {
+    guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else {
+      return false
+    }
+    for argument in arguments where argument.label?.text == "phaseManaged" {
+      if argument.expression.as(BooleanLiteralExprSyntax.self) == nil {
+        context.diagnose(
+          Diagnostic(
+            node: Syntax(argument.expression),
+            message: InvalidPhaseManagedArgumentDiagnosticMessage.nonLiteral
+          )
+        )
+        return true
       }
     }
     return false
@@ -136,6 +168,10 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     }
 
     emitMacroEntryDiagnostics(for: structDecl, context: context)
+
+    if diagnoseInvalidPhaseManagedArgumentIfNeeded(node: node, context: context) {
+      return []
+    }
 
     if isPhaseManaged(node: node) {
       guard
@@ -193,6 +229,26 @@ public struct InnoFlowActionPathsMacro: MemberMacro {
     }
 
     return InnoFlowMacro.synthesizedActionPathDeclarations(in: actionEnum, context: context)
+  }
+}
+
+enum InvalidPhaseManagedArgumentDiagnosticMessage: DiagnosticMessage {
+  case nonLiteral
+
+  var message: String {
+    switch self {
+    case .nonLiteral:
+      return
+        "@InnoFlow(phaseManaged:) requires a boolean literal (`true` or `false`); non-literal expressions are rejected because they cannot be evaluated at macro-expansion time and would silently disable phase management"
+    }
+  }
+
+  var diagnosticID: MessageID {
+    .init(domain: "InnoFlowMacro", id: "PhaseManagedArgumentMustBeLiteral")
+  }
+
+  var severity: DiagnosticSeverity {
+    .error
   }
 }
 
