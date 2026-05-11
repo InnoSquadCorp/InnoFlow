@@ -391,10 +391,15 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     guard let nextState = stateResolver(parent.state) else {
       // Background refresh deactivates a stale projection; direct access follows
       // the projection lifecycle contract via cached reads/no-op sends plus
-      // debug assertions.
+      // debug assertions. Prune child observers in the same drain pass so a
+      // burst of activations followed by a single deactivation does not leave
+      // the registry holding weak references to dead observers until the next
+      // parent dispatch — that gap was previously unbounded when the parent
+      // went quiescent after the deactivation.
       isActive = false
-      pendingObserverPrune = true
       observerRegistry.refreshAll()
+      observerRegistry.pruneAllObservers()
+      pendingObserverPrune = false
       return true
     }
     if nextState != previousState {
