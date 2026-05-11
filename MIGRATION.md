@@ -14,6 +14,19 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 - Effects that still read `context.isCancelled` from inside `EffectTask.run`.
 - Maintainers or downstream CI jobs that run the canonical sample package or
   sample app build under macro-heavy toolchains.
+- Call sites that read `SelectedStore.value` directly. The accessor has been
+  removed; reads now go through `optionalValue` (returns `nil` once the
+  projection deactivates) or `requireAlive()` (traps when the projection
+  is dead).
+- Tests that asserted on the per-action `Task { @MainActor }` scheduling
+  hop in `TestStore`. Action delivery now drains on the same serial queue
+  as `Store.send`, so one fewer scheduling boundary exists between
+  `await store.send(.x)` and the next reducer step.
+- Feature authors that route collection state through
+  `ForEachReducer<[Element]>` and want O(1) child lookup; the new
+  `ForEachIdentifiedReducer` overload accepts an
+  `IdentifiedArrayOf<Element>` and is the preferred path for hot routing
+  surfaces.
 
 ### Required action
 
@@ -38,6 +51,27 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 - Run canonical sample package tests and sample Xcode builds serially
   (`--jobs 1` / `-jobs 1`) so CI fails on real diagnostics instead of Swift
   macro worker log corruption.
+- Replace `store.value` reads with one of:
+  - `store.optionalValue ?? fallback` for graceful degradation when the
+    projection is no longer alive (typical SwiftUI body usage during a
+    parent-driven dismiss),
+  - `store.requireAlive()` for assertions / explicit ownership paths
+    where the caller has external proof that the projection is still
+    routable.
+  Dynamic member lookup (`store.someField`) and the SwiftUI bindings
+  continue to work; they internally route through `requireAlive()` and
+  surface a deterministic trap if the projection deactivates between the
+  binding read and the action send.
+- Migrate hot collection routing to `ForEachIdentifiedReducer` and
+  `IdentifiedArrayOf<Element>` where the parent feature already keys child
+  state by identity. The `ForEachReducer<[Element]>` overload remains for
+  source-compatible call sites, but moving hot paths to the identified
+  collection eliminates the per-action O(N) `firstIndex(where:)` scan.
+- Tests that interleaved `await store.send(...)` with other awaits and
+  relied on the per-action `Task { @MainActor }` hop should re-check
+  their interleaving. The reducer-visible action sequence and the
+  receive/expect API are unchanged; assert on reducer state, not on
+  scheduler micro-timing.
 
 ### Notes
 
