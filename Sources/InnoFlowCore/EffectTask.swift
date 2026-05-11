@@ -127,10 +127,17 @@ public struct EffectContext: Sendable {
   private let checkCancellationProvider: @Sendable () async throws -> Void
   private let errorReporter: @Sendable (any Error) async -> Void
 
+  /// Creates an `EffectContext` for use inside `EffectTask.run`.
+  ///
+  /// `errorReporter` mirrors the package init's `reportError` hook so user-supplied
+  /// contexts (typically in tests or custom drivers) can surface non-cancellation
+  /// errors that escape an `AsyncSequence` run. Cancellation errors must still be
+  /// propagated by `throw`, not reported here.
   public init(
     now: @escaping @Sendable () async -> StoreClock.Instant,
     sleep: @escaping @Sendable (Duration) async throws -> Void,
-    isCancellationRequested: @escaping @Sendable () async -> Bool
+    isCancellationRequested: @escaping @Sendable () async -> Bool,
+    errorReporter: @escaping @Sendable (any Error) async -> Void = { _ in }
   ) {
     self.nowProvider = now
     self.sleepProvider = sleep
@@ -140,7 +147,7 @@ public struct EffectContext: Sendable {
         throw CancellationError()
       }
     }
-    self.errorReporter = { _ in }
+    self.errorReporter = errorReporter
   }
 
   package init(
