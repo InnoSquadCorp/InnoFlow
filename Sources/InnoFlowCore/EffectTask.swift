@@ -464,14 +464,14 @@ public struct EffectTask<Action: Sendable>: Sendable {
       return .reportDrop(transform(action), reason: reason)
 
     case .run, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation:
-      let source = self
-      return .init(
-        operation: .lazyMap(
-          .init {
-            source.eagerMap(transform)
-          }
-        )
-      )
+      // Flatten the 1-stage map fast path: rather than wrapping the source in
+      // a `.lazyMap` (one closure allocation now + one indirect materialize
+      // on each walk), rewrite the operation tree eagerly. The work is
+      // identical to what `EffectWalker` would have done via
+      // `lazyMapped.materialize()`, just paid at construction time, so the
+      // run-time path skips a heap-allocated closure box and an extra
+      // dispatch through the `.lazyMap` case in `EffectWalker.walk`.
+      return eagerMap(transform)
     }
   }
 
