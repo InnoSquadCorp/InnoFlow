@@ -5,17 +5,47 @@
 import Foundation
 
 /// A closure-backed reducer primitive.
+///
+/// User-authored `Reduce { state, action in ... }` blocks store the closure
+/// directly. `ReducerBuilder` chains additionally produce a composed form
+/// that holds a flat array of children, so an N-reducer block evaluates as
+/// a single iteration rather than N nested closures.
 public struct Reduce<State: Sendable, Action: Sendable>: Reducer {
-  private let reducer: (inout State, Action) -> EffectTask<Action>
+  @usableFromInline
+  enum Storage {
+    case closure((inout State, Action) -> EffectTask<Action>)
+    case composed([Reduce<State, Action>])
+  }
+
+  @usableFromInline
+  let storage: Storage
 
   public init(
     _ reducer: @escaping (inout State, Action) -> EffectTask<Action>
   ) {
-    self.reducer = reducer
+    self.storage = .closure(reducer)
+  }
+
+  @usableFromInline
+  init(composed children: [Reduce<State, Action>]) {
+    self.storage = .composed(children)
   }
 
   public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    reducer(&state, action)
+    switch storage {
+    case .closure(let body):
+      return body(&state, action)
+
+    case .composed(let children):
+      var effects: [EffectTask<Action>] = []
+      effects.reserveCapacity(children.count)
+      for child in children {
+        let effect = child.reduce(into: &state, action: action)
+        if case .none = effect.operation { continue }
+        effects.append(effect)
+      }
+      return .merge(effects)
+    }
   }
 }
 
@@ -62,10 +92,22 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
     accumulated: Reduce<State, Action>,
     next component: Reduce<State, Action>
   ) -> Reduce<State, Action> {
-    Reduce { state, action in
-      let accumulatedEffect = accumulated.reduce(into: &state, action: action)
-      let componentEffect = component.reduce(into: &state, action: action)
-      return .merge(accumulatedEffect, componentEffect)
+    switch (accumulated.storage, component.storage) {
+    case (.composed(var lhs), .composed(let rhs)):
+      lhs.append(contentsOf: rhs)
+      return Reduce(composed: lhs)
+
+    case (.composed(var lhs), _):
+      lhs.append(component)
+      return Reduce(composed: lhs)
+
+    case (_, .composed(let rhs)):
+      var combined: [Reduce<State, Action>] = [accumulated]
+      combined.append(contentsOf: rhs)
+      return Reduce(composed: combined)
+
+    case (_, _):
+      return Reduce(composed: [accumulated, component])
     }
   }
 
