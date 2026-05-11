@@ -18,21 +18,46 @@ import InnoFlow
 import InnoFlowSwiftUI
 import SwiftUI
 
-// MARK: - Service
+// MARK: - Row feature
 
-struct SampleArticle: Identifiable, Equatable, Sendable {
-  let id: UUID
-  let title: String
-  let summary: String
-  @BindableField var isFavorite = false
+@InnoFlow
+struct SampleArticleRowFeature {
+  struct State: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let title: String
+    let summary: String
+    @BindableField var isFavorite = false
 
-  init(id: UUID = UUID(), title: String, summary: String, isFavorite: Bool = false) {
-    self.id = id
-    self.title = title
-    self.summary = summary
-    self._isFavorite = BindableField(wrappedValue: isFavorite)
+    init(id: UUID = UUID(), title: String, summary: String, isFavorite: Bool = false) {
+      self.id = id
+      self.title = title
+      self.summary = summary
+      self._isFavorite = BindableField(wrappedValue: isFavorite)
+    }
+  }
+
+  enum Action: Equatable, Sendable {
+    case toggleFavorite
+    case setIsFavorite(Bool)
+  }
+
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .toggleFavorite:
+        state.isFavorite.toggle()
+        return .none
+      case .setIsFavorite(let value):
+        state.isFavorite = value
+        return .none
+      }
+    }
   }
 }
+
+typealias SampleArticle = SampleArticleRowFeature.State
+
+// MARK: - Service
 
 protocol ArticlesServiceProtocol: Sendable {
   func loadPage(_ page: Int, pageSize: Int) async throws -> [SampleArticle]
@@ -56,31 +81,6 @@ actor SampleArticlesService: ArticlesServiceProtocol {
         title: "Article #\(index + 1)",
         summary: "Paginated summary for item \(index + 1)"
       )
-    }
-  }
-}
-
-// MARK: - Row feature
-
-@InnoFlow
-struct SampleArticleRowFeature {
-  typealias State = SampleArticle
-
-  enum Action: Equatable, Sendable {
-    case toggleFavorite
-    case setFavorite(Bool)
-  }
-
-  var body: some Reducer<State, Action> {
-    Reduce { state, action in
-      switch action {
-      case .toggleFavorite:
-        state.isFavorite.toggle()
-        return .none
-      case .setFavorite(let value):
-        state.isFavorite = value
-        return .none
-      }
     }
   }
 }
@@ -342,7 +342,7 @@ struct ListDetailPaginationDetailView: View {
           .font(.body)
         Toggle(
           "Favorite",
-          isOn: store.binding(\.$isFavorite, to: SampleArticleRowFeature.Action.setFavorite)
+          isOn: store.binding(\.$isFavorite, to: SampleArticleRowFeature.Action.setIsFavorite)
         )
         .accessibilityIdentifier("list.detail.favorite-toggle")
         Spacer()

@@ -48,6 +48,16 @@ validation stricter. It also finalizes the 4.0.0 public split between the core
 13. Enabled tag-triggered release gates to run principle validation with release
     tag enforcement.
 
+### Known toolchain workarounds
+
+`Store.deinit` and `TestStore.deinit` keep the `@_optimize(none)` attribute
+that sidesteps the Swift 6.3 `EarlyPerfInliner` crash
+([swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173)). The
+attribute affects the deinit path only — not effect execution or action
+dispatch — and is tracked in
+[`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md) along
+with the retest steps and the gate that warns on Swift 6.4+.
+
 ## Migration Note
 
 ### What changed

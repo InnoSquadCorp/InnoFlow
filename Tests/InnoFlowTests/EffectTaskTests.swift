@@ -462,6 +462,39 @@ struct EffectTaskTests {
 
     #expect(actual == expected.outputs)
   }
+
+  @Test("EffectContext public init forwards errorReporter to AsyncSequence run failures")
+  func effectContextPublicInitErrorReporter() async {
+    let storage = OSAllocatedUnfairLock<[String]>(initialState: [])
+    let context = EffectContext(
+      now: { ContinuousClock().now },
+      sleep: { _ in },
+      isCancellationRequested: { false },
+      errorReporter: { error in
+        storage.withLock { $0.append(String(describing: type(of: error))) }
+      }
+    )
+
+    struct Boom: Error {}
+    await context.reportError(Boom())
+
+    #expect(storage.withLock { $0 } == ["Boom"])
+  }
+
+  @Test("EffectContext.testing() factory honours custom errorReporter")
+  func effectContextTestingFactoryErrorReporter() async {
+    let storage = OSAllocatedUnfairLock<[String]>(initialState: [])
+    let context = EffectContext.testing(
+      errorReporter: { error in
+        storage.withLock { $0.append(String(describing: type(of: error))) }
+      }
+    )
+
+    struct Boom: Error {}
+    await context.reportError(Boom())
+
+    #expect(storage.withLock { $0 } == ["Boom"])
+  }
 }
 
 private struct DelayedAsyncSequence<Element: Sendable>: AsyncSequence, Sendable {

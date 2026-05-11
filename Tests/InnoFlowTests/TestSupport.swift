@@ -48,6 +48,11 @@ func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Action>) ->
 
   case .lazyMap(let lazy):
     return effectOperationSignature(lazy.materialize())
+
+  case .diagnosticDrop(let action, let reason):
+    let actionDescription = String(describing: action)
+    let reasonDescription = String(describing: reason)
+    return "diagnosticDrop(action:\(actionDescription),reason:\(reasonDescription))"
   }
 }
 
@@ -1041,6 +1046,7 @@ func runPhaseMapReleaseHarness(
 
 private let conditionalReducerReleaseHarnessSource = #"""
   import Foundation
+  import os
 
   struct ReleaseIfLetFeature: Reducer {
     struct ChildState: Equatable, Sendable {
@@ -1148,31 +1154,75 @@ private let conditionalReducerReleaseHarnessSource = #"""
     }
   }
 
+  final class DropRecorder: Sendable {
+    private let storage = OSAllocatedUnfairLock<[String]>(initialState: [])
+    var events: [String] {
+      storage.withLock { $0 }
+    }
+    func record(_ event: String) {
+      storage.withLock { $0.append(event) }
+    }
+  }
+
   @main
   struct ConditionalReducerProbe {
     @MainActor
-    static func main() {
+    static func main() async {
       switch ProcessInfo.processInfo.environment["INNOFLOW_CONDITIONAL_REDUCER_SCENARIO"] {
       case "iflet-absent-state":
+        let recorder = DropRecorder()
+        let instrumentation = StoreInstrumentation<ReleaseIfLetFeature.Action>(
+          didDropAction: { event in
+            recorder.record("drop:\(event.reason)")
+          }
+        )
         let store = Store(
           reducer: ReleaseIfLetFeature(),
-          initialState: .init(child: nil, untouched: 7)
+          initialState: .init(child: nil, untouched: 7),
+          instrumentation: instrumentation
         )
         store.send(.child(.increment))
+        for _ in 0..<256 {
+          if recorder.events.contains("drop:missingChildState") { break }
+          await Task.yield()
+        }
         guard store.state == .init(child: nil, untouched: 7) else {
           fputs("IfLet mutated state unexpectedly\n", stderr)
+          Foundation.exit(1)
+        }
+        guard recorder.events.contains("drop:missingChildState") else {
+          fputs(
+            "Expected didDropAction with .missingChildState, got \(recorder.events)\n",
+            stderr)
           Foundation.exit(1)
         }
         print("ok")
 
       case "ifcase-mismatched-state":
+        let recorder = DropRecorder()
+        let instrumentation = StoreInstrumentation<ReleaseIfCaseLetFeature.Action>(
+          didDropAction: { event in
+            recorder.record("drop:\(event.reason)")
+          }
+        )
         let store = Store(
           reducer: ReleaseIfCaseLetFeature(),
-          initialState: .idle
+          initialState: .idle,
+          instrumentation: instrumentation
         )
         store.send(.child(.increment))
+        for _ in 0..<256 {
+          if recorder.events.contains("drop:missingChildState") { break }
+          await Task.yield()
+        }
         guard store.state == .idle else {
           fputs("IfCaseLet mutated state unexpectedly\n", stderr)
+          Foundation.exit(1)
+        }
+        guard recorder.events.contains("drop:missingChildState") else {
+          fputs(
+            "Expected didDropAction with .missingChildState, got \(recorder.events)\n",
+            stderr)
           Foundation.exit(1)
         }
         print("ok")
@@ -1294,7 +1344,10 @@ private let staleScopedStoreHarnessSource = #"""
           let store = Store(reducer: ParentReleasedFeature(), initialState: .init())
           return store.select(\.child.value)
         }()
-        _ = selected.value
+        // requireAlive() crashes loudly (precondition) once the parent
+        // store is released — the new contract after the legacy `value`
+        // cached-fallback accessor was removed.
+        _ = selected.requireAlive()
 
       default:
         fatalError("Unknown stale scope scenario")
@@ -1545,8 +1598,14 @@ private let phaseMapReleaseHarnessSource = #"""
         }
 
         store.send(.loaded([1, 2, 3]))
-        guard store.state.phase == .loaded, store.state.values == [1, 2, 3] else {
-          fputs("Expected loaded payload to preserve reducer work and then transition to .loaded\n", stderr)
+        // The base reducer sets `phase=.idle` (illegal) AND `values=[1,2,3]`
+        // in the same call. The illegal phase mutation forces an atomic
+        // full-state revert, which intentionally drops the `values` write
+        // because we cannot distinguish legitimate mutations from those
+        // coupled to the illegal phase transition. After revert, the
+        // PhaseMap rule fires the declared `.loaded` transition.
+        guard store.state.phase == .loaded, store.state.values == [] else {
+          fputs("Expected atomic revert to drop the coupled values write and then transition to .loaded\n", stderr)
           Foundation.exit(1)
         }
         print("ok")
@@ -1713,12 +1772,17 @@ private let staleScopedStoreReleaseHarnessSource = #"""
             reducer: ReleaseParentReleasedFeature(), initialState: .init())
           return store.select(\.child.value)
         }()
-        // Release builds must return the cached projected value instead of
-        // aborting.
-        let cachedValue = selected.value
-        guard cachedValue == 42 else {
+        // After H1 removed `value`'s release-mode cached fallback, the
+        // safe-read path is `optionalValue` which must report nil once the
+        // parent store has been released. `isAlive` mirrors the contract.
+        guard selected.isAlive == false else {
+          fputs("Expected selected.isAlive == false after parent release\n", stderr)
+          Foundation.exit(1)
+        }
+        guard selected.optionalValue == nil else {
           fputs(
-            "Expected cached SelectedStore value 42, got \(cachedValue)\n", stderr)
+            "Expected selected.optionalValue == nil after parent release, got \(String(describing: selected.optionalValue))\n",
+            stderr)
           Foundation.exit(1)
         }
         print("ok")

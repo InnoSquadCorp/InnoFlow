@@ -127,10 +127,17 @@ public struct EffectContext: Sendable {
   private let checkCancellationProvider: @Sendable () async throws -> Void
   private let errorReporter: @Sendable (any Error) async -> Void
 
+  /// Creates an `EffectContext` for use inside `EffectTask.run`.
+  ///
+  /// `errorReporter` mirrors the package init's `reportError` hook so user-supplied
+  /// contexts (typically in tests or custom drivers) can surface non-cancellation
+  /// errors that escape an `AsyncSequence` run. Cancellation errors must still be
+  /// propagated by `throw`, not reported here.
   public init(
     now: @escaping @Sendable () async -> StoreClock.Instant,
     sleep: @escaping @Sendable (Duration) async throws -> Void,
-    isCancellationRequested: @escaping @Sendable () async -> Bool
+    isCancellationRequested: @escaping @Sendable () async -> Bool,
+    errorReporter: @escaping @Sendable (any Error) async -> Void = { _ in }
   ) {
     self.nowProvider = now
     self.sleepProvider = sleep
@@ -140,7 +147,7 @@ public struct EffectContext: Sendable {
         throw CancellationError()
       }
     }
-    self.errorReporter = { _ in }
+    self.errorReporter = errorReporter
   }
 
   package init(
@@ -177,6 +184,11 @@ public struct EffectContext: Sendable {
 
   /// Reports a non-cancellation error escaping an effect to the host store's
   /// instrumentation. Cancellation errors must be propagated by `throw` instead.
+  ///
+  /// First-error-wins per run: the Store driver suppresses the trailing
+  /// `didFinishRun` once `reportError` fires and ignores subsequent calls so
+  /// the `didStartRun`/`didFailRun` pair stays 1:1. Effects that wish to
+  /// surface multiple failures must aggregate them before calling this.
   package func reportError(_ error: any Error) async {
     await errorReporter(error)
   }
@@ -226,6 +238,10 @@ public struct EffectTask<Action: Sendable>: Sendable {
       animation: EffectAnimation
     )
     case lazyMap(LazyMappedEffect)
+    /// Routes a drop event through the effect walker so reducers that do not
+    /// own `Send` (e.g., `IfLet`/`IfCaseLet`) can still surface
+    /// `StoreInstrumentation.didDropAction` to the host store.
+    case diagnosticDrop(action: Action, reason: ActionDropReason)
   }
 
   package let operation: Operation
@@ -342,6 +358,14 @@ public struct EffectTask<Action: Sendable>: Sendable {
     return .init(operation: .concatenate(live))
   }
 
+  /// Emits an `ActionDropEvent` through the host store's instrumentation
+  /// without re-delivering the action. Used by composition primitives that
+  /// detect a structurally-invalid action (e.g., `IfLet` with `nil` child
+  /// state) and need to surface the drop in release builds.
+  package static func reportDrop(_ action: Action, reason: ActionDropReason) -> Self {
+    .init(operation: .diagnosticDrop(action: action, reason: reason))
+  }
+
   /// Cancels effects tied to an identifier.
   public static func cancel<ID: Hashable & Sendable>(_ id: EffectID<ID>) -> Self {
     cancel(AnyEffectID(id))
@@ -441,15 +465,18 @@ public struct EffectTask<Action: Sendable>: Sendable {
     case .lazyMap:
       return eagerMap(transform)
 
+    case .diagnosticDrop(let action, let reason):
+      return .reportDrop(transform(action), reason: reason)
+
     case .run, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation:
-      let source = self
-      return .init(
-        operation: .lazyMap(
-          .init {
-            source.eagerMap(transform)
-          }
-        )
-      )
+      // Flatten the 1-stage map fast path: rather than wrapping the source in
+      // a `.lazyMap` (one closure allocation now + one indirect materialize
+      // on each walk), rewrite the operation tree eagerly. The work is
+      // identical to what `EffectWalker` would have done via
+      // `lazyMapped.materialize()`, just paid at construction time, so the
+      // run-time path skips a heap-allocated closure box and an extra
+      // dispatch through the `.lazyMap` case in `EffectWalker.walk`.
+      return eagerMap(transform)
     }
   }
 
@@ -501,6 +528,9 @@ public struct EffectTask<Action: Sendable>: Sendable {
 
     case .animation(let effect, let animation):
       return effect.eagerMap(transform).applyingAnimation(animation)
+
+    case .diagnosticDrop(let action, let reason):
+      return .reportDrop(transform(action), reason: reason)
 
     case .lazyMap:
       preconditionFailure(

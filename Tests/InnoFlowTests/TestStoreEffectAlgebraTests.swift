@@ -132,8 +132,8 @@ struct TestStoreEffectAlgebraTests {
     }
   }
 
-  @Test("EffectTask.map lazily wraps structured effects")
-  func mappedStructuredEffectsUseLazyWrapper() {
+  @Test("EffectTask.map eagerly flattens structured effects")
+  func mappedStructuredEffectsAreEagerlyFlattened() {
     let childEffect: EffectTask<LazyMappedEffectFeature.ChildAction> = .concatenate(
       .send(.immediate("first")),
       .run { _ in }
@@ -147,10 +147,13 @@ struct TestStoreEffectAlgebraTests {
       }
     }
 
-    if case .lazyMap = mapped.operation {
+    // After G3, `.map` flattens 1-stage transforms directly. The outermost
+    // `.cancellable` wrapper is preserved, no `.lazyMap` indirection layer
+    // is inserted, and the action type is rewritten in-place.
+    if case .cancellable = mapped.operation {
       // expected shape
     } else {
-      Issue.record("Expected lazy-mapped operation, got \(mapped.operation)")
+      Issue.record("Expected eagerly-rewritten .cancellable operation, got \(mapped.operation)")
     }
   }
 

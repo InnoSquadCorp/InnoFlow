@@ -276,7 +276,6 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package let observerRegistry = ProjectionObserverRegistry<ChildState>()
   @ObservationIgnored package let selectionCache = SelectionCache()
   @ObservationIgnored package var isActive = true
-  @ObservationIgnored package var pendingObserverPrune = false
   @ObservationIgnored package nonisolated(unsafe) let stableID: AnyHashable?
 
   /// The current child state, falling back to the last cached snapshot
@@ -380,10 +379,6 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
 
   private func refreshStateFromParent() -> Bool {
     guard isActive else {
-      if pendingObserverPrune {
-        observerRegistry.pruneAllObservers()
-        pendingObserverPrune = false
-      }
       return false
     }
     guard let parent else { return false }
@@ -391,10 +386,14 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     guard let nextState = stateResolver(parent.state) else {
       // Background refresh deactivates a stale projection; direct access follows
       // the projection lifecycle contract via cached reads/no-op sends plus
-      // debug assertions.
+      // debug assertions. Prune child observers in the same drain pass so a
+      // burst of activations followed by a single deactivation does not leave
+      // the registry holding weak references to dead observers until the next
+      // parent dispatch — that gap was previously unbounded when the parent
+      // went quiescent after the deactivation.
       isActive = false
-      pendingObserverPrune = true
       observerRegistry.refreshAll()
+      observerRegistry.pruneAllObservers()
       return true
     }
     if nextState != previousState {

@@ -208,4 +208,35 @@ struct PhaseMapDiagnosticsAdaptersTests {
 
     #expect(probe.events.count == 1)
   }
+
+  @Test(".osLog and .signpost evaluate without crashing for illegalSelfTransition")
+  func adaptersEmitIllegalSelfTransition() {
+    let logger = Logger(subsystem: "InnoFlowTests", category: "phaseMapDiagnostics")
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "phaseMapDiagnostics")
+    let osLog: PhaseMapDiagnostics<TestAction, TestPhase> = .osLog(logger: logger)
+    let signpost: PhaseMapDiagnostics<TestAction, TestPhase> = .signpost(signposter: signposter)
+
+    osLog.report(.illegalSelfTransition(action: .finish, phase: .loading))
+    signpost.report(.illegalSelfTransition(action: .finish, phase: .loading))
+  }
+
+  @Test("illegalSelfTransition redaction does not evaluate action descriptions")
+  func illegalSelfTransitionRedactsActionDescription() {
+    let counter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "phaseMapDiagnostics")
+    let signposter = OSSignposter(subsystem: "InnoFlowTests", category: "phaseMapDiagnostics")
+    let osLog: PhaseMapDiagnostics<DescriptionCountingAction, TestPhase> = .osLog(logger: logger)
+    let signpost: PhaseMapDiagnostics<DescriptionCountingAction, TestPhase> = .signpost(
+      signposter: signposter
+    )
+
+    osLog.report(
+      .illegalSelfTransition(action: DescriptionCountingAction(counter: counter), phase: .loading)
+    )
+    signpost.report(
+      .illegalSelfTransition(action: DescriptionCountingAction(counter: counter), phase: .loading)
+    )
+
+    #expect(counter.count == 0)
+  }
 }

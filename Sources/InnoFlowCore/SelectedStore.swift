@@ -30,41 +30,13 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   @ObservationIgnored private let parentReleasedMessage: @MainActor () -> String
   @ObservationIgnored private var isActive = true
 
-  /// The current selected value, falling back to the last cached snapshot
-  /// when the parent store is released or the selection is inactive.
-  ///
-  /// This accessor exists so SwiftUI observer races do not crash release
-  /// builds; it is **not** intended as a stable lifecycle-aware read path.
-  /// New call sites should prefer ``optionalValue`` (or gate on
-  /// ``isAlive``) and treat `nil` as "regenerate the selection." Reserve
-  /// `value` for tick-bounded observers (SwiftUI view bodies, dynamic
-  /// member lookups) that must always return something.
-  ///
-  /// See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
-  public var value: Value {
-    // Lifecycle race: a SwiftUI observer may read this projection on the same
-    // tick that its parent store is released. Rather than aborting the
-    // process in release builds, return the last valid cached projection —
-    // the observer refresh pass will invalidate dependents within the next
-    // tick. Debug builds surface the race via `assertionFailure`.
-    guard parentObject != nil else {
-      assertionFailure(parentReleasedMessage())
-      return cachedValue
-    }
-    guard isActive else {
-      assertionFailure(inactiveMessage())
-      return cachedValue
-    }
-    return cachedValue
-  }
-
   /// Whether this selection is still backed by a live source projection.
   ///
   /// Returns `false` once the parent store or scoped store backing this
   /// selection has been released, or once the selection has been marked
   /// inactive because its source collection entry was removed. Callers
-  /// can consult this before reading `value` to avoid the cached-fallback
-  /// path documented in the lifecycle contract.
+  /// can consult this before using ``requireAlive()`` or read
+  /// ``optionalValue`` when a dead selection should be treated as absence.
   public var isAlive: Bool {
     parentObject != nil && isActive
   }
@@ -72,13 +44,39 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// A read accessor that reports a released parent or inactive selection
   /// as `nil` instead of returning the last cached value.
   ///
-  /// `value` keeps the existing cached-read contract for SwiftUI observer
-  /// races. `optionalValue` is the explicit form: callers that need to
-  /// distinguish "value is fresh" from "parent is gone" without hitting a
-  /// debug assertion or a release-time stale read should consult this
-  /// property and treat `nil` as "regenerate the selection."
+  /// Callers that need to distinguish "value is fresh" from "parent is
+  /// gone" should consult this property and treat `nil` as "regenerate
+  /// the selection." When the selection's liveness is a precondition of
+  /// the call site (e.g., the value is read inside a SwiftUI view body
+  /// guarded by `if selected.isAlive`), use ``requireAlive()`` instead —
+  /// it returns `Value` directly and crashes loudly on a released parent.
   public var optionalValue: Value? {
     guard isAlive else { return nil }
+    return cachedValue
+  }
+
+  /// Returns the cached selected value when the selection is still alive,
+  /// otherwise crashes with a descriptive precondition failure.
+  ///
+  /// Use this from call sites that have already verified liveness (via
+  /// ``isAlive``) or where reading after a released parent is a contract
+  /// violation — for instance, inside a tightly-scoped SwiftUI view body
+  /// that takes its lifetime from the parent store. The crash is
+  /// intentionally loud in both debug and release so a missing
+  /// regenerate-on-dismiss step does not silently surface stale data.
+  ///
+  /// Replaces the removed `value` accessor whose cached fallback could
+  /// silently leak stale state in release builds.
+  public func requireAlive(
+    file: StaticString = #fileID,
+    line: UInt = #line
+  ) -> Value {
+    guard parentObject != nil else {
+      preconditionFailure(parentReleasedMessage(), file: file, line: line)
+    }
+    guard isActive else {
+      preconditionFailure(inactiveMessage(), file: file, line: line)
+    }
     return cachedValue
   }
 
@@ -97,7 +95,11 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   }
 
   public subscript<Member>(dynamicMember keyPath: KeyPath<Value, Member>) -> Member {
-    value[keyPath: keyPath]
+    // dynamicMember reads route through `requireAlive()` so a released
+    // parent or inactive selection surfaces as a loud precondition
+    // failure rather than a silent stale-cache read. Call sites that
+    // tolerate dead selections must use `optionalValue` explicitly.
+    requireAlive()[keyPath: keyPath]
   }
 }
 
@@ -157,6 +159,19 @@ private func alwaysRefreshSelectionRegistration<Snapshot>(
   .dependency(
     .custom(callsite),
     hasChanged: { _, _ in true }
+  )
+}
+
+private func memoizedCustomSelectionRegistration<Snapshot: Equatable>(
+  callsite: SelectionCallsite
+) -> ProjectionObserverRegistration<Snapshot> {
+  // Snapshot-equality short-circuits valueResolver invocation when the
+  // parent state has not changed between refresh passes. Pair this with
+  // `select(_:memoize:)` for closure-only selections whose selector
+  // body is expensive enough that always-rerun pays a real cost.
+  .dependency(
+    .custom(callsite),
+    hasChanged: { $0 != $1 }
   )
 }
 
@@ -315,9 +330,39 @@ extension Store {
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
+      cacheKey: selectionCacheKey(callsite: callsite, signature: .closureSelector(memoized: false)),
       initialValue: selector(state),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
+      valueResolver: { [weak self] in
+        guard let self else { return nil }
+        return selector(self.state)
+      }
+    )
+  }
+
+  /// Memoized closure-only selection: requires `R.State: Equatable` so the
+  /// projection registry can skip a refresh pass entirely when the parent
+  /// snapshot is unchanged. Pass `memoize: false` to retain the legacy
+  /// always-refresh contract.
+  public func select<Value: Equatable & Sendable>(
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column,
+    memoize: Bool,
+    _ selector: @escaping @Sendable (R.State) -> Value
+  ) -> SelectedStore<Value> where R.State: Equatable {
+    let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
+    let registration: ProjectionObserverRegistration<R.State> =
+      memoize
+      ? memoizedCustomSelectionRegistration(callsite: callsite)
+      : alwaysRefreshSelectionRegistration(callsite: callsite)
+    return cachedSelectedStore(
+      cacheKey: selectionCacheKey(
+        callsite: callsite,
+        signature: .closureSelector(memoized: memoize)
+      ),
+      initialValue: selector(state),
+      registration: registration,
       valueResolver: { [weak self] in
         guard let self else { return nil }
         return selector(self.state)
@@ -470,9 +515,39 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .alwaysRefresh),
+      cacheKey: selectionCacheKey(callsite: callsite, signature: .closureSelector(memoized: false)),
       initialValue: selector(state),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
+      valueResolver: { [weak self] in
+        guard let self, self.isActive else { return nil }
+        return selector(self.cachedState)
+      }
+    )
+  }
+
+  /// Memoized closure-only selection: ChildState is already required to be
+  /// `Equatable`, so the projection registry can skip refresh passes whose
+  /// child snapshot is unchanged. Pass `memoize: false` to retain the
+  /// legacy always-refresh contract.
+  public func select<Value: Equatable & Sendable>(
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column,
+    memoize: Bool,
+    _ selector: @escaping @Sendable (ChildState) -> Value
+  ) -> SelectedStore<Value> {
+    let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
+    let registration: ProjectionObserverRegistration<ChildState> =
+      memoize
+      ? memoizedCustomSelectionRegistration(callsite: callsite)
+      : alwaysRefreshSelectionRegistration(callsite: callsite)
+    return cachedSelectedStore(
+      cacheKey: selectionCacheKey(
+        callsite: callsite,
+        signature: .closureSelector(memoized: memoize)
+      ),
+      initialValue: selector(state),
+      registration: registration,
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
         return selector(self.cachedState)

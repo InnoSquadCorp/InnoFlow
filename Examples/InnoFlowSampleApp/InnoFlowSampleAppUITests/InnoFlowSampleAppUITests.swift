@@ -77,6 +77,54 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   }
 
   @MainActor
+  private func setSwitch(
+    _ element: XCUIElement,
+    to isOn: Bool,
+    in app: XCUIApplication,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    XCTAssertTrue(
+      waitForElement(element, in: app, requireHittable: true),
+      "Expected switch \(element) to become hittable",
+      file: file,
+      line: line
+    )
+
+    if !Self.switchStateMatches(element, isOn: isOn) {
+      element.tap()
+    }
+
+    let predicate = NSPredicate { object, _ in
+      guard let element = object as? XCUIElement else { return false }
+      return Self.switchStateMatches(element, isOn: isOn)
+    }
+    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+    XCTAssertEqual(
+      XCTWaiter().wait(for: [expectation], timeout: 2),
+      .completed,
+      "Expected switch \(element) to become \(isOn ? "on" : "off")",
+      file: file,
+      line: line
+    )
+  }
+
+  private static func switchStateMatches(_ element: XCUIElement, isOn: Bool) -> Bool {
+    let actualValue: Bool
+    switch element.value {
+    case let value as Bool:
+      actualValue = value
+    case let value as NSNumber:
+      actualValue = value.boolValue
+    case let value as String:
+      actualValue = ["1", "true", "on", "yes"].contains(value.lowercased())
+    default:
+      actualValue = false
+    }
+    return actualValue == isOn
+  }
+
+  @MainActor
   private func dismissKeyboard(in app: XCUIApplication) {
     guard app.keyboards.element.exists else { return }
 
@@ -129,17 +177,13 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     XCTAssertTrue(app.switches["phase.fail-next-load"].waitForExistence(timeout: 2))
 
     let failSwitch = app.switches["phase.fail-next-load"]
-    if let value = failSwitch.value as? String, value == "0" {
-      failSwitch.tap()
-    }
+    setSwitch(failSwitch, to: true, in: app)
 
     app.buttons["phase.load-todos"].tap()
     XCTAssertTrue(app.staticTexts["phase.error-message"].waitForExistence(timeout: 4))
 
     app.buttons["phase.dismiss-error"].tap()
-    if let value = failSwitch.value as? String, value == "1" {
-      failSwitch.tap()
-    }
+    setSwitch(failSwitch, to: false, in: app)
 
     app.buttons["phase.load-todos"].tap()
     XCTAssertTrue(app.staticTexts["Document legal transitions"].waitForExistence(timeout: 4))
@@ -165,18 +209,14 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     XCTAssertTrue(app.switches["phase.fail-next-load"].waitForExistence(timeout: 2))
 
     let failSwitch = app.switches["phase.fail-next-load"]
-    if let value = failSwitch.value as? String, value == "0" {
-      failSwitch.tap()
-    }
+    setSwitch(failSwitch, to: true, in: app)
 
     app.buttons["phase.load-todos"].tap()
     XCTAssertTrue(app.staticTexts["phase.error-message"].waitForExistence(timeout: 4))
     XCTAssertEqual(app.staticTexts["phase.error-message"].label, "Sample network request failed")
 
     app.buttons["phase.dismiss-error"].tap()
-    if let value = failSwitch.value as? String, value == "1" {
-      failSwitch.tap()
-    }
+    setSwitch(failSwitch, to: false, in: app)
 
     app.buttons["phase.load-todos"].tap()
     XCTAssertTrue(app.staticTexts["Document legal transitions"].waitForExistence(timeout: 4))

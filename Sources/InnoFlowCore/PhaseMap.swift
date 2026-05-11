@@ -35,6 +35,37 @@ public enum PhaseMapViolation<Action: Sendable, Phase: Hashable & Sendable>: Sen
     target: Phase,
     declaredTargets: Set<Phase>
   )
+  /// An `On(...)` rule resolved to the source phase while its
+  /// `selfTransitionPolicy` was `.forbid`. The runtime makes no state change
+  /// and asserts in debug builds.
+  case illegalSelfTransition(action: Action, phase: Phase)
+}
+
+/// Controls how a single `On(...)` transition handles a resolution that lands
+/// on the same phase the reducer started in.
+///
+/// Same-phase resolutions occur whenever a dynamic resolver returns the
+/// source phase. The historical behavior is to silently treat that as a
+/// runtime no-op (the phase keypath is not rewritten and no diagnostics are
+/// reported). That stays the default to preserve source compatibility, but
+/// authors can now opt into stricter or more permissive contracts per
+/// transition.
+public enum SelfTransitionPolicy: Sendable, Hashable {
+  /// Same-phase resolution is silently ignored. The transition is treated as
+  /// if it had not matched. This is the default and preserves the historical
+  /// behavior from before the explicit policy parameter was introduced.
+  case ignore
+  /// Same-phase resolution is reported as a `PhaseMapViolation` and asserts
+  /// in debug builds. Use this when the declared transition is meant to
+  /// always move off the source phase and a same-phase resolution indicates
+  /// a logic error in the resolver.
+  case forbid
+  /// Same-phase resolution is accepted as a declared transition. The phase
+  /// keypath is rewritten with the resolved value even though it equals the
+  /// previous phase. Use this when "tick on the same phase" carries
+  /// observable meaning (e.g. observers that key off identity rather than
+  /// value).
+  case allow
 }
 
 public struct PhaseMapDiagnostics<Action: Sendable, Phase: Hashable & Sendable>: Sendable {
@@ -56,6 +87,15 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
   package let rules: [PhaseRule<State, Action, Phase>]
   package let rulesBySourcePhase: [Phase: [PhaseRule<State, Action, Phase>]]
   package let diagnostics: PhaseMapDiagnostics<Action, Phase>
+  /// Source phases that appear in more than one `From(...)` block. Each entry
+  /// is reported at most once and preserves the order the duplicate was first
+  /// observed. Surfaced through `validationReport(...)`.
+  package let duplicateSourcePhases: [Phase]
+  /// Adjacency view precomputed at construction time. `PhaseMap` is immutable
+  /// after init, so the graph never changes; callers (notably the test
+  /// reachability validator) can hit `derivedGraph` repeatedly without
+  /// recomputing the rule walk.
+  private let cachedDerivedGraph: PhaseTransitionGraph<Phase>
 
   public init(
     _ phaseKeyPath: WritableKeyPath<State, Phase>,
@@ -67,9 +107,17 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
     let declaredRules = rules()
     self.rules = declaredRules
     self.rulesBySourcePhase = Self.makeRulesBySourcePhase(from: declaredRules)
+    self.duplicateSourcePhases = Self.findDuplicateSourcePhases(in: declaredRules)
+    self.cachedDerivedGraph = Self.makeDerivedGraph(from: declaredRules)
   }
 
   public var derivedGraph: PhaseTransitionGraph<Phase> {
+    cachedDerivedGraph
+  }
+
+  private static func makeDerivedGraph(
+    from rules: [PhaseRule<State, Action, Phase>]
+  ) -> PhaseTransitionGraph<Phase> {
     var adjacency: [Phase: Set<Phase>] = [:]
     for rule in rules {
       for transition in rule.transitions {
@@ -80,12 +128,14 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
   }
 
   /// Returns a lightweight report describing which explicitly expected phase triggers
-  /// are not covered by the current `PhaseMap` declaration.
+  /// are not covered by the current `PhaseMap` declaration, plus any source phases
+  /// that were split across more than one `From(...)` block.
   ///
   /// This helper is intentionally opt-in. `PhaseMap` remains partial by default and
-  /// unmatched actions are still legal runtime no-ops.
+  /// unmatched actions are still legal runtime no-ops. Pass an empty dictionary to
+  /// only surface duplicate-`From` diagnostics.
   public func validationReport(
-    expectedTriggersByPhase: [Phase: [PhaseMapExpectedTrigger<Action>]]
+    expectedTriggersByPhase: [Phase: [PhaseMapExpectedTrigger<Action>]] = [:]
   ) -> PhaseMapValidationReport<Phase> {
     var missingTriggers: [PhaseMapValidationReport<Phase>.MissingTrigger] = []
 
@@ -102,7 +152,10 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
       }
     }
 
-    return .init(missingTriggers: missingTriggers)
+    return .init(
+      missingTriggers: missingTriggers,
+      duplicateSourcePhases: duplicateSourcePhases
+    )
   }
 
   private static func makeRulesBySourcePhase(
@@ -113,6 +166,27 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
       rulesBySourcePhase[rule.sourcePhase, default: []].append(rule)
     }
     return rulesBySourcePhase
+  }
+
+  /// Returns the source phases that appear in more than one `From(...)` block.
+  /// Splitting transitions across separate `From(.x)` blocks for the same `.x`
+  /// is supported at runtime (ordering is preserved) but is almost always a
+  /// declaration mistake; surface it through `validationReport(...)` so authors
+  /// can opt into a hard failure.
+  private static func findDuplicateSourcePhases(
+    in rules: [PhaseRule<State, Action, Phase>]
+  ) -> [Phase] {
+    var seen: Set<Phase> = []
+    var duplicateSet: Set<Phase> = []
+    var duplicateOrder: [Phase] = []
+    for rule in rules {
+      if !seen.insert(rule.sourcePhase).inserted {
+        if duplicateSet.insert(rule.sourcePhase).inserted {
+          duplicateOrder.append(rule.sourcePhase)
+        }
+      }
+    }
+    return duplicateOrder
   }
 }
 
@@ -169,13 +243,20 @@ public struct PhaseMapValidationReport<Phase: Hashable & Sendable>: Sendable, Eq
   }
 
   public let missingTriggers: [MissingTrigger]
+  /// Source phases that were declared via more than one `From(...)` block.
+  /// Empty for the canonical "one `From(.x)` block per phase" layout.
+  public let duplicateSourcePhases: [Phase]
 
-  public init(missingTriggers: [MissingTrigger]) {
+  public init(
+    missingTriggers: [MissingTrigger],
+    duplicateSourcePhases: [Phase] = []
+  ) {
     self.missingTriggers = missingTriggers
+    self.duplicateSourcePhases = duplicateSourcePhases
   }
 
   public var isEmpty: Bool {
-    missingTriggers.isEmpty
+    missingTriggers.isEmpty && duplicateSourcePhases.isEmpty
   }
 }
 
@@ -198,6 +279,7 @@ public struct On<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>:
   package init<Payload: Sendable>(
     matcher: ActionMatcher<Action, Payload>,
     declaredTargets: Set<Phase>,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore,
     resolve: @escaping @Sendable (State, Payload) -> Phase?
   ) {
     self.transition = .init(
@@ -206,66 +288,84 @@ public struct On<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>:
         guard let payload = matcher.match(action) else { return nil }
         return resolve(state, payload)
       },
-      declaredTargets: declaredTargets
+      declaredTargets: declaredTargets,
+      selfTransitionPolicy: selfTransitionPolicy
     )
   }
 }
 
 extension On where Action: Equatable {
-  public init(_ action: Action, to target: Phase) {
+  public init(
+    _ action: Action,
+    to target: Phase,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore
+  ) {
     self.init(
       matcher: .action(action),
-      declaredTargets: [target]
+      declaredTargets: [target],
+      selfTransitionPolicy: selfTransitionPolicy
     ) { _, _ in target }
   }
 
   public init(
     _ action: Action,
     targets: Set<Phase>,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore,
     resolve: @escaping @Sendable (State) -> Phase?
   ) {
     self.init(
       matcher: .action(action),
-      declaredTargets: targets
+      declaredTargets: targets,
+      selfTransitionPolicy: selfTransitionPolicy
     ) { state, _ in resolve(state) }
   }
 }
 
 extension On {
-  public init<Value: Sendable>(_ path: CasePath<Action, Value>, to target: Phase) {
+  public init<Value: Sendable>(
+    _ path: CasePath<Action, Value>,
+    to target: Phase,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore
+  ) {
     self.init(
       matcher: .casePath(path),
-      declaredTargets: [target]
+      declaredTargets: [target],
+      selfTransitionPolicy: selfTransitionPolicy
     ) { _, _ in target }
   }
 
   public init<Value: Sendable>(
     _ path: CasePath<Action, Value>,
     targets: Set<Phase>,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore,
     resolve: @escaping @Sendable (State, Value) -> Phase?
   ) {
     self.init(
       matcher: .casePath(path),
       declaredTargets: targets,
+      selfTransitionPolicy: selfTransitionPolicy,
       resolve: resolve
     )
   }
 
   public init(
     where predicate: @escaping @Sendable (Action) -> Bool,
-    to target: Phase
+    to target: Phase,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore
   ) {
     self.init(
       matcher: .init { action in
         predicate(action) ? action : nil
       },
-      declaredTargets: [target]
+      declaredTargets: [target],
+      selfTransitionPolicy: selfTransitionPolicy
     ) { _, _ in target }
   }
 
   public init(
     where predicate: @escaping @Sendable (Action) -> Bool,
     targets: Set<Phase>,
+    selfTransitionPolicy: SelfTransitionPolicy = .ignore,
     resolve: @escaping @Sendable (State, Action) -> Phase?
   ) {
     self.init(
@@ -273,6 +373,7 @@ extension On {
         predicate(action) ? action : nil
       },
       declaredTargets: targets,
+      selfTransitionPolicy: selfTransitionPolicy,
       resolve: resolve
     )
   }
@@ -369,6 +470,7 @@ public struct AnyPhaseTransition<State: Sendable, Action: Sendable, Phase: Hasha
   package let matches: @Sendable (Action) -> Bool
   package let resolve: @Sendable (State, Action) -> Phase?
   package let declaredTargets: Set<Phase>
+  package let selfTransitionPolicy: SelfTransitionPolicy
 }
 
 private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Reducer {
@@ -379,8 +481,15 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
   let phaseMap: PhaseMap<State, Action, Phase>
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    // Snapshot the entire state, not just the phase keypath. If the base
+    // reducer illegally mutates the phase, it has very likely also touched
+    // coupled domain fields based on that (illegal) phase transition.
+    // Reverting only the phase keypath leaves those domain fields in an
+    // inconsistent state in release builds where the assertion does not
+    // trap. Atomic full-state revert is the only sound fallback.
+    let previousState = state
     let previousPhase = state[keyPath: phaseMap.phaseKeyPath]
-    let effect = base.reduce(into: &state, action: action)
+    var effect = base.reduce(into: &state, action: action)
 
     let postReducePhase = state[keyPath: phaseMap.phaseKeyPath]
     if postReducePhase != previousPhase {
@@ -394,13 +503,24 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
       assertionFailure(
         """
         Base reducer must not mutate phase directly when PhaseMap is active.
+        The entire state has been reverted to its pre-reduce value to keep
+        phase and coupled domain fields consistent.
         action: \(String(reflecting: action))
         previousPhase: \(String(reflecting: previousPhase))
         postReducePhase: \(String(reflecting: postReducePhase))
         phaseKeyPath: \(String(reflecting: phaseMap.phaseKeyPath))
         """
       )
-      state[keyPath: phaseMap.phaseKeyPath] = previousPhase
+      // Atomic revert: the base reducer's effect was contingent on the
+      // mutation we are throwing away, so the only sound choice is to
+      // drop it too. Keeping the effect would let work scheduled against
+      // the rejected mutation continue running against the pre-reduce
+      // state, exactly the inconsistency the revert exists to prevent.
+      // We still fall through to the transition rules so a declared
+      // PhaseMap transition for `previousPhase + action` can apply
+      // cleanly on top of the reverted state.
+      state = previousState
+      effect = .none
     }
 
     for rule in phaseMap.rulesBySourcePhase[previousPhase] ?? [] {
@@ -411,8 +531,32 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
           return effect
         }
 
-        guard target != previousPhase else {
-          return effect
+        if target == previousPhase {
+          switch transition.selfTransitionPolicy {
+          case .ignore:
+            return effect
+          case .forbid:
+            // Reported even when a prior `.directPhaseMutation` revert
+            // already fired this tick: a dynamic resolver returning
+            // `previousPhase` under `.forbid` is an independent
+            // authoring defect of the rule, not a symptom of the base
+            // reducer's illegal write, and deserves its own diagnostic.
+            phaseMap.diagnostics.report(
+              .illegalSelfTransition(action: action, phase: previousPhase)
+            )
+            assertionFailure(
+              """
+              PhaseMap transition resolved to the source phase while \
+              selfTransitionPolicy was `.forbid`.
+              action: \(String(reflecting: action))
+              phase: \(String(reflecting: previousPhase))
+              """
+            )
+            return effect
+          case .allow:
+            state[keyPath: phaseMap.phaseKeyPath] = target
+            return effect
+          }
         }
 
         guard transition.declaredTargets.contains(target) else {

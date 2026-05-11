@@ -19,7 +19,12 @@ package struct SelectionCallsite: Hashable, Equatable {
 package enum SelectionSignature: Hashable {
   case keyPath(AnyKeyPath)
   case dependencies([AnyKeyPath])
-  case alwaysRefresh
+  /// Closure-only selection (no declared keypath dependencies). `memoized`
+  /// reflects whether the cached observer compares snapshots before rerunning
+  /// the selector — false maps to "always refresh", true to memoization. The
+  /// boolean is part of the cache key so two `select(memoize:)` callsites
+  /// with opposite memoize settings cannot collide on the same cache slot.
+  case closureSelector(memoized: Bool)
 }
 
 package struct SelectionCacheKey: Hashable {
@@ -75,17 +80,13 @@ package final class CollectionScopeCache {
       return bucket
     }
 
-    #if DEBUG
-      preconditionFailure(
-        """
-        scope(collection:action:) must use a single call site per collection key path for a given Store instance.
-        Existing call site: \(bucket.callsite.fileID):\(bucket.callsite.line):\(bucket.callsite.column)
-        New call site: \(callsite.fileID):\(callsite.line):\(callsite.column)
-        """
-      )
-    #else
-      return .init(callsite: callsite)
-    #endif
+    preconditionFailure(
+      """
+      scope(collection:action:) must use a single call site per collection key path for a given Store instance.
+      Existing call site: \(bucket.callsite.fileID):\(bucket.callsite.line):\(bucket.callsite.column)
+      New call site: \(callsite.fileID):\(callsite.line):\(callsite.column)
+      """
+    )
   }
 
   package func store(_ bucket: CollectionScopeCacheBucket, for keyPath: AnyKeyPath) {
@@ -126,17 +127,15 @@ package final class SelectionCache {
     valueType: Value.Type
   ) -> SelectedStore<Value>? {
     guard let entry = entries[key] else { return nil }
-    #if DEBUG
-      precondition(
-        entry.valueType == valueType,
-        """
-        select(...) must use a single value type per call site and selection signature for a given Store or ScopedStore instance.
-        Existing type: \(String(reflecting: entry.valueType))
-        Requested type: \(String(reflecting: valueType))
-        Call site: \(key.callsite.fileID):\(key.callsite.line):\(key.callsite.column)
-        """
-      )
-    #endif
+    precondition(
+      entry.valueType == valueType,
+      """
+      select(...) must use a single value type per call site and selection signature for a given Store or ScopedStore instance.
+      Existing type: \(String(reflecting: entry.valueType))
+      Requested type: \(String(reflecting: valueType))
+      Call site: \(key.callsite.fileID):\(key.callsite.line):\(key.callsite.column)
+      """
+    )
     return entry.selection as? SelectedStore<Value>
   }
 

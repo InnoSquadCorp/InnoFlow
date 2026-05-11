@@ -5,17 +5,47 @@
 import Foundation
 
 /// A closure-backed reducer primitive.
+///
+/// User-authored `Reduce { state, action in ... }` blocks store the closure
+/// directly. `ReducerBuilder` chains additionally produce a composed form
+/// that holds a flat array of children, so an N-reducer block evaluates as
+/// a single iteration rather than N nested closures.
 public struct Reduce<State: Sendable, Action: Sendable>: Reducer {
-  private let reducer: (inout State, Action) -> EffectTask<Action>
+  @usableFromInline
+  enum Storage {
+    case closure((inout State, Action) -> EffectTask<Action>)
+    case composed([Reduce<State, Action>])
+  }
+
+  @usableFromInline
+  let storage: Storage
 
   public init(
     _ reducer: @escaping (inout State, Action) -> EffectTask<Action>
   ) {
-    self.reducer = reducer
+    self.storage = .closure(reducer)
+  }
+
+  @usableFromInline
+  init(composed children: [Reduce<State, Action>]) {
+    self.storage = .composed(children)
   }
 
   public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    reducer(&state, action)
+    switch storage {
+    case .closure(let body):
+      return body(&state, action)
+
+    case .composed(let children):
+      var effects: [EffectTask<Action>] = []
+      effects.reserveCapacity(children.count)
+      for child in children {
+        let effect = child.reduce(into: &state, action: action)
+        if case .none = effect.operation { continue }
+        effects.append(effect)
+      }
+      return .merge(effects)
+    }
   }
 }
 
@@ -62,10 +92,22 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
     accumulated: Reduce<State, Action>,
     next component: Reduce<State, Action>
   ) -> Reduce<State, Action> {
-    Reduce { state, action in
-      let accumulatedEffect = accumulated.reduce(into: &state, action: action)
-      let componentEffect = component.reduce(into: &state, action: action)
-      return .merge(accumulatedEffect, componentEffect)
+    switch (accumulated.storage, component.storage) {
+    case (.composed(var lhs), .composed(let rhs)):
+      lhs.append(contentsOf: rhs)
+      return Reduce(composed: lhs)
+
+    case (.composed(var lhs), _):
+      lhs.append(component)
+      return Reduce(composed: lhs)
+
+    case (_, .composed(let rhs)):
+      var combined: [Reduce<State, Action>] = [accumulated]
+      combined.append(contentsOf: rhs)
+      return Reduce(composed: combined)
+
+    case (_, _):
+      return Reduce(composed: [accumulated, component])
     }
   }
 
@@ -258,13 +300,13 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
     guard var childState = state[keyPath: self.state] else {
       switch onMissing {
       case .ignore:
-        break
+        return .none
       case .assertOnly:
         assertionFailure("IfLet received a child action while child state was nil.")
+        return .reportDrop(action, reason: .missingChildState)
       case .crash:
         preconditionFailure("IfLet received a child action while child state was nil.")
       }
-      return .none
     }
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
@@ -322,15 +364,15 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
     guard var childState = self.state.extract(state) else {
       switch onMissing {
       case .ignore:
-        break
+        return .none
       case .assertOnly:
         assertionFailure(
           "IfCaseLet received a child action while parent state was in a different case.")
+        return .reportDrop(action, reason: .missingChildState)
       case .crash:
         preconditionFailure(
           "IfCaseLet received a child action while parent state was in a different case.")
       }
-      return .none
     }
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
@@ -384,6 +426,72 @@ where
       into: &state[keyPath: self.state][index],
       action: childAction
     )
+    let actionPath = self.action
+    let elementID = id
+    return childEffect.map { followUpAction in
+      actionPath.embed(elementID, followUpAction)
+    }
+  }
+}
+
+/// Lifts a child reducer across an `IdentifiedArray` in parent state using
+/// the array's `id → index` map for O(1) child resolution.
+///
+/// Use this in preference to the generic `ForEachReducer` whenever the
+/// parent stores its rows as an `IdentifiedArray` — the only behavior
+/// difference is that lookup, routing, and the in-place mutation address
+/// resolve in constant time rather than scanning with `firstIndex(where:)`.
+/// Equality, identity, and action-embedding semantics are unchanged so
+/// migration is mechanical. Child reducers must not mutate their own
+/// `Child.State.id`: `reduce(into:action:)` copies the addressed element out of
+/// the parent `IdentifiedArray`, runs the child reducer, then writes it back via
+/// `IdentifiedArray[id:]`, so changing the id can change element location.
+public struct ForEachIdentifiedReducer<
+  ParentState: Sendable,
+  ParentAction: Sendable,
+  ElementID: Hashable & Sendable,
+  Child: Reducer
+>: Reducer
+where
+  Child.State: Sendable,
+  Child.State: Identifiable,
+  Child.State.ID == ElementID
+{
+  public typealias State = ParentState
+  public typealias Action = ParentAction
+
+  private let state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>
+  private let action: CollectionActionPath<ParentAction, ElementID, Child.Action>
+  private let reducer: Child
+
+  /// Creates an identified collection reducer for the parent `state` key path.
+  ///
+  /// The child reducer must treat `Child.State.id` as stable for the duration of
+  /// `reduce(into:action:)`; this reducer writes the copied child state back
+  /// through the same `IdentifiedArray[id:]` address used for lookup.
+  public init(
+    state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>,
+    action: CollectionActionPath<ParentAction, ElementID, Child.Action>,
+    reducer: Child
+  ) {
+    self.state = state
+    self.action = action
+    self.reducer = reducer
+  }
+
+  public func reduce(into state: inout ParentState, action parentAction: ParentAction)
+    -> EffectTask<ParentAction>
+  {
+    guard let (id, childAction) = action.extract(parentAction) else {
+      return .none
+    }
+    guard var element = state[keyPath: self.state][id: id] else {
+      return .none
+    }
+
+    let childEffect = reducer.reduce(into: &element, action: childAction)
+    state[keyPath: self.state][id: id] = element
+
     let actionPath = self.action
     let elementID = id
     return childEffect.map { followUpAction in

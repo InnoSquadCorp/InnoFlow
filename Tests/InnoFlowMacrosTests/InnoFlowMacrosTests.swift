@@ -390,7 +390,7 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow notes labeled single-parameter cases instead of silently skipping them")
+  @Test("@InnoFlow warns on labeled single-parameter cases instead of silently skipping them")
   func labeledSingleParameterCaseDoesNotSynthesizeActionPath() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
@@ -433,10 +433,10 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has a labeled payload (`action:`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `childCasePath` manually",
+              "case `child` has a labeled payload (`action:`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, or declare `static let childCasePath = CasePath<Self, …>(embed:extract:)` manually",
             line: 5,
             column: 14,
-            severity: .note
+            severity: .warning
           )
         ],
         macros: testMacros
@@ -446,7 +446,7 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow labeled-payload notes use the generated action path base name")
+  @Test("@InnoFlow labeled-payload warnings use the generated action path base name")
   func labeledLeadingUnderscorePayloadNoteUsesGeneratedBaseName() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
@@ -489,10 +489,10 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `_child` has a labeled payload (`action:`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `childCasePath` manually",
+              "case `_child` has a labeled payload (`action:`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, or declare `static let childCasePath = CasePath<Self, …>(embed:extract:)` manually",
             line: 5,
             column: 14,
-            severity: .note
+            severity: .warning
           )
         ],
         macros: testMacros
@@ -502,7 +502,7 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow notes multi-parameter cases instead of silently skipping them")
+  @Test("@InnoFlow warns on multi-parameter cases instead of silently skipping them")
   func multiParameterCaseDoesNotSynthesizeActionPath() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
@@ -545,10 +545,10 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has multiple payload parameters; CasePath synthesis only handles unlabeled single payloads and `id:action:` collection routes. Declare a static path manually if you need one",
+              "case `child` has multiple payload parameters; no CasePath is synthesized. Why: CasePath auto-synthesis only handles unlabeled single payloads and `id:action:` collection routes. Fix: collapse the payload into a single struct/tuple or declare a static path manually if you need routing",
             line: 5,
             column: 14,
-            severity: .note
+            severity: .warning
           )
         ],
         macros: testMacros
@@ -558,7 +558,7 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow notes optional payload cases while still synthesizing a CasePath")
+  @Test("@InnoFlow warns on optional payload cases while still synthesizing a CasePath")
   func optionalPayloadCaseEmitsNote() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
@@ -612,10 +612,10 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` extracts as `.some(nil)`; consider splitting into two cases or declaring a custom path",
+              "case `child` has an optional payload; CasePath is still synthesized but `.child(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.child(value)` + `.childCleared`) or declare a custom CasePath that flattens the inner optional",
             line: 5,
             column: 14,
-            severity: .note
+            severity: .warning
           )
         ],
         macros: testMacros
@@ -625,7 +625,7 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow notes Optional<T> payload cases")
+  @Test("@InnoFlow warns on Optional<T> payload cases")
   func genericOptionalPayloadCaseEmitsNote() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
@@ -679,10 +679,10 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` extracts as `.some(nil)`; consider splitting into two cases or declaring a custom path",
+              "case `child` has an optional payload; CasePath is still synthesized but `.child(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.child(value)` + `.childCleared`) or declare a custom CasePath that flattens the inner optional",
             line: 5,
             column: 14,
-            severity: .note
+            severity: .warning
           )
         ],
         macros: testMacros
@@ -692,7 +692,7 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow notes implicitly unwrapped optional payload cases")
+  @Test("@InnoFlow warns on implicitly unwrapped optional payload cases")
   func implicitlyUnwrappedOptionalPayloadCaseEmitsNote() throws {
     #if canImport(InnoFlowMacros)
       assertMacroExpansion(
@@ -746,10 +746,10 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has an optional payload; the synthesized CasePath still works but `.child(nil)` extracts as `.some(nil)`; consider splitting into two cases or declaring a custom path",
+              "case `child` has an optional payload; CasePath is still synthesized but `.child(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.child(value)` + `.childCleared`) or declare a custom CasePath that flattens the inner optional",
             line: 5,
             column: 14,
-            severity: .note
+            severity: .warning
           )
         ],
         macros: testMacros
@@ -1414,6 +1414,10 @@ struct InnoFlowMacrosTests {
               var body: some Reducer<State, Action> {
                   Reduce { state, action in .none }
               }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
           }
           """,
         diagnostics: [
@@ -1486,6 +1490,58 @@ struct InnoFlowMacrosTests {
               "@InnoFlow(phaseManaged: true) synthesizes `body.phaseMap(Self.phaseMap)` automatically; remove the explicit `.phaseMap(...)` call from `body` or disable phaseManaged",
             line: 1,
             column: 1
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow(phaseManaged:) rejects non-literal boolean argument")
+  func phaseManagedRejectsNonLiteralArgument() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: someFlag)
+        struct NonLiteralPhaseManagedFeature {
+            struct State: Sendable {
+                enum Phase: Hashable, Sendable {
+                    case idle
+                }
+                var phase: Phase = .idle
+            }
+            enum Action: Sendable {
+                case load
+            }
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct NonLiteralPhaseManagedFeature {
+              struct State: Sendable {
+                  enum Phase: Hashable, Sendable {
+                      case idle
+                  }
+                  var phase: Phase = .idle
+              }
+              enum Action: Sendable {
+                  case load
+              }
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "@InnoFlow(phaseManaged:) requires a boolean literal (`true` or `false`); non-literal expressions are rejected because they cannot be evaluated at macro-expansion time and would silently disable phase management",
+            line: 1,
+            column: 25
           )
         ],
         macros: testMacros

@@ -5,29 +5,44 @@
 import Foundation
 package import InnoFlowCore
 
-package actor ActionQueue<Action: Sendable> {
+@MainActor
+package final class ActionQueue<Action: Sendable> {
   struct QueuedAction: Sendable {
     let action: Action
     let context: EffectExecutionContext?
   }
 
+  private struct Waiter {
+    let id: UUID
+    let continuation: CheckedContinuation<QueuedAction?, Never>
+    let timeoutTask: Task<Void, Never>?
+  }
+
   private var buffer: [QueuedAction] = []
   private var headIndex = 0
-  private var waiters: [UUID: CheckedContinuation<QueuedAction?, Never>] = [:]
+  // Waiters intentionally use an ordered array instead of a dictionary so
+  // resumption is FIFO. The previous dictionary-based implementation woke
+  // an arbitrary waiter via `waiters.keys.first`, which made multi-waiter
+  // test scenarios non-deterministic across runs.
+  private var waiters: [Waiter] = []
+
+  package var pendingWaiterCount: Int {
+    waiters.count
+  }
 
   func enqueue(_ action: Action, context: EffectExecutionContext?) {
     let queuedAction = QueuedAction(action: action, context: context)
-    if let waiterID = waiters.keys.first,
-      let continuation = waiters.removeValue(forKey: waiterID)
-    {
-      continuation.resume(returning: queuedAction)
+    if !waiters.isEmpty {
+      let head = waiters.removeFirst()
+      head.timeoutTask?.cancel()
+      head.continuation.resume(returning: queuedAction)
       return
     }
 
     buffer.append(queuedAction)
   }
 
-  func next() async -> QueuedAction? {
+  func next(timeout: Duration) async -> QueuedAction? {
     if headIndex < buffer.count {
       let queuedAction = buffer[headIndex]
       headIndex += 1
@@ -38,11 +53,18 @@ package actor ActionQueue<Action: Sendable> {
     let waiterID = UUID()
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
-        waiters[waiterID] = continuation
+        let timeoutTask = Task { @MainActor [weak self] in
+          try? await Task.sleep(for: timeout)
+          guard !Task.isCancelled else { return }
+          self?.resolveWaiter(id: waiterID, returning: nil)
+        }
+        waiters.append(
+          Waiter(id: waiterID, continuation: continuation, timeoutTask: timeoutTask)
+        )
       }
     } onCancel: {
-      Task {
-        await self.cancelWaiter(waiterID)
+      Task { @MainActor [weak self] in
+        self?.resolveWaiter(id: waiterID, returning: nil)
       }
     }
   }
@@ -55,9 +77,11 @@ package actor ActionQueue<Action: Sendable> {
     return queuedAction
   }
 
-  private func cancelWaiter(_ waiterID: UUID) {
-    guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
-    continuation.resume(returning: nil)
+  private func resolveWaiter(id waiterID: UUID, returning queuedAction: QueuedAction?) {
+    guard let index = waiters.firstIndex(where: { $0.id == waiterID }) else { return }
+    let waiter = waiters.remove(at: index)
+    waiter.timeoutTask?.cancel()
+    waiter.continuation.resume(returning: queuedAction)
   }
 
   private func compactBufferIfNeeded() {
@@ -309,12 +333,7 @@ extension TestStore {
 
   package func nextActionWithinTimeout() async -> R.Action? {
     let queue = self.queue
-    while let queuedAction = await withTimeout(
-      effectTimeout,
-      operation: {
-        await queue.next()
-      })
-    {
+    while let queuedAction = await queue.next(timeout: effectTimeout) {
       guard shouldProceed(context: queuedAction.context) else { continue }
       return queuedAction.action
     }
@@ -322,31 +341,11 @@ extension TestStore {
   }
 
   package func popBufferedAction() async -> R.Action? {
-    while let queuedAction = await queue.popBuffered() {
+    while let queuedAction = queue.popBuffered() {
       guard shouldProceed(context: queuedAction.context) else { continue }
       return queuedAction.action
     }
     return nil
-  }
-
-  private func withTimeout<T: Sendable>(
-    _ timeout: Duration,
-    operation: @escaping @Sendable () async -> T?
-  ) async -> T? {
-    await withTaskGroup(of: T?.self) { group in
-      group.addTask {
-        await operation()
-      }
-
-      group.addTask {
-        try? await Task.sleep(for: timeout)
-        return nil
-      }
-
-      let result = await group.next() ?? nil
-      group.cancelAll()
-      return result
-    }
   }
 
   private func isRunTaskActive(token: UUID) -> Bool {
@@ -372,10 +371,26 @@ extension TestStore: EffectDriver {
   package typealias Action = R.Action
 
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
-    Task { @MainActor [weak self] in
-      guard let self, self.shouldProceed(context: context) else { return }
-      await self.queue.enqueue(action, context: context)
-    }
+    // BREAKING (InnoFlow 4.0.0): deliverAction now enqueues synchronously on
+    // the MainActor, matching Store's enqueue contract exactly. Previously
+    // each delivery hopped through a fire-and-forget `Task { @MainActor }`,
+    // which let actions interleave with subsequent reducer ticks in
+    // non-deterministic ways. Test fixtures that relied on that latency
+    // (e.g. asserting an intermediate state between two scheduled
+    // deliveries) must move the assertion to before the action that would
+    // have raced ahead.
+    guard shouldProceed(context: context) else { return }
+    queue.enqueue(action, context: context)
+  }
+
+  package func reportActionDrop(
+    _ action: R.Action,
+    reason: ActionDropReason,
+    context: EffectExecutionContext?
+  ) {
+    // TestStore observes assertion failures via DEBUG `assertionFailure` at the
+    // composition site; the diagnostic effect itself is a no-op here so test
+    // expectations stay deterministic.
   }
 
   package func startRun(
@@ -514,10 +529,24 @@ extension TestStore: EffectDriver {
         await group.waitForAll()
       }
     } else {
+      let uniqueCancellationIDs = Set(context?.cancellationIDs ?? [])
       for child in children {
-        Task { [weak self] in
+        let token = UUID()
+        let task = Task { @MainActor [weak self] in
+          defer {
+            self?.removeTrackedTask(token: token)
+          }
           guard self != nil else { return }
           await recurse(child, context, false)
+        }
+        // Track unawaited concurrent children so cancelAllEffectsSynchronously
+        // can reach them. Without this, fire-and-forget Tasks here would
+        // outlive their owning TestStore drain and break the assertion that
+        // cancellation reliably winds the entire effect tree down — a
+        // divergence from the Store path that this commit closes.
+        runningTasks[token] = task
+        for id in uniqueCancellationIDs {
+          taskIDsByEffectID[id, default: []].insert(token)
         }
       }
     }

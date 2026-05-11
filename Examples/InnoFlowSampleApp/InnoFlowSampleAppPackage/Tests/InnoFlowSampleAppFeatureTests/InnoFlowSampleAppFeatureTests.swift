@@ -224,7 +224,7 @@ struct InnoFlowSampleAppFeatureTests {
     )
 
     let targetID = MockTodoService.navigationTodoID
-    await store.send(PhaseDrivenTodoFeature.Action.todo(id: targetID, action: .setDone(true))) {
+    await store.send(PhaseDrivenTodoFeature.Action.todo(id: targetID, action: .setIsDone(true))) {
       if let index = $0.todos.firstIndex(where: { $0.id == targetID }) {
         $0.todos[index].isDone = true
       }
@@ -269,7 +269,7 @@ struct InnoFlowSampleAppFeatureTests {
       action: PhaseDrivenTodoFeature.Action.todoActionPath
     )
 
-    await todo.send(.setDone(true))
+    await todo.send(.setIsDone(true))
 
     todo.assert {
       $0.isDone = true

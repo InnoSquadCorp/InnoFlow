@@ -36,6 +36,14 @@ extension Store: EffectDriver {
     enqueue(action, animation: context?.animation)
   }
 
+  package func reportActionDrop(
+    _ action: R.Action,
+    reason: ActionDropReason,
+    context: EffectExecutionContext?
+  ) {
+    recordDrop(action, reason: reason, context: context)
+  }
+
   package func startRun(
     priority: TaskPriority?,
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
@@ -46,7 +54,6 @@ extension Store: EffectDriver {
     let token = UUID()
     let gate = RunStartGate()
     let runEvent = makeRunEvent(token: token, context: context)
-    instrumentation.didStartRun(runEvent)
 
     let runtime = effectBridge.runtime
     let instrumentation = self.instrumentation
@@ -68,10 +75,19 @@ extension Store: EffectDriver {
           throw CancellationError()
         }
       } catch {
+        // Run was cancelled before it could start. We never fired `didStartRun`,
+        // so we deliberately do not fire `didFinishRun` either — the
+        // start/finish pair stays balanced.
         await runtime.finish(token: token)
-        instrumentation.didFinishRun(runEvent)
         return
       }
+
+      instrumentation.didStartRun(runEvent)
+
+      // Tracks whether `reportError` fired `didFailRun` during this run. The
+      // start/finish/fail/cancel contract is 1:1 per run, so if the run
+      // failed we must not also emit `didFinishRun` below.
+      let runFailedBox = RunFailureLatch()
 
       let send = Send<R.Action> { action in
         if lifetime.isReleased {
@@ -156,6 +172,10 @@ extension Store: EffectDriver {
         },
         checkCancellation: checkCancellation,
         reportError: { error in
+          // First-error-wins: the start/finish/fail/cancel contract is 1:1
+          // per run, so swallow any subsequent reportError calls instead of
+          // fanning out duplicate didFailRun events.
+          guard runFailedBox.setIfUnset() else { return }
           instrumentation.didFailRun(
             .init(
               token: token,
@@ -170,7 +190,9 @@ extension Store: EffectDriver {
 
       await operation(send, effectContext)
       await runtime.finish(token: token)
-      instrumentation.didFinishRun(runEvent)
+      if !runFailedBox.isSet {
+        instrumentation.didFinishRun(runEvent)
+      }
     }
 
     await runtime.registerAndStart(

@@ -34,6 +34,11 @@ public enum ActionDropReason: Sendable, Equatable {
   case cancellationBoundary
   case inactiveToken
   case throttledOrDebouncedCancellation
+  /// An `IfLet`/`IfCaseLet` composition received a child action while the
+  /// child's state was unavailable. Surfaced even in release builds (where
+  /// `assertOnly`/`ignore` would otherwise drop silently) so dashboards can
+  /// observe parent-child desynchronization.
+  case missingChildState
 }
 
 /// A unified stream of store instrumentation events.
@@ -227,6 +232,14 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   }
 
   public static func combined(_ instrumentations: Self...) -> Self {
+    combined(instrumentations)
+  }
+
+  /// Array-backed variant of `combined(_:)`. Use this when the set of
+  /// instrumentations is computed dynamically (e.g. assembled from a feature
+  /// flag matrix or a host application's optional adapters) where the
+  /// variadic form would require call-site splatting.
+  public static func combined(_ instrumentations: [Self]) -> Self {
     .init(
       didStartRun: { event in
         for instrumentation in instrumentations {

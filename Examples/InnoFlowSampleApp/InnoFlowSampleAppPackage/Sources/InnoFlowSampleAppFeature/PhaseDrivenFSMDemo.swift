@@ -3,17 +3,36 @@ import InnoFlow
 import InnoFlowSwiftUI
 import SwiftUI
 
-struct SampleTodo: Identifiable, Equatable, Sendable {
-  let id: UUID
-  let title: String
-  @BindableField var isDone = false
+@InnoFlow
+struct PhaseDrivenTodoRowFeature {
+  struct State: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let title: String
+    @BindableField var isDone = false
 
-  init(id: UUID = UUID(), title: String, isDone: Bool = false) {
-    self.id = id
-    self.title = title
-    self._isDone = BindableField(wrappedValue: isDone)
+    init(id: UUID = UUID(), title: String, isDone: Bool = false) {
+      self.id = id
+      self.title = title
+      self._isDone = BindableField(wrappedValue: isDone)
+    }
+  }
+
+  enum Action: Equatable, Sendable {
+    case setIsDone(Bool)
+  }
+
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .setIsDone(let isDone):
+        state.isDone = isDone
+        return .none
+      }
+    }
   }
 }
+
+typealias SampleTodo = PhaseDrivenTodoRowFeature.State
 
 protocol SampleTodoServiceProtocol: Sendable {
   func loadTodos(shouldFail: Bool) async throws -> [SampleTodo]
@@ -61,13 +80,9 @@ struct PhaseDrivenTodoFeature {
     case loadTodos
     case setShouldFail(Bool)
     case dismissError
-    case todo(id: UUID, action: TodoAction)
+    case todo(id: UUID, action: PhaseDrivenTodoRowFeature.Action)
     case _loaded([SampleTodo])
     case _failed(String)
-  }
-
-  enum TodoAction: Equatable, Sendable {
-    case setDone(Bool)
   }
 
   let dependencies: Dependencies
@@ -158,22 +173,6 @@ struct PhaseDrivenTodoFeature {
         action: Action.todoActionPath,
         reducer: PhaseDrivenTodoRowFeature()
       )
-    }
-  }
-}
-
-@InnoFlow
-struct PhaseDrivenTodoRowFeature {
-  typealias State = SampleTodo
-  typealias Action = PhaseDrivenTodoFeature.TodoAction
-
-  var body: some Reducer<State, Action> {
-    Reduce { state, action in
-      switch action {
-      case .setDone(let isDone):
-        state.isDone = isDone
-        return .none
-      }
     }
   }
 }
@@ -282,11 +281,11 @@ struct PhaseDrivenFSMDemoView: View {
 
 @MainActor
 struct PhaseDrivenTodoRowView: View {
-  let store: ScopedStore<PhaseDrivenTodoFeature, SampleTodo, PhaseDrivenTodoFeature.TodoAction>
+  let store: ScopedStore<PhaseDrivenTodoFeature, SampleTodo, PhaseDrivenTodoRowFeature.Action>
 
   var body: some View {
     Toggle(
-      isOn: store.binding(\.$isDone, to: PhaseDrivenTodoFeature.TodoAction.setDone)
+      isOn: store.binding(\.$isDone, to: PhaseDrivenTodoRowFeature.Action.setIsDone)
     ) {
       VStack(alignment: .leading, spacing: 4) {
         Text(store.title)

@@ -85,6 +85,20 @@ depend on `InnoFlowSwiftUI`, which provides
 SwiftUI. `InnoFlowSwiftUI` and `InnoFlowTesting` reexport `InnoFlowCore`, but
 macro users must still import `InnoFlow` directly.
 
+### Known toolchain workarounds (Swift 6.3)
+
+`Store.deinit` and `TestStore.deinit` are annotated with `@_optimize(none)` to
+sidestep a Swift 6.3 release-mode SIL crash in `EarlyPerfInliner`
+([swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173))
+that triggers when the compiler tries to inline the generic `R.Action`-typed
+deinit. The deinit path is not a hot loop — the lost optimization is
+negligible — and `@MainActor isolated deinit` semantics are unchanged. If your
+own consumer crashes during release builds with a similar SIL trace, see
+[`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md) for the
+retest procedure and removal trigger. The principle gates also emit a
+non-blocking warning on Swift 6.4+ so the workaround does not silently outlive
+the upstream fix.
+
 ## Quick Start
 
 ### Define a feature
@@ -290,6 +304,8 @@ ForEachReducer(
 
 `SelectedStore` is a read-only derived projection for expensive `Equatable` read models. Use it when
 you want a view to refresh only when the selected value actually changes.
+Read live projections with `requireAlive()` when liveness is a precondition, or use
+`optionalValue` when a released projection should be handled as absence.
 
 ```swift
 let summary = store.select { state in
@@ -700,9 +716,9 @@ let todo = store.scope(
   action: ParentFeature.Action.todoActionPath
 )
 
-await todo.send(.setDone(true))
+await todo.send(.setIsDone(true))
 todo.assert {
-  $0.isDone.value = true
+  $0.isDone = true
 }
 ```
 
@@ -710,7 +726,7 @@ For expensive derived read-models, prefer `SelectedStore` over ad-hoc recomputat
 
 ```swift
 let status = store.select(\.phase)
-#expect(status.value == .idle)
+#expect(status.requireAlive() == .idle)
 ```
 
 If the read model is derived from a single explicit `Equatable` slice, use the
@@ -719,7 +735,7 @@ dependency-annotated form; for two or more slices use the variadic
 
 ```swift
 let title = store.select(dependingOn: \.child.title) { $0.uppercased() }
-#expect(title.value == "CHILD")
+#expect(title.requireAlive() == "CHILD")
 ```
 
 ## Canonical Sample

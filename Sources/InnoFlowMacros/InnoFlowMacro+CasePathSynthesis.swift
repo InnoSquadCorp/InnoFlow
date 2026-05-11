@@ -253,17 +253,20 @@ enum InnoFlowActionPathsMessage: DiagnosticMessage {
         "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case"
     case .optionalPayloadNote(let caseName):
       return
-        "case `\(caseName)` has an optional payload; the synthesized CasePath still works but `.\(caseName)(nil)` extracts as `.some(nil)`; consider splitting into two cases or declaring a custom path"
+        "case `\(caseName)` has an optional payload; CasePath is still synthesized but `.\(caseName)(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.\(caseName)(value)` + `.\(caseName)Cleared`) or declare a custom CasePath that flattens the inner optional"
     case .labeledPayloadNote(let caseName, let label, let actionPathBaseName):
       return
-        "case `\(caseName)` has a labeled payload (`\(label):`); CasePath synthesis only handles unlabeled single payloads. Drop the label or declare a static `\(actionPathBaseName)CasePath` manually"
+        "case `\(caseName)` has a labeled payload (`\(label):`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, or declare `static let \(actionPathBaseName)CasePath = CasePath<Self, …>(embed:extract:)` manually"
     case .multiPayloadNote(let caseName):
       return
-        "case `\(caseName)` has multiple payload parameters; CasePath synthesis only handles unlabeled single payloads and `id:action:` collection routes. Declare a static path manually if you need one"
+        "case `\(caseName)` has multiple payload parameters; no CasePath is synthesized. Why: CasePath auto-synthesis only handles unlabeled single payloads and `id:action:` collection routes. Fix: collapse the payload into a single struct/tuple or declare a static path manually if you need routing"
     }
   }
 
   var diagnosticID: MessageID {
+    // The note→warning elevation keeps the same diagnostic IDs so existing
+    // suppression configurations (e.g. `-Wno-…`-style pragmas, downstream
+    // CI rules) keep targeting the same diagnostic identity.
     switch self {
     case .leadingUnderscoreCollision:
       return .init(domain: "InnoFlowMacro", id: "LeadingUnderscoreCollision")
@@ -281,7 +284,11 @@ enum InnoFlowActionPathsMessage: DiagnosticMessage {
     case .leadingUnderscoreCollision:
       return .error
     case .optionalPayloadNote, .labeledPayloadNote, .multiPayloadNote:
-      return .note
+      // Elevated from `.note` so the diagnostic surfaces next to the
+      // downstream "unresolved identifier 'Action.fooCasePath'" error
+      // a user sees at the Scope/IfLet callsite. Without this, the
+      // root cause (CasePath was not synthesized) was easy to miss.
+      return .warning
     }
   }
 }

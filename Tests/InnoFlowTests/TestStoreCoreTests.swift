@@ -38,6 +38,35 @@ struct TestStoreCoreTests {
     await store.assertNoBufferedActions()
   }
 
+  @Test("ActionQueue timeout does not consume actions delivered after timeout")
+  func actionQueueTimeoutDoesNotConsumeLaterAction() async {
+    let queue = ActionQueue<Int>()
+
+    let timedOut = await queue.next(timeout: .milliseconds(1))
+    #expect(timedOut == nil)
+
+    queue.enqueue(42, context: nil)
+    let next = await queue.next(timeout: .seconds(1))
+
+    #expect(next?.action == 42)
+  }
+
+  @Test("ActionQueue returns an action that arrives before timeout")
+  func actionQueueReturnsActionBeforeTimeout() async {
+    let queue = ActionQueue<Int>()
+    let pendingReceive = Task { @MainActor in
+      await queue.next(timeout: .seconds(1))
+    }
+
+    await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+      queue.pendingWaiterCount == 1
+    }
+    queue.enqueue(7, context: nil)
+
+    let received = await pendingReceive.value
+    #expect(received?.action == 7)
+  }
+
   @Test("TestStore run effects deliver their first emission deterministically")
   func testStoreRunEffectsDeliverFirstEmissionDeterministically() async {
     for _ in 0..<40 {
@@ -720,8 +749,160 @@ struct TestStoreCoreTests {
       ]
     )
 
-    #expect(report.isEmpty)
+    // Trigger coverage still resolves through the source-phase index even when
+    // the author splits `.loading` across multiple `From(...)` blocks.
     #expect(report.missingTriggers.isEmpty)
+    // The split itself is now surfaced as a duplicate-From diagnostic so the
+    // author can collapse it into a single block.
+    #expect(report.duplicateSourcePhases == [.loading])
+    #expect(report.isEmpty == false)
+  }
+
+  @Test("PhaseMap validation report surfaces duplicate From blocks in first-seen order")
+  func phaseMapValidationReportSurfacesDuplicateFromBlocks() {
+    enum Phase: Hashable, Sendable {
+      case idle
+      case loading
+      case loaded
+      case failed
+    }
+
+    struct State: Equatable, Sendable {
+      var phase: Phase
+    }
+
+    enum Action: Equatable, Sendable {
+      case load
+      case retry
+      case finish
+      case fail
+    }
+
+    let map = PhaseMap<State, Action, Phase>(\.phase) {
+      From(.idle) {
+        On(.load, to: .loading)
+      }
+      From(.loading) {
+        On(.finish, to: .loaded)
+      }
+      From(.idle) {
+        On(.retry, to: .loading)
+      }
+      From(.loading) {
+        On(.fail, to: .failed)
+      }
+    }
+
+    let report = map.validationReport()
+    #expect(report.missingTriggers.isEmpty)
+    #expect(report.duplicateSourcePhases == [.idle, .loading])
+    #expect(report.isEmpty == false)
+  }
+
+  @Test("PhaseMap validation report is clean when each source phase has a single From block")
+  func phaseMapValidationReportCleanWhenNoDuplicateFromBlocks() {
+    let report = PhaseMapHarness.phaseMap.validationReport()
+    #expect(report.duplicateSourcePhases.isEmpty)
+    #expect(report.isEmpty)
+  }
+
+  @Test("On(selfTransitionPolicy: .ignore) silently skips same-phase resolutions")
+  func phaseMapSelfTransitionPolicyIgnoreSilent() {
+    enum Phase: Hashable, Sendable {
+      case running
+      case stopped
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .running
+    }
+    enum Action: Equatable, Sendable {
+      case tick
+    }
+
+    let probe = InstrumentationProbe()
+    let map = PhaseMap<State, Action, Phase>(
+      \.phase,
+      diagnostics: .init { _ in probe.record("violation") }
+    ) {
+      From(.running) {
+        On(
+          .tick,
+          targets: [.running, .stopped],
+          resolve: { _ in .running }
+        )
+      }
+    }
+    let reducer = Reduce<State, Action> { _, _ in .none }.phaseMap(map)
+
+    var state = State()
+    _ = reducer.reduce(into: &state, action: .tick)
+
+    #expect(state.phase == .running)
+    #expect(probe.events.isEmpty)
+  }
+
+  @Test("PhaseMap diagnostics exposes illegalSelfTransition events")
+  func phaseMapDiagnosticsReportsIllegalSelfTransition() {
+    enum Phase: Hashable, Sendable {
+      case running
+      case stopped
+    }
+    enum Action: Equatable, Sendable {
+      case tick
+    }
+
+    let probe = InstrumentationProbe()
+    let diagnostics = PhaseMapDiagnostics<Action, Phase> { violation in
+      if case .illegalSelfTransition(action: _, phase: let phase) = violation {
+        probe.record("self:\(phase)")
+      }
+    }
+
+    diagnostics.report(.illegalSelfTransition(action: .tick, phase: .running))
+
+    #expect(probe.events == ["self:running"])
+  }
+
+  @Test("On(selfTransitionPolicy: .allow) writes the resolved phase even when equal to the source")
+  func phaseMapSelfTransitionPolicyAllowWritesPhase() {
+    enum Phase: Hashable, Sendable {
+      case running
+      case stopped
+    }
+    struct State: Equatable, Sendable {
+      var phase: Phase = .running
+      var observerTicks = 0
+    }
+    enum Action: Equatable, Sendable {
+      case tick
+    }
+
+    let probe = InstrumentationProbe()
+    let map = PhaseMap<State, Action, Phase>(
+      \.phase,
+      diagnostics: .init { _ in probe.record("violation") }
+    ) {
+      From(.running) {
+        On(
+          .tick,
+          targets: [.running, .stopped],
+          selfTransitionPolicy: .allow,
+          resolve: { _ in .running }
+        )
+      }
+    }
+    let reducer = Reduce<State, Action> { state, _ in
+      state.observerTicks += 1
+      return .none
+    }
+    .phaseMap(map)
+
+    var state = State()
+    _ = reducer.reduce(into: &state, action: .tick)
+
+    #expect(state.phase == .running)
+    #expect(state.observerTicks == 1)
+    #expect(probe.events.isEmpty)
   }
 
   @Test("PhaseMap supports predicate-based fixed-target, nil-guard, and same-phase guard paths")
