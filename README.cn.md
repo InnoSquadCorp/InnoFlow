@@ -126,7 +126,7 @@ Stepper(
 - `IfLet`: optional child state
 - `IfCaseLet`: enum-backed child state
 - `ForEachReducer`: collection child state
-- `SelectedStore`: 只读派生模型。单个显式 key path 使用 `select(dependingOn:)`，两个或更多使用可变参数的 `select(dependingOnAll:)`；无法声明 dependency 时，`select { ... }` 是 always-refresh fallback
+- `SelectedStore`: 只读派生模型。单个显式 key path 使用 `select(dependingOn:)`，两个或更多使用可变参数的 `select(dependingOnAll:)`；无法声明 dependency 时，`select { ... }` 是 always-refresh fallback。dead projection 下 `optionalValue` 返回 `nil`，`requireAlive()` / dynamic member read 在 release 中也会触发 `preconditionFailure`。
 
 ## 样例目录
 

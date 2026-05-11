@@ -5,20 +5,24 @@ ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 cd "$ROOT_DIR"
 
-latest_tag_version() {
+latest_release_tag_name() {
   if git rev-parse --git-dir >/dev/null 2>&1; then
     local latest_tag
     latest_tag="$(
       git tag --list --sort=-v:refname \
-        | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
         | head -n 1 \
         || true
     )"
     if [[ -n "$latest_tag" ]]; then
-      printf '%s\n' "${latest_tag#v}"
+      printf '%s\n' "$latest_tag"
       return
     fi
   fi
+}
+
+latest_tag_version() {
+  latest_release_tag_name
 }
 
 is_truthy() {
@@ -62,16 +66,17 @@ require_published_tag_version() {
     return
   fi
 
-  local tag_version
-  tag_version="$(latest_tag_version || true)"
-  if [[ -z "$tag_version" ]]; then
-    echo "[check-release-sync] Failed: INNOFLOW_REQUIRE_RELEASE_TAG=1 but no semantic release tag exists" >&2
+  local tag_name
+  tag_name="$(latest_release_tag_name || true)"
+  if [[ -z "$tag_name" ]]; then
+    echo "[check-release-sync] Failed: INNOFLOW_REQUIRE_RELEASE_TAG=1 but no exact semantic release tag exists" >&2
+    echo "[check-release-sync] Create/pull tag ${version}; v${version} is not accepted for this release train" >&2
     exit 1
   fi
 
-  if [[ "$tag_version" != "$version" ]]; then
-    echo "[check-release-sync] Failed: staged release surface targets ${version}, but latest published tag is ${tag_version}" >&2
-    echo "[check-release-sync] Create/pull tag v${version} or rerun without INNOFLOW_REQUIRE_RELEASE_TAG for staged-doc sync" >&2
+  if [[ "$tag_name" != "$version" ]]; then
+    echo "[check-release-sync] Failed: staged release surface targets ${version}, but latest exact published tag is ${tag_name}" >&2
+    echo "[check-release-sync] Create/pull tag ${version} or rerun without INNOFLOW_REQUIRE_RELEASE_TAG for staged-doc sync" >&2
     exit 1
   fi
 }

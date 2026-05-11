@@ -33,14 +33,13 @@ let summary = store.select(
 
 `ScopedStore.isAlive` / `optionalState` and `SelectedStore.isAlive` /
 `optionalValue` expose the projection lifecycle contract without relying on a
-debug assertion or a release-time cached fallback.
+debug assertion or a release-time fallback.
 
 **Recommended for new code:** prefer `optionalState` / `optionalValue` (or
-gate on `isAlive`) over the cached-fallback `state` / `value` accessors when
-reading from non-SwiftUI call sites. The cached read exists so SwiftUI observer
-races do not crash release builds; treat `nil` as "regenerate the projection."
-Reserve `state` / `value` for tick-bounded observers (SwiftUI view bodies,
-dynamic member lookups) that must always return something.
+gate on `isAlive`) when reading from non-SwiftUI call sites. `ScopedStore.state`
+keeps a cached snapshot fallback for SwiftUI observer races. `SelectedStore.value`
+was removed in 4.0.0; use `SelectedStore.optionalValue` for release-tolerant
+absence or `SelectedStore.requireAlive()` when a dead projection should trap.
 
 ## Phase-managed Features
 

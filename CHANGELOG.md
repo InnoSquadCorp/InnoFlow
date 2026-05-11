@@ -142,12 +142,12 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   overload are now the only typed-dependency selection forms; multi-slice
   call sites must migrate from `dependingOn: (\.a, \.b)` to
   `dependingOnAll: \.a, \.b`. Closure-based `select { ... }` is unchanged.
-- `SelectedStore.value` and the ScopedStore-side equivalent stale-read
-  branch have been removed. Reads must go through `optionalValue` (returns
-  `nil` once the projection deactivates) or `requireAlive()` (traps with
-  `preconditionFailure` when the projection is dead). Dynamic member
-  lookup, `subscript`, and the SwiftUI bindings continue to route through
-  the `requireAlive()` path. Replace `store.value` with
+- `SelectedStore.value` has been removed. Reads must go through
+  `optionalValue` (returns `nil` once the projection deactivates) or
+  `requireAlive()` (traps with `preconditionFailure` when the projection is
+  dead). Dynamic member lookup, `subscript`, and the SwiftUI bindings continue
+  to route through the `requireAlive()` path. `ScopedStore.state` keeps its
+  SwiftUI observer-race cached snapshot fallback; replace `store.value` with
   `store.optionalValue ?? fallback` or `store.requireAlive()`.
 - `TestStore.deliverAction` now drains on the same `@MainActor` serial
   queue as `Store.send`, dropping the per-action `Task { @MainActor }`
@@ -296,7 +296,16 @@ APIs.
 - `docs/MIGRATION_3_1.md`, `docs/INSTRUMENTATION_COOKBOOK.md`,
   `docs/PERFORMANCE_BASELINES.md`, and `docs/FRAMEWORK_COMPARISON.md` document the 3.1 adoption
   path, instrumentation adapters, maintainer baseline policy, and adjacent-library positioning.
-- `ScopedStore.isAlive` / `ScopedStore.optionalState` and `SelectedStore.isAlive` / `SelectedStore.optionalValue` — explicit lifecycle accessors for the projection-lifecycle race documented in `ARCHITECTURE_CONTRACT.md`. `state` / `value` keep the existing cached-fallback contract for SwiftUI observer reads, but call sites that prefer to branch on liveness rather than rely on the cached snapshot can now consult `isAlive` (`true` while the projection is backed by a live parent and active observer state) or `optionalState` / `optionalValue` (returns `nil` in the same situations where `state` / `value` would emit a debug `assertionFailure` and a release-time cached fallback). The accessors do not change the cached-read or no-op-write semantics; they expose the same lifecycle signal in a release-tolerant form. Backed by four new `@Test` cases verifying both the live-parent and released-parent paths.
+- `ScopedStore.isAlive` / `ScopedStore.optionalState` and
+  `SelectedStore.isAlive` / `SelectedStore.optionalValue` — explicit
+  lifecycle accessors for the projection-lifecycle race documented in
+  `ARCHITECTURE_CONTRACT.md`. `ScopedStore.state` keeps the cached snapshot
+  fallback for SwiftUI observer reads, while `SelectedStore.value` is removed
+  and `SelectedStore` live reads use `optionalValue` (`nil` when dead) or
+  `requireAlive()` (release-mode `preconditionFailure` when dead). The
+  accessors expose the same lifecycle signal in a release-tolerant form for
+  call sites that prefer to branch on liveness. Backed by four new `@Test`
+  cases verifying both the live-parent and released-parent paths.
 - `CONTRIBUTING.md` now documents the intentional package layout: core lives in the root `Package.swift`, the canonical sample lives in `Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage`, and the SIL inliner reproducer lives in `Repro/SILCrashRepro`. Consumers depend only on the core package, so sample- or reproducer-only changes do not invalidate consumer build caches.
 - `Tests/InnoFlowTests/PhaseMapPerfTests.swift` — opt-in (`INNOFLOW_PERF_BENCHMARKS=1`) dispatch benchmark for `PhaseMap` covering small (4 phases × 3 transitions), medium (16 × 5), large (64 × 5), and worst-case (last-of-5 match in a 64-phase ring) FSM fixtures. Establishes baseline numbers so a future per-phase transition index — which would require a `Hashable` constraint on `Action` and an opt-in `PhaseMap` shape — can be evaluated against measurement instead of intuition. The `PhaseMap` doc comment now records the per-action complexity (`O(1)` phase lookup + linear walk over the matched phase's transitions) and explains why the index work is intentionally deferred until real workloads demand it.
 - `StoreInstrumentation.signpost(signposter:name:includeActions:)` — new instrumentation factory that bridges store run lifecycle to `OSSignposter`. Each `runStarted` event opens an Instruments interval signpost identified by the run's UUID token, the matching `runFinished` event closes it, and action emissions / drops / cancellations are surfaced as `emitEvent` signposts on the same name so they appear inline in Instruments' timeline. Token, sequence, and cancellation identifiers are included in signpost messages, while action payloads are redacted by default unless `includeActions: true` is passed. Pairs cleanly with `.osLog(logger:)` through `.combined(...)`. Backed by a new `@Test` case verifying that signpost-instrumented stores preserve runtime behavior on the canonical async load path. `ARCHITECTURE_CONTRACT.md` lists `.signpost` alongside `.sink` / `.osLog` / `.combined` as official instrumentation surfaces.
@@ -335,7 +344,7 @@ APIs.
 - `.github/workflows/ci.yml` now splits package tests into two parallel jobs — `Package Tests (Core)` and `Package Tests (Sample)`. Sample-only failures no longer hold up core test feedback, and platform builds depend on the core test job alone, while sample-package builds depend on the sample test job. The principle-gates job depends on both since it runs the full canonical suite.
 - `scripts/principle-gates.sh` now excludes `Repro/` and any `.build-*` working directory when rsyncing the project into the canonical sample test root. The reproducer is not exercised by CI, and broader `.build-*` exclusion keeps stray release-build caches out of the staged copy used for sample-package tests.
 - Sample app, DocC walkthrough, `.cursor` authoring rules, README, and `CLAUDE.md` now document the new `store.binding(_:to:)` alias when forwarding an enum case constructor. `store.binding(\.$step, to: Feature.Action.setStep)` is the recommended form, `send:` remains supported indefinitely as an explicit labeled alternative, and the old unlabeled closure spelling remains a compatibility shim only.
-- `ScopedStore` and `SelectedStore` now survive the SwiftUI observer / parent-store-release race without aborting release builds. When a projection is read or written after its parent `Store` has been released (or the projection has been marked inactive), reads return the last valid cached snapshot and writes become silent no-ops. Debug builds surface both cases through `assertionFailure` so the race stays immediately visible in development. Programming errors that are not lifecycle races — state resolver returning `nil` at init, or `Identifiable.id` type mismatch — still trap. The new contract is documented in `ARCHITECTURE_CONTRACT.md` under "Projection lifecycle contract".
+- `ScopedStore` now survives the SwiftUI observer / parent-store-release race without aborting release builds: stale `state` reads return the last valid cached snapshot and stale sends become silent no-ops. `SelectedStore` exposes the same liveness signal through `optionalValue` (`nil` when dead), while `requireAlive()` and dynamic-member reads trap with `preconditionFailure` when the projection is dead. Programming errors that are not lifecycle races — state resolver returning `nil` at init, or `Identifiable.id` type mismatch — still trap. The current contract is documented in `ARCHITECTURE_CONTRACT.md` under "Projection lifecycle contract".
 - `ReducerBuilder` now preserves composed reducer structure through the full builder chain instead of collapsing every step into nested closure composition. Public authoring (`CombineReducers { … }` with `Reduce`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`) is unchanged. Construction-side benchmarks (debug build) show −29%/−34%/−40% at N=2/8/32; dispatch-side benchmarks show modest −3 to −5% gains in debug and are expected to improve further in release builds where `@inlinable` unlocks specialization across the builder boundary.
 
 ### Internal
@@ -345,7 +354,7 @@ APIs.
 - `scripts/principle-gates.sh` now opts the release-mode test run into the `EffectTimingBaselineGate` suite via `INNOFLOW_CHECK_EFFECT_BASELINE=1`. The gate drives a probe `Store` through a fixed workload, captures the recorder's JSONL output to a temp file, and invokes `scripts/compare-effect-timings.sh` to report mean regressions without blocking CI. Malformed or incomplete timing captures still fail loudly. Stricter timing observations belong to `scripts/report-effect-timing-trend.sh`, which preserves hard failures for malformed or incomplete data instead of flattening them into non-blocking regressions. Maintainers can regenerate `Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl` deliberately with `INNOFLOW_WRITE_EFFECT_BASELINE=<path>`.
 - Added a release-build regression guard to `scripts/principle-gates.sh`. The gate runs `swift build -c release` in an isolated build path so release object files cannot leak into `.build/` and pollute subprocess harness linking.
 - Added a release-test regression gate to `scripts/principle-gates.sh`. The gate runs `swift test -c release` in an isolated build path so tests that pass under debug but regress under release optimization (flaky timing assumptions, harness configuration leakage, SIL inliner variants) surface in CI instead of only manual runs.
-- Added release-mode subprocess tests that verify `ScopedStore.state`, `ScopedStore.send`, collection-scoped projections, and `SelectedStore.value` all fall back to cached snapshots instead of aborting after the parent store is released.
+- Added release-mode subprocess tests that verify `ScopedStore.state`, `ScopedStore.send`, collection-scoped projections, and `SelectedStore.optionalValue` / `SelectedStore.requireAlive()` follow the current dead-projection contract after the parent store is released.
 - Added `Repro/SILCrashRepro/` — a minimal, standalone SwiftPM package that reproduces the Swift 6.3 `EarlyPerfInliner` crash on a generic `@MainActor` class with an `isolated deinit` that stores result-builder-composed value types. Kept in-tree so toolchain bumps can retest whether the InnoFlow `@_optimize(none)` workaround is still required.
 
 ## [3.0.3] - 2026-04-13
