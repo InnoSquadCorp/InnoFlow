@@ -19,16 +19,23 @@ let package = Package(
         .visionOS(.v2)
     ],
     products: [
+        // InnoFlowCore intentionally omits an explicit `type:` so consumers
+        // can choose static/dynamic linkage (matters for binary frameworks
+        // that re-export it). The two "authoring" libraries below are
+        // pinned to static so macro-plugin loading and PrivacyInfo
+        // absorption stay deterministic across app shells.
         .library(
             name: "InnoFlowCore",
             targets: ["InnoFlowCore"]
         ),
         .library(
             name: "InnoFlow",
+            type: .static,
             targets: ["InnoFlow"]
         ),
         .library(
             name: "InnoFlowSwiftUI",
+            type: .static,
             targets: ["InnoFlowSwiftUI"]
         ),
         .library(
@@ -83,12 +90,13 @@ let package = Package(
         ),
         
         // MARK: - Testing Utilities
+        // InnoFlowTesting is intentionally test-only and never ships as part
+        // of an App Store submission, so it does not carry its own
+        // PrivacyInfo.xcprivacy. The runtime targets above each provide the
+        // manifest that App Store Connect actually inspects.
         .target(
             name: "InnoFlowTesting",
             dependencies: ["InnoFlowCore"],
-            resources: [
-                .process("PrivacyInfo.xcprivacy"),
-            ],
             swiftSettings: swift6PackageContract
         ),
         
