@@ -72,7 +72,11 @@ jobs:
       - name: Run package tests with ThreadSanitizer
         run: |
           set -eo pipefail
-          swift test --package-path "$GITHUB_WORKSPACE" --sanitize=thread -Xswiftc -warnings-as-errors
+          swift test \
+            --package-path "$GITHUB_WORKSPACE" \
+            --sanitize=thread \
+            --no-parallel \
+            -Xswiftc -warnings-as-errors
 
   sample-tests:
     name: Package Tests (Sample)
@@ -195,7 +199,11 @@ jobs:
       - name: Run package tests with AddressSanitizer
         run: |
           set -eo pipefail
-          swift test --package-path "$GITHUB_WORKSPACE" --sanitize=address -Xswiftc -warnings-as-errors
+          swift test \
+            --package-path "$GITHUB_WORKSPACE" \
+            --sanitize=address \
+            --no-parallel \
+            -Xswiftc -warnings-as-errors
 
   sample-ui-tests:
     name: Canonical Sample UI Smoke Tests
