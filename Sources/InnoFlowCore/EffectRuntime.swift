@@ -91,9 +91,14 @@ package final class EffectCancellationBoundaries {
 ///
 /// Invariants:
 /// - every prepared token must be either attached to a task or finished/removed
-/// - `tokensByID` and `idsByToken` must stay symmetric for live tokens
+/// - `tokensByID`, `idsByToken`, and `tasks` must stay symmetric for live tokens
 /// - cancellation boundaries are monotonic and never move backward
 package actor EffectRuntime<Action: Sendable> {
+  private struct TrackedRun {
+    let task: Task<Void, Never>
+    let sequence: UInt64
+  }
+
   package struct MetricsSnapshot: Sendable, Equatable {
     package let preparedRuns: UInt64
     package let attachedRuns: UInt64
@@ -103,7 +108,7 @@ package actor EffectRuntime<Action: Sendable> {
   }
 
   private var activeTokens: Set<UUID> = []
-  private var tasks: [UUID: Task<Void, Never>] = [:]
+  private var tasks: [UUID: TrackedRun] = [:]
   private var tokensByID: [AnyEffectID: Set<UUID>] = [:]
   private var idsByToken: [UUID: Set<AnyEffectID>] = [:]
   private var cancelledTokensAwaitingFinish: Set<UUID> = []
@@ -118,12 +123,14 @@ package actor EffectRuntime<Action: Sendable> {
   package func registerAndStart(
     token: UUID,
     id: AnyEffectID?,
+    sequence: UInt64,
     task: Task<Void, Never>,
     gate: RunStartGate
   ) async {
     await registerAndStart(
       token: token,
       ids: id.map { [$0] } ?? [],
+      sequence: sequence,
       task: task,
       gate: gate
     )
@@ -132,13 +139,14 @@ package actor EffectRuntime<Action: Sendable> {
   package func registerAndStart(
     token: UUID,
     ids: [AnyEffectID],
+    sequence: UInt64,
     task: Task<Void, Never>,
     gate: RunStartGate
   ) async {
     preparedRuns &+= 1
     attachedRuns &+= 1
     activeTokens.insert(token)
-    tasks[token] = task
+    tasks[token] = .init(task: task, sequence: sequence)
     let uniqueIDs = Set(ids)
     if uniqueIDs.isEmpty == false {
       idsByToken[token] = uniqueIDs
@@ -164,23 +172,32 @@ package actor EffectRuntime<Action: Sendable> {
 
   package func cancel(id: AnyEffectID, upTo sequence: UInt64) {
     cancellationCount &+= 1
-    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, sequence)
-    cancelTrackedTasks(for: id)
+    let boundary = max(cancelledUpToByID[id] ?? 0, sequence)
+    cancelledUpToByID[id] = boundary
+    cancelTrackedTasks(for: id, upTo: boundary)
   }
 
   package func cancelInFlight(id: AnyEffectID, upTo sequence: UInt64) {
     cancellationCount &+= 1
-    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, sequence)
-    cancelTrackedTasks(for: id)
+    let boundary = max(cancelledUpToByID[id] ?? 0, sequence)
+    cancelledUpToByID[id] = boundary
+    cancelTrackedTasks(for: id, upTo: boundary)
   }
 
   package func cancelAll(upTo sequence: UInt64) {
     cancellationCount &+= 1
-    cancelledUpToAll = max(cancelledUpToAll, sequence)
+    let boundary = max(cancelledUpToAll, sequence)
+    cancelledUpToAll = boundary
     cancelledUpToByID.removeAll(keepingCapacity: true)
     let snapshot = Array(activeTokens)
     for token in snapshot {
-      cancelTrackedTask(token)
+      guard let trackedRun = tasks[token] else {
+        cancelTrackedTask(token)
+        continue
+      }
+      if trackedRun.sequence <= boundary {
+        cancelTrackedTask(token)
+      }
     }
   }
 
@@ -296,16 +313,22 @@ package actor EffectRuntime<Action: Sendable> {
     }
   }
 
-  private func cancelTrackedTasks(for id: AnyEffectID) {
+  private func cancelTrackedTasks(for id: AnyEffectID, upTo sequence: UInt64) {
     guard let tokens = tokensByID[id] else { return }
 
-    for token in tokens {
-      cancelTrackedTask(token)
+    for token in Array(tokens) {
+      guard let trackedRun = tasks[token] else {
+        cancelTrackedTask(token)
+        continue
+      }
+      if trackedRun.sequence <= sequence {
+        cancelTrackedTask(token)
+      }
     }
   }
 
   private func cancelTrackedTask(_ token: UUID) {
-    tasks[token]?.cancel()
+    tasks[token]?.task.cancel()
     if activeTokens.contains(token) {
       cancelledTokensAwaitingFinish.insert(token)
     }

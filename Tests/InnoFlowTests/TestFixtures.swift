@@ -735,6 +735,57 @@ struct DirectSendCancellationBoundaryFeature: Reducer {
   }
 }
 
+actor SequenceCancellationProbe {
+  private(set) var wasCancellationRequested: Bool?
+
+  func recordCancellationRequested(_ value: Bool) {
+    wasCancellationRequested = value
+  }
+}
+
+struct SequenceBoundedCancellationFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {}
+
+  enum Action: Equatable, Sendable {
+    case scheduleStaleCancellation
+    case startNewerRun
+  }
+
+  let staleCancellationReady: AsyncTestSignal
+  let releaseStaleCancellation: LateSendGate
+  let staleCancellationApplied: AsyncTestSignal
+  let newerRunReady: AsyncTestSignal
+  let releaseNewerRun: LateSendGate
+  let newerRunFinished: AsyncTestSignal
+  let probe: SequenceCancellationProbe
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .scheduleStaleCancellation:
+      return .concatenate(
+        .run { _, _ in
+          staleCancellationReady.signal()
+          await releaseStaleCancellation.wait()
+        },
+        .cancel("sequence-bounded-run"),
+        .run { _, _ in
+          staleCancellationApplied.signal()
+        }
+      )
+
+    case .startNewerRun:
+      return .run { _, context in
+        newerRunReady.signal()
+        await releaseNewerRun.wait()
+        let wasCancellationRequested = await context.isCancellationRequested()
+        await probe.recordCancellationRequested(wasCancellationRequested)
+        newerRunFinished.signal()
+      }
+      .cancellable("sequence-bounded-run")
+    }
+  }
+}
+
 struct LazyMappedEffectFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var values: [String] = []

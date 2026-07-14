@@ -17,6 +17,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   macro-authored features work across module and package-target boundaries.
   Access inherited from `public extension` / `package extension` namespaces
   and qualified nested feature conformances are covered as well.
+- Store and TestStore run cancellation now applies only through the requesting
+  effect sequence. A delayed cancellation from an older sequence no longer
+  terminates a newer run registered under the same cancellation ID.
 
 ### Added
 

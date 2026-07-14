@@ -171,13 +171,13 @@ extension TestStore {
 
   public func cancelEffects<ID: Hashable & Sendable>(identifiedBy id: EffectID<ID>) async {
     let erasedID = AnyEffectID(id)
-    markCancelled(id: erasedID)
-    cancelEffectsSynchronously(identifiedBy: erasedID)
+    let sequence = markCancelled(id: erasedID)
+    cancelEffectsSynchronously(identifiedBy: erasedID, upTo: sequence)
   }
 
   public func cancelAllEffects() async {
-    markCancelledAll()
-    cancelAllEffectsSynchronously()
+    let sequence = markCancelledAll()
+    cancelAllEffectsSynchronously(upTo: sequence)
   }
 
   fileprivate func makeScopedTestStore<ChildState: Equatable, ChildAction>(

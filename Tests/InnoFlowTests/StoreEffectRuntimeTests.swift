@@ -170,6 +170,43 @@ struct StoreEffectRuntimeTests {
     #expect(probe.events == ["drop:late:cancellationBoundary"])
   }
 
+  @Test("Store stale cancellation preserves a newer run sequence")
+  func storeStaleCancellationPreservesNewerRunSequence() async throws {
+    let staleCancellationReady = AsyncTestSignal()
+    let releaseStaleCancellation = LateSendGate()
+    let staleCancellationApplied = AsyncTestSignal()
+    let newerRunReady = AsyncTestSignal()
+    let releaseNewerRun = LateSendGate()
+    let newerRunFinished = AsyncTestSignal()
+    let probe = SequenceCancellationProbe()
+    let store = Store(
+      reducer: SequenceBoundedCancellationFeature(
+        staleCancellationReady: staleCancellationReady,
+        releaseStaleCancellation: releaseStaleCancellation,
+        staleCancellationApplied: staleCancellationApplied,
+        newerRunReady: newerRunReady,
+        releaseNewerRun: releaseNewerRun,
+        newerRunFinished: newerRunFinished,
+        probe: probe
+      ),
+      initialState: .init()
+    )
+
+    store.send(.scheduleStaleCancellation)
+    try #require(await staleCancellationReady.wait())
+
+    store.send(.startNewerRun)
+    try #require(await newerRunReady.wait())
+
+    await releaseStaleCancellation.open()
+    try #require(await staleCancellationApplied.wait())
+
+    await releaseNewerRun.open()
+    try #require(await newerRunFinished.wait())
+
+    #expect(await probe.wasCancellationRequested == false)
+  }
+
   @Test("Store .run keeps FIFO ordering for multiple emitted actions")
   func storeRunEmissionOrderingRemainsFIFO() async throws {
     let clock = ManualTestClock()
@@ -1251,7 +1288,13 @@ struct StoreEffectRuntimeTests {
     let gate = RunStartGate()
     let task = Task<Void, Never> {}
 
-    await runtime.registerAndStart(token: token, id: nil, task: task, gate: gate)
+    await runtime.registerAndStart(
+      token: token,
+      id: nil,
+      sequence: 1,
+      task: task,
+      gate: gate
+    )
     await runtime.cancelAll(upTo: 1)
     await runtime.finish(token: token)
     await runtime.finish(token: token)
@@ -1261,6 +1304,103 @@ struct StoreEffectRuntimeTests {
     #expect(metrics.attachedRuns == 1)
     #expect(metrics.finishedRuns == 1)
     #expect(metrics.cancellations == 1)
+  }
+
+  @Test("EffectRuntime cancellation preserves registered runs above its sequence boundary")
+  func effectRuntimeCancellationPreservesNewerRegisteredRuns() async {
+    let runtime = EffectRuntime<CounterFeature.Action>()
+    let id = AnyEffectID(StaticEffectID("runtime-sequence-boundary"))
+    let olderToken = UUID()
+    let newerToken = UUID()
+    let olderHold = LateSendGate()
+    let newerHold = LateSendGate()
+    let olderTask = Task<Void, Never> {
+      await olderHold.wait()
+    }
+    let newerTask = Task<Void, Never> {
+      await newerHold.wait()
+    }
+
+    await runtime.registerAndStart(
+      token: olderToken,
+      id: id,
+      sequence: 1,
+      task: olderTask,
+      gate: RunStartGate()
+    )
+    await runtime.registerAndStart(
+      token: newerToken,
+      id: id,
+      sequence: 2,
+      task: newerTask,
+      gate: RunStartGate()
+    )
+
+    await runtime.cancel(id: id, upTo: 1)
+
+    #expect(olderTask.isCancelled)
+    #expect(newerTask.isCancelled == false)
+    switch await runtime.emissionDecision(token: newerToken, id: id, sequence: 2) {
+    case .allow:
+      break
+    case .drop(let reason):
+      Issue.record("Expected the newer run to remain active, but it was dropped: \(reason)")
+    }
+
+    await olderHold.open()
+    await newerHold.open()
+    _ = await olderTask.result
+    _ = await newerTask.result
+    await runtime.finish(token: olderToken)
+    await runtime.finish(token: newerToken)
+  }
+
+  @Test("EffectRuntime cancelAll preserves registered runs above its sequence boundary")
+  func effectRuntimeCancelAllPreservesNewerRegisteredRuns() async {
+    let runtime = EffectRuntime<CounterFeature.Action>()
+    let olderToken = UUID()
+    let newerToken = UUID()
+    let olderHold = LateSendGate()
+    let newerHold = LateSendGate()
+    let olderTask = Task<Void, Never> {
+      await olderHold.wait()
+    }
+    let newerTask = Task<Void, Never> {
+      await newerHold.wait()
+    }
+
+    await runtime.registerAndStart(
+      token: olderToken,
+      id: nil,
+      sequence: 1,
+      task: olderTask,
+      gate: RunStartGate()
+    )
+    await runtime.registerAndStart(
+      token: newerToken,
+      id: nil,
+      sequence: 2,
+      task: newerTask,
+      gate: RunStartGate()
+    )
+
+    await runtime.cancelAll(upTo: 1)
+
+    #expect(olderTask.isCancelled)
+    #expect(newerTask.isCancelled == false)
+    switch await runtime.emissionDecision(token: newerToken, id: nil, sequence: 2) {
+    case .allow:
+      break
+    case .drop(let reason):
+      Issue.record("Expected the newer run to remain active, but it was dropped: \(reason)")
+    }
+
+    await olderHold.open()
+    await newerHold.open()
+    _ = await olderTask.result
+    _ = await newerTask.result
+    await runtime.finish(token: olderToken)
+    await runtime.finish(token: newerToken)
   }
 
   @Test("Store cancelled run effects do not start after public cancellation")

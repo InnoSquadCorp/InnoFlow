@@ -191,6 +191,20 @@ private actor TestStoreRunStartGate {
 extension TestStore {
   // MARK: - Task Management
 
+  private func trackEffectTask(
+    token: UUID,
+    task: Task<Void, Never>,
+    context: EffectExecutionContext?
+  ) {
+    runningTasks[token] = .init(
+      task: task,
+      sequence: context?.sequence ?? 0
+    )
+    for id in Set(context?.cancellationIDs ?? []) {
+      taskIDsByEffectID[id, default: []].insert(token)
+    }
+  }
+
   private func startRunTask(
     priority: TaskPriority?,
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
@@ -275,12 +289,7 @@ extension TestStore {
       await runBridge.finish()
     }
 
-    runningTasks[token] = task
-
-    let uniqueIDs = Set(context?.cancellationIDs ?? [])
-    for id in uniqueIDs {
-      taskIDsByEffectID[id, default: []].insert(token)
-    }
+    trackEffectTask(token: token, task: task, context: context)
 
     Task { @MainActor in
       await startGate.open()
@@ -289,28 +298,44 @@ extension TestStore {
     return task
   }
 
-  package func cancelEffectsSynchronously(identifiedBy id: AnyEffectID) {
+  package func cancelEffectsSynchronously(
+    identifiedBy id: AnyEffectID,
+    upTo sequence: UInt64
+  ) {
     debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
     debounceGenerationByID.removeValue(forKey: id)
     throttleState.clearState(for: id)
-    guard let ids = taskIDsByEffectID.removeValue(forKey: id) else { return }
+    guard let tokens = taskIDsByEffectID[id] else { return }
 
-    for token in ids {
-      runningTasks.removeValue(forKey: token)?.cancel()
+    for token in Array(tokens) {
+      guard let trackedTask = runningTasks[token] else {
+        removeTrackedTask(token: token)
+        continue
+      }
+      let isPastBoundary =
+        trackedTask.sequence <= sequence
+        || shouldStart(sequence: trackedTask.sequence, cancellationID: id) == false
+      guard isPastBoundary else { continue }
+      trackedTask.task.cancel()
       removeTrackedTask(token: token)
     }
   }
 
-  package func cancelAllEffectsSynchronously() {
-    for task in runningTasks.values {
-      task.cancel()
+  package func cancelAllEffectsSynchronously(upTo sequence: UInt64) {
+    let tokens = runningTasks.compactMap { token, trackedTask in
+      let isPastBoundary =
+        trackedTask.sequence <= sequence
+        || shouldStart(sequence: trackedTask.sequence, cancellationIDs: []) == false
+      return isPastBoundary ? token : nil
+    }
+    for token in tokens {
+      runningTasks[token]?.task.cancel()
+      removeTrackedTask(token: token)
     }
     for task in debounceDelayTasksByID.values {
       task.cancel()
     }
     throttleState.clearAll()
-    runningTasks.removeAll()
-    taskIDsByEffectID.removeAll()
     debounceDelayTasksByID.removeAll()
     debounceGenerationByID.removeAll()
   }
@@ -411,13 +436,13 @@ extension TestStore: EffectDriver {
   }
 
   package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
-    markCancelled(id: id, upTo: context?.sequence)
-    cancelEffectsSynchronously(identifiedBy: id)
+    let sequence = markCancelled(id: id, upTo: context?.sequence)
+    cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
-    markCancelledInFlight(id: id, upTo: context?.sequence)
-    cancelEffectsSynchronously(identifiedBy: id)
+    let sequence = markCancelledInFlight(id: id, upTo: context?.sequence)
+    cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
   }
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
@@ -437,8 +462,8 @@ extension TestStore: EffectDriver {
       ) async -> Void
   ) async {
     debounceDelayTasksByID[id]?.cancel()
-    markCancelledInFlight(id: id, upTo: context?.sequence)
-    cancelEffectsSynchronously(identifiedBy: id)
+    let sequence = markCancelledInFlight(id: id, upTo: context?.sequence)
+    cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
 
     let generation = UUID()
     debounceGenerationByID[id] = generation
@@ -529,7 +554,6 @@ extension TestStore: EffectDriver {
         await group.waitForAll()
       }
     } else {
-      let uniqueCancellationIDs = Set(context?.cancellationIDs ?? [])
       for child in children {
         let token = UUID()
         let task = Task { @MainActor [weak self] in
@@ -544,10 +568,7 @@ extension TestStore: EffectDriver {
         // outlive their owning TestStore drain and break the assertion that
         // cancellation reliably winds the entire effect tree down — a
         // divergence from the Store path that this commit closes.
-        runningTasks[token] = task
-        for id in uniqueCancellationIDs {
-          taskIDsByEffectID[id, default: []].insert(token)
-        }
+        trackEffectTask(token: token, task: task, context: context)
       }
     }
   }
@@ -567,7 +588,6 @@ extension TestStore: EffectDriver {
       }
     } else {
       let token = UUID()
-      let cancellationIDs = context?.cancellationIDs ?? []
       let startGate = TestStoreRunStartGate()
       let task = Task { @MainActor [weak self] in
         guard await startGate.wait() else {
@@ -583,10 +603,7 @@ extension TestStore: EffectDriver {
           await recurse(child, context, true)
         }
       }
-      runningTasks[token] = task
-      for id in Set(cancellationIDs) {
-        taskIDsByEffectID[id, default: []].insert(token)
-      }
+      trackEffectTask(token: token, task: task, context: context)
       Task { @MainActor in
         await startGate.open()
       }

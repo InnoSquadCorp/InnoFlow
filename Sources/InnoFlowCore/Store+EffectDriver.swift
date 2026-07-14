@@ -198,6 +198,7 @@ extension Store: EffectDriver {
     await runtime.registerAndStart(
       token: token,
       ids: context?.cancellationIDs ?? [],
+      sequence: sequence,
       task: task,
       gate: gate
     )

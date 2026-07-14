@@ -14,6 +14,11 @@ import Foundation
 @MainActor
 public final class TestStore<R: Reducer> where R.State: Equatable {
 
+  package struct TrackedEffectTask {
+    package let task: Task<Void, Never>
+    package let sequence: UInt64
+  }
+
   // MARK: - Properties
 
   public package(set) var state: R.State
@@ -25,7 +30,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let manualClock: ManualTestClock?
   package let queue = ActionQueue<R.Action>()
 
-  package var runningTasks: [UUID: Task<Void, Never>] = [:]
+  package var runningTasks: [UUID: TrackedEffectTask] = [:]
   package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]
   package var debounceDelayTasksByID: [AnyEffectID: Task<Void, Never>] = [:]
   package var debounceGenerationByID: [AnyEffectID: UUID] = [:]
@@ -79,8 +84,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   // Tracked in docs/SWIFT_TOOLCHAIN_TRACKING.md.
   @_optimize(none)
   isolated deinit {
-    for task in runningTasks.values {
-      task.cancel()
+    for trackedTask in runningTasks.values {
+      trackedTask.task.cancel()
     }
     for task in debounceDelayTasksByID.values {
       task.cancel()

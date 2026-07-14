@@ -146,6 +146,48 @@ struct TestStoreCoreTests {
     await store.assertNoMoreActions()
   }
 
+  @Test("TestStore stale cancellation preserves a newer run sequence")
+  func testStoreStaleCancellationPreservesNewerRunSequence() async throws {
+    let staleCancellationReady = AsyncTestSignal()
+    let releaseStaleCancellation = LateSendGate()
+    let staleCancellationApplied = AsyncTestSignal()
+    let newerRunReady = AsyncTestSignal()
+    let releaseNewerRun = LateSendGate()
+    let newerRunFinished = AsyncTestSignal()
+    let probe = SequenceCancellationProbe()
+    let store = TestStore(
+      reducer: SequenceBoundedCancellationFeature(
+        staleCancellationReady: staleCancellationReady,
+        releaseStaleCancellation: releaseStaleCancellation,
+        staleCancellationApplied: staleCancellationApplied,
+        newerRunReady: newerRunReady,
+        releaseNewerRun: releaseNewerRun,
+        newerRunFinished: newerRunFinished,
+        probe: probe
+      ),
+      initialState: .init(),
+      effectTimeout: .seconds(60)
+    )
+
+    await store.send(.scheduleStaleCancellation)
+    try #require(await staleCancellationReady.wait())
+
+    await store.send(.startNewerRun)
+    try #require(await newerRunReady.wait())
+
+    await releaseStaleCancellation.open()
+    try #require(await staleCancellationApplied.wait())
+
+    let cancellationID = AnyEffectID(StaticEffectID("sequence-bounded-run"))
+    #expect(store.taskIDsByEffectID[cancellationID]?.count == 1)
+
+    await releaseNewerRun.open()
+    try #require(await newerRunFinished.wait())
+
+    #expect(await probe.wasCancellationRequested == false)
+    await store.assertNoBufferedActions()
+  }
+
   @Test("TestStore filters stale queued actions at assertion time")
   func testStoreFiltersStaleQueuedActionsAtAssertionTime() async {
     let id = AnyEffectID(StaticEffectID("queued-stale-action"))
