@@ -252,11 +252,17 @@ jobs:
           fi
           echo "udid=$IOS_SIMULATOR_UDID" >> "$GITHUB_OUTPUT"
 
+      - name: Preboot iOS simulator
+        run: |
+          set -eo pipefail
+          xcrun simctl bootstatus "${{ steps.ios-simulator.outputs.udid }}" -b
+
       - name: Run canonical sample UI smoke tests
         run: |
           set -eo pipefail
           xcodebuild \
             -jobs 1 \
+            -parallel-testing-enabled NO \
             -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
             -scheme InnoFlowSampleApp \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.udid }}" \
