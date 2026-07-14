@@ -337,6 +337,54 @@ final class InstrumentationProbe: Sendable {
   }
 }
 
+/// A one-shot, single-waiter, cancellation-aware signal for tests that need
+/// to await an explicit callback instead of polling eventual state.
+final class AsyncTestSignal: Sendable {
+  private let stream: AsyncStream<Void>
+  private let continuation: AsyncStream<Void>.Continuation
+
+  init() {
+    let pair = AsyncStream.makeStream(
+      of: Void.self,
+      bufferingPolicy: .bufferingNewest(1)
+    )
+    stream = pair.stream
+    continuation = pair.continuation
+  }
+
+  deinit {
+    continuation.finish()
+  }
+
+  func signal() {
+    continuation.yield()
+    continuation.finish()
+  }
+
+  func wait(timeout: Duration = .seconds(60)) async -> Bool {
+    await withTaskGroup(of: Bool.self) { group in
+      group.addTask { [stream] in
+        for await _ in stream {
+          return true
+        }
+        return false
+      }
+      group.addTask {
+        do {
+          try await Task.sleep(for: timeout)
+          return false
+        } catch {
+          return false
+        }
+      }
+
+      let didSignal = await group.next() ?? false
+      group.cancelAll()
+      return didSignal
+    }
+  }
+}
+
 @MainActor
 final class ProjectionObserverTestProbe: ProjectionObserver {
   private let refreshResult: Bool

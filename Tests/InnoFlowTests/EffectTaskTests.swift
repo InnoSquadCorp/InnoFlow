@@ -350,24 +350,41 @@ struct EffectTaskTests {
     arguments: Array(0..<50)
   )
   func effectCancellableLatestWinsProperty(seed: Int) async throws {
+    var rng = SeededGenerator(seed: UInt64(seed + 1))
+    let count = rng.nextInt(upperBound: 6) + 2
+    let requests = (0..<count).map { requestID in
+      LatestWinsPropertyFeature.Request(
+        id: requestID,
+        value: rng.nextInt(upperBound: 10_000)
+      )
+    }
+    let winner = try #require(requests.last)
+    let gate = CancellablePropertyGate()
+    let winnerRegistered = AsyncTestSignal()
+    let winnerEmitted = AsyncTestSignal()
     let store = TestStore(
-      reducer: CancellableFeature(delay: .milliseconds(100)),
+      reducer: LatestWinsPropertyFeature(
+        gate: gate,
+        winningRequestID: winner.id,
+        winnerRegistered: winnerRegistered,
+        winnerEmitted: winnerEmitted
+      ),
       initialState: .init(),
       effectTimeout: .milliseconds(300)
     )
-    var rng = SeededGenerator(seed: UInt64(seed + 1))
-    let count = rng.nextInt(upperBound: 6) + 2
-    let values = (0..<count).map { _ in rng.nextInt(upperBound: 10_000) }
 
-    for (index, value) in values.enumerated() {
-      await store.send(.start(value)) {
+    for (index, request) in requests.enumerated() {
+      await store.send(.start(request)) {
         $0.requested = index + 1
       }
     }
 
-    let winner = try #require(values.last)
-    await store.receive(._completed(winner)) {
-      $0.completed = [winner]
+    try #require(await winnerRegistered.wait())
+    await gate.open()
+    try #require(await winnerEmitted.wait())
+
+    await store.receive(._completed(winner.value)) {
+      $0.completed = [winner.value]
     }
     await store.assertNoMoreActions()
   }
@@ -494,6 +511,108 @@ struct EffectTaskTests {
     await context.reportError(Boom())
 
     #expect(storage.withLock { $0 } == ["Boom"])
+  }
+}
+
+private actor CancellablePropertyGate {
+  private var isOpen = false
+  private var waiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
+
+  func wait(onRegistered: AsyncTestSignal?) async throws {
+    try Task.checkCancellation()
+    if isOpen {
+      onRegistered?.signal()
+      return
+    }
+
+    let waiterID = UUID()
+    let canContinue = await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        if isOpen {
+          onRegistered?.signal()
+          continuation.resume(returning: true)
+          return
+        }
+
+        waiters[waiterID] = continuation
+        onRegistered?.signal()
+
+        if Task.isCancelled, let waiter = waiters.removeValue(forKey: waiterID) {
+          waiter.resume(returning: false)
+        }
+      }
+    } onCancel: {
+      Task {
+        await self.cancelWaiter(waiterID)
+      }
+    }
+
+    guard canContinue else { throw CancellationError() }
+    try Task.checkCancellation()
+  }
+
+  func open() {
+    guard !isOpen else { return }
+    isOpen = true
+    let continuations = Array(waiters.values)
+    waiters.removeAll()
+    for continuation in continuations {
+      continuation.resume(returning: true)
+    }
+  }
+
+  private func cancelWaiter(_ waiterID: UUID) {
+    guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
+    continuation.resume(returning: false)
+  }
+}
+
+private struct LatestWinsPropertyFeature: Reducer {
+  struct Request: Equatable, Sendable {
+    let id: Int
+    let value: Int
+  }
+
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var completed: [Int] = []
+    var requested = 0
+  }
+
+  enum Action: Equatable, Sendable {
+    case start(Request)
+    case _completed(Int)
+  }
+
+  let gate: CancellablePropertyGate
+  let winningRequestID: Int
+  let winnerRegistered: AsyncTestSignal
+  let winnerEmitted: AsyncTestSignal
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start(let request):
+      state.requested += 1
+      let isWinner = request.id == winningRequestID
+      return .run { send, context in
+        do {
+          try await gate.wait(onRegistered: isWinner ? winnerRegistered : nil)
+          try await context.checkCancellation()
+          await send(._completed(request.value))
+          if isWinner {
+            winnerEmitted.signal()
+          }
+        } catch is CancellationError {
+          return
+        } catch {
+          return
+        }
+      }
+      .cancellable("property-latest-wins", cancelInFlight: true)
+
+    case ._completed(let value):
+      state.completed.append(value)
+      return .none
+    }
   }
 }
 

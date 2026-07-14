@@ -107,30 +107,38 @@ struct StoreEffectRuntimeTests {
   }
 
   @Test("Store .run drops post-cancellation emissions but keeps earlier values")
-  func storeRunDropsPostCancellationEmissions() async {
+  func storeRunDropsPostCancellationEmissions() async throws {
     let clock = ManualTestClock()
+    let emittedFirst = AsyncTestSignal()
+    let finished = AsyncTestSignal()
     let store = Store(
       reducer: RunEmissionBoundaryFeature(),
       initialState: .init(),
-      clock: .manual(clock)
+      clock: .manual(clock),
+      instrumentation: .init(
+        didFinishRun: { _ in finished.signal() },
+        didEmitAction: { event in
+          if event.action == ._record("first-1") {
+            emittedFirst.signal()
+          }
+        }
+      )
     )
 
     store.send(.start("first"))
-
-    for _ in 0..<128 {
-      if store.events.contains("first-1") {
-        break
-      }
-      await drainAsyncWork(iterations: 1)
-    }
-
+    try #require(await emittedFirst.wait())
     #expect(store.events.contains("first-1"))
+    try #require(
+      await waitUntilAsync(timeout: .seconds(60), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
+
     store.send(.cancel)
-    await drainAsyncWork()
-    await clock.advance(by: .milliseconds(140))
-    await drainAsyncWork()
+    try #require(await finished.wait())
 
     #expect(store.events == ["first-1"])
+    #expect(await clock.sleeperCount == 0)
   }
 
   @Test("Store drops direct .send actions after a cancellation boundary")
@@ -163,78 +171,92 @@ struct StoreEffectRuntimeTests {
   }
 
   @Test("Store .run keeps FIFO ordering for multiple emitted actions")
-  func storeRunEmissionOrderingRemainsFIFO() async {
+  func storeRunEmissionOrderingRemainsFIFO() async throws {
     let clock = ManualTestClock()
+    let emittedFirst = AsyncTestSignal()
+    let finished = AsyncTestSignal()
     let store = Store(
       reducer: RunEmissionBoundaryFeature(),
       initialState: .init(),
-      clock: .manual(clock)
+      clock: .manual(clock),
+      instrumentation: .init(
+        didFinishRun: { _ in finished.signal() },
+        didEmitAction: { event in
+          if event.action == ._record("ordered-1") {
+            emittedFirst.signal()
+          }
+        }
+      )
     )
 
     store.send(.start("ordered"))
-
-    for _ in 0..<128 {
-      if store.events == ["ordered-1"] {
-        break
-      }
-      await drainAsyncWork(iterations: 1)
-    }
-
+    try #require(await emittedFirst.wait())
     #expect(store.events == ["ordered-1"])
-    await clock.advance(by: .milliseconds(100))
+    try #require(
+      await waitUntilAsync(timeout: .seconds(60), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
 
-    // Two more emissions (ordered-2, ordered-3) land as queued follow-up
-    // actions after the sleep resumes. `drainAsyncWork`'s fixed yield budget
-    // is sufficient on fast hardware but not on saturated CI executors —
-    // poll the observable outcome with a wall-clock bounded wait instead.
-    await waitUntil(timeout: .seconds(5)) {
-      store.events.count >= 3
-    }
+    await clock.advance(by: .milliseconds(100))
+    try #require(await finished.wait())
 
     #expect(store.events == ["ordered-1", "ordered-2", "ordered-3"])
   }
 
   @Test("Store .run remains reusable after cancel and restart")
-  func storeRunEmissionRecoversAfterRestart() async {
+  func storeRunEmissionRecoversAfterRestart() async throws {
     let clock = ManualTestClock()
+    let emittedFirst = AsyncTestSignal()
+    let emittedSecondFirst = AsyncTestSignal()
+    let emittedSecondLast = AsyncTestSignal()
     let store = Store(
       reducer: RunEmissionBoundaryFeature(),
       initialState: .init(),
-      clock: .manual(clock)
+      clock: .manual(clock),
+      instrumentation: .init(
+        didEmitAction: { event in
+          switch event.action {
+          case ._record("first-1"):
+            emittedFirst.signal()
+          case ._record("second-1"):
+            emittedSecondFirst.signal()
+          case ._record("second-3"):
+            emittedSecondLast.signal()
+          default:
+            break
+          }
+        }
+      )
     )
 
     store.send(.start("first"))
-    for _ in 0..<128 {
-      if store.events.contains("first-1") {
-        break
-      }
-      await drainAsyncWork(iterations: 1)
-    }
+    try #require(await emittedFirst.wait())
     #expect(store.events.contains("first-1"))
+    try #require(
+      await waitUntilAsync(timeout: .seconds(60), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
 
     store.send(.cancel)
-    await drainAsyncWork()
-    await clock.advance(by: .milliseconds(100))
-    await drainAsyncWork()
+    try #require(
+      await waitUntilAsync(timeout: .seconds(60), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 0
+      }
+    )
 
     store.send(.start("second"))
-
-    for _ in 0..<128 {
-      if store.events == ["first-1", "second-1"] {
-        break
-      }
-      await drainAsyncWork(iterations: 1)
-    }
-
+    try #require(await emittedSecondFirst.wait())
     #expect(store.events == ["first-1", "second-1"])
-    await clock.advance(by: .milliseconds(100))
+    try #require(
+      await waitUntilAsync(timeout: .seconds(60), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
 
-    // Same CI-executor-saturation risk as `storeRunEmissionOrderingRemainsFIFO`
-    // above: after the advance, the two remaining emissions arrive as queued
-    // follow-up actions. Poll observable state with a wall-clock bounded wait.
-    await waitUntil(timeout: .seconds(5)) {
-      store.events.count >= 4
-    }
+    await clock.advance(by: .milliseconds(100))
+    try #require(await emittedSecondLast.wait())
 
     #expect(store.events == ["first-1", "second-1", "second-2", "second-3"])
   }

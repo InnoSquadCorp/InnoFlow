@@ -99,14 +99,16 @@ private struct SequenceErrorFeature: Reducer {
 struct EffectTaskRunSequenceErrorTests {
 
   @Test("Cancellation thrown from sequence does not surface as didFailRun")
-  func cancellationDoesNotSurfaceAsFailure() async {
+  func cancellationDoesNotSurfaceAsFailure() async throws {
     let probe = InstrumentationProbe()
+    let finished = AsyncTestSignal()
     let store = Store(
       reducer: SequenceErrorFeature(),
       initialState: .init(),
       instrumentation: .init(
         didFinishRun: { _ in
           probe.record("finish")
+          finished.signal()
         },
         didFailRun: { event in
           probe.record("fail:\(event.errorTypeName):\(event.errorDescription)")
@@ -115,9 +117,7 @@ struct EffectTaskRunSequenceErrorTests {
     )
 
     store.send(.startThrowing(.cancellation))
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      store.values == [1] && probe.events == ["finish"]
-    }
+    try #require(await finished.wait())
     #expect(probe.events == ["finish"])
     #expect(store.values == [1])
   }
@@ -125,6 +125,7 @@ struct EffectTaskRunSequenceErrorTests {
   @Test("Custom error thrown from sequence is forwarded to didFailRun and stops the effect")
   func customErrorSurfacesAsFailure() async throws {
     let probe = InstrumentationProbe()
+    let failed = AsyncTestSignal()
     let store = Store(
       reducer: SequenceErrorFeature(),
       initialState: .init(),
@@ -134,14 +135,13 @@ struct EffectTaskRunSequenceErrorTests {
         },
         didFailRun: { event in
           probe.record("fail:\(event.errorTypeName):\(event.errorDescription)")
+          failed.signal()
         }
       )
     )
 
     store.send(.startThrowing(.custom))
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      probe.events.contains(where: { $0.hasPrefix("fail:") })
-    }
+    try #require(await failed.wait())
 
     let failureEvents = probe.events.filter { $0.hasPrefix("fail:") }
     #expect(failureEvents.count == 1)
@@ -152,14 +152,16 @@ struct EffectTaskRunSequenceErrorTests {
   }
 
   @Test("transform overload narrows cancellation the same way")
-  func transformCancellationDoesNotSurfaceAsFailure() async {
+  func transformCancellationDoesNotSurfaceAsFailure() async throws {
     let probe = InstrumentationProbe()
+    let finished = AsyncTestSignal()
     let store = Store(
       reducer: SequenceErrorFeature(),
       initialState: .init(),
       instrumentation: .init(
         didFinishRun: { _ in
           probe.record("finish")
+          finished.signal()
         },
         didFailRun: { event in
           probe.record("fail:\(event.errorTypeName):\(event.errorDescription)")
@@ -168,9 +170,7 @@ struct EffectTaskRunSequenceErrorTests {
     )
 
     store.send(.startThrowingTransformed(.cancellation))
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      store.values == [2] && probe.events == ["finish"]
-    }
+    try #require(await finished.wait())
 
     #expect(probe.events == ["finish"])
     #expect(store.values == [2])
@@ -179,20 +179,20 @@ struct EffectTaskRunSequenceErrorTests {
   @Test("transform overload forwards custom errors to didFailRun")
   func transformCustomErrorSurfacesAsFailure() async throws {
     let probe = InstrumentationProbe()
+    let failed = AsyncTestSignal()
     let store = Store(
       reducer: SequenceErrorFeature(),
       initialState: .init(),
       instrumentation: .init(
         didFailRun: { event in
           probe.record("fail:\(event.errorTypeName):\(event.errorDescription)")
+          failed.signal()
         }
       )
     )
 
     store.send(.startThrowingTransformed(.custom))
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      probe.events.contains(where: { $0.hasPrefix("fail:") })
-    }
+    try #require(await failed.wait())
 
     let failureEvents = probe.events.filter { $0.hasPrefix("fail:") }
     #expect(failureEvents.count == 1)
@@ -233,22 +233,26 @@ private struct DoubleReportFeature: Reducer {
 struct ReportErrorFirstWinsTests {
 
   @Test("Multiple reportError calls within a single run emit a single didFailRun event")
-  func firstErrorWinsAcrossMultipleReports() async {
+  func firstErrorWinsAcrossMultipleReports() async throws {
     let probe = InstrumentationProbe()
+    let emittedDone = AsyncTestSignal()
     let store = Store(
       reducer: DoubleReportFeature(),
       initialState: .init(),
       instrumentation: .init(
         didStartRun: { _ in probe.record("start") },
         didFinishRun: { _ in probe.record("finish") },
-        didFailRun: { event in probe.record("fail:\(event.errorDescription)") }
+        didFailRun: { event in probe.record("fail:\(event.errorDescription)") },
+        didEmitAction: { event in
+          if event.action == .done {
+            emittedDone.signal()
+          }
+        }
       )
     )
 
     store.send(.fireTwice)
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      store.state.done && probe.events.filter { $0.hasPrefix("fail:") }.count == 1
-    }
+    try #require(await emittedDone.wait())
 
     let starts = probe.events.filter { $0 == "start" }
     let finishes = probe.events.filter { $0 == "finish" }
