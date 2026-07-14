@@ -37,15 +37,20 @@ private struct DescriptionCountingAction: Sendable, CustomStringConvertible {
 @MainActor
 struct StoreInstrumentationTests {
   @Test("Store processes async run effect")
-  func storeAsyncEffect() async {
-    let store = Store(reducer: AsyncFeature(), initialState: .init())
+  func storeAsyncEffect() async throws {
+    let finished = AsyncTestSignal()
+    let store = Store(
+      reducer: AsyncFeature(),
+      initialState: .init(),
+      instrumentation: .init(
+        didFinishRun: { _ in finished.signal() }
+      )
+    )
 
     store.send(.load)
     #expect(store.isLoading)
 
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      store.value == "Hello, InnoFlow" && store.isLoading == false
-    }
+    try #require(await finished.wait())
 
     #expect(store.value == "Hello, InnoFlow")
     #expect(store.isLoading == false)
