@@ -1908,6 +1908,41 @@ struct ThrottleTrailingFeature: Reducer {
   }
 }
 
+struct AwaitedTrailingReleaseFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var completed = false
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _completed
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      return .concatenate(
+        .concatenate(
+          EffectTask.send(._completed)
+            .throttle(
+              "awaited-trailing-release",
+              for: .seconds(60),
+              leading: false,
+              trailing: true
+            )
+            .cancellable("awaited-trailing-release-outer"),
+          .run { _, _ in }
+        ),
+        .run { _, _ in }
+      )
+
+    case ._completed:
+      state.completed = true
+      return .none
+    }
+  }
+}
+
 struct ThrottleLeadingTrailingFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var emitted: [Int] = []

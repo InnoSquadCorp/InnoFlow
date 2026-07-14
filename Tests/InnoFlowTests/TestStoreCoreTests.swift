@@ -246,6 +246,185 @@ struct TestStoreCoreTests {
     #expect(probe.events.isEmpty)
   }
 
+  @Test("TestStore debounce forwards unawaited recursion")
+  func testStoreDebounceForwardsUnawaitedRecursion() async throws {
+    let id = AnyEffectID(StaticEffectID("teststore-debounce-awaited-forwarding"))
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+    let sequence = store.nextSequence()
+    let didRecurse = AsyncTestSignal()
+    let releaseRecursion = RunStartGate()
+    let probe = InstrumentationProbe()
+
+    await store.debounce(
+      .none,
+      id: id,
+      interval: .zero,
+      context: .init(cancellationID: id, sequence: sequence),
+      scope: .init(ownerID: id, sequence: sequence),
+      awaited: false
+    ) { _, _, awaited in
+      probe.record("awaited:\(awaited)")
+      didRecurse.signal()
+      await releaseRecursion.wait()
+    }
+
+    do {
+      try #require(await didRecurse.wait())
+      let task = try #require(store.debounceTasksByID[id]?.task)
+      await releaseRecursion.open()
+      _ = await task.result
+    } catch {
+      await releaseRecursion.open()
+      await store.cancelAllEffects()
+      throw error
+    }
+
+    #expect(probe.events == ["awaited:false"])
+    #expect(store.debounceTasksByID[id] == nil)
+  }
+
+  @Test("TestStore awaited trailing throttle completes before concatenate continues")
+  func testStoreAwaitedTrailingThrottleCompletesBeforeConcatenateContinues() async throws {
+    let id = AnyEffectID(StaticEffectID("teststore-awaited-trailing-throttle"))
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+    let trailingRunStarted = AsyncTestSignal()
+    let walkFinished = AsyncTestSignal()
+    let releaseTrailingRun = RunStartGate()
+    let effect = EffectTask<CounterFeature.Action>.concatenate(
+      .run { send in
+        trailingRunStarted.signal()
+        await releaseTrailingRun.wait()
+        await send(.increment)
+      }
+      .throttle(id, for: .zero, leading: false, trailing: true),
+      .send(.decrement)
+    )
+    let sequence = store.nextSequence()
+    let walkTask = Task { @MainActor in
+      await store.walker.walk(
+        effect,
+        context: .init(sequence: sequence),
+        awaited: true
+      )
+      walkFinished.signal()
+    }
+
+    do {
+      try #require(await trailingRunStarted.wait())
+
+      #expect(await store.popBufferedAction() == nil)
+
+      await releaseTrailingRun.open()
+      try #require(await walkFinished.wait())
+      _ = await walkTask.result
+
+      #expect(await store.popBufferedAction() == .increment)
+      #expect(await store.popBufferedAction() == .decrement)
+      #expect(await store.popBufferedAction() == nil)
+    } catch {
+      await releaseTrailingRun.open()
+      await store.cancelAllEffects()
+      _ = await walkTask.result
+      throw error
+    }
+  }
+
+  @Test("TestStore active trailing throttle keeps awaited completion after replacement")
+  func testStoreActiveTrailingThrottleKeepsAwaitedCompletionAfterReplacement() async throws {
+    let id = AnyEffectID(StaticEffectID("teststore-active-awaited-trailing-throttle"))
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+    let replacementRunStarted = AsyncTestSignal()
+    let walkFinished = AsyncTestSignal()
+    let releaseReplacementRun = RunStartGate()
+    let firstSequence = store.nextSequence()
+    let initialEffect = EffectTask<CounterFeature.Action>.send(.increment)
+      .throttle(id, for: .seconds(60), leading: false, trailing: true)
+
+    await store.walker.walk(
+      initialEffect,
+      context: .init(sequence: firstSequence),
+      awaited: false
+    )
+    try #require(
+      await waitUntilAsync(timeout: .seconds(60), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
+
+    let awaitedSequence = store.nextSequence()
+    let awaitedEffect = EffectTask<CounterFeature.Action>.concatenate(
+      .send(.increment)
+        .throttle(id, for: .seconds(60), leading: false, trailing: true),
+      .send(.decrement)
+    )
+    let walkTask = Task { @MainActor in
+      await store.walker.walk(
+        awaitedEffect,
+        context: .init(sequence: awaitedSequence),
+        awaited: true
+      )
+      walkFinished.signal()
+    }
+
+    do {
+      try #require(
+        await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(1)) {
+          store.throttleState.pending(for: id)?.context?.sequence == awaitedSequence
+        }
+      )
+      #expect(store.throttleState.pending(for: id)?.requiresAwaitedCompletion == true)
+
+      let replacementSequence = store.nextSequence()
+      let replacementEffect = EffectTask<CounterFeature.Action>.run { send in
+        replacementRunStarted.signal()
+        await releaseReplacementRun.wait()
+        await send(.increment)
+      }
+      .throttle(id, for: .seconds(60), leading: false, trailing: true)
+      await store.walker.walk(
+        replacementEffect,
+        context: .init(sequence: replacementSequence),
+        awaited: false
+      )
+
+      #expect(store.throttleState.pending(for: id)?.context?.sequence == replacementSequence)
+      #expect(store.throttleState.pending(for: id)?.requiresAwaitedCompletion == true)
+
+      await clock.advance(by: .seconds(60))
+      try #require(await replacementRunStarted.wait())
+      #expect(await store.popBufferedAction() == nil)
+
+      await releaseReplacementRun.open()
+      try #require(await walkFinished.wait())
+      _ = await walkTask.result
+
+      #expect(await store.popBufferedAction() == .increment)
+      #expect(await store.popBufferedAction() == .decrement)
+      #expect(await store.popBufferedAction() == nil)
+    } catch {
+      await releaseReplacementRun.open()
+      await store.cancelAllEffects()
+      await clock.advance(by: .seconds(60))
+      _ = await walkTask.result
+      throw error
+    }
+  }
+
   @Test("TestStore debounce replaces equal sequences and preserves newer work from stale calls")
   func testStoreDebounceSequenceOwnership() async throws {
     let debounceID = AnyEffectID(StaticEffectID("teststore-sequence-debounce"))
@@ -420,7 +599,7 @@ struct TestStoreCoreTests {
     await store.cancelEffects(id: id, context: .init(sequence: 1))
     store.throttleState.storePending(
       EffectTask<CounterFeature.Action>.none, context: context, for: id)
-    store.scheduleTrailingDrain(for: id, interval: .milliseconds(0)) { _, _, _ in
+    store.scheduleTrailingDrain(for: id, interval: .milliseconds(0), awaited: false) { _, _, _ in
       probe.record("recursed")
     }
 
@@ -448,7 +627,7 @@ struct TestStoreCoreTests {
       context: .init(cancellationID: id, sequence: sequence),
       for: id
     )
-    store.scheduleTrailingDrain(for: id, interval: .seconds(60)) { _, _, _ in }
+    store.scheduleTrailingDrain(for: id, interval: .seconds(60), awaited: false) { _, _, _ in }
     let trailingTask = try #require(store.throttleState.trailingTask(for: id))
 
     trailingTask.cancel()

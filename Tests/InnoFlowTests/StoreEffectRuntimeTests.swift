@@ -459,6 +459,132 @@ struct StoreEffectRuntimeTests {
     await store.cancelAllEffects()
   }
 
+  @Test("Awaited concatenate waits for trailing throttle nested run before next effect")
+  func awaitedConcatenateWaitsForTrailingThrottleNestedRun() async throws {
+    let timingID = AnyEffectID(StaticEffectID("awaited-trailing-throttle"))
+    let sleepProbe = CancellationAwareSleepProbe()
+    let trailingRunStarted = AsyncTestSignal()
+    let trailingRunFinished = AsyncTestSignal()
+    let nextRunStarted = AsyncTestSignal()
+    let releaseTrailingRun = RunStartGate()
+    let orderProbe = InstrumentationProbe()
+    let instant = ContinuousClock().now
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .init(
+        now: { instant },
+        sleep: { _ in try await sleepProbe.sleep() }
+      )
+    )
+    let trailingEffect = EffectTask<CounterFeature.Action>.run { _, _ in
+      orderProbe.record("trailing-start")
+      trailingRunStarted.signal()
+      await releaseTrailingRun.wait()
+      orderProbe.record("trailing-finish")
+      trailingRunFinished.signal()
+    }
+    .throttle(timingID, for: .seconds(60), leading: false, trailing: true)
+    let effect = EffectTask<CounterFeature.Action>.concatenate(
+      trailingEffect,
+      .run { _, _ in
+        orderProbe.record("next-start")
+        nextRunStarted.signal()
+      }
+    )
+    let sequence = store.effectBridge.nextSequence()
+    let walk = Task { @MainActor in
+      await store.walkEffect(
+        effect,
+        context: .init(sequence: sequence),
+        awaited: true
+      )
+    }
+
+    do {
+      try #require(await sleepProbe.started.wait())
+      #expect(orderProbe.events.isEmpty)
+
+      await sleepProbe.release()
+      try #require(await trailingRunStarted.wait())
+      #expect(orderProbe.events == ["trailing-start"])
+
+      await releaseTrailingRun.open()
+      try #require(await trailingRunFinished.wait())
+      try #require(await nextRunStarted.wait())
+      _ = await walk.result
+    } catch {
+      await sleepProbe.release()
+      await releaseTrailingRun.open()
+      await store.cancelAllEffects()
+      _ = await walk.result
+      throw error
+    }
+
+    #expect(orderProbe.events == ["trailing-start", "trailing-finish", "next-start"])
+    await store.cancelAllEffects()
+  }
+
+  @Test("Trailing drain keeps an awaited requirement across unawaited replacement")
+  func trailingDrainKeepsAwaitedRequirementAcrossReplacement() async throws {
+    let timingID = AnyEffectID(StaticEffectID("monotonic-awaited-trailing-throttle"))
+    let sleepProbe = CancellationAwareSleepProbe()
+    let didRecurse = AsyncTestSignal()
+    let awaitedProbe = InstrumentationProbe()
+    let instant = ContinuousClock().now
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .init(
+        now: { instant },
+        sleep: { _ in try await sleepProbe.sleep() }
+      )
+    )
+
+    store.throttleState.storePending(
+      .none,
+      context: nil,
+      requiresAwaitedCompletion: true,
+      for: timingID
+    )
+    store.throttleState.storePending(
+      .send(.increment),
+      context: nil,
+      requiresAwaitedCompletion: false,
+      for: timingID
+    )
+    let trailingTask = store.scheduleTrailingDrain(
+      for: timingID,
+      interval: .seconds(60),
+      awaited: false
+    ) { [store] _, _, awaited in
+      _ = store.count
+      awaitedProbe.record("awaited:\(awaited)")
+      didRecurse.signal()
+    }
+
+    do {
+      try #require(await sleepProbe.started.wait())
+      #expect(store.throttleState.pending(for: timingID)?.requiresAwaitedCompletion == true)
+      #expect(
+        effectOperationSignature(store.throttleState.pending(for: timingID)?.effect ?? .none)
+          == "send(increment)"
+      )
+
+      await sleepProbe.release()
+      try #require(await didRecurse.wait())
+      _ = await trailingTask.result
+    } catch {
+      await sleepProbe.release()
+      trailingTask.cancel()
+      _ = await trailingTask.result
+      throw error
+    }
+
+    #expect(awaitedProbe.events == ["awaited:true"])
+    await store.cancelAllEffects()
+  }
+
   @Test("Debounce clears delayed state when the store clock fails")
   func debounceClearsStateAfterClockFailure() async {
     let timingID = AnyEffectID(StaticEffectID("debounce-clock-failure"))
@@ -1557,6 +1683,45 @@ struct StoreEffectRuntimeTests {
     await clock.advance(by: .seconds(5))
     #expect(weakStore == nil)
     #expect(await clock.sleeperCount == 0)
+  }
+
+  @Test("Store release breaks awaited trailing throttle composite ownership")
+  func storeReleaseBreaksAwaitedTrailingThrottleCompositeOwnership() async throws {
+    let clock = ManualTestClock()
+    weak var weakStore: Store<AwaitedTrailingReleaseFeature>?
+
+    do {
+      var store: Store<AwaitedTrailingReleaseFeature>? = Store(
+        reducer: AwaitedTrailingReleaseFeature(),
+        initialState: .init(),
+        clock: .manual(clock)
+      )
+      weakStore = store
+      store?.send(.start)
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      store = nil
+    }
+
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(60))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+    #expect(released)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+    #expect(weakStore == nil)
   }
 
   @Test("Store deinit prevents long-running effect completion")

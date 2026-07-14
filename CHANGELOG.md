@@ -27,6 +27,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   inherited cancellation IDs, and effect sequence. Outer cancellation clears
   nested delayed work immediately, while stale ID/global cancellation preserves
   newer sleepers, throttle windows, and trailing drains.
+- Store and TestStore awaited trailing throttles now keep concatenate children
+  sequential through the trailing run's completion, including when newer
+  unawaited events replace the pending effect inside the active window.
+- TestStore debounce now preserves the caller's awaited mode instead of always
+  recursing as awaited work.
 
 ### Added
 

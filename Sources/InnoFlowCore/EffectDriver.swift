@@ -47,6 +47,7 @@ package final class ThrottleStateMap<Action: Sendable> {
   package struct PendingTrailing: Sendable {
     package let effect: EffectTask<Action>
     package let context: EffectExecutionContext?
+    package let requiresAwaitedCompletion: Bool
   }
 
   private var windowEndByID: [AnyEffectID: ContinuousClock.Instant] = [:]
@@ -70,9 +71,16 @@ package final class ThrottleStateMap<Action: Sendable> {
   package func storePending(
     _ effect: EffectTask<Action>,
     context: EffectExecutionContext?,
+    requiresAwaitedCompletion: Bool = false,
     for id: AnyEffectID
   ) {
-    pendingByID[id] = .init(effect: effect, context: context)
+    let requiresAwaitedCompletion =
+      pendingByID[id]?.requiresAwaitedCompletion == true || requiresAwaitedCompletion
+    pendingByID[id] = .init(
+      effect: effect,
+      context: context,
+      requiresAwaitedCompletion: requiresAwaitedCompletion
+    )
   }
 
   package func pending(for id: AnyEffectID) -> PendingTrailing? {
@@ -284,14 +292,20 @@ package protocol EffectDriver<Action>: AnyObject {
   var throttleState: ThrottleStateMap<Action> { get }
 
   /// Schedules the trailing drain task for the throttle id.
+  ///
+  /// `awaited` records whether the call that opened the window needs the
+  /// trailing window to complete. Later pending replacements can only promote
+  /// that requirement through `PendingTrailing.requiresAwaitedCompletion`.
+  @discardableResult
   func scheduleTrailingDrain(
     for id: AnyEffectID,
     interval: Duration,
+    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         EffectTask<Action>, EffectExecutionContext?, Bool
       ) async -> Void
-  )
+  ) -> Task<Void, Never>
 
   /// Current clock instant for throttle window comparison.
   var now: ContinuousClock.Instant { get async }

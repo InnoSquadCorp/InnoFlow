@@ -286,14 +286,16 @@ extension Store: EffectDriver {
     effectBridge.throttleState
   }
 
+  @discardableResult
   package func scheduleTrailingDrain(
     for id: AnyEffectID,
     interval: Duration,
+    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         EffectTask<R.Action>, EffectExecutionContext?, Bool
       ) async -> Void
-  ) {
+  ) -> Task<Void, Never> {
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
 
@@ -326,11 +328,16 @@ extension Store: EffectDriver {
           return pending
         }
 
-      guard let pending, let self else { return }
-      await self.walkEffect(pending.effect, context: pending.context, awaited: false)
+      guard let pending else { return }
+      await recurse(
+        pending.effect,
+        pending.context,
+        awaited || pending.requiresAwaitedCompletion
+      )
     }
 
     throttleState.setTrailingTask(task, for: id)
+    return task
   }
 
   package var now: ContinuousClock.Instant {

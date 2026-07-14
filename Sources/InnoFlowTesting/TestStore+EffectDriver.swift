@@ -550,7 +550,7 @@ extension TestStore: EffectDriver {
       guard !Task.isCancelled else { return }
       guard self.debounceTasksByID[id]?.generation == generation else { return }
       guard self.shouldProceed(context: context) else { return }
-      await recurse(nested, context, true)
+      await recurse(nested, context, awaited)
     }
 
     guard setDebounceTask(task, for: id, generation: generation) else {
@@ -562,14 +562,16 @@ extension TestStore: EffectDriver {
     }
   }
 
+  @discardableResult
   package func scheduleTrailingDrain(
     for id: AnyEffectID,
     interval: Duration,
+    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         EffectTask<R.Action>, EffectExecutionContext?, Bool
       ) async -> Void
-  ) {
+  ) -> Task<Void, Never> {
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
     let task = Task { [weak self] in
@@ -590,9 +592,14 @@ extension TestStore: EffectDriver {
       }
       guard let pending = self.throttleState.pending(for: id) else { return }
       guard self.shouldProceed(context: pending.context) else { return }
-      await recurse(pending.effect, pending.context, false)
+      await recurse(
+        pending.effect,
+        pending.context,
+        awaited || pending.requiresAwaitedCompletion
+      )
     }
     throttleState.setTrailingTask(task, for: id)
+    return task
   }
 
   package var now: ContinuousClock.Instant {

@@ -29,16 +29,16 @@ package struct EffectWalker<D: EffectDriver> {
     context: EffectExecutionContext? = nil,
     awaited: Bool = false
   ) async {
-    guard let driver else { return }
-
     switch effect.operation {
     case .none:
       return
 
     case .send(let action):
+      guard let driver else { return }
       driver.deliverAction(action, context: context)
 
     case .run(let priority, let operation):
+      guard let driver else { return }
       guard driver.shouldProceed(context: context) else { return }
       await driver.startRun(
         priority: priority,
@@ -48,27 +48,47 @@ package struct EffectWalker<D: EffectDriver> {
       )
 
     case .merge(let children):
-      await driver.runConcurrently(
-        children,
-        context: context,
-        awaited: awaited,
-        recurse: recurse
-      )
+      if awaited {
+        await withTaskGroup(of: Void.self) { group in
+          for child in children {
+            group.addTask { [recurse] in
+              await recurse(child, context, true)
+            }
+          }
+          await group.waitForAll()
+        }
+      } else {
+        guard let driver else { return }
+        await driver.runConcurrently(
+          children,
+          context: context,
+          awaited: false,
+          recurse: recurse
+        )
+      }
 
     case .concatenate(let children):
-      await driver.runSequentially(
-        children,
-        context: context,
-        awaited: awaited,
-        recurse: recurse
-      )
+      if awaited {
+        for child in children {
+          await recurse(child, context, true)
+        }
+      } else {
+        guard let driver else { return }
+        await driver.runSequentially(
+          children,
+          context: context,
+          awaited: false,
+          recurse: recurse
+        )
+      }
 
     case .cancel(let id):
+      guard let driver else { return }
       await driver.cancelEffects(id: id, context: context)
 
     case .cancellable(let nested, let id, let cancelInFlight):
       if cancelInFlight {
-        await driver.cancelInFlightEffects(id: id, context: context)
+        await cancelInFlightEffects(id: id, context: context)
       }
       await walk(
         nested,
@@ -77,6 +97,7 @@ package struct EffectWalker<D: EffectDriver> {
       )
 
     case .debounce(let nested, let id, let interval):
+      guard let driver else { return }
       let delayedScope = DelayedEffectScope(
         ownerID: id,
         inheritedCancellationIDs: context?.cancellationIDs ?? [],
@@ -118,11 +139,28 @@ package struct EffectWalker<D: EffectDriver> {
       )
 
     case .diagnosticDrop(let action, let reason):
+      guard let driver else { return }
       driver.reportActionDrop(action, reason: reason, context: context)
     }
   }
 
+  /// Applies a cancellation boundary in a short-lived frame so an enclosing
+  /// cancellable wrapper does not retain the driver while its nested effect
+  /// performs delayed awaited work.
+  private func cancelInFlightEffects(
+    id: AnyEffectID,
+    context: EffectExecutionContext?
+  ) async {
+    guard let driver else { return }
+    await driver.cancelInFlightEffects(id: id, context: context)
+  }
+
   // MARK: - Throttle (shared window logic)
+
+  private struct ThrottlePlan {
+    let runsLeadingEffect: Bool
+    let trailingTaskToAwait: Task<Void, Never>?
+  }
 
   private func walkThrottle(
     nested: EffectTask<D.Action>,
@@ -133,48 +171,107 @@ package struct EffectWalker<D: EffectDriver> {
     context: EffectExecutionContext?,
     awaited: Bool
   ) async {
-    guard let driver else { return }
-
     let throttleContext = EffectExecutionContext.withCancellation(id, on: context)
+    guard
+      let plan = await prepareThrottle(
+        nested: nested,
+        id: id,
+        interval: interval,
+        leading: leading,
+        trailing: trailing,
+        context: context,
+        throttleContext: throttleContext,
+        awaited: awaited
+      )
+    else { return }
+
+    if plan.runsLeadingEffect {
+      await walk(nested, context: throttleContext, awaited: awaited)
+    }
+
+    if let trailingTask = plan.trailingTaskToAwait {
+      _ = await trailingTask.result
+    }
+  }
+
+  /// Prepares throttle state without retaining the driver across delayed work.
+  ///
+  /// A Store owns unawaited composite tasks. If an awaited throttle frame kept
+  /// the Store strongly while waiting for its timer, that ownership would form
+  /// a cycle and prevent Store deinitialization from cancelling the timer.
+  private func prepareThrottle(
+    nested: EffectTask<D.Action>,
+    id: AnyEffectID,
+    interval: Duration,
+    leading: Bool,
+    trailing: Bool,
+    context: EffectExecutionContext?,
+    throttleContext: EffectExecutionContext,
+    awaited: Bool
+  ) async -> ThrottlePlan? {
+    guard let driver else { return nil }
+
     let delayedScope = DelayedEffectScope(
       ownerID: id,
       inheritedCancellationIDs: context?.cancellationIDs ?? [],
       sequence: context?.sequence
     )
-    guard driver.throttleState.beginAdmission(delayedScope) else { return }
+    guard driver.throttleState.beginAdmission(delayedScope) else { return nil }
     defer {
       driver.throttleState.endAdmission(for: id)
     }
     let now = await driver.now
-    guard driver.shouldProceed(context: throttleContext) else { return }
-    guard driver.throttleState.admit(delayedScope) else { return }
+    guard driver.shouldProceed(context: throttleContext) else { return nil }
+    guard driver.throttleState.admit(delayedScope) else { return nil }
 
     // Inside active window — store trailing if requested, then drop.
     if let windowEnd = driver.throttleState.windowEnd(for: id),
       now < windowEnd
     {
       if trailing {
-        guard driver.throttleState.setScope(delayedScope) else { return }
-        driver.throttleState.storePending(nested, context: throttleContext, for: id)
+        guard driver.throttleState.setScope(delayedScope) else { return nil }
+        driver.throttleState.storePending(
+          nested,
+          context: throttleContext,
+          requiresAwaitedCompletion: awaited,
+          for: id
+        )
       }
-      return
+      return .init(
+        runsLeadingEffect: false,
+        trailingTaskToAwait: awaited && trailing
+          ? driver.throttleState.trailingTask(for: id)
+          : nil
+      )
     }
 
     // New window.
     driver.throttleState.resetWindow(for: id)
-    guard driver.throttleState.setScope(delayedScope) else { return }
+    guard driver.throttleState.setScope(delayedScope) else { return nil }
     driver.throttleState.setWindowEnd(now.advanced(by: interval), for: id)
 
+    var trailingTask: Task<Void, Never>?
     if trailing {
       if !leading {
-        driver.throttleState.storePending(nested, context: throttleContext, for: id)
+        driver.throttleState.storePending(
+          nested,
+          context: throttleContext,
+          requiresAwaitedCompletion: awaited,
+          for: id
+        )
       }
-      driver.scheduleTrailingDrain(for: id, interval: interval, recurse: recurse)
+      trailingTask = driver.scheduleTrailingDrain(
+        for: id,
+        interval: interval,
+        awaited: awaited,
+        recurse: recurse
+      )
     }
 
-    if leading {
-      await walk(nested, context: throttleContext, awaited: awaited)
-    }
+    return .init(
+      runsLeadingEffect: leading,
+      trailingTaskToAwait: awaited ? trailingTask : nil
+    )
   }
 
   // MARK: - Recursion Closure
