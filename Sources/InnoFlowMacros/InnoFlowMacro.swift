@@ -55,6 +55,12 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       return []
     }
 
+    let accessPrefix = synthesizedMemberAccessPrefix(
+      from: structDecl.modifiers,
+      declaration: structDecl,
+      in: context
+    )
+
     if isPhaseManaged(node: node) {
       // Mirrored by `diagnosePhaseManagedContractIssueIfNeeded` in the
       // ExtensionMacro pass.
@@ -64,22 +70,24 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
 
       return [
         DeclSyntax(
-          """
-          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-            body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
-          }
-          """
+          stringLiteral:
+            """
+            \(accessPrefix)func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
+            }
+            """
         )
       ]
     }
 
     return [
       DeclSyntax(
-        """
-        func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-          body.reduce(into: &state, action: action)
-        }
-        """
+        stringLiteral:
+          """
+          \(accessPrefix)func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+            body.reduce(into: &state, action: action)
+          }
+          """
       )
     ]
   }
@@ -187,8 +195,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       diagnosePhaseTotalityIfNeeded(in: structDecl, context: context)
     }
 
-    let typeName = structDecl.name.text
-    let extensionDecl = try ExtensionDeclSyntax("extension \(raw: typeName): Reducer {}")
+    let extendedType = type.trimmedDescription
+    let extensionDecl = try ExtensionDeclSyntax("extension \(raw: extendedType): Reducer {}")
     return [extensionDecl]
   }
 

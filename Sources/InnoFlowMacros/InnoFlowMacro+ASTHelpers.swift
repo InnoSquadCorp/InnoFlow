@@ -9,6 +9,66 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
 extension InnoFlowMacro {
+  /// Returns the explicit access required by a synthesized protocol witness or
+  /// API member. Swift does not infer `public` or `package` for members emitted
+  /// by an attached macro, even when the enclosing declaration has that access.
+  static func synthesizedMemberAccessPrefix(
+    from modifiers: DeclModifierListSyntax,
+    declaration: some DeclGroupSyntax,
+    in context: some MacroExpansionContext
+  ) -> String {
+    if let explicitPrefix = declaredAccessPrefix(from: modifiers) {
+      return explicitPrefix
+    }
+
+    var lexicalContexts = context.lexicalContext[...]
+    if let first = lexicalContexts.first,
+      representsSameNominalDeclaration(first, as: declaration)
+    {
+      lexicalContexts = lexicalContexts.dropFirst()
+    }
+
+    guard let extensionDecl = lexicalContexts.first?.as(ExtensionDeclSyntax.self) else {
+      return ""
+    }
+    return declaredAccessPrefix(from: extensionDecl.modifiers) ?? ""
+  }
+
+  private static func declaredAccessPrefix(
+    from modifiers: DeclModifierListSyntax
+  ) -> String? {
+    for modifier in modifiers {
+      switch modifier.name.tokenKind {
+      case .keyword(.open), .keyword(.public):
+        return "public "
+      case .keyword(.package):
+        return "package "
+      case .keyword(.internal), .keyword(.fileprivate), .keyword(.private):
+        return ""
+      default:
+        continue
+      }
+    }
+    return nil
+  }
+
+  private static func representsSameNominalDeclaration(
+    _ lexicalContext: Syntax,
+    as declaration: some DeclGroupSyntax
+  ) -> Bool {
+    if let contextStruct = lexicalContext.as(StructDeclSyntax.self),
+      let declarationStruct = declaration.as(StructDeclSyntax.self)
+    {
+      return contextStruct.name.text == declarationStruct.name.text
+    }
+    if let contextEnum = lexicalContext.as(EnumDeclSyntax.self),
+      let declarationEnum = declaration.as(EnumDeclSyntax.self)
+    {
+      return contextEnum.name.text == declarationEnum.name.text
+    }
+    return false
+  }
+
   static func emitMacroEntryDiagnostics(
     for declaration: StructDeclSyntax,
     context: some MacroExpansionContext

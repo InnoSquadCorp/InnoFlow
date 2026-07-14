@@ -69,6 +69,145 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow preserves public access on synthesized members")
+  func publicFeatureSynthesizesPublicMembers() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        public struct PublicFeature {
+            public struct State: Sendable {}
+            public enum Action: Sendable {
+                case child(ChildAction)
+                case row(id: Int, action: ChildAction)
+            }
+            public enum ChildAction: Sendable { case start }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          public struct PublicFeature {
+              public struct State: Sendable {}
+              public enum Action: Sendable {
+                  case child(ChildAction)
+                  case row(id: Int, action: ChildAction)
+              }
+              public enum ChildAction: Sendable { case start }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension PublicFeature: Reducer {}
+          extension PublicFeature.Action {
+            public static let childCasePath = CasePath<Self, ChildAction>(
+              embed: { childAction in
+                .child(childAction)
+              },
+              extract: { action in
+                guard case .child(let childAction) = action else { return nil }
+                return childAction
+              }
+            )
+            public static let rowActionPath = CollectionActionPath<Self, Int, ChildAction>(
+              embed: { id, action in
+                .row(id: id, action: action)
+              },
+              extract: { action in
+                guard case let .row(id, childAction) = action else { return nil }
+                return (id, childAction)
+              }
+            )
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow phase-managed form preserves package access on synthesized members")
+  func packageFeatureSynthesizesPackageMembers() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow(phaseManaged: true)
+        package struct PackageFeature {
+            package struct State: Sendable {
+                package enum Phase: Hashable, Sendable { case idle, loaded }
+                package var phase = Phase.idle
+            }
+            package enum Action: Sendable {
+                case child(ChildAction)
+            }
+            package enum ChildAction: Sendable { case start }
+
+            package static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                PhaseMap(\\.phase) {
+                    From(.idle) { On(Action.childCasePath, to: .loaded) }
+                    From(.loaded) {}
+                }
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          package struct PackageFeature {
+              package struct State: Sendable {
+                  package enum Phase: Hashable, Sendable { case idle, loaded }
+                  package var phase = Phase.idle
+              }
+              package enum Action: Sendable {
+                  case child(ChildAction)
+              }
+              package enum ChildAction: Sendable { case start }
+
+              package static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  PhaseMap(\\.phase) {
+                      From(.idle) { On(Action.childCasePath, to: .loaded) }
+                      From(.loaded) {}
+                  }
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              package func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
+              }
+          }
+          extension PackageFeature: Reducer {}
+          extension PackageFeature.Action {
+            package static let childCasePath = CasePath<Self, ChildAction>(
+              embed: { childAction in
+                .child(childAction)
+              },
+              extract: { action in
+                guard case .child(let childAction) = action else { return nil }
+                return childAction
+              }
+            )
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow synthesizes case paths for single child-action cases")
   func childActionCasePathIsSynthesized() throws {
     #if canImport(InnoFlowMacros)

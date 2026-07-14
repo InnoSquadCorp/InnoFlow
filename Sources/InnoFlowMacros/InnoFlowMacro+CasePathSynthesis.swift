@@ -13,6 +13,11 @@ extension InnoFlowMacro {
     in actionEnum: EnumDeclSyntax,
     context: some MacroExpansionContext
   ) -> [DeclSyntax] {
+    let accessPrefix = synthesizedMemberAccessPrefix(
+      from: actionEnum.modifiers,
+      declaration: actionEnum,
+      in: context
+    )
     let existingNames = Set(
       actionEnum.memberBlock.members.flatMap { member -> [String] in
         if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
@@ -50,6 +55,7 @@ extension InnoFlowMacro {
         guard
           let member = synthesizedActionPathMember(
             for: element,
+            accessPrefix: accessPrefix,
             existingNames: existingNames,
             seenGeneratedNames: &seenGeneratedNames,
             context: context
@@ -66,6 +72,7 @@ extension InnoFlowMacro {
 
   private static func synthesizedActionPathMember(
     for element: EnumCaseElementSyntax,
+    accessPrefix: String,
     existingNames: Set<String>,
     seenGeneratedNames: inout Set<String>,
     context: some MacroExpansionContext
@@ -111,7 +118,7 @@ extension InnoFlowMacro {
       let childActionType = parameter.type.trimmedDescription
       return .init(
         declaration: """
-          static let \(memberName) = CasePath<Self, \(childActionType)>(
+          \(accessPrefix)static let \(memberName) = CasePath<Self, \(childActionType)>(
             embed: { childAction in
               .\(caseName)(childAction)
             },
@@ -166,7 +173,7 @@ extension InnoFlowMacro {
       let childActionType = actionParameter.type.trimmedDescription
       return .init(
         declaration: """
-          static let \(memberName) = CollectionActionPath<Self, \(idType), \(childActionType)>(
+          \(accessPrefix)static let \(memberName) = CollectionActionPath<Self, \(idType), \(childActionType)>(
             embed: { id, action in
               .\(caseName)(id: id, action: action)
             },

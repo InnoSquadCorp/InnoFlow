@@ -12,6 +12,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - The 5.0 development line now requires Swift 6.3 or newer. The core package,
   compile-contract clients, canonical sample package, Xcode sample targets,
   and DocC workflow all build in the same Swift 6 toolchain contract.
+- `@InnoFlow` now propagates `public` and `package` access to its synthesized
+  `reduce(into:action:)`, `CasePath`, and `CollectionActionPath` members, so
+  macro-authored features work across module and package-target boundaries.
+  Access inherited from `public extension` / `package extension` namespaces
+  and qualified nested feature conformances are covered as well.
 
 ### Added
 

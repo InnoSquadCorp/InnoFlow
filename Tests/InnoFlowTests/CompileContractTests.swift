@@ -339,6 +339,251 @@ struct CompileContractTests {
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
+  @Test("Public and package InnoFlow macro features work across target boundaries")
+  func exportedMacroFeaturesWorkAcrossTargetBoundaries() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let temporaryRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let clientRoot = temporaryRoot.appendingPathComponent("PublicMacroClient", isDirectory: true)
+    let featureRoot = clientRoot.appendingPathComponent(
+      "Sources/PublicFeatureKit",
+      isDirectory: true
+    )
+    let executableRoot = clientRoot.appendingPathComponent(
+      "Sources/PublicMacroClient",
+      isDirectory: true
+    )
+    let buildPath = temporaryRoot.appendingPathComponent("build", isDirectory: true)
+    try FileManager.default.createDirectory(at: featureRoot, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: executableRoot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+    let escapedPackagePath = packageRoot.path
+      .replacingOccurrences(of: "\\", with: "\\\\")
+      .replacingOccurrences(of: "\"", with: "\\\"")
+
+    let manifest = """
+      // swift-tools-version: 6.3
+      import PackageDescription
+
+      let package = Package(
+          name: "PublicMacroClient",
+          platforms: [
+              .iOS(.v18),
+              .macOS(.v15),
+              .tvOS(.v18),
+              .watchOS(.v11),
+              .visionOS(.v2)
+          ],
+          products: [
+              .executable(name: "PublicMacroClient", targets: ["PublicMacroClient"])
+          ],
+          dependencies: [
+              .package(path: "\(escapedPackagePath)")
+          ],
+          targets: [
+              .target(
+                  name: "PublicFeatureKit",
+                  dependencies: [
+                      .product(name: "InnoFlow", package: "InnoFlow")
+                  ]
+              ),
+              .executableTarget(
+                  name: "PublicMacroClient",
+                  dependencies: [
+                      "PublicFeatureKit",
+                      .product(name: "InnoFlow", package: "InnoFlow")
+                  ]
+              )
+          ]
+      )
+      """
+    try manifest.write(
+      to: clientRoot.appendingPathComponent("Package.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let featureSource = """
+      import InnoFlow
+
+      @InnoFlow
+      public struct PublicFeature {
+          public struct State: Equatable, Sendable, DefaultInitializable {
+              public var count = 0
+              public init() {}
+          }
+
+          public enum Action: Equatable, Sendable {
+              case increment
+              case child(ChildAction)
+              case row(id: Int, action: ChildAction)
+          }
+
+          public enum ChildAction: Equatable, Sendable {
+              case start
+          }
+
+          public init() {}
+
+          var body: some Reducer<State, Action> {
+              Reduce { state, action in
+                  if case .increment = action {
+                      state.count += 1
+                  }
+                  return .none
+              }
+          }
+      }
+
+      @InnoFlow(phaseManaged: true)
+      package struct PackageFeature {
+          package struct State: Equatable, Sendable, DefaultInitializable {
+              package enum Phase: Hashable, Sendable { case idle, loaded }
+              package var phase = Phase.idle
+              package init() {}
+          }
+
+          package enum Action: Equatable, Sendable {
+              case child(ChildAction)
+              case row(id: Int, action: ChildAction)
+          }
+
+          package enum ChildAction: Equatable, Sendable {
+              case start
+          }
+
+          package static var phaseMap: PhaseMap<State, Action, State.Phase> {
+              PhaseMap(\\.phase) {
+                  From(.idle) { On(Action.childCasePath, to: .loaded) }
+                  From(.loaded) {}
+              }
+          }
+
+          package init() {}
+
+          var body: some Reducer<State, Action> {
+              Reduce { _, _ in .none }
+          }
+      }
+
+      public enum PublicNamespace {}
+
+      public extension PublicNamespace {
+          @InnoFlow
+          struct Feature {
+              public struct State: Equatable, Sendable, DefaultInitializable {
+                  public init() {}
+              }
+
+              public enum Action: Equatable, Sendable {
+                  case child(ChildAction)
+              }
+
+              public enum ChildAction: Equatable, Sendable {
+                  case start
+              }
+
+              public init() {}
+
+              var body: some Reducer<State, Action> {
+                  Reduce { _, _ in .none }
+              }
+          }
+      }
+
+      package enum PackageNamespace {}
+
+      package extension PackageNamespace {
+          @InnoFlow(phaseManaged: true)
+          struct Feature {
+              package struct State: Equatable, Sendable, DefaultInitializable {
+                  package enum Phase: Hashable, Sendable { case idle, loaded }
+                  package var phase = Phase.idle
+                  package init() {}
+              }
+
+              package enum Action: Equatable, Sendable {
+                  case child(ChildAction)
+              }
+
+              package enum ChildAction: Equatable, Sendable {
+                  case start
+              }
+
+              package static var phaseMap: PhaseMap<State, Action, State.Phase> {
+                  PhaseMap(\\.phase) {
+                      From(.idle) { On(Action.childCasePath, to: .loaded) }
+                      From(.loaded) {}
+                  }
+              }
+
+              package init() {}
+
+              var body: some Reducer<State, Action> {
+                  Reduce { _, _ in .none }
+              }
+          }
+      }
+      """
+    try featureSource.write(
+      to: featureRoot.appendingPathComponent("PublicFeature.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let executableSource = """
+      import InnoFlow
+      import PublicFeatureKit
+
+      var state = PublicFeature.State()
+      let feature = PublicFeature()
+      let _ = feature.reduce(into: &state, action: .increment)
+      let _ = PublicFeature.Action.childCasePath
+      let _ = PublicFeature.Action.rowActionPath
+
+      var packageState = PackageFeature.State()
+      let packageFeature = PackageFeature()
+      let _ = packageFeature.reduce(into: &packageState, action: .child(.start))
+      let _ = PackageFeature.Action.childCasePath
+      let _ = PackageFeature.Action.rowActionPath
+
+      var nestedPublicState = PublicNamespace.Feature.State()
+      let nestedPublicFeature = PublicNamespace.Feature()
+      let _ = nestedPublicFeature.reduce(into: &nestedPublicState, action: .child(.start))
+      let _ = PublicNamespace.Feature.Action.childCasePath
+
+      var nestedPackageState = PackageNamespace.Feature.State()
+      let nestedPackageFeature = PackageNamespace.Feature()
+      let _ = nestedPackageFeature.reduce(into: &nestedPackageState, action: .child(.start))
+      let _ = PackageNamespace.Feature.Action.childCasePath
+      """
+    try executableSource.write(
+      to: executableRoot.appendingPathComponent("main.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let result = try runProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+      arguments: [
+        "swift",
+        "build",
+        "--package-path",
+        clientRoot.path,
+        "--build-path",
+        buildPath.path,
+        "--product",
+        "PublicMacroClient",
+      ]
+    )
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
   @Test("InnoFlowCore does not expose macro declarations")
   func innoFlowCoreDoesNotExposeMacroDeclarations() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
