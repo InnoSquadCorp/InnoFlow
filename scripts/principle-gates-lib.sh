@@ -790,7 +790,15 @@ run_release_build_checks() {
   fi
 
   echo "[principle-gates] Running package tests"
-  run_low_priority swift test --package-path "$ROOT_DIR" --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors
+  # SwiftPM's --jobs limit applies to the build, while Swift Testing still
+  # schedules suites concurrently. On shared macOS runners that can starve
+  # unrelated MainActor-bound async tests behind the long-running randomized
+  # effect suites until their guardrail timeouts fire together.
+  run_low_priority swift test \
+    --package-path "$ROOT_DIR" \
+    --jobs "$SWIFTPM_JOBS" \
+    --no-parallel \
+    -Xswiftc -warnings-as-errors
 
   echo "[principle-gates] Running package tests in release configuration"
   # Release-mode test gate. Uses an isolated build path for the same reason as
@@ -807,6 +815,7 @@ run_release_build_checks() {
       --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
       --jobs "$SWIFTPM_JOBS" \
+      --no-parallel \
       "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" \
       -Xswiftc -warnings-as-errors; then
     echo "[principle-gates] Failed: 'swift test -c release' failed — release-mode regression"
