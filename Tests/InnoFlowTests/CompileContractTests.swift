@@ -480,7 +480,7 @@ struct CompileContractTests {
       .replacingOccurrences(of: "\"", with: "\\\"")
 
     let manifest = """
-      // swift-tools-version: 6.2
+      // swift-tools-version: 6.3
       import PackageDescription
 
       let package = Package(
@@ -584,7 +584,7 @@ struct CompileContractTests {
       .replacingOccurrences(of: "\"", with: "\\\"")
 
     let manifest = """
-      // swift-tools-version: 6.2
+      // swift-tools-version: 6.3
       import PackageDescription
 
       let package = Package(
@@ -688,7 +688,7 @@ struct CompileContractTests {
       .replacingOccurrences(of: "\"", with: "\\\"")
 
     let manifest = """
-      // swift-tools-version: 6.2
+      // swift-tools-version: 6.3
       import PackageDescription
 
       let package = Package(

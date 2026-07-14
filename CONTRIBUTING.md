@@ -11,6 +11,9 @@ Read these files first:
 
 Those files define the current framework contract.
 
+The 5.0 development line requires Swift 6.3 or newer. Run validation with a
+toolchain that satisfies that minimum before committing changes.
+
 ## Non-negotiable rules
 
 - `@InnoFlow` features use `var body: some Reducer<State, Action>`.

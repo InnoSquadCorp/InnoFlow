@@ -1,5 +1,5 @@
 ---
-description: "Comprehensive project overview, architecture patterns, and development workflow for Swift 6.1+ iOS applications using SwiftUI and SPM. Apply when working on project structure, general Swift coding patterns, or need orientation about the codebase architecture."
+description: "Comprehensive project overview, architecture patterns, and development workflow for Swift 6.3+ iOS applications using SwiftUI and SPM. Apply when working on project structure, general Swift coding patterns, or need orientation about the codebase architecture."
 globs: 
 alwaysApply: false
 ---
@@ -8,7 +8,7 @@ alwaysApply: false
 
 ## Project Overview
 
-This is a native **iOS application** built with **Swift 6.1+** and **SwiftUI**. The codebase targets **iOS 18.0 and later**, allowing full use of the latest Swift and iOS APIs without backward compatibility concerns. All concurrency is handled with **Swift Concurrency** (async/await, actors, @MainActor isolation) ensuring thread-safe code.
+This is a native **iOS application** built with **Swift 6.3+** and **SwiftUI**. The codebase targets **iOS 18.0 and later**, allowing full use of the latest Swift and iOS APIs without backward compatibility concerns. All concurrency is handled with **Swift Concurrency** (async/await, actors, @MainActor isolation) ensuring thread-safe code.
 
 - **Frameworks & Tech:** SwiftUI for UI, Swift Concurrency with strict mode, Swift Package Manager for modular architecture
 - **Architecture:** Model-View (MV) pattern using pure SwiftUI state management. We avoid MVVM and instead leverage SwiftUI's built-in state mechanisms (@State, @Observable, @Environment, @Binding)

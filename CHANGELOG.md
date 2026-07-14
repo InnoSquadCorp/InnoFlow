@@ -7,6 +7,12 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Changed
+
+- The 5.0 development line now requires Swift 6.3 or newer. The core package,
+  compile-contract clients, canonical sample package, Xcode sample targets,
+  and DocC workflow all build in the same Swift 6 toolchain contract.
+
 ### Added
 
 - `StoreInstrumentation.didFailRun` and `StoreInstrumentationEvent.runFailed`

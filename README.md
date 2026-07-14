@@ -51,6 +51,10 @@ longer comparison against TCA, ReactorKit, ReSwift, and SwiftRex.
 
 ## Installation
 
+The 5.0 development line requires a Swift 6.3 or newer toolchain and compiles
+all package targets in Swift 6 language mode. The canonical sample and DocC
+workflow use the same toolchain contract.
+
 ### Swift Package Manager
 
 ```swift
