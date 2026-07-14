@@ -19,6 +19,12 @@ import Foundation
 /// - delayed debounce/throttle state must be cleared whenever the owning Store shuts down
 @MainActor
 package final class StoreEffectBridge<Action: Sendable> {
+  private struct DebounceState {
+    let scope: DelayedEffectScope
+    let generation: UInt64
+    var task: Task<Void, Never>?
+  }
+
   private struct TrackedCompositeTask {
     let task: Task<Void, Never>
     let sequence: UInt64
@@ -28,8 +34,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   package let throttleState = ThrottleStateMap<Action>()
   private let boundaries = EffectCancellationBoundaries()
 
-  private var debounceDelayTasksByID: [AnyEffectID: Task<Void, Never>] = [:]
-  private var debounceGenerationByID: [AnyEffectID: UInt64] = [:]
+  private var debounceStateByID: [AnyEffectID: DebounceState] = [:]
   private var nextDebounceGenerationValue: UInt64 = 0
   private var compositeTasksByToken: [UUID: TrackedCompositeTask] = [:]
   private var compositeTokensByID: [AnyEffectID: Set<UUID>] = [:]
@@ -81,48 +86,68 @@ package final class StoreEffectBridge<Action: Sendable> {
     boundaries.markCancelledAll(upTo: sequence)
   }
 
-  @discardableResult
-  package func nextDebounceGeneration(for id: AnyEffectID) -> UInt64 {
+  /// Atomically accepts a debounce request and reserves its generation.
+  ///
+  /// Lower-sequence continuations are rejected after a newer request has won.
+  /// Equal sequences retain debounce's latest-wins behavior and cancel the
+  /// previously registered sleeper before reserving the replacement.
+  package func beginDebounce(_ scope: DelayedEffectScope) -> UInt64? {
+    if shouldAdmitDelayedScope(scope, replacing: debounceStateByID[scope.ownerID]?.scope) == false {
+      return nil
+    }
+
+    debounceStateByID[scope.ownerID]?.task?.cancel()
     nextDebounceGenerationValue &+= 1
-    debounceGenerationByID[id] = nextDebounceGenerationValue
+    debounceStateByID[scope.ownerID] = .init(
+      scope: scope,
+      generation: nextDebounceGenerationValue,
+      task: nil
+    )
     return nextDebounceGenerationValue
   }
 
   package func debounceGeneration(for id: AnyEffectID) -> UInt64? {
-    debounceGenerationByID[id]
+    debounceStateByID[id]?.generation
   }
 
+  package func debounceScope(for id: AnyEffectID) -> DelayedEffectScope? {
+    debounceStateByID[id]?.scope
+  }
+
+  @discardableResult
   package func setDebounceDelayTask(
     _ task: Task<Void, Never>,
     for id: AnyEffectID,
     generation: UInt64
-  ) {
-    guard debounceGenerationByID[id] == generation else { return }
-    debounceDelayTasksByID[id] = task
+  ) -> Bool {
+    guard var state = debounceStateByID[id], state.generation == generation else {
+      task.cancel()
+      return false
+    }
+    state.task?.cancel()
+    state.task = task
+    debounceStateByID[id] = state
+    return true
   }
 
-  package func clearDebounceState(for id: AnyEffectID, generation: UInt64? = nil) {
-    if let generation, debounceGenerationByID[id] != generation {
-      return
+  package func clearDebounceStates(where shouldClear: (DelayedEffectScope) -> Bool) {
+    for (id, state) in Array(debounceStateByID) where shouldClear(state.scope) {
+      debounceStateByID.removeValue(forKey: id)?.task?.cancel()
     }
-    debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
-    debounceGenerationByID.removeValue(forKey: id)
   }
 
   @discardableResult
   package func finishDebounceState(for id: AnyEffectID, generation: UInt64) -> Bool {
-    guard debounceGenerationByID[id] == generation else { return false }
-    debounceDelayTasksByID.removeValue(forKey: id)
-    debounceGenerationByID.removeValue(forKey: id)
+    guard debounceStateByID[id]?.generation == generation else { return false }
+    debounceStateByID.removeValue(forKey: id)
     return true
   }
 
   package func clearAllDelayedState() {
-    for task in debounceDelayTasksByID.values {
-      task.cancel()
+    for state in debounceStateByID.values {
+      state.task?.cancel()
     }
-    debounceDelayTasksByID.removeAll(keepingCapacity: true)
-    debounceGenerationByID.removeAll(keepingCapacity: true)
+    debounceStateByID.removeAll(keepingCapacity: true)
     throttleState.clearAll()
   }
 
@@ -211,24 +236,41 @@ package final class StoreEffectBridge<Action: Sendable> {
     compositeIDsByToken.removeAll(keepingCapacity: true)
   }
 
+  private func cancelDelayedState(id: AnyEffectID, upTo sequence: UInt64) {
+    let shouldCancel: (DelayedEffectScope) -> Bool = { [boundaries] scope in
+      guard scope.contains(id) else { return false }
+      return scope.sequence <= sequence
+        || boundaries.shouldStart(sequence: scope.sequence, cancellationID: id) == false
+    }
+    clearDebounceStates(where: shouldCancel)
+    throttleState.clearStates(where: shouldCancel)
+  }
+
+  private func cancelAllDelayedState(upTo sequence: UInt64) {
+    let shouldCancel: (DelayedEffectScope) -> Bool = { [boundaries] scope in
+      scope.sequence <= sequence
+        || boundaries.shouldStart(sequence: scope.sequence, cancellationID: nil) == false
+    }
+    clearDebounceStates(where: shouldCancel)
+    throttleState.clearStates(where: shouldCancel)
+  }
+
   package func cancelEffects(id: AnyEffectID, upTo sequence: UInt64) async {
     cancelCompositeTasks(id: id, upTo: sequence)
+    cancelDelayedState(id: id, upTo: sequence)
     await runtime.cancel(id: id, upTo: sequence)
-    clearDebounceState(for: id)
-    throttleState.clearState(for: id)
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, upTo sequence: UInt64) async {
     cancelCompositeTasks(id: id, upTo: sequence)
+    cancelDelayedState(id: id, upTo: sequence)
     await runtime.cancelInFlight(id: id, upTo: sequence)
-    clearDebounceState(for: id)
-    throttleState.clearState(for: id)
   }
 
   package func cancelAllEffects(upTo sequence: UInt64) async {
     cancelAllCompositeTasks(upTo: sequence)
+    cancelAllDelayedState(upTo: sequence)
     await runtime.cancelAll(upTo: sequence)
-    clearAllDelayedState()
   }
 
   /// Clears store-local timing state and triggers best-effort runtime cancellation.

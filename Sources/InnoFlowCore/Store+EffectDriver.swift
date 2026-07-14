@@ -234,6 +234,7 @@ extension Store: EffectDriver {
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
+    scope: DelayedEffectScope,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
@@ -241,7 +242,8 @@ extension Store: EffectDriver {
       ) async -> Void
   ) async {
     await cancelInFlightEffects(id: id, context: context)
-    let generation = effectBridge.nextDebounceGeneration(for: id)
+    guard shouldProceed(context: context) else { return }
+    guard let generation = effectBridge.beginDebounce(scope) else { return }
     let clock = self.clock
 
     let task = Task { [weak self] in
@@ -249,7 +251,11 @@ extension Store: EffectDriver {
         try await clock.sleep(interval)
       } catch {
         await MainActor.run {
-          self?.recordDrop(nil, reason: .throttledOrDebouncedCancellation, context: context)
+          guard let self else { return }
+          if self.effectBridge.debounceGeneration(for: id) == generation {
+            self.effectBridge.finishDebounceState(for: id, generation: generation)
+          }
+          self.recordDrop(nil, reason: .throttledOrDebouncedCancellation, context: context)
         }
         return
       }
@@ -267,7 +273,9 @@ extension Store: EffectDriver {
       await self.walkEffect(nested, context: context, awaited: awaited)
     }
 
-    effectBridge.setDebounceDelayTask(task, for: id, generation: generation)
+    guard effectBridge.setDebounceDelayTask(task, for: id, generation: generation) else {
+      return
+    }
 
     if awaited {
       _ = await task.result
@@ -295,7 +303,11 @@ extension Store: EffectDriver {
         try await clock.sleep(interval)
       } catch {
         await MainActor.run {
-          self?.recordDrop(nil, reason: .throttledOrDebouncedCancellation, context: nil)
+          guard let self else { return }
+          if self.throttleState.generation(for: id) == generation {
+            self.throttleState.finishState(for: id, generation: generation)
+          }
+          self.recordDrop(nil, reason: .throttledOrDebouncedCancellation, context: nil)
         }
         return
       }

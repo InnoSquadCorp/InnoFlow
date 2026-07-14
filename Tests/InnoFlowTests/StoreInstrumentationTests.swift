@@ -408,11 +408,16 @@ struct StoreInstrumentationTests {
   }
 
   @Test("Store instrumentation records cancellation and trailing throttle drop events")
-  func storeInstrumentationCancellationAndDrop() async {
+  func storeInstrumentationCancellationAndDrop() async throws {
     let probe = InstrumentationProbe()
+    let throttleSleepProbe = CancellationAwareSleepProbe()
     let store = Store(
       reducer: InstrumentationFeature(),
       initialState: .init(),
+      clock: .init(
+        now: { ContinuousClock().now },
+        sleep: { _ in try await throttleSleepProbe.sleep() }
+      ),
       instrumentation: .init(
         didStartRun: { event in
           probe.record("start:\(event.cancellationID?.description ?? "nil")")
@@ -447,10 +452,9 @@ struct StoreInstrumentationTests {
     }
 
     store.send(.trailingThrottle(1))
-    for _ in 0..<10 {
-      await Task.yield()
-    }
+    try #require(await throttleSleepProbe.started.wait())
     await store.cancelEffects(identifiedBy: "instrumented-throttle")
+    try #require(await throttleSleepProbe.cancelled.wait())
     await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
       probe.events.contains("cancel:instrumented-throttle")
         && probe.events.contains(where: {

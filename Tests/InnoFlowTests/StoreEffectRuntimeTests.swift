@@ -341,6 +341,243 @@ struct StoreEffectRuntimeTests {
     await store.cancelAllEffects()
   }
 
+  @Test("Store stale outer cancellation preserves a newer inner debounce sleeper")
+  func storeStaleOuterCancellationPreservesNewerDebounce() async throws {
+    try await assertStaleOuterCancellationPreservesNewerDelayedEffect(.debounce)
+  }
+
+  @Test("Store stale outer cancellation preserves a newer inner throttle drain")
+  func storeStaleOuterCancellationPreservesNewerThrottle() async throws {
+    try await assertStaleOuterCancellationPreservesNewerDelayedEffect(.throttle)
+  }
+
+  @Test("Throttle rejects an older clock read after newer state finishes")
+  func throttleRejectsOlderClockReadAfterNewerFinish() async throws {
+    let timingID = AnyEffectID(StaticEffectID("throttle-admission-tombstone"))
+    let clockReads = FirstClockReadGate()
+    let newerFinished = AsyncTestSignal()
+    let staleExecutionProbe = InstrumentationProbe()
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .init(
+        now: { await clockReads.now() },
+        sleep: { _ in }
+      )
+    )
+    let staleEffect = EffectTask<CounterFeature.Action>.run { _, _ in
+      staleExecutionProbe.record("stale")
+    }
+    .throttle(timingID, for: .seconds(60), leading: true, trailing: false)
+    let staleWalk = Task { @MainActor in
+      await store.walkEffect(
+        staleEffect,
+        context: .init(sequence: 1),
+        awaited: true
+      )
+    }
+
+    do {
+      try #require(await clockReads.firstReadStarted.wait())
+
+      let newerEffect = EffectTask<CounterFeature.Action>.run { _, _ in
+        newerFinished.signal()
+      }
+      .throttle(timingID, for: .seconds(60), leading: false, trailing: true)
+      await store.walkEffect(
+        newerEffect,
+        context: .init(sequence: 2),
+        awaited: true
+      )
+      try #require(await newerFinished.wait())
+
+      #expect(store.throttleState.scope(for: timingID) == nil)
+      #expect(store.throttleState.latestAdmissionSequence(for: timingID) == 2)
+
+      await clockReads.release()
+      _ = await staleWalk.result
+    } catch {
+      await clockReads.release()
+      await store.cancelAllEffects()
+      _ = await staleWalk.result
+      throw error
+    }
+
+    #expect(staleExecutionProbe.events.isEmpty)
+    #expect(store.throttleState.latestAdmissionSequence(for: timingID) == nil)
+    await store.cancelAllEffects()
+  }
+
+  @Test("Suppressed non-trailing throttle does not steal active delayed ownership")
+  func suppressedNonTrailingThrottleKeepsActiveOwner() async throws {
+    let timingID = AnyEffectID(StaticEffectID("throttle-active-owner"))
+    let firstOuterID = AnyEffectID(StaticEffectID("throttle-active-owner-first"))
+    let suppressedOuterID = AnyEffectID(StaticEffectID("throttle-active-owner-suppressed"))
+    let sleepProbe = CancellationAwareSleepProbe()
+    let instant = ContinuousClock().now
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .init(
+        now: { instant },
+        sleep: { _ in try await sleepProbe.sleep() }
+      )
+    )
+    let delayedEffect = EffectTask<CounterFeature.Action>.run { _, _ in }
+      .throttle(timingID, for: .seconds(60), leading: false, trailing: true)
+
+    do {
+      await store.walkEffect(
+        delayedEffect,
+        context: .init(cancellationID: firstOuterID, sequence: 1),
+        awaited: false
+      )
+      try #require(await sleepProbe.started.wait())
+
+      let suppressedEffect = EffectTask<CounterFeature.Action>.run { _, _ in }
+        .throttle(timingID, for: .seconds(60), leading: true, trailing: false)
+      await store.walkEffect(
+        suppressedEffect,
+        context: .init(cancellationID: suppressedOuterID, sequence: 2),
+        awaited: true
+      )
+
+      #expect(store.throttleState.scope(for: timingID)?.contains(firstOuterID) == true)
+      #expect(store.throttleState.scope(for: timingID)?.contains(suppressedOuterID) == false)
+      #expect(store.throttleState.latestAdmissionSequence(for: timingID) == nil)
+
+      await store.cancelEffects(id: firstOuterID, context: .init(sequence: 1))
+      try #require(await sleepProbe.cancelled.wait())
+    } catch {
+      await sleepProbe.release()
+      await store.cancelAllEffects()
+      throw error
+    }
+
+    #expect(store.throttleState.scope(for: timingID) == nil)
+    #expect(store.throttleState.latestAdmissionSequence(for: timingID) == nil)
+    await store.cancelAllEffects()
+  }
+
+  @Test("Debounce clears delayed state when the store clock fails")
+  func debounceClearsStateAfterClockFailure() async {
+    let timingID = AnyEffectID(StaticEffectID("debounce-clock-failure"))
+    let instant = ContinuousClock().now
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .init(
+        now: { instant },
+        sleep: { _ in throw TestClockFailure() }
+      )
+    )
+    let sequence = store.effectBridge.nextSequence()
+    let context = EffectExecutionContext(cancellationID: timingID, sequence: sequence)
+    let scope = DelayedEffectScope(ownerID: timingID, sequence: sequence)
+    let recurseProbe = InstrumentationProbe()
+
+    await store.debounce(
+      .none,
+      id: timingID,
+      interval: .seconds(60),
+      context: context,
+      scope: scope,
+      awaited: true
+    ) { _, _, _ in
+      recurseProbe.record("recursed")
+    }
+
+    #expect(store.effectBridge.debounceScope(for: timingID) == nil)
+    #expect(store.effectBridge.debounceGeneration(for: timingID) == nil)
+    #expect(recurseProbe.events.isEmpty)
+  }
+
+  @Test("Trailing throttle clears delayed state when the store clock fails")
+  func trailingThrottleClearsStateAfterClockFailure() async throws {
+    let timingID = AnyEffectID(StaticEffectID("throttle-clock-failure"))
+    let dropped = AsyncTestSignal()
+    let instant = ContinuousClock().now
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .init(
+        now: { instant },
+        sleep: { _ in throw TestClockFailure() }
+      ),
+      instrumentation: .init(
+        didDropAction: { event in
+          if event.reason == .throttledOrDebouncedCancellation {
+            dropped.signal()
+          }
+        }
+      )
+    )
+    let effect = EffectTask<CounterFeature.Action>.none
+      .throttle(timingID, for: .seconds(60), leading: false, trailing: true)
+
+    await store.walkEffect(
+      effect,
+      context: .init(sequence: 1),
+      awaited: true
+    )
+    try #require(await dropped.wait())
+
+    #expect(store.throttleState.scope(for: timingID) == nil)
+    #expect(store.throttleState.generation(for: timingID) == nil)
+    #expect(store.throttleState.pending(for: timingID) == nil)
+    #expect(store.throttleState.windowEnd(for: timingID) == nil)
+    #expect(store.throttleState.latestAdmissionSequence(for: timingID) == nil)
+  }
+
+  private func assertStaleOuterCancellationPreservesNewerDelayedEffect(
+    _ kind: SequenceBoundedDelayedEffectKind
+  ) async throws {
+    let staleCancellationReady = AsyncTestSignal()
+    let releaseStaleCancellation = RunStartGate()
+    let staleCancellationApplied = AsyncTestSignal()
+    let sleepProbe = CancellationAwareSleepProbe()
+    let clock = StoreClock(
+      now: { ContinuousClock().now },
+      sleep: { _ in
+        try await sleepProbe.sleep()
+      }
+    )
+    let store = Store(
+      reducer: SequenceBoundedDelayedEffectFeature(
+        kind: kind,
+        staleCancellationReady: staleCancellationReady,
+        releaseStaleCancellation: releaseStaleCancellation,
+        staleCancellationApplied: staleCancellationApplied
+      ),
+      initialState: .init(),
+      clock: clock
+    )
+
+    do {
+      store.send(.scheduleStaleCancellation)
+      try #require(await staleCancellationReady.wait())
+
+      store.send(.startNewerDelayedEffect)
+      try #require(await sleepProbe.started.wait())
+
+      await releaseStaleCancellation.open()
+      try #require(await staleCancellationApplied.wait())
+
+      #expect(sleepProbe.isCancelled == false)
+
+      await store.cancelEffects(identifiedBy: "sequence-bounded-delayed-outer")
+      try #require(await sleepProbe.cancelled.wait())
+    } catch {
+      await releaseStaleCancellation.open()
+      await sleepProbe.release()
+      await store.cancelAllEffects()
+      throw error
+    }
+
+    #expect(sleepProbe.isCancelled)
+    await store.cancelAllEffects()
+  }
+
   @Test("Store .run keeps FIFO ordering for multiple emitted actions")
   func storeRunEmissionOrderingRemainsFIFO() async throws {
     let clock = ManualTestClock()

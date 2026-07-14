@@ -191,4 +191,196 @@ struct StoreEffectBridgeIsolationTests {
     _ = await effectiveTask.result
     _ = await newerTask.result
   }
+
+  @Test("Delayed debounce cancellation honors inherited ID effective boundaries")
+  func delayedDebounceHonorsInheritedIDEffectiveBoundary() async throws {
+    let bridge = StoreEffectBridge<Int>()
+    let outerID = AnyEffectID(StaticEffectID("delayed.debounce.outer"))
+    let effectiveID = AnyEffectID(StaticEffectID("delayed.debounce.effective"))
+    let newerID = AnyEffectID(StaticEffectID("delayed.debounce.newer"))
+    let staleSequence = bridge.nextSequence()
+    let effectiveSequence = bridge.nextSequence()
+    let newerSequence = bridge.nextSequence()
+    let hold = RunStartGate()
+    let effectiveTask = Task<Void, Never> { await hold.wait() }
+    let newerTask = Task<Void, Never> { await hold.wait() }
+    let effectiveScope = DelayedEffectScope(
+      ownerID: effectiveID,
+      inheritedCancellationIDs: [outerID],
+      sequence: effectiveSequence
+    )
+    let newerScope = DelayedEffectScope(
+      ownerID: newerID,
+      inheritedCancellationIDs: [outerID],
+      sequence: newerSequence
+    )
+
+    let effectiveGeneration = try #require(bridge.beginDebounce(effectiveScope))
+    let newerGeneration = try #require(bridge.beginDebounce(newerScope))
+    #expect(
+      bridge.setDebounceDelayTask(
+        effectiveTask,
+        for: effectiveID,
+        generation: effectiveGeneration
+      ))
+    #expect(
+      bridge.setDebounceDelayTask(
+        newerTask,
+        for: newerID,
+        generation: newerGeneration
+      ))
+
+    bridge.markCancelled(id: outerID, upTo: effectiveSequence)
+    let staleBoundary = bridge.markCancelled(id: outerID, upTo: staleSequence)
+    await bridge.cancelEffects(id: outerID, upTo: staleBoundary)
+
+    #expect(effectiveTask.isCancelled)
+    #expect(newerTask.isCancelled == false)
+    #expect(bridge.debounceScope(for: effectiveID) == nil)
+    #expect(bridge.debounceScope(for: newerID)?.sequence == newerSequence)
+
+    await bridge.cancelEffects(id: outerID, upTo: newerSequence)
+    #expect(newerTask.isCancelled)
+
+    await hold.open()
+    _ = await effectiveTask.result
+    _ = await newerTask.result
+  }
+
+  @Test("Debounce registration rejects older scopes and replaces equal sequences")
+  func debounceRegistrationHonorsSequenceOwnership() async throws {
+    let bridge = StoreEffectBridge<Int>()
+    let id = AnyEffectID(StaticEffectID("delayed.debounce.registration"))
+    let hold = RunStartGate()
+    let firstTask = Task<Void, Never> { await hold.wait() }
+    let staleRegistrationTask = Task<Void, Never> { await hold.wait() }
+    let replacementTask = Task<Void, Never> { await hold.wait() }
+    let olderScope = DelayedEffectScope(ownerID: id, sequence: 1)
+    let currentScope = DelayedEffectScope(ownerID: id, sequence: 2)
+
+    let firstGeneration = try #require(bridge.beginDebounce(currentScope))
+    #expect(
+      bridge.setDebounceDelayTask(
+        firstTask,
+        for: id,
+        generation: firstGeneration
+      ))
+
+    #expect(bridge.beginDebounce(olderScope) == nil)
+    #expect(firstTask.isCancelled == false)
+
+    let replacementGeneration = try #require(bridge.beginDebounce(currentScope))
+    #expect(replacementGeneration > firstGeneration)
+    #expect(firstTask.isCancelled)
+
+    #expect(
+      bridge.setDebounceDelayTask(
+        staleRegistrationTask,
+        for: id,
+        generation: firstGeneration
+      ) == false)
+    #expect(staleRegistrationTask.isCancelled)
+
+    #expect(
+      bridge.setDebounceDelayTask(
+        replacementTask,
+        for: id,
+        generation: replacementGeneration
+      ))
+    #expect(replacementTask.isCancelled == false)
+
+    bridge.clearAllDelayedState()
+    #expect(replacementTask.isCancelled)
+
+    await hold.open()
+    _ = await firstTask.result
+    _ = await staleRegistrationTask.result
+    _ = await replacementTask.result
+  }
+
+  @Test("Delayed cancel-all honors effective global boundaries")
+  func delayedCancelAllHonorsEffectiveGlobalBoundary() async throws {
+    let bridge = StoreEffectBridge<Int>()
+    let effectiveThrottleID = AnyEffectID(StaticEffectID("delayed.throttle.effective"))
+    let newerThrottleID = AnyEffectID(StaticEffectID("delayed.throttle.newer"))
+    let effectiveDebounceID = AnyEffectID(StaticEffectID("delayed.debounce.global.effective"))
+    let newerDebounceID = AnyEffectID(StaticEffectID("delayed.debounce.global.newer"))
+    let staleSequence = bridge.nextSequence()
+    let effectiveSequence = bridge.nextSequence()
+    let newerSequence = bridge.nextSequence()
+    let hold = RunStartGate()
+    let effectiveThrottleTask = Task<Void, Never> { await hold.wait() }
+    let newerThrottleTask = Task<Void, Never> { await hold.wait() }
+    let effectiveDebounceTask = Task<Void, Never> { await hold.wait() }
+    let newerDebounceTask = Task<Void, Never> { await hold.wait() }
+    let effectiveThrottleScope = DelayedEffectScope(
+      ownerID: effectiveThrottleID,
+      sequence: effectiveSequence
+    )
+    let newerThrottleScope = DelayedEffectScope(
+      ownerID: newerThrottleID,
+      sequence: newerSequence
+    )
+
+    #expect(bridge.throttleState.beginAdmission(effectiveThrottleScope))
+    #expect(bridge.throttleState.admit(effectiveThrottleScope))
+    #expect(bridge.throttleState.setScope(effectiveThrottleScope))
+    bridge.throttleState.endAdmission(for: effectiveThrottleID)
+    bridge.throttleState.setWindowEnd(ContinuousClock().now, for: effectiveThrottleID)
+    _ = bridge.throttleState.nextGeneration(for: effectiveThrottleID)
+    bridge.throttleState.setTrailingTask(effectiveThrottleTask, for: effectiveThrottleID)
+
+    #expect(bridge.throttleState.beginAdmission(newerThrottleScope))
+    #expect(bridge.throttleState.admit(newerThrottleScope))
+    #expect(bridge.throttleState.setScope(newerThrottleScope))
+    bridge.throttleState.endAdmission(for: newerThrottleID)
+    bridge.throttleState.setWindowEnd(ContinuousClock().now, for: newerThrottleID)
+    _ = bridge.throttleState.nextGeneration(for: newerThrottleID)
+    bridge.throttleState.setTrailingTask(newerThrottleTask, for: newerThrottleID)
+
+    let effectiveDebounceGeneration = try #require(
+      bridge.beginDebounce(
+        .init(ownerID: effectiveDebounceID, sequence: effectiveSequence)
+      ))
+    #expect(
+      bridge.setDebounceDelayTask(
+        effectiveDebounceTask,
+        for: effectiveDebounceID,
+        generation: effectiveDebounceGeneration
+      ))
+
+    let newerDebounceGeneration = try #require(
+      bridge.beginDebounce(
+        .init(ownerID: newerDebounceID, sequence: newerSequence)
+      ))
+    #expect(
+      bridge.setDebounceDelayTask(
+        newerDebounceTask,
+        for: newerDebounceID,
+        generation: newerDebounceGeneration
+      ))
+
+    bridge.markCancelledAll(upTo: effectiveSequence)
+    let staleBoundary = bridge.markCancelledAll(upTo: staleSequence)
+    await bridge.cancelAllEffects(upTo: staleBoundary)
+
+    #expect(effectiveThrottleTask.isCancelled)
+    #expect(effectiveDebounceTask.isCancelled)
+    #expect(newerThrottleTask.isCancelled == false)
+    #expect(newerDebounceTask.isCancelled == false)
+    #expect(bridge.throttleState.scope(for: effectiveThrottleID) == nil)
+    #expect(bridge.throttleState.scope(for: newerThrottleID)?.sequence == newerSequence)
+    #expect(bridge.debounceScope(for: effectiveDebounceID) == nil)
+    #expect(bridge.debounceScope(for: newerDebounceID)?.sequence == newerSequence)
+
+    await bridge.cancelAllEffects(upTo: newerSequence)
+    #expect(newerThrottleTask.isCancelled)
+    #expect(newerDebounceTask.isCancelled)
+
+    await hold.open()
+    _ = await effectiveThrottleTask.result
+    _ = await newerThrottleTask.result
+    _ = await effectiveDebounceTask.result
+    _ = await newerDebounceTask.result
+  }
 }

@@ -23,6 +23,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - Store merge and concatenate wrapper cancellation now follows the same effect
   sequence boundary. Stale ID or global cancellation keeps newer composite
   tasks and their cancellation indexes alive.
+- Store and TestStore debounce/throttle state now retains its timing owner,
+  inherited cancellation IDs, and effect sequence. Outer cancellation clears
+  nested delayed work immediately, while stale ID/global cancellation preserves
+  newer sleepers, throttle windows, and trailing drains.
 
 ### Added
 

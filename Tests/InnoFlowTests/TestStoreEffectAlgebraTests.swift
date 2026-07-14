@@ -23,11 +23,16 @@ struct TestStoreEffectAlgebraTests {
       try? await Task.sleep(for: .seconds(5))
     }
 
+    let scope = DelayedEffectScope(ownerID: id)
+    #expect(map.beginAdmission(scope))
+    #expect(map.admit(scope))
+    #expect(map.setScope(scope))
+    map.endAdmission(for: id)
     map.setWindowEnd(ContinuousClock().now, for: id)
     map.storePending(.send(.increment), context: nil, for: id)
     _ = map.nextGeneration(for: id)
     map.setTrailingTask(task, for: id)
-    map.clearState(for: id)
+    _ = map.clearState(for: id) { _ in true }
 
     #expect(map.windowEnd(for: id) == nil)
     #expect(map.pending(for: id) == nil)
@@ -96,6 +101,75 @@ struct TestStoreEffectAlgebraTests {
     #expect(map.generation(for: secondID) == nil)
     #expect(firstTask.isCancelled)
     #expect(secondTask.isCancelled)
+  }
+
+  @Test("ThrottleStateMap rejects stale active scopes without retaining finished IDs")
+  func throttleStateMapHonorsSequenceOwnership() {
+    let map = ThrottleStateMap<CounterFeature.Action>()
+    let id = AnyEffectID(StaticEffectID("throttle-sequence-ownership"))
+    let firstOuterID = AnyEffectID(StaticEffectID("throttle-sequence-first-outer"))
+    let latestOuterID = AnyEffectID(StaticEffectID("throttle-sequence-latest-outer"))
+    let currentScope = DelayedEffectScope(
+      ownerID: id,
+      inheritedCancellationIDs: [firstOuterID],
+      sequence: 2
+    )
+
+    #expect(map.beginAdmission(currentScope))
+    #expect(map.admit(currentScope))
+    #expect(map.setScope(currentScope))
+    map.endAdmission(for: id)
+    #expect(map.latestAdmissionSequence(for: id) == nil)
+    #expect(map.beginAdmission(.init(ownerID: id, sequence: 1)) == false)
+    #expect(map.scope(for: id)?.contains(firstOuterID) == true)
+
+    let latestSameSequenceScope = DelayedEffectScope(
+      ownerID: id,
+      inheritedCancellationIDs: [latestOuterID],
+      sequence: 2
+    )
+    #expect(map.beginAdmission(latestSameSequenceScope))
+    #expect(map.admit(latestSameSequenceScope))
+    #expect(map.setScope(latestSameSequenceScope))
+    map.endAdmission(for: id)
+    #expect(map.scope(for: id)?.contains(firstOuterID) == false)
+    #expect(map.scope(for: id)?.contains(latestOuterID) == true)
+
+    let generation = map.nextGeneration(for: id)
+    #expect(map.finishState(for: id, generation: generation))
+    #expect(map.scope(for: id) == nil)
+    #expect(map.latestAdmissionSequence(for: id) == nil)
+
+    let reusedScope = DelayedEffectScope(ownerID: id, sequence: 1)
+    #expect(map.beginAdmission(reusedScope))
+    #expect(map.admit(reusedScope))
+    map.endAdmission(for: id)
+    #expect(map.latestAdmissionSequence(for: id) == nil)
+  }
+
+  @Test("Delayed scope admission rejects older sequences and accepts equal replacements")
+  func delayedScopeAdmissionOrdering() {
+    let id = AnyEffectID(StaticEffectID("delayed-scope-admission"))
+    let current = DelayedEffectScope(ownerID: id, sequence: 2)
+
+    #expect(
+      shouldAdmitDelayedScope(
+        .init(ownerID: id, sequence: 1),
+        replacing: current
+      ) == false
+    )
+    #expect(
+      shouldAdmitDelayedScope(
+        .init(ownerID: id, sequence: 2),
+        replacing: current
+      )
+    )
+    #expect(
+      shouldAdmitDelayedScope(
+        .init(ownerID: id, sequence: 3),
+        replacing: current
+      )
+    )
   }
 
   // MARK: - C-1: merge/concatenate .none normalization

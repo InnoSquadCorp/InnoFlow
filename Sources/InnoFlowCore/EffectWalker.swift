@@ -77,11 +77,17 @@ package struct EffectWalker<D: EffectDriver> {
       )
 
     case .debounce(let nested, let id, let interval):
+      let delayedScope = DelayedEffectScope(
+        ownerID: id,
+        inheritedCancellationIDs: context?.cancellationIDs ?? [],
+        sequence: context?.sequence
+      )
       await driver.debounce(
         nested,
         id: id,
         interval: interval,
         context: .withCancellation(id, on: context),
+        scope: delayedScope,
         awaited: awaited,
         recurse: recurse
       )
@@ -130,13 +136,25 @@ package struct EffectWalker<D: EffectDriver> {
     guard let driver else { return }
 
     let throttleContext = EffectExecutionContext.withCancellation(id, on: context)
+    let delayedScope = DelayedEffectScope(
+      ownerID: id,
+      inheritedCancellationIDs: context?.cancellationIDs ?? [],
+      sequence: context?.sequence
+    )
+    guard driver.throttleState.beginAdmission(delayedScope) else { return }
+    defer {
+      driver.throttleState.endAdmission(for: id)
+    }
     let now = await driver.now
+    guard driver.shouldProceed(context: throttleContext) else { return }
+    guard driver.throttleState.admit(delayedScope) else { return }
 
     // Inside active window — store trailing if requested, then drop.
     if let windowEnd = driver.throttleState.windowEnd(for: id),
       now < windowEnd
     {
       if trailing {
+        guard driver.throttleState.setScope(delayedScope) else { return }
         driver.throttleState.storePending(nested, context: throttleContext, for: id)
       }
       return
@@ -144,6 +162,7 @@ package struct EffectWalker<D: EffectDriver> {
 
     // New window.
     driver.throttleState.resetWindow(for: id)
+    guard driver.throttleState.setScope(delayedScope) else { return }
     driver.throttleState.setWindowEnd(now.advanced(by: interval), for: id)
 
     if trailing {

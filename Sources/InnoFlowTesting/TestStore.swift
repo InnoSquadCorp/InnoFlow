@@ -19,6 +19,12 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     package let sequence: UInt64
   }
 
+  package struct TrackedDebounceTask {
+    package let task: Task<Void, Never>?
+    package let scope: DelayedEffectScope
+    package let generation: UInt64
+  }
+
   // MARK: - Properties
 
   public package(set) var state: R.State
@@ -32,8 +38,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   package var runningTasks: [UUID: TrackedEffectTask] = [:]
   package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]
-  package var debounceDelayTasksByID: [AnyEffectID: Task<Void, Never>] = [:]
-  package var debounceGenerationByID: [AnyEffectID: UUID] = [:]
+  package var debounceTasksByID: [AnyEffectID: TrackedDebounceTask] = [:]
+  package var nextDebounceGenerationValue: UInt64 = 0
   package let effectBoundaries = EffectCancellationBoundaries()
   package let throttleState = ThrottleStateMap<R.Action>()
 
@@ -87,8 +93,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     for trackedTask in runningTasks.values {
       trackedTask.task.cancel()
     }
-    for task in debounceDelayTasksByID.values {
-      task.cancel()
+    for trackedTask in debounceTasksByID.values {
+      trackedTask.task?.cancel()
     }
     throttleState.clearAll()
   }

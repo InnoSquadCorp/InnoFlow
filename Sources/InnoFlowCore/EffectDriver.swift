@@ -4,8 +4,46 @@
 
 import Foundation
 
+/// Ownership metadata for delayed debounce and throttle work.
+///
+/// A timing identifier owns the delayed work directly. Cancellation identifiers
+/// inherited from enclosing effect scopes also own it, so cancelling any member
+/// can tear the delayed state down without waiting for a nested `.run` to start.
+package struct DelayedEffectScope: Sendable {
+  package let ownerID: AnyEffectID
+  package let inheritedCancellationIDs: [AnyEffectID]
+  package let sequence: UInt64
+
+  package init(
+    ownerID: AnyEffectID,
+    inheritedCancellationIDs: [AnyEffectID] = [],
+    sequence: UInt64? = nil
+  ) {
+    self.ownerID = ownerID
+    self.inheritedCancellationIDs = inheritedCancellationIDs
+    self.sequence = sequence ?? 0
+  }
+
+  package func contains(_ id: AnyEffectID) -> Bool {
+    ownerID == id || inheritedCancellationIDs.contains(id)
+  }
+}
+
+package func shouldAdmitDelayedScope(
+  _ candidate: DelayedEffectScope,
+  replacing current: DelayedEffectScope?
+) -> Bool {
+  guard let current else { return true }
+  return candidate.sequence >= current.sequence
+}
+
 @MainActor
 package final class ThrottleStateMap<Action: Sendable> {
+  private struct AdmissionState {
+    var latestSequence: UInt64
+    var outstandingCount: Int
+  }
+
   package struct PendingTrailing: Sendable {
     package let effect: EffectTask<Action>
     package let context: EffectExecutionContext?
@@ -15,6 +53,8 @@ package final class ThrottleStateMap<Action: Sendable> {
   private var pendingByID: [AnyEffectID: PendingTrailing] = [:]
   private var trailingTaskByID: [AnyEffectID: Task<Void, Never>] = [:]
   private var generationByID: [AnyEffectID: UInt64] = [:]
+  private var scopeByID: [AnyEffectID: DelayedEffectScope] = [:]
+  private var admissionStateByID: [AnyEffectID: AdmissionState] = [:]
   private var nextGenerationValue: UInt64 = 0
 
   package init() {}
@@ -43,6 +83,74 @@ package final class ThrottleStateMap<Action: Sendable> {
     trailingTaskByID[id] = task
   }
 
+  package func scope(for id: AnyEffectID) -> DelayedEffectScope? {
+    scopeByID[id]
+  }
+
+  package func trailingTask(for id: AnyEffectID) -> Task<Void, Never>? {
+    trailingTaskByID[id]
+  }
+
+  package func latestAdmissionSequence(for id: AnyEffectID) -> UInt64? {
+    admissionStateByID[id]?.latestSequence
+  }
+
+  /// Registers a throttle request before its asynchronous clock read.
+  ///
+  /// The short-lived ledger prevents an older suspended clock read from
+  /// recreating state after a newer request overtakes and finishes. Entries are
+  /// removed when every overlapping clock read completes, so dynamic timing IDs
+  /// are not retained for the lifetime of the store.
+  @discardableResult
+  package func beginAdmission(_ scope: DelayedEffectScope) -> Bool {
+    let activeSequence = scopeByID[scope.ownerID]?.sequence
+    let pendingSequence = admissionStateByID[scope.ownerID]?.latestSequence
+    if let latest = [activeSequence, pendingSequence].compactMap({ $0 }).max(),
+      scope.sequence < latest
+    {
+      return false
+    }
+
+    if var state = admissionStateByID[scope.ownerID] {
+      state.latestSequence = max(state.latestSequence, scope.sequence)
+      state.outstandingCount += 1
+      admissionStateByID[scope.ownerID] = state
+    } else {
+      admissionStateByID[scope.ownerID] = .init(
+        latestSequence: scope.sequence,
+        outstandingCount: 1
+      )
+    }
+    return true
+  }
+
+  package func admit(_ scope: DelayedEffectScope) -> Bool {
+    guard let state = admissionStateByID[scope.ownerID] else { return false }
+    guard scope.sequence >= state.latestSequence else { return false }
+    guard let activeScope = scopeByID[scope.ownerID] else { return true }
+    return shouldAdmitDelayedScope(scope, replacing: activeScope)
+  }
+
+  package func endAdmission(for id: AnyEffectID) {
+    guard var state = admissionStateByID[id] else { return }
+    state.outstandingCount -= 1
+    if state.outstandingCount == 0 {
+      admissionStateByID.removeValue(forKey: id)
+    } else {
+      admissionStateByID[id] = state
+    }
+  }
+
+  /// Assigns ownership to work that actually occupies the active window.
+  @discardableResult
+  package func setScope(_ scope: DelayedEffectScope) -> Bool {
+    guard admissionStateByID[scope.ownerID]?.latestSequence == scope.sequence else {
+      return false
+    }
+    scopeByID[scope.ownerID] = scope
+    return true
+  }
+
   package func cancelTrailingTask(for id: AnyEffectID) {
     trailingTaskByID.removeValue(forKey: id)?.cancel()
   }
@@ -64,9 +172,22 @@ package final class ThrottleStateMap<Action: Sendable> {
     pendingByID.removeValue(forKey: id)
   }
 
-  package func clearState(for id: AnyEffectID) {
+  @discardableResult
+  package func clearState(
+    for id: AnyEffectID,
+    where shouldClear: (DelayedEffectScope) -> Bool
+  ) -> Bool {
+    guard let scope = scopeByID[id], shouldClear(scope) else { return false }
     resetWindow(for: id)
     windowEndByID.removeValue(forKey: id)
+    scopeByID.removeValue(forKey: id)
+    return true
+  }
+
+  package func clearStates(where shouldClear: (DelayedEffectScope) -> Bool) {
+    for id in Array(scopeByID.keys) {
+      _ = clearState(for: id, where: shouldClear)
+    }
   }
 
   @discardableResult
@@ -76,6 +197,7 @@ package final class ThrottleStateMap<Action: Sendable> {
     generationByID.removeValue(forKey: id)
     pendingByID.removeValue(forKey: id)
     windowEndByID.removeValue(forKey: id)
+    scopeByID.removeValue(forKey: id)
     return true
   }
 
@@ -87,6 +209,8 @@ package final class ThrottleStateMap<Action: Sendable> {
     pendingByID.removeAll(keepingCapacity: true)
     windowEndByID.removeAll(keepingCapacity: true)
     generationByID.removeAll(keepingCapacity: true)
+    scopeByID.removeAll(keepingCapacity: true)
+    admissionStateByID.removeAll(keepingCapacity: true)
   }
 }
 
@@ -146,6 +270,7 @@ package protocol EffectDriver<Action>: AnyObject {
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
+    scope: DelayedEffectScope,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (

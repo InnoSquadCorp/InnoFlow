@@ -237,12 +237,177 @@ struct TestStoreCoreTests {
       id: id,
       interval: .milliseconds(0),
       context: .init(cancellationID: id, sequence: 1),
+      scope: .init(ownerID: id, sequence: 1),
       awaited: true
     ) { _, _, _ in
       probe.record("recursed")
     }
 
     #expect(probe.events.isEmpty)
+  }
+
+  @Test("TestStore debounce replaces equal sequences and preserves newer work from stale calls")
+  func testStoreDebounceSequenceOwnership() async throws {
+    let debounceID = AnyEffectID(StaticEffectID("teststore-sequence-debounce"))
+    let outerID = AnyEffectID(StaticEffectID("teststore-sequence-debounce-outer"))
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+    let olderSequence = store.nextSequence()
+    let newerSequence = store.nextSequence()
+    let newerContext = EffectExecutionContext(
+      cancellationIDs: [outerID, debounceID],
+      sequence: newerSequence
+    )
+    let newerScope = DelayedEffectScope(
+      ownerID: debounceID,
+      inheritedCancellationIDs: [outerID],
+      sequence: newerSequence
+    )
+
+    await store.debounce(
+      .none,
+      id: debounceID,
+      interval: .seconds(60),
+      context: newerContext,
+      scope: newerScope,
+      awaited: false
+    ) { _, _, _ in }
+    let first = try #require(store.debounceTasksByID[debounceID])
+    let firstTask = try #require(first.task)
+
+    await store.debounce(
+      .none,
+      id: debounceID,
+      interval: .seconds(60),
+      context: newerContext,
+      scope: newerScope,
+      awaited: false
+    ) { _, _, _ in }
+    let replacement = try #require(store.debounceTasksByID[debounceID])
+    let replacementTask = try #require(replacement.task)
+
+    #expect(firstTask.isCancelled)
+    #expect(replacement.generation > first.generation)
+    #expect(replacementTask.isCancelled == false)
+
+    let olderContext = EffectExecutionContext(
+      cancellationIDs: [outerID, debounceID],
+      sequence: olderSequence
+    )
+    let olderScope = DelayedEffectScope(
+      ownerID: debounceID,
+      inheritedCancellationIDs: [outerID],
+      sequence: olderSequence
+    )
+    await store.debounce(
+      .none,
+      id: debounceID,
+      interval: .seconds(60),
+      context: olderContext,
+      scope: olderScope,
+      awaited: false
+    ) { _, _, _ in }
+
+    #expect(store.debounceTasksByID[debounceID]?.generation == replacement.generation)
+    #expect(replacementTask.isCancelled == false)
+
+    await store.cancelEffects(id: outerID, context: .init(sequence: newerSequence))
+
+    #expect(replacementTask.isCancelled)
+    #expect(store.debounceTasksByID[debounceID] == nil)
+    _ = await firstTask.result
+    _ = await replacementTask.result
+  }
+
+  @Test("TestStore debounce cancellation does not clear unrelated throttle state")
+  func testStoreDebounceCancellationPreservesThrottleState() async throws {
+    let id = AnyEffectID(StaticEffectID("teststore-debounce-throttle-isolation"))
+    let store = TestStore(reducer: CounterFeature(), initialState: .init())
+    let sequence = store.nextSequence()
+    let scope = DelayedEffectScope(ownerID: id, sequence: sequence)
+
+    await store.debounce(
+      .none,
+      id: id,
+      interval: .seconds(60),
+      context: .init(cancellationID: id, sequence: sequence),
+      scope: scope,
+      awaited: false
+    ) { _, _, _ in }
+    let trackedDebounce = try #require(store.debounceTasksByID[id])
+    let debounceTask = try #require(trackedDebounce.task)
+
+    #expect(store.throttleState.beginAdmission(scope))
+    #expect(store.throttleState.admit(scope))
+    #expect(store.throttleState.setScope(scope))
+    store.throttleState.endAdmission(for: id)
+    store.throttleState.setWindowEnd(ContinuousClock().now, for: id)
+    store.throttleState.storePending(.none, context: nil, for: id)
+    let throttleGeneration = store.throttleState.nextGeneration(for: id)
+    let hold = RunStartGate()
+    let throttleTask = Task<Void, Never> { await hold.wait() }
+    store.throttleState.setTrailingTask(throttleTask, for: id)
+    #expect(throttleGeneration == trackedDebounce.generation)
+
+    debounceTask.cancel()
+    _ = await debounceTask.result
+
+    #expect(store.debounceTasksByID[id] == nil)
+    #expect(store.throttleState.scope(for: id)?.sequence == sequence)
+    #expect(store.throttleState.generation(for: id) == throttleGeneration)
+    #expect(store.throttleState.pending(for: id) != nil)
+    #expect(throttleTask.isCancelled == false)
+
+    store.throttleState.clearAll()
+    await hold.open()
+    _ = await throttleTask.result
+  }
+
+  @Test("TestStore stale outer cancellation preserves newer inner debounce")
+  func testStoreStaleOuterCancellationPreservesNewerInnerDebounce() async throws {
+    let debounceID = AnyEffectID(StaticEffectID("teststore-outer-inner-debounce"))
+    let outerID = AnyEffectID(StaticEffectID("teststore-outer-inner-cancellation"))
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: ManualTestClock()
+    )
+    let staleSequence = store.nextSequence()
+    let newerSequence = store.nextSequence()
+    let context = EffectExecutionContext(
+      cancellationIDs: [outerID, debounceID],
+      sequence: newerSequence
+    )
+    let scope = DelayedEffectScope(
+      ownerID: debounceID,
+      inheritedCancellationIDs: [outerID],
+      sequence: newerSequence
+    )
+
+    await store.debounce(
+      .none,
+      id: debounceID,
+      interval: .seconds(60),
+      context: context,
+      scope: scope,
+      awaited: false
+    ) { _, _, _ in }
+    let task = try #require(store.debounceTasksByID[debounceID]?.task)
+
+    await store.cancelEffects(id: outerID, context: .init(sequence: staleSequence))
+
+    #expect(task.isCancelled == false)
+    #expect(store.debounceTasksByID[debounceID]?.scope.sequence == newerSequence)
+
+    await store.cancelEffects(id: outerID, context: .init(sequence: newerSequence))
+
+    #expect(task.isCancelled)
+    #expect(store.debounceTasksByID[debounceID] == nil)
+    _ = await task.result
   }
 
   @Test("TestStore trailing throttle skips stale effects at cancellation boundaries")
@@ -264,6 +429,174 @@ struct TestStoreCoreTests {
     }
 
     #expect(probe.events.isEmpty)
+  }
+
+  @Test("TestStore trailing throttle cancellation clears its delayed state")
+  func testStoreTrailingThrottleCancellationClearsState() async throws {
+    let id = AnyEffectID(StaticEffectID("teststore-trailing-cancellation-cleanup"))
+    let store = TestStore(reducer: CounterFeature(), initialState: .init())
+    let sequence = store.nextSequence()
+    let scope = DelayedEffectScope(ownerID: id, sequence: sequence)
+
+    #expect(store.throttleState.beginAdmission(scope))
+    #expect(store.throttleState.admit(scope))
+    #expect(store.throttleState.setScope(scope))
+    store.throttleState.endAdmission(for: id)
+    store.throttleState.setWindowEnd(ContinuousClock().now, for: id)
+    store.throttleState.storePending(
+      .none,
+      context: .init(cancellationID: id, sequence: sequence),
+      for: id
+    )
+    store.scheduleTrailingDrain(for: id, interval: .seconds(60)) { _, _, _ in }
+    let trailingTask = try #require(store.throttleState.trailingTask(for: id))
+
+    trailingTask.cancel()
+    _ = await trailingTask.result
+
+    #expect(store.throttleState.scope(for: id) == nil)
+    #expect(store.throttleState.generation(for: id) == nil)
+    #expect(store.throttleState.pending(for: id) == nil)
+    #expect(store.throttleState.windowEnd(for: id) == nil)
+    #expect(store.throttleState.trailingTask(for: id) == nil)
+  }
+
+  @Test("TestStore throttle cleanup honors inherited ID effective boundaries")
+  func testStoreThrottleCleanupHonorsInheritedIDEffectiveBoundaries() async {
+    let store = TestStore(reducer: CounterFeature(), initialState: .init())
+    let outerID = AnyEffectID(StaticEffectID("teststore-throttle-outer"))
+    let effectiveID = AnyEffectID(StaticEffectID("teststore-throttle-effective"))
+    let newerID = AnyEffectID(StaticEffectID("teststore-throttle-newer"))
+    let staleSequence = store.nextSequence()
+    let effectiveSequence = store.nextSequence()
+    let newerSequence = store.nextSequence()
+    let hold = RunStartGate()
+    let effectiveTask = Task<Void, Never> { await hold.wait() }
+    let newerTask = Task<Void, Never> { await hold.wait() }
+    let effectiveScope = DelayedEffectScope(
+      ownerID: effectiveID,
+      inheritedCancellationIDs: [outerID],
+      sequence: effectiveSequence
+    )
+    let newerScope = DelayedEffectScope(
+      ownerID: newerID,
+      inheritedCancellationIDs: [outerID],
+      sequence: newerSequence
+    )
+
+    #expect(store.throttleState.beginAdmission(effectiveScope))
+    #expect(store.throttleState.admit(effectiveScope))
+    #expect(store.throttleState.setScope(effectiveScope))
+    store.throttleState.endAdmission(for: effectiveID)
+    _ = store.throttleState.nextGeneration(for: effectiveID)
+    store.throttleState.setTrailingTask(effectiveTask, for: effectiveID)
+
+    #expect(store.throttleState.beginAdmission(newerScope))
+    #expect(store.throttleState.admit(newerScope))
+    #expect(store.throttleState.setScope(newerScope))
+    store.throttleState.endAdmission(for: newerID)
+    _ = store.throttleState.nextGeneration(for: newerID)
+    store.throttleState.setTrailingTask(newerTask, for: newerID)
+
+    store.markCancelled(id: outerID, upTo: effectiveSequence)
+    await store.cancelEffects(id: outerID, context: .init(sequence: staleSequence))
+
+    #expect(effectiveTask.isCancelled)
+    #expect(newerTask.isCancelled == false)
+    #expect(store.throttleState.scope(for: effectiveID) == nil)
+    #expect(store.throttleState.scope(for: newerID)?.sequence == newerSequence)
+
+    await store.cancelEffects(id: outerID, context: .init(sequence: newerSequence))
+
+    #expect(newerTask.isCancelled)
+    await hold.open()
+    _ = await effectiveTask.result
+    _ = await newerTask.result
+  }
+
+  @Test("TestStore delayed cancel-all honors effective global boundaries")
+  func testStoreDelayedCancelAllHonorsEffectiveGlobalBoundaries() async throws {
+    let effectiveDebounceID = AnyEffectID(StaticEffectID("teststore-global-debounce-effective"))
+    let newerDebounceID = AnyEffectID(StaticEffectID("teststore-global-debounce-newer"))
+    let effectiveThrottleID = AnyEffectID(StaticEffectID("teststore-global-throttle-effective"))
+    let newerThrottleID = AnyEffectID(StaticEffectID("teststore-global-throttle-newer"))
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: ManualTestClock()
+    )
+    let staleSequence = store.nextSequence()
+    let effectiveSequence = store.nextSequence()
+    let newerSequence = store.nextSequence()
+    let hold = RunStartGate()
+    let effectiveThrottleTask = Task<Void, Never> { await hold.wait() }
+    let newerThrottleTask = Task<Void, Never> { await hold.wait() }
+
+    await store.debounce(
+      .none,
+      id: effectiveDebounceID,
+      interval: .seconds(60),
+      context: .init(cancellationID: effectiveDebounceID, sequence: effectiveSequence),
+      scope: .init(ownerID: effectiveDebounceID, sequence: effectiveSequence),
+      awaited: false
+    ) { _, _, _ in }
+    let effectiveDebounceTask = try #require(
+      store.debounceTasksByID[effectiveDebounceID]?.task
+    )
+
+    await store.debounce(
+      .none,
+      id: newerDebounceID,
+      interval: .seconds(60),
+      context: .init(cancellationID: newerDebounceID, sequence: newerSequence),
+      scope: .init(ownerID: newerDebounceID, sequence: newerSequence),
+      awaited: false
+    ) { _, _, _ in }
+    let newerDebounceTask = try #require(store.debounceTasksByID[newerDebounceID]?.task)
+
+    let effectiveThrottleScope = DelayedEffectScope(
+      ownerID: effectiveThrottleID,
+      sequence: effectiveSequence
+    )
+    #expect(store.throttleState.beginAdmission(effectiveThrottleScope))
+    #expect(store.throttleState.admit(effectiveThrottleScope))
+    #expect(store.throttleState.setScope(effectiveThrottleScope))
+    store.throttleState.endAdmission(for: effectiveThrottleID)
+    _ = store.throttleState.nextGeneration(for: effectiveThrottleID)
+    store.throttleState.setTrailingTask(effectiveThrottleTask, for: effectiveThrottleID)
+
+    let newerThrottleScope = DelayedEffectScope(
+      ownerID: newerThrottleID,
+      sequence: newerSequence
+    )
+    #expect(store.throttleState.beginAdmission(newerThrottleScope))
+    #expect(store.throttleState.admit(newerThrottleScope))
+    #expect(store.throttleState.setScope(newerThrottleScope))
+    store.throttleState.endAdmission(for: newerThrottleID)
+    _ = store.throttleState.nextGeneration(for: newerThrottleID)
+    store.throttleState.setTrailingTask(newerThrottleTask, for: newerThrottleID)
+
+    store.markCancelledAll(upTo: effectiveSequence)
+    store.cancelAllEffectsSynchronously(upTo: staleSequence)
+
+    #expect(effectiveDebounceTask.isCancelled)
+    #expect(effectiveThrottleTask.isCancelled)
+    #expect(store.debounceTasksByID[effectiveDebounceID] == nil)
+    #expect(store.throttleState.scope(for: effectiveThrottleID) == nil)
+    #expect(newerDebounceTask.isCancelled == false)
+    #expect(newerThrottleTask.isCancelled == false)
+    #expect(store.debounceTasksByID[newerDebounceID]?.scope.sequence == newerSequence)
+    #expect(store.throttleState.scope(for: newerThrottleID)?.sequence == newerSequence)
+
+    store.cancelAllEffectsSynchronously(upTo: newerSequence)
+
+    #expect(newerDebounceTask.isCancelled)
+    #expect(newerThrottleTask.isCancelled)
+    await hold.open()
+    _ = await effectiveDebounceTask.result
+    _ = await newerDebounceTask.result
+    _ = await effectiveThrottleTask.result
+    _ = await newerThrottleTask.result
   }
 
   @Test("TestStore repeated cancellation stress keeps queue clean")

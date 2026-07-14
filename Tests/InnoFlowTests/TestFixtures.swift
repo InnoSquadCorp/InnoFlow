@@ -385,6 +385,66 @@ final class AsyncTestSignal: Sendable {
   }
 }
 
+/// A one-shot clock sleep that exposes explicit start/cancellation events.
+///
+/// The suspended continuation is released from the cancellation handler so
+/// the sleeping task can observe cancellation and finish without a timer or
+/// polling loop.
+final class CancellationAwareSleepProbe: Sendable {
+  let started = AsyncTestSignal()
+  let cancelled = AsyncTestSignal()
+
+  private let gate = RunStartGate()
+  private let cancellationLock = OSAllocatedUnfairLock<Bool>(initialState: false)
+
+  var isCancelled: Bool {
+    cancellationLock.withLock { $0 }
+  }
+
+  func sleep() async throws {
+    started.signal()
+    await withTaskCancellationHandler {
+      await gate.wait()
+    } onCancel: {
+      cancellationLock.withLock { $0 = true }
+      cancelled.signal()
+      Task { [gate] in
+        await gate.open()
+      }
+    }
+    try Task.checkCancellation()
+  }
+
+  func release() async {
+    await gate.open()
+  }
+}
+
+/// Holds the first clock read while allowing later reads to complete.
+/// This models actor reentrancy around `await driver.now` without polling.
+actor FirstClockReadGate {
+  let firstReadStarted = AsyncTestSignal()
+
+  private let releaseFirstRead = RunStartGate()
+  private let instant = ContinuousClock().now
+  private var readCount = 0
+
+  func now() async -> ContinuousClock.Instant {
+    readCount += 1
+    if readCount == 1 {
+      firstReadStarted.signal()
+      await releaseFirstRead.wait()
+    }
+    return instant
+  }
+
+  func release() async {
+    await releaseFirstRead.open()
+  }
+}
+
+struct TestClockFailure: Error, Sendable {}
+
 @MainActor
 final class ProjectionObserverTestProbe: ProjectionObserver {
   private let refreshResult: Bool
@@ -832,6 +892,62 @@ struct SequenceBoundedCompositeFeature: Reducer {
       state.finished = true
       newerCompositeFinished.signal()
       return .none
+    }
+  }
+}
+
+enum SequenceBoundedDelayedEffectKind: Sendable {
+  case debounce
+  case throttle
+}
+
+struct SequenceBoundedDelayedEffectFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {}
+
+  enum Action: Equatable, Sendable {
+    case scheduleStaleCancellation
+    case startNewerDelayedEffect
+  }
+
+  let kind: SequenceBoundedDelayedEffectKind
+  let staleCancellationReady: AsyncTestSignal
+  let releaseStaleCancellation: RunStartGate
+  let staleCancellationApplied: AsyncTestSignal
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .scheduleStaleCancellation:
+      return .concatenate(
+        .run { _, _ in
+          staleCancellationReady.signal()
+          await releaseStaleCancellation.wait()
+        },
+        .cancel("sequence-bounded-delayed-outer"),
+        .run { _, _ in
+          staleCancellationApplied.signal()
+        }
+      )
+
+    case .startNewerDelayedEffect:
+      let nested = EffectTask<Action>.run { _, _ in }
+      switch kind {
+      case .debounce:
+        return
+          nested
+          .debounce("sequence-bounded-delayed-inner-debounce", for: .seconds(60))
+          .cancellable("sequence-bounded-delayed-outer")
+
+      case .throttle:
+        return
+          nested
+          .throttle(
+            "sequence-bounded-delayed-inner-throttle",
+            for: .seconds(60),
+            leading: false,
+            trailing: true
+          )
+          .cancellable("sequence-bounded-delayed-outer")
+      }
     }
   }
 }

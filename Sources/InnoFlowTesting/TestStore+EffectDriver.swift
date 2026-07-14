@@ -205,6 +205,63 @@ extension TestStore {
     }
   }
 
+  private func nextDebounceGeneration() -> UInt64 {
+    nextDebounceGenerationValue &+= 1
+    return nextDebounceGenerationValue
+  }
+
+  private func beginDebounce(_ scope: DelayedEffectScope) -> UInt64? {
+    if let trackedTask = debounceTasksByID[scope.ownerID] {
+      guard shouldAdmitDelayedScope(scope, replacing: trackedTask.scope) else {
+        return nil
+      }
+      trackedTask.task?.cancel()
+    }
+
+    let generation = nextDebounceGeneration()
+    debounceTasksByID[scope.ownerID] = .init(
+      task: nil,
+      scope: scope,
+      generation: generation
+    )
+    return generation
+  }
+
+  @discardableResult
+  private func setDebounceTask(
+    _ task: Task<Void, Never>,
+    for id: AnyEffectID,
+    generation: UInt64
+  ) -> Bool {
+    guard let trackedTask = debounceTasksByID[id], trackedTask.generation == generation else {
+      task.cancel()
+      return false
+    }
+    trackedTask.task?.cancel()
+    debounceTasksByID[id] = .init(
+      task: task,
+      scope: trackedTask.scope,
+      generation: generation
+    )
+    return true
+  }
+
+  @discardableResult
+  private func finishDebounceTask(for id: AnyEffectID, generation: UInt64) -> Bool {
+    guard debounceTasksByID[id]?.generation == generation else { return false }
+    debounceTasksByID.removeValue(forKey: id)
+    return true
+  }
+
+  private func cancelDebounceTasks(
+    where shouldCancel: (DelayedEffectScope) -> Bool
+  ) {
+    for (id, trackedTask) in Array(debounceTasksByID) {
+      guard shouldCancel(trackedTask.scope) else { continue }
+      debounceTasksByID.removeValue(forKey: id)?.task?.cancel()
+    }
+  }
+
   private func startRunTask(
     priority: TaskPriority?,
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
@@ -302,9 +359,16 @@ extension TestStore {
     identifiedBy id: AnyEffectID,
     upTo sequence: UInt64
   ) {
-    debounceDelayTasksByID.removeValue(forKey: id)?.cancel()
-    debounceGenerationByID.removeValue(forKey: id)
-    throttleState.clearState(for: id)
+    cancelDebounceTasks { scope in
+      scope.contains(id)
+        && (scope.sequence <= sequence
+          || shouldStart(sequence: scope.sequence, cancellationID: id) == false)
+    }
+    throttleState.clearStates { scope in
+      scope.contains(id)
+        && (scope.sequence <= sequence
+          || shouldStart(sequence: scope.sequence, cancellationID: id) == false)
+    }
     guard let tokens = taskIDsByEffectID[id] else { return }
 
     for token in Array(tokens) {
@@ -332,12 +396,14 @@ extension TestStore {
       runningTasks[token]?.task.cancel()
       removeTrackedTask(token: token)
     }
-    for task in debounceDelayTasksByID.values {
-      task.cancel()
+    cancelDebounceTasks { scope in
+      scope.sequence <= sequence
+        || shouldStart(sequence: scope.sequence, cancellationIDs: []) == false
     }
-    throttleState.clearAll()
-    debounceDelayTasksByID.removeAll()
-    debounceGenerationByID.removeAll()
+    throttleState.clearStates { scope in
+      scope.sequence <= sequence
+        || shouldStart(sequence: scope.sequence, cancellationIDs: []) == false
+    }
   }
 
   private func removeTrackedTask(token: UUID) {
@@ -455,26 +521,24 @@ extension TestStore: EffectDriver {
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
+    scope: DelayedEffectScope,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         EffectTask<R.Action>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
-    debounceDelayTasksByID[id]?.cancel()
     let sequence = markCancelledInFlight(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
 
-    let generation = UUID()
-    debounceGenerationByID[id] = generation
+    guard shouldProceed(context: context) else { return }
+
+    guard let generation = beginDebounce(scope) else { return }
 
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
       defer {
-        if self.debounceGenerationByID[id] == generation {
-          self.debounceDelayTasksByID.removeValue(forKey: id)
-          self.debounceGenerationByID.removeValue(forKey: id)
-        }
+        self.finishDebounceTask(for: id, generation: generation)
       }
 
       do {
@@ -484,12 +548,14 @@ extension TestStore: EffectDriver {
       }
 
       guard !Task.isCancelled else { return }
-      guard self.debounceGenerationByID[id] == generation else { return }
+      guard self.debounceTasksByID[id]?.generation == generation else { return }
       guard self.shouldProceed(context: context) else { return }
       await recurse(nested, context, true)
     }
 
-    debounceDelayTasksByID[id] = task
+    guard setDebounceTask(task, for: id, generation: generation) else {
+      return
+    }
 
     if awaited {
       _ = await task.result
@@ -511,12 +577,15 @@ extension TestStore: EffectDriver {
       do {
         try await self.sleepForDriver(interval)
       } catch {
+        if self.throttleState.generation(for: id) == generation {
+          self.throttleState.finishState(for: id, generation: generation)
+        }
         return
       }
       guard self.throttleState.generation(for: id) == generation else { return }
       defer {
         if self.throttleState.generation(for: id) == generation {
-          self.throttleState.clearState(for: id)
+          self.throttleState.finishState(for: id, generation: generation)
         }
       }
       guard let pending = self.throttleState.pending(for: id) else { return }
