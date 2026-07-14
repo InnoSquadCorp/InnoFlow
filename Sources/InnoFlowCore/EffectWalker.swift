@@ -236,12 +236,23 @@ package struct EffectWalker<D: EffectDriver> {
           requiresAwaitedCompletion: awaited,
           for: id
         )
+
+        let trailingTask =
+          driver.throttleState.trailingTask(for: id)
+          ?? driver.scheduleTrailingDrain(
+            for: id,
+            interval: now.duration(to: windowEnd),
+            awaited: awaited,
+            recurse: recurse
+          )
+        return .init(
+          runsLeadingEffect: false,
+          trailingTaskToAwait: awaited ? trailingTask : nil
+        )
       }
       return .init(
         runsLeadingEffect: false,
-        trailingTaskToAwait: awaited && trailing
-          ? driver.throttleState.trailingTask(for: id)
-          : nil
+        trailingTaskToAwait: nil
       )
     }
 

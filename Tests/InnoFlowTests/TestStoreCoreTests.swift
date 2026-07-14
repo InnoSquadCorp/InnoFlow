@@ -339,6 +339,93 @@ struct TestStoreCoreTests {
     }
   }
 
+  @Test("TestStore awaits late trailing work at the original throttle deadline")
+  func testStoreAwaitsLateTrailingWorkAtOriginalThrottleDeadline() async throws {
+    let id = AnyEffectID(StaticEffectID("teststore-late-trailing-activation"))
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+    let leadingSequence = store.nextSequence()
+    let leadingEffect = EffectTask<CounterFeature.Action>.send(.reset)
+      .throttle(id, for: .milliseconds(80), leading: true, trailing: false)
+
+    await store.walker.walk(
+      leadingEffect,
+      context: .init(sequence: leadingSequence),
+      awaited: true
+    )
+
+    #expect(await store.popBufferedAction() == .reset)
+    #expect(await clock.sleeperCount == 0)
+    let originalDeadline = try #require(store.throttleState.windowEnd(for: id))
+
+    await clock.advance(by: .milliseconds(30))
+
+    let trailingSequence = store.nextSequence()
+    let awaitedEffect = EffectTask<CounterFeature.Action>.concatenate(
+      .send(.increment)
+        .throttle(id, for: .milliseconds(80), leading: false, trailing: true),
+      .send(.decrement)
+    )
+    let walkCompletion = InstrumentationProbe()
+    let walkTask = Task { @MainActor in
+      await store.walker.walk(
+        awaitedEffect,
+        context: .init(sequence: trailingSequence),
+        awaited: true
+      )
+      walkCompletion.record("finished")
+    }
+
+    do {
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+          await clock.sleeperCount == 1
+        }
+      )
+
+      #expect(store.throttleState.windowEnd(for: id) == originalDeadline)
+      #expect(store.throttleState.scope(for: id)?.sequence == trailingSequence)
+      #expect(store.throttleState.pending(for: id)?.context?.sequence == trailingSequence)
+      #expect(store.throttleState.pending(for: id)?.requiresAwaitedCompletion == true)
+
+      await clock.advance(by: .milliseconds(49))
+
+      #expect(await store.popBufferedAction() == nil)
+      #expect(walkCompletion.events.isEmpty)
+      #expect(await clock.sleeperCount == 1)
+      #expect(store.throttleState.pending(for: id) != nil)
+
+      await clock.advance(by: .milliseconds(1))
+      try #require(
+        await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+          walkCompletion.events == ["finished"]
+        }
+      )
+      _ = await walkTask.result
+    } catch {
+      await store.cancelAllEffects()
+      await clock.advance(by: .milliseconds(80))
+      _ = await walkTask.result
+      throw error
+    }
+
+    #expect(await store.popBufferedAction() == .increment)
+    #expect(await store.popBufferedAction() == .decrement)
+    #expect(await store.popBufferedAction() == nil)
+    #expect(walkCompletion.events == ["finished"])
+    #expect(await clock.sleeperCount == 0)
+    #expect(store.throttleState.scope(for: id) == nil)
+    #expect(store.throttleState.generation(for: id) == nil)
+    #expect(store.throttleState.pending(for: id) == nil)
+    #expect(store.throttleState.windowEnd(for: id) == nil)
+    #expect(store.throttleState.trailingTask(for: id) == nil)
+    #expect(store.throttleState.latestAdmissionSequence(for: id) == nil)
+  }
+
   @Test("TestStore active trailing throttle keeps awaited completion after replacement")
   func testStoreActiveTrailingThrottleKeepsAwaitedCompletionAfterReplacement() async throws {
     let id = AnyEffectID(StaticEffectID("teststore-active-awaited-trailing-throttle"))

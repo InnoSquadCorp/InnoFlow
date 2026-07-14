@@ -1280,6 +1280,87 @@ struct StoreEffectRuntimeTests {
     #expect(store.emitted == [2])
   }
 
+  @Test("Store activates trailing work within a leading-only throttle window")
+  func storeActivatesTrailingWorkWithinLeadingOnlyThrottleWindow() async throws {
+    let timingID = AnyEffectID(StaticEffectID("store-late-trailing-activation"))
+    let clock = ManualTestClock()
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+    let leadingEffect = EffectTask<CounterFeature.Action>.send(.increment)
+      .throttle(timingID, for: .milliseconds(80), leading: true, trailing: false)
+    let trailingEffect = EffectTask<CounterFeature.Action>.send(.decrement)
+      .throttle(timingID, for: .milliseconds(80), leading: false, trailing: true)
+    var trailingTask: Task<Void, Never>?
+
+    do {
+      await store.walkEffect(
+        leadingEffect,
+        context: .init(sequence: 1),
+        awaited: true
+      )
+
+      #expect(store.count == 1)
+      #expect(await clock.sleeperCount == 0)
+      let originalDeadline = try #require(store.throttleState.windowEnd(for: timingID))
+      #expect(store.throttleState.scope(for: timingID)?.sequence == 1)
+
+      await clock.advance(by: .milliseconds(30))
+      await store.walkEffect(
+        trailingEffect,
+        context: .init(sequence: 2),
+        awaited: false
+      )
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      let activeTrailingTask = try #require(
+        store.throttleState.trailingTask(for: timingID)
+      )
+      trailingTask = activeTrailingTask
+
+      #expect(store.throttleState.windowEnd(for: timingID) == originalDeadline)
+      #expect(store.throttleState.scope(for: timingID)?.sequence == 2)
+      #expect(store.throttleState.pending(for: timingID)?.context?.sequence == 2)
+
+      await clock.advance(by: .milliseconds(49))
+
+      #expect(store.count == 1)
+      #expect(await clock.sleeperCount == 1)
+      #expect(store.throttleState.pending(for: timingID) != nil)
+
+      await clock.advance(by: .milliseconds(1))
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+          await clock.sleeperCount == 0
+        }
+      )
+      if let trailingTask {
+        _ = await trailingTask.result
+      }
+    } catch {
+      await store.cancelAllEffects()
+      await clock.advance(by: .milliseconds(80))
+      if let trailingTask {
+        _ = await trailingTask.result
+      }
+      throw error
+    }
+
+    #expect(store.count == 0)
+    #expect(await clock.sleeperCount == 0)
+    #expect(store.throttleState.scope(for: timingID) == nil)
+    #expect(store.throttleState.generation(for: timingID) == nil)
+    #expect(store.throttleState.pending(for: timingID) == nil)
+    #expect(store.throttleState.windowEnd(for: timingID) == nil)
+    #expect(store.throttleState.trailingTask(for: timingID) == nil)
+    #expect(store.throttleState.latestAdmissionSequence(for: timingID) == nil)
+  }
+
   @Test("StoreClock deterministically drives debounce effects")
   func storeClockControlsDebounce() async {
     let clock = ManualTestClock()

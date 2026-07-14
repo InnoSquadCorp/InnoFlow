@@ -30,6 +30,8 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - Store and TestStore awaited trailing throttles now keep concatenate children
   sequential through the trailing run's completion, including when newer
   unawaited events replace the pending effect inside the active window.
+- Store and TestStore active throttle windows now start a trailing drain when a
+  later call enables trailing delivery, while preserving the original deadline.
 - TestStore debounce now preserves the caller's awaited mode instead of always
   recursing as awaited work.
 
