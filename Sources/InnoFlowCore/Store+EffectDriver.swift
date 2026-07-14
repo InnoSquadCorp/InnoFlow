@@ -5,7 +5,7 @@ extension Store: EffectDriver {
 
   @discardableResult
   private func startCompositeTask(
-    cancellationIDs: [AnyEffectID],
+    context: EffectExecutionContext?,
     operation: @escaping @MainActor @Sendable () async -> Void
   ) -> Task<Void, Never> {
     let token = UUID()
@@ -20,7 +20,12 @@ extension Store: EffectDriver {
       await operation()
     }
 
-    bridge.registerCompositeTask(token: token, ids: cancellationIDs, task: task)
+    bridge.registerCompositeTask(
+      token: token,
+      ids: context?.cancellationIDs ?? [],
+      sequence: context?.sequence ?? 0,
+      task: task
+    )
     Task {
       await gate.open()
     }
@@ -342,7 +347,7 @@ extension Store: EffectDriver {
       }
     } else {
       let bridge = effectBridge
-      startCompositeTask(cancellationIDs: context?.cancellationIDs ?? []) {
+      startCompositeTask(context: context) {
         await withTaskGroup(of: Void.self) { group in
           for child in children {
             group.addTask {
@@ -374,7 +379,7 @@ extension Store: EffectDriver {
       }
     } else {
       let bridge = effectBridge
-      startCompositeTask(cancellationIDs: context?.cancellationIDs ?? []) {
+      startCompositeTask(context: context) {
         for child in children {
           guard !Task.isCancelled else { return }
           guard bridge.shouldProceed(context: context) else { return }

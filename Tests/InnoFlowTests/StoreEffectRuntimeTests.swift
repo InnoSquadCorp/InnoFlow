@@ -207,6 +207,140 @@ struct StoreEffectRuntimeTests {
     #expect(await probe.wasCancellationRequested == false)
   }
 
+  @Test("Store stale cancellation preserves a newer concatenate composite")
+  func storeStaleCancellationPreservesNewerCompositeSequence() async throws {
+    let staleCancellationReady = AsyncTestSignal()
+    let releaseStaleCancellation = RunStartGate()
+    let staleCancellationApplied = AsyncTestSignal()
+    let newerChildReady = AsyncTestSignal()
+    let releaseNewerChild = RunStartGate()
+    let newerCompositeFinished = AsyncTestSignal()
+    let store = Store(
+      reducer: SequenceBoundedCompositeFeature(
+        staleCancellationReady: staleCancellationReady,
+        releaseStaleCancellation: releaseStaleCancellation,
+        staleCancellationApplied: staleCancellationApplied,
+        newerChildReady: newerChildReady,
+        releaseNewerChild: releaseNewerChild,
+        newerCompositeFinished: newerCompositeFinished
+      ),
+      initialState: .init()
+    )
+
+    do {
+      store.send(.scheduleStaleCancellation)
+      try #require(await staleCancellationReady.wait())
+
+      store.send(.startNewerComposite)
+      try #require(await newerChildReady.wait())
+
+      await releaseStaleCancellation.open()
+      try #require(await staleCancellationApplied.wait())
+
+      await releaseNewerChild.open()
+      try #require(await newerCompositeFinished.wait())
+    } catch {
+      await releaseStaleCancellation.open()
+      await releaseNewerChild.open()
+      await store.cancelAllEffects()
+      throw error
+    }
+
+    #expect(store.finished)
+    await store.cancelAllEffects()
+  }
+
+  @Test("Store stale cancellation preserves a newer merge composite wrapper")
+  func storeStaleCancellationPreservesNewerMergeComposite() async throws {
+    let store = Store(reducer: CounterFeature(), initialState: .init())
+    let id = AnyEffectID(StaticEffectID("sequence-bounded-merge"))
+    let staleSequence = store.effectBridge.nextSequence()
+    let newerSequence = store.effectBridge.nextSequence()
+    let newerContext = EffectExecutionContext(cancellationID: id, sequence: newerSequence)
+    let childReady = AsyncTestSignal()
+    let releaseChild = RunStartGate()
+    let childFinished = AsyncTestSignal()
+    let probe = SequenceCancellationProbe()
+
+    await store.runConcurrently(
+      [.none],
+      context: newerContext,
+      awaited: false
+    ) { _, _, _ in
+      childReady.signal()
+      await releaseChild.wait()
+      await probe.recordCancellationRequested(Task.isCancelled)
+      childFinished.signal()
+    }
+
+    do {
+      try #require(await childReady.wait())
+      await store.cancelEffects(id: id, context: .init(sequence: staleSequence))
+      await releaseChild.open()
+      try #require(await childFinished.wait())
+    } catch {
+      await releaseChild.open()
+      await store.cancelAllEffects()
+      throw error
+    }
+
+    #expect(await probe.wasCancellationRequested == false)
+    await store.cancelAllEffects()
+  }
+
+  @Test("Store cancel-in-flight preserves its current composite wrapper")
+  func storeCancelInFlightPreservesCurrentComposite() async throws {
+    let store = Store(reducer: CounterFeature(), initialState: .init())
+    let id = AnyEffectID(StaticEffectID("sequence-bounded-in-flight-composite"))
+    let olderSequence = store.effectBridge.nextSequence()
+    let currentSequence = store.effectBridge.nextSequence()
+    let olderContext = EffectExecutionContext(cancellationID: id, sequence: olderSequence)
+    let currentContext = EffectExecutionContext(cancellationID: id, sequence: currentSequence)
+    let olderReady = AsyncTestSignal()
+    let releaseOlder = RunStartGate()
+    let olderFinished = AsyncTestSignal()
+    let currentFinished = AsyncTestSignal()
+    let olderProbe = SequenceCancellationProbe()
+    let currentProbe = SequenceCancellationProbe()
+
+    await store.runSequentially(
+      [.none],
+      context: olderContext,
+      awaited: false
+    ) { _, _, _ in
+      olderReady.signal()
+      await releaseOlder.wait()
+      await olderProbe.recordCancellationRequested(Task.isCancelled)
+      olderFinished.signal()
+    }
+
+    do {
+      try #require(await olderReady.wait())
+
+      await store.runSequentially(
+        [.none],
+        context: currentContext,
+        awaited: false
+      ) { _, _, _ in
+        await store.cancelInFlightEffects(id: id, context: currentContext)
+        await currentProbe.recordCancellationRequested(Task.isCancelled)
+        currentFinished.signal()
+      }
+
+      try #require(await currentFinished.wait())
+      await releaseOlder.open()
+      try #require(await olderFinished.wait())
+    } catch {
+      await releaseOlder.open()
+      await store.cancelAllEffects()
+      throw error
+    }
+
+    #expect(await olderProbe.wasCancellationRequested == true)
+    #expect(await currentProbe.wasCancellationRequested == false)
+    await store.cancelAllEffects()
+  }
+
   @Test("Store .run keeps FIFO ordering for multiple emitted actions")
   func storeRunEmissionOrderingRemainsFIFO() async throws {
     let clock = ManualTestClock()

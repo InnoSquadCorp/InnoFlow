@@ -786,6 +786,56 @@ struct SequenceBoundedCancellationFeature: Reducer {
   }
 }
 
+struct SequenceBoundedCompositeFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var finished = false
+  }
+
+  enum Action: Equatable, Sendable {
+    case scheduleStaleCancellation
+    case startNewerComposite
+    case _finished
+  }
+
+  let staleCancellationReady: AsyncTestSignal
+  let releaseStaleCancellation: RunStartGate
+  let staleCancellationApplied: AsyncTestSignal
+  let newerChildReady: AsyncTestSignal
+  let releaseNewerChild: RunStartGate
+  let newerCompositeFinished: AsyncTestSignal
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .scheduleStaleCancellation:
+      return .concatenate(
+        .run { _, _ in
+          staleCancellationReady.signal()
+          await releaseStaleCancellation.wait()
+        },
+        .cancel("sequence-bounded-composite"),
+        .run { _, _ in
+          staleCancellationApplied.signal()
+        }
+      )
+
+    case .startNewerComposite:
+      return .concatenate(
+        .run { _, _ in
+          newerChildReady.signal()
+          await releaseNewerChild.wait()
+        },
+        .send(._finished)
+      )
+      .cancellable("sequence-bounded-composite")
+
+    case ._finished:
+      state.finished = true
+      newerCompositeFinished.signal()
+      return .none
+    }
+  }
+}
+
 struct LazyMappedEffectFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var values: [String] = []

@@ -19,6 +19,11 @@ import Foundation
 /// - delayed debounce/throttle state must be cleared whenever the owning Store shuts down
 @MainActor
 package final class StoreEffectBridge<Action: Sendable> {
+  private struct TrackedCompositeTask {
+    let task: Task<Void, Never>
+    let sequence: UInt64
+  }
+
   package let runtime = EffectRuntime<Action>()
   package let throttleState = ThrottleStateMap<Action>()
   private let boundaries = EffectCancellationBoundaries()
@@ -26,7 +31,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   private var debounceDelayTasksByID: [AnyEffectID: Task<Void, Never>] = [:]
   private var debounceGenerationByID: [AnyEffectID: UInt64] = [:]
   private var nextDebounceGenerationValue: UInt64 = 0
-  private var compositeTasksByToken: [UUID: Task<Void, Never>] = [:]
+  private var compositeTasksByToken: [UUID: TrackedCompositeTask] = [:]
   private var compositeTokensByID: [AnyEffectID: Set<UUID>] = [:]
   private var compositeIDsByToken: [UUID: Set<AnyEffectID>] = [:]
 
@@ -124,17 +129,24 @@ package final class StoreEffectBridge<Action: Sendable> {
   package func registerCompositeTask(
     token: UUID,
     id: AnyEffectID?,
+    sequence: UInt64,
     task: Task<Void, Never>
   ) {
-    registerCompositeTask(token: token, ids: id.map { [$0] } ?? [], task: task)
+    registerCompositeTask(
+      token: token,
+      ids: id.map { [$0] } ?? [],
+      sequence: sequence,
+      task: task
+    )
   }
 
   package func registerCompositeTask(
     token: UUID,
     ids: [AnyEffectID],
+    sequence: UInt64,
     task: Task<Void, Never>
   ) {
-    compositeTasksByToken[token] = task
+    compositeTasksByToken[token] = .init(task: task, sequence: sequence)
     let uniqueIDs = Set(ids)
     if uniqueIDs.isEmpty == false {
       compositeIDsByToken[token] = uniqueIDs
@@ -159,17 +171,40 @@ package final class StoreEffectBridge<Action: Sendable> {
     }
   }
 
-  package func cancelCompositeTasks(id: AnyEffectID) {
+  package func cancelCompositeTasks(id: AnyEffectID, upTo sequence: UInt64) {
     guard let tokens = compositeTokensByID[id] else { return }
-    for token in tokens {
-      compositeTasksByToken[token]?.cancel()
+    for token in Array(tokens) {
+      guard let tracked = compositeTasksByToken[token] else {
+        finishCompositeTask(token: token)
+        continue
+      }
+      guard
+        tracked.sequence <= sequence
+          || boundaries.shouldStart(sequence: tracked.sequence, cancellationID: id) == false
+      else {
+        continue
+      }
+      tracked.task.cancel()
+      finishCompositeTask(token: token)
+    }
+  }
+
+  package func cancelAllCompositeTasks(upTo sequence: UInt64) {
+    for (token, tracked) in Array(compositeTasksByToken) {
+      guard
+        tracked.sequence <= sequence
+          || boundaries.shouldStart(sequence: tracked.sequence, cancellationID: nil) == false
+      else {
+        continue
+      }
+      tracked.task.cancel()
       finishCompositeTask(token: token)
     }
   }
 
   package func cancelAllCompositeTasks() {
-    for task in compositeTasksByToken.values {
-      task.cancel()
+    for tracked in compositeTasksByToken.values {
+      tracked.task.cancel()
     }
     compositeTasksByToken.removeAll(keepingCapacity: true)
     compositeTokensByID.removeAll(keepingCapacity: true)
@@ -177,21 +212,21 @@ package final class StoreEffectBridge<Action: Sendable> {
   }
 
   package func cancelEffects(id: AnyEffectID, upTo sequence: UInt64) async {
-    cancelCompositeTasks(id: id)
+    cancelCompositeTasks(id: id, upTo: sequence)
     await runtime.cancel(id: id, upTo: sequence)
     clearDebounceState(for: id)
     throttleState.clearState(for: id)
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, upTo sequence: UInt64) async {
-    cancelCompositeTasks(id: id)
+    cancelCompositeTasks(id: id, upTo: sequence)
     await runtime.cancelInFlight(id: id, upTo: sequence)
     clearDebounceState(for: id)
     throttleState.clearState(for: id)
   }
 
   package func cancelAllEffects(upTo sequence: UInt64) async {
-    cancelAllCompositeTasks()
+    cancelAllCompositeTasks(upTo: sequence)
     await runtime.cancelAll(upTo: sequence)
     clearAllDelayedState()
   }

@@ -2,6 +2,7 @@
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
+import Foundation
 import Testing
 
 @testable import InnoFlowCore
@@ -95,5 +96,99 @@ struct StoreEffectBridgeIsolationTests {
     bridge.markCancelled(id: outer, upTo: sequence)
 
     #expect(bridge.shouldProceed(context: context) == false)
+  }
+
+  @Test("ID cancellation honors its effective boundary and preserves newer indexes")
+  func idCancellationHonorsEffectiveCompositeBoundary() async {
+    let bridge = StoreEffectBridge<Int>()
+    let id = AnyEffectID(StaticEffectID("composite.sequence.id"))
+    let staleSequence = bridge.nextSequence()
+    let effectiveSequence = bridge.nextSequence()
+    let newerSequence = bridge.nextSequence()
+    let effectiveToken = UUID()
+    let newerToken = UUID()
+    let hold = RunStartGate()
+    let effectiveTask = Task<Void, Never> {
+      await hold.wait()
+    }
+    let newerTask = Task<Void, Never> {
+      await hold.wait()
+    }
+
+    bridge.registerCompositeTask(
+      token: effectiveToken,
+      id: id,
+      sequence: effectiveSequence,
+      task: effectiveTask
+    )
+    bridge.registerCompositeTask(
+      token: newerToken,
+      id: id,
+      sequence: newerSequence,
+      task: newerTask
+    )
+
+    bridge.markCancelled(id: id, upTo: effectiveSequence)
+    let staleBoundary = bridge.markCancelled(id: id, upTo: staleSequence)
+    bridge.cancelCompositeTasks(id: id, upTo: staleBoundary)
+
+    #expect(staleBoundary == staleSequence)
+    #expect(effectiveTask.isCancelled)
+    #expect(newerTask.isCancelled == false)
+
+    bridge.cancelCompositeTasks(id: id, upTo: newerSequence)
+
+    #expect(newerTask.isCancelled)
+
+    await hold.open()
+    _ = await effectiveTask.result
+    _ = await newerTask.result
+  }
+
+  @Test("Cancel all honors its effective boundary and preserves newer indexes")
+  func cancelAllHonorsEffectiveCompositeBoundary() async {
+    let bridge = StoreEffectBridge<Int>()
+    let id = AnyEffectID(StaticEffectID("composite.sequence.all"))
+    let staleSequence = bridge.nextSequence()
+    let effectiveSequence = bridge.nextSequence()
+    let newerSequence = bridge.nextSequence()
+    let effectiveToken = UUID()
+    let newerToken = UUID()
+    let hold = RunStartGate()
+    let effectiveTask = Task<Void, Never> {
+      await hold.wait()
+    }
+    let newerTask = Task<Void, Never> {
+      await hold.wait()
+    }
+
+    bridge.registerCompositeTask(
+      token: effectiveToken,
+      id: id,
+      sequence: effectiveSequence,
+      task: effectiveTask
+    )
+    bridge.registerCompositeTask(
+      token: newerToken,
+      id: id,
+      sequence: newerSequence,
+      task: newerTask
+    )
+
+    bridge.markCancelledAll(upTo: effectiveSequence)
+    let staleBoundary = bridge.markCancelledAll(upTo: staleSequence)
+    bridge.cancelAllCompositeTasks(upTo: staleBoundary)
+
+    #expect(staleBoundary == staleSequence)
+    #expect(effectiveTask.isCancelled)
+    #expect(newerTask.isCancelled == false)
+
+    bridge.cancelCompositeTasks(id: id, upTo: newerSequence)
+
+    #expect(newerTask.isCancelled)
+
+    await hold.open()
+    _ = await effectiveTask.result
+    _ = await newerTask.result
   }
 }
