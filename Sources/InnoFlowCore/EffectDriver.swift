@@ -271,20 +271,25 @@ package protocol EffectDriver<Action>: AnyObject {
 
   // MARK: - Debounce
 
-  /// Schedule a debounced effect. Driver owns the timer and generation tracking.
-  /// When the timer fires, calls `recurse(nested, context, awaited)`.
-  func debounce(
+  /// Schedules a debounced effect and returns its registered delay task.
+  /// The driver owns timer and generation tracking. When the timer fires, it
+  /// interprets the nested effect using the requested awaited semantics.
+  ///
+  /// The walker decides whether to await the returned task after the driver's
+  /// strong reference has left scope.
+  @discardableResult
+  func scheduleDebounce(
     _ nested: EffectTask<Action>,
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
     scope: DelayedEffectScope,
-    awaited: Bool,
+    nestedAwaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         EffectTask<Action>, EffectExecutionContext?, Bool
       ) async -> Void
-  ) async
+  ) async -> Task<Void, Never>?
 
   // MARK: - Throttle State
 

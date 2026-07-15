@@ -525,6 +525,71 @@ struct StoreEffectRuntimeTests {
     await store.cancelAllEffects()
   }
 
+  @Test("Awaited concatenate waits for debounce nested run before next effect")
+  func awaitedConcatenateWaitsForDebounceNestedRun() async throws {
+    let timingID = AnyEffectID(StaticEffectID("awaited-debounce"))
+    let clock = ManualTestClock()
+    let debouncedRunStarted = AsyncTestSignal()
+    let debouncedRunFinished = AsyncTestSignal()
+    let nextRunStarted = AsyncTestSignal()
+    let releaseDebouncedRun = RunStartGate()
+    let orderProbe = InstrumentationProbe()
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+    let debouncedEffect = EffectTask<CounterFeature.Action>.run { _, _ in
+      orderProbe.record("debounced-start")
+      debouncedRunStarted.signal()
+      await releaseDebouncedRun.wait()
+      orderProbe.record("debounced-finish")
+      debouncedRunFinished.signal()
+    }
+    .debounce(timingID, for: .seconds(60))
+    let effect = EffectTask<CounterFeature.Action>.concatenate(
+      debouncedEffect,
+      .run { _, _ in
+        orderProbe.record("next-start")
+        nextRunStarted.signal()
+      }
+    )
+    let sequence = store.effectBridge.nextSequence()
+    let walk = Task { @MainActor in
+      await store.walkEffect(
+        effect,
+        context: .init(sequence: sequence),
+        awaited: true
+      )
+    }
+
+    do {
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      #expect(orderProbe.events.isEmpty)
+
+      await clock.advance(by: .seconds(60))
+      try #require(await debouncedRunStarted.wait())
+      #expect(orderProbe.events == ["debounced-start"])
+
+      await releaseDebouncedRun.open()
+      try #require(await debouncedRunFinished.wait())
+      try #require(await nextRunStarted.wait())
+      _ = await walk.result
+    } catch {
+      await releaseDebouncedRun.open()
+      await store.cancelAllEffects()
+      _ = await walk.result
+      throw error
+    }
+
+    #expect(orderProbe.events == ["debounced-start", "debounced-finish", "next-start"])
+    await store.cancelAllEffects()
+  }
+
   @Test("Trailing drain uses latest context and keeps awaited requirement across replacement")
   func trailingDrainKeepsAwaitedRequirementAcrossReplacement() async throws {
     let timingID = AnyEffectID(StaticEffectID("monotonic-awaited-trailing-throttle"))
@@ -616,15 +681,18 @@ struct StoreEffectRuntimeTests {
     let scope = DelayedEffectScope(ownerID: timingID, sequence: sequence)
     let recurseProbe = InstrumentationProbe()
 
-    await store.debounce(
+    let task = await store.scheduleDebounce(
       .none,
       id: timingID,
       interval: .seconds(60),
       context: context,
       scope: scope,
-      awaited: true
+      nestedAwaited: true
     ) { _, _, _ in
       recurseProbe.record("recursed")
+    }
+    if let task {
+      _ = await task.result
     }
 
     #expect(store.effectBridge.debounceScope(for: timingID) == nil)
@@ -1817,6 +1885,45 @@ struct StoreEffectRuntimeTests {
     do {
       var store: Store<AwaitedTrailingReleaseFeature>? = Store(
         reducer: AwaitedTrailingReleaseFeature(),
+        initialState: .init(),
+        clock: .manual(clock)
+      )
+      weakStore = store
+      store?.send(.start)
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      store = nil
+    }
+
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(60))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+    #expect(released)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+    #expect(weakStore == nil)
+  }
+
+  @Test("Store release breaks awaited debounce composite ownership")
+  func storeReleaseBreaksAwaitedDebounceCompositeOwnership() async throws {
+    let clock = ManualTestClock()
+    weak var weakStore: Store<AwaitedDebounceReleaseFeature>?
+
+    do {
+      var store: Store<AwaitedDebounceReleaseFeature>? = Store(
+        reducer: AwaitedDebounceReleaseFeature(),
         initialState: .init(),
         clock: .manual(clock)
       )

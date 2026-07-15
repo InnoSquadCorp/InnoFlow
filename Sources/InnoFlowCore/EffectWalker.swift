@@ -97,21 +97,16 @@ package struct EffectWalker<D: EffectDriver> {
       )
 
     case .debounce(let nested, let id, let interval):
-      guard let driver else { return }
-      let delayedScope = DelayedEffectScope(
-        ownerID: id,
-        inheritedCancellationIDs: context?.cancellationIDs ?? [],
-        sequence: context?.sequence
-      )
-      await driver.debounce(
-        nested,
+      let task = await prepareDebounce(
+        nested: nested,
         id: id,
         interval: interval,
-        context: .withCancellation(id, on: context),
-        scope: delayedScope,
-        awaited: awaited,
-        recurse: recurse
+        context: context,
+        nestedAwaited: awaited
       )
+      if awaited, let task {
+        _ = await task.result
+      }
 
     case .throttle(let nested, let id, let interval, let leading, let trailing):
       await walkThrottle(
@@ -153,6 +148,34 @@ package struct EffectWalker<D: EffectDriver> {
   ) async {
     guard let driver else { return }
     await driver.cancelInFlightEffects(id: id, context: context)
+  }
+
+  /// Schedules debounce work without retaining the driver while its timer is
+  /// suspended. An enclosing unawaited composite is owned by the driver, so a
+  /// strong driver reference across the delay would otherwise form a cycle.
+  private func prepareDebounce(
+    nested: EffectTask<D.Action>,
+    id: AnyEffectID,
+    interval: Duration,
+    context: EffectExecutionContext?,
+    nestedAwaited: Bool
+  ) async -> Task<Void, Never>? {
+    guard let driver else { return nil }
+
+    let delayedScope = DelayedEffectScope(
+      ownerID: id,
+      inheritedCancellationIDs: context?.cancellationIDs ?? [],
+      sequence: context?.sequence
+    )
+    return await driver.scheduleDebounce(
+      nested,
+      id: id,
+      interval: interval,
+      context: .withCancellation(id, on: context),
+      scope: delayedScope,
+      nestedAwaited: nestedAwaited,
+      recurse: recurse
+    )
   }
 
   // MARK: - Throttle (shared window logic)

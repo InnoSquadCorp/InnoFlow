@@ -345,6 +345,46 @@ struct TestStoreCoreTests {
     #expect(weakStore == nil)
   }
 
+  @Test("TestStore release breaks awaited debounce composite ownership")
+  func testStoreReleaseBreaksAwaitedDebounceCompositeOwnership() async throws {
+    let clock = ManualTestClock()
+    weak var weakStore: TestStore<AwaitedDebounceReleaseFeature>?
+
+    do {
+      var store: TestStore<AwaitedDebounceReleaseFeature>? = TestStore(
+        reducer: AwaitedDebounceReleaseFeature(),
+        initialState: .init(),
+        clock: clock
+      )
+      weakStore = store
+      await store?.send(.start)
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      store = nil
+    }
+
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(60))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+
+    #expect(released)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+    #expect(weakStore == nil)
+  }
+
   @Test("TestStore debounce skips stale effects at cancellation boundaries")
   func testStoreDebounceSkipsStaleEffectsAtCancellationBoundaries() async {
     let id = AnyEffectID(StaticEffectID("teststore-stale-debounce"))
@@ -352,15 +392,18 @@ struct TestStoreCoreTests {
     let probe = InstrumentationProbe()
 
     await store.cancelEffects(id: id, context: .init(sequence: 1))
-    await store.debounce(
+    let task = await store.scheduleDebounce(
       EffectTask<CounterFeature.Action>.none,
       id: id,
       interval: .milliseconds(0),
       context: .init(cancellationID: id, sequence: 1),
       scope: .init(ownerID: id, sequence: 1),
-      awaited: true
+      nestedAwaited: true
     ) { _, _, _ in
       probe.record("recursed")
+    }
+    if let task {
+      _ = await task.result
     }
 
     #expect(probe.events.isEmpty)
@@ -380,13 +423,13 @@ struct TestStoreCoreTests {
     let releaseRecursion = RunStartGate()
     let probe = InstrumentationProbe()
 
-    await store.debounce(
+    await store.scheduleDebounce(
       .none,
       id: id,
       interval: .zero,
       context: .init(cancellationID: id, sequence: sequence),
       scope: .init(ownerID: id, sequence: sequence),
-      awaited: false
+      nestedAwaited: false
     ) { _, _, awaited in
       probe.record("awaited:\(awaited)")
       didRecurse.signal()
@@ -406,6 +449,64 @@ struct TestStoreCoreTests {
 
     #expect(probe.events == ["awaited:false"])
     #expect(store.debounceTasksByID[id] == nil)
+  }
+
+  @Test("TestStore awaited debounce completes before concatenate continues")
+  func testStoreAwaitedDebounceCompletesBeforeConcatenateContinues() async throws {
+    let id = AnyEffectID(StaticEffectID("teststore-awaited-debounce"))
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+    let debouncedRunStarted = AsyncTestSignal()
+    let walkFinished = AsyncTestSignal()
+    let releaseDebouncedRun = RunStartGate()
+    let effect = EffectTask<CounterFeature.Action>.concatenate(
+      .run { send in
+        debouncedRunStarted.signal()
+        await releaseDebouncedRun.wait()
+        await send(.increment)
+      }
+      .debounce(id, for: .seconds(60)),
+      .send(.decrement)
+    )
+    let sequence = store.nextSequence()
+    let walkTask = Task { @MainActor in
+      await store.walker.walk(
+        effect,
+        context: .init(sequence: sequence),
+        awaited: true
+      )
+      walkFinished.signal()
+    }
+
+    do {
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      #expect(await store.popBufferedAction() == nil)
+
+      await clock.advance(by: .seconds(60))
+      try #require(await debouncedRunStarted.wait())
+      #expect(await store.popBufferedAction() == nil)
+
+      await releaseDebouncedRun.open()
+      try #require(await walkFinished.wait())
+      _ = await walkTask.result
+
+      #expect(await store.popBufferedAction() == .increment)
+      #expect(await store.popBufferedAction() == .decrement)
+      #expect(await store.popBufferedAction() == nil)
+    } catch {
+      await releaseDebouncedRun.open()
+      await store.cancelAllEffects()
+      _ = await walkTask.result
+      throw error
+    }
   }
 
   @Test("TestStore awaited trailing throttle completes before concatenate continues")
@@ -654,24 +755,24 @@ struct TestStoreCoreTests {
       sequence: newerSequence
     )
 
-    await store.debounce(
+    await store.scheduleDebounce(
       .none,
       id: debounceID,
       interval: .seconds(60),
       context: newerContext,
       scope: newerScope,
-      awaited: false
+      nestedAwaited: false
     ) { _, _, _ in }
     let first = try #require(store.debounceTasksByID[debounceID])
     let firstTask = try #require(first.task)
 
-    await store.debounce(
+    await store.scheduleDebounce(
       .none,
       id: debounceID,
       interval: .seconds(60),
       context: newerContext,
       scope: newerScope,
-      awaited: false
+      nestedAwaited: false
     ) { _, _, _ in }
     let replacement = try #require(store.debounceTasksByID[debounceID])
     let replacementTask = try #require(replacement.task)
@@ -689,13 +790,13 @@ struct TestStoreCoreTests {
       inheritedCancellationIDs: [outerID],
       sequence: olderSequence
     )
-    await store.debounce(
+    await store.scheduleDebounce(
       .none,
       id: debounceID,
       interval: .seconds(60),
       context: olderContext,
       scope: olderScope,
-      awaited: false
+      nestedAwaited: false
     ) { _, _, _ in }
 
     #expect(store.debounceTasksByID[debounceID]?.generation == replacement.generation)
@@ -716,13 +817,13 @@ struct TestStoreCoreTests {
     let sequence = store.nextSequence()
     let scope = DelayedEffectScope(ownerID: id, sequence: sequence)
 
-    await store.debounce(
+    await store.scheduleDebounce(
       .none,
       id: id,
       interval: .seconds(60),
       context: .init(cancellationID: id, sequence: sequence),
       scope: scope,
-      awaited: false
+      nestedAwaited: false
     ) { _, _, _ in }
     let trackedDebounce = try #require(store.debounceTasksByID[id])
     let debounceTask = try #require(trackedDebounce.task)
@@ -774,13 +875,13 @@ struct TestStoreCoreTests {
       sequence: newerSequence
     )
 
-    await store.debounce(
+    await store.scheduleDebounce(
       .none,
       id: debounceID,
       interval: .seconds(60),
       context: context,
       scope: scope,
-      awaited: false
+      nestedAwaited: false
     ) { _, _, _ in }
     let task = try #require(store.debounceTasksByID[debounceID]?.task)
 
@@ -928,25 +1029,25 @@ struct TestStoreCoreTests {
     let effectiveThrottleTask = Task<Void, Never> { await hold.wait() }
     let newerThrottleTask = Task<Void, Never> { await hold.wait() }
 
-    await store.debounce(
+    await store.scheduleDebounce(
       .none,
       id: effectiveDebounceID,
       interval: .seconds(60),
       context: .init(cancellationID: effectiveDebounceID, sequence: effectiveSequence),
       scope: .init(ownerID: effectiveDebounceID, sequence: effectiveSequence),
-      awaited: false
+      nestedAwaited: false
     ) { _, _, _ in }
     let effectiveDebounceTask = try #require(
       store.debounceTasksByID[effectiveDebounceID]?.task
     )
 
-    await store.debounce(
+    await store.scheduleDebounce(
       .none,
       id: newerDebounceID,
       interval: .seconds(60),
       context: .init(cancellationID: newerDebounceID, sequence: newerSequence),
       scope: .init(ownerID: newerDebounceID, sequence: newerSequence),
-      awaited: false
+      nestedAwaited: false
     ) { _, _, _ in }
     let newerDebounceTask = try #require(store.debounceTasksByID[newerDebounceID]?.task)
 

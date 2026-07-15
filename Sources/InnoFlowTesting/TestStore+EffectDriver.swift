@@ -513,24 +513,25 @@ extension TestStore: EffectDriver {
     return shouldStart(sequence: sequence, cancellationIDs: context?.cancellationIDs ?? [])
   }
 
-  package func debounce(
+  @discardableResult
+  package func scheduleDebounce(
     _ nested: EffectTask<R.Action>,
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
     scope: DelayedEffectScope,
-    awaited: Bool,
+    nestedAwaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         EffectTask<R.Action>, EffectExecutionContext?, Bool
       ) async -> Void
-  ) async {
+  ) async -> Task<Void, Never>? {
     let sequence = markCancelledInFlight(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
 
-    guard shouldProceed(context: context) else { return }
+    guard shouldProceed(context: context) else { return nil }
 
-    guard let generation = beginDebounce(scope) else { return }
+    guard let generation = beginDebounce(scope) else { return nil }
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
 
     let task = Task { @MainActor [weak self] in
@@ -548,16 +549,13 @@ extension TestStore: EffectDriver {
       guard !Task.isCancelled else { return }
       guard self.debounceTasksByID[id]?.generation == generation else { return }
       guard self.shouldProceed(context: context) else { return }
-      await recurse(nested, context, awaited)
+      await recurse(nested, context, nestedAwaited)
     }
 
     guard setDebounceTask(task, for: id, generation: generation) else {
-      return
+      return nil
     }
-
-    if awaited {
-      _ = await task.result
-    }
+    return task
   }
 
   @discardableResult

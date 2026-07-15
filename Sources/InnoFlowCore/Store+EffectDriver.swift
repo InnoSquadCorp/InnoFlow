@@ -229,21 +229,22 @@ extension Store: EffectDriver {
     effectBridge.shouldProceed(context: context)
   }
 
-  package func debounce(
+  @discardableResult
+  package func scheduleDebounce(
     _ nested: EffectTask<R.Action>,
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
     scope: DelayedEffectScope,
-    awaited: Bool,
+    nestedAwaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         EffectTask<R.Action>, EffectExecutionContext?, Bool
       ) async -> Void
-  ) async {
+  ) async -> Task<Void, Never>? {
     await cancelInFlightEffects(id: id, context: context)
-    guard shouldProceed(context: context) else { return }
-    guard let generation = effectBridge.beginDebounce(scope) else { return }
+    guard shouldProceed(context: context) else { return nil }
+    guard let generation = effectBridge.beginDebounce(scope) else { return nil }
     let clock = self.clock
 
     let task = Task { [weak self] in
@@ -270,16 +271,13 @@ extension Store: EffectDriver {
       }
 
       guard shouldRun, let self else { return }
-      await self.walkEffect(nested, context: context, awaited: awaited)
+      await self.walkEffect(nested, context: context, awaited: nestedAwaited)
     }
 
     guard effectBridge.setDebounceDelayTask(task, for: id, generation: generation) else {
-      return
+      return nil
     }
-
-    if awaited {
-      _ = await task.result
-    }
+    return task
   }
 
   package var throttleState: ThrottleStateMap<R.Action> {

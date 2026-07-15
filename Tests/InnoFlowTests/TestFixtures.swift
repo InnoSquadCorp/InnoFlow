@@ -1943,6 +1943,36 @@ struct AwaitedTrailingReleaseFeature: Reducer {
   }
 }
 
+struct AwaitedDebounceReleaseFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var completed = false
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _completed
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      return .concatenate(
+        .concatenate(
+          EffectTask.send(._completed)
+            .debounce("awaited-debounce-release", for: .seconds(60))
+            .cancellable("awaited-debounce-release-outer"),
+          .run { _, _ in }
+        ),
+        .run { _, _ in }
+      )
+
+    case ._completed:
+      state.completed = true
+      return .none
+    }
+  }
+}
+
 struct ThrottleLeadingTrailingFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var emitted: [Int] = []
