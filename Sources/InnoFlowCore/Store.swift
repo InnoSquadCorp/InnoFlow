@@ -151,13 +151,14 @@ public final class Store<R: Reducer> {
         var animatedEffect: EffectTask<R.Action> = .none
         animation.perform {
           animatedEffect = reducer.reduce(into: &state, action: queuedAction.action)
+          observerRegistry.refresh(from: previousState, to: state)
         }
         effect = animatedEffect
       } else {
         effect = reducer.reduce(into: &state, action: queuedAction.action)
+        observerRegistry.refresh(from: previousState, to: state)
       }
 
-      observerRegistry.refresh(from: previousState, to: state)
       executeEffect(effect, sequence: sequence)
     }
   }

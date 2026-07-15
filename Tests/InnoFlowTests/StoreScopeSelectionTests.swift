@@ -201,6 +201,28 @@ struct StoreScopeSelectionTests {
     #expect(scoped.step == 7)
   }
 
+  @Test("Animated dispatch refreshes projections inside the animation boundary")
+  func animatedDispatchRefreshesProjectionsInsideAnimationBoundary() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child,
+      action: ScopedBindableChildFeature.Action.childCasePath
+    )
+    let selected = scoped.select(\.step)
+    let probe = InstrumentationProbe()
+    let animation = EffectAnimation(description: "projection-boundary") { updates in
+      probe.record("before:\(scoped.step):\(selected.requireAlive())")
+      updates()
+      probe.record("after:\(scoped.step):\(selected.requireAlive())")
+    }
+
+    store.enqueue(.child(.setStep(7)), animation: animation)
+
+    #expect(probe.events == ["before:1:1", "after:7:7"])
+    #expect(scoped.step == 7)
+    #expect(selected.requireAlive() == 7)
+  }
+
   @Test("ScopedStore.isAlive and optionalState are true/non-nil while parent is alive")
   func scopedStoreLifecycleAccessorsWhileAlive() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
