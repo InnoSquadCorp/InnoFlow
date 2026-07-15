@@ -1572,6 +1572,38 @@ struct StoreEffectRuntimeTests {
     #expect(snapshot.sorted() == [1, 2])
   }
 
+  @Test("ManualTestClock distinguishes successive sleep registrations")
+  func manualTestClockCountsSuccessiveSleepRegistrations() async throws {
+    let clock = ManualTestClock()
+    #expect(await clock.sleepRegistrationCount == 0)
+
+    let firstSleeper = Task {
+      try await clock.sleep(for: .seconds(60))
+    }
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleepRegistrationCount == 1
+      }
+    )
+    firstSleeper.cancel()
+    _ = await firstSleeper.result
+
+    let secondSleeper = Task {
+      try await clock.sleep(for: .seconds(60))
+    }
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleepRegistrationCount == 2
+      }
+    )
+    #expect(await clock.sleeperCount == 1)
+
+    secondSleeper.cancel()
+    _ = await secondSleeper.result
+    #expect(await clock.sleepRegistrationCount == 2)
+    #expect(await clock.sleeperCount == 0)
+  }
+
   @Test("ManualTestClock cancels pending sleepers without late resume")
   func manualTestClockCancelsPendingSleepersWithoutLateResume() async {
     let clock = ManualTestClock()

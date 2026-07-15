@@ -229,8 +229,9 @@ func runTimingScenario<R: Reducer>(
   trigger: @escaping (Int) -> R.Action,
   emitted: KeyPath<R.State, [Int]>,
   expectedCount: Int,
-  expectedCountAfterEachStep: [Int]? = nil
-) async -> [Int]
+  expectedCountAfterEachStep: [Int]? = nil,
+  awaitSleepRegistrationAfterTrigger: Bool = false
+) async throws -> [Int]
 where
   R.State: Equatable & Sendable & DefaultInitializable,
   R.Action: Sendable
@@ -249,8 +250,23 @@ where
   for (index, step) in steps.enumerated() {
     switch step {
     case .trigger(let value):
-      store.send(trigger(value))
-      await settleTimingScenarioWork()
+      if awaitSleepRegistrationAfterTrigger {
+        let previousRegistrationCount = await clock.sleepRegistrationCount
+        store.send(trigger(value))
+        let didRegister = await waitUntilAsync(
+          timeout: .seconds(2),
+          pollInterval: .milliseconds(1)
+        ) {
+          await clock.sleepRegistrationCount > previousRegistrationCount
+        }
+        try #require(
+          didRegister,
+          "Timed out waiting for the trigger's manual-clock sleep registration"
+        )
+      } else {
+        store.send(trigger(value))
+        await settleTimingScenarioWork()
+      }
 
     case .advance(let milliseconds):
       await settleTimingScenarioWork()
@@ -259,18 +275,24 @@ where
     }
 
     if let expectedCountAfterEachStep {
-      await waitForEmissionCount(
-        store,
-        emitted: emitted,
-        minimumCount: expectedCountAfterEachStep[index]
+      try #require(
+        await waitForEmissionCount(
+          store,
+          emitted: emitted,
+          minimumCount: expectedCountAfterEachStep[index]
+        ),
+        "Timed out waiting for the expected emission count after timing step \(index)"
       )
     }
   }
 
-  await waitForEmissionCount(
-    store,
-    emitted: emitted,
-    minimumCount: expectedCount
+  try #require(
+    await waitForEmissionCount(
+      store,
+      emitted: emitted,
+      minimumCount: expectedCount
+    ),
+    "Timed out waiting for the final expected emission count"
   )
 
   return store.state[keyPath: emitted]
@@ -294,15 +316,15 @@ func waitForEmissionCount<R: Reducer>(
   _ store: Store<R>,
   emitted: KeyPath<R.State, [Int]>,
   minimumCount: Int,
-  maxIterations: Int = 1_024
-) async {
-  guard minimumCount > 0 else { return }
+  timeout: Duration = .seconds(2)
+) async -> Bool {
+  guard minimumCount > 0 else { return true }
 
-  for _ in 0..<maxIterations {
-    if store.state[keyPath: emitted].count >= minimumCount {
-      return
-    }
-    await Task.yield()
+  return await waitUntil(
+    timeout: timeout,
+    pollInterval: .milliseconds(1)
+  ) {
+    store.state[keyPath: emitted].count >= minimumCount
   }
 }
 

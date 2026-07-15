@@ -393,16 +393,17 @@ struct EffectTaskTests {
     "EffectTask.debounce latest-wins semantics hold across random timing streams",
     arguments: Array(0..<50)
   )
-  func effectDebounceLatestWinsProperty(seed: Int) async {
+  func effectDebounceLatestWinsProperty(seed: Int) async throws {
     let steps = makeTimingScenario(seed: UInt64(seed + 101))
     let expected = expectedDebounceTimeline(for: steps, intervalMilliseconds: 60)
-    let actual = await runTimingScenario(
+    let actual = try await runTimingScenario(
       reducer: DebounceFeature(),
       steps: steps,
       trigger: DebounceFeature.Action.trigger,
       emitted: \.emitted,
       expectedCount: expected.outputs.count,
-      expectedCountAfterEachStep: expected.emissionCountsAfterSteps
+      expectedCountAfterEachStep: expected.emissionCountsAfterSteps,
+      awaitSleepRegistrationAfterTrigger: true
     )
 
     #expect(actual == expected.outputs)
@@ -412,7 +413,7 @@ struct EffectTaskTests {
     "EffectTask.throttle leading-only semantics hold across random timing streams",
     arguments: Array(0..<50)
   )
-  func effectThrottleLeadingOnlyProperty(seed: Int) async {
+  func effectThrottleLeadingOnlyProperty(seed: Int) async throws {
     let steps = makeTimingScenario(seed: UInt64(seed + 201))
     let expected = expectedThrottleTimeline(
       for: steps,
@@ -420,7 +421,7 @@ struct EffectTaskTests {
       leading: true,
       trailing: false
     )
-    let actual = await runTimingScenario(
+    let actual = try await runTimingScenario(
       reducer: ThrottleFeature(),
       steps: steps,
       trigger: ThrottleFeature.Action.trigger,
@@ -436,7 +437,7 @@ struct EffectTaskTests {
     "EffectTask.throttle trailing-only semantics hold across random timing streams",
     arguments: Array(0..<50)
   )
-  func effectThrottleTrailingOnlyProperty(seed: Int) async {
+  func effectThrottleTrailingOnlyProperty(seed: Int) async throws {
     let steps = makeTimingScenario(seed: UInt64(seed + 301))
     let expected = expectedThrottleTimeline(
       for: steps,
@@ -444,7 +445,7 @@ struct EffectTaskTests {
       leading: false,
       trailing: true
     )
-    let actual = await runTimingScenario(
+    let actual = try await runTimingScenario(
       reducer: ThrottleTrailingFeature(),
       steps: steps,
       trigger: ThrottleTrailingFeature.Action.trigger,
@@ -460,7 +461,7 @@ struct EffectTaskTests {
     "EffectTask.throttle leading+trailing semantics hold across random timing streams",
     arguments: Array(0..<50)
   )
-  func effectThrottleLeadingTrailingProperty(seed: Int) async {
+  func effectThrottleLeadingTrailingProperty(seed: Int) async throws {
     let steps = makeTimingScenario(seed: UInt64(seed + 401))
     let expected = expectedThrottleTimeline(
       for: steps,
@@ -468,7 +469,7 @@ struct EffectTaskTests {
       leading: true,
       trailing: true
     )
-    let actual = await runTimingScenario(
+    let actual = try await runTimingScenario(
       reducer: ThrottleLeadingTrailingFeature(),
       steps: steps,
       trigger: ThrottleLeadingTrailingFeature.Action.trigger,

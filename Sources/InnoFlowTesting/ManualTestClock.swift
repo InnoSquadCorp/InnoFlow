@@ -18,6 +18,7 @@ public actor ManualTestClock {
   private var current: Instant
   private var sleepers: [UUID: SleepRequest] = [:]
   private var nextInsertionOrder: UInt64 = 0
+  private var successfulSleepRegistrationCount: UInt64 = 0
 
   deinit {
     for request in sleepers.values {
@@ -25,6 +26,7 @@ public actor ManualTestClock {
     }
     sleepers.removeAll()
     nextInsertionOrder = 0
+    successfulSleepRegistrationCount = 0
   }
 
   /// Creates a deterministic test clock starting from the supplied instant.
@@ -45,6 +47,15 @@ public actor ManualTestClock {
   /// between spawning a sleeper and advancing unreliable.
   public var sleeperCount: Int {
     sleepers.count
+  }
+
+  /// The number of sleep requests successfully registered since initialization.
+  ///
+  /// Unlike ``sleeperCount``, this value changes when one pending sleeper is
+  /// replaced by another. Package tests use it to wait for latest-wins timing
+  /// effects without relying on a fixed number of executor yields.
+  package var sleepRegistrationCount: UInt64 {
+    successfulSleepRegistrationCount
   }
 
   /// Advances the clock and resumes any sleepers whose deadlines have passed.
@@ -119,6 +130,7 @@ public actor ManualTestClock {
       insertionOrder: insertionOrder,
       continuation: continuation
     )
+    successfulSleepRegistrationCount += 1
     return true
   }
 
