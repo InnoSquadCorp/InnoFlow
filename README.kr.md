@@ -136,6 +136,13 @@ child 타입, `CasePath` identity가 모두 일치할 때 살아 있는 `ScopedS
 않고 안전하게 새 projection을 만듭니다. 이 계약은 reducer 합성 primitive인
 `Scope`나 테스트용 `TestStore.scope`의 identity 계약이 아닙니다.
 
+런타임 `Store.scope(collection:action:)`는 collection key path마다 하나의 활성
+row family만 보유합니다. child 타입과 `CollectionActionPath` identity가 일치하면
+호출 위치가 달라도 ID별 `ScopedStore`를 재사용하고, signature가 달라지면 family
+전체를 교체합니다. 이전에 반환된 row는 기존 action transform을 유지하고 새로
+scope한 row는 새 path로 라우팅됩니다. 안정적인 row 객체 identity가 필요하면
+저장해 둔 path 값을 재사용하고, path 재생성은 의도적인 안전한 교체로 취급하세요.
+
 ## 샘플 카탈로그
 
 공식 샘플 앱은 10개 데모를 유지합니다.

@@ -22,6 +22,13 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   `CasePath` identity. Repeated calls reuse one projection and observer without
   extending its lifetime; independently reconstructed action paths safely
   create separate projections.
+- `Store.scope(collection:action:)` now distinguishes opaque
+  `CollectionActionPath` identities. Matching child types and path identity
+  reuse the active ID-keyed row family across source locations; changing that
+  signature replaces the whole family instead of silently retaining an
+  outdated action transform. Previously returned row handles keep their
+  original routing, and the parent retains at most one active family per
+  collection key path.
 - Store and TestStore run cancellation now applies only through the requesting
   effect sequence. A delayed cancellation from an older sequence no longer
   terminates a newer run registered under the same cancellation ID.

@@ -129,9 +129,7 @@ extension Store {
   fileprivate func makeScopedCollectionStores<CollectionState, ChildAction>(
     collection: KeyPath<R.State, CollectionState>,
     action: @escaping @Sendable (CollectionState.Element.ID, ChildAction) -> R.Action,
-    fileID: StaticString = #fileID,
-    line: UInt = #line,
-    column: UInt = #column
+    actionPathIdentity: ActionPathIdentity
   ) -> [ScopedStore<R, CollectionState.Element, ChildAction>]
   where
     CollectionState: RandomAccessCollection,
@@ -139,8 +137,15 @@ extension Store {
     CollectionState.Element.ID: Sendable
   {
     let anyKeyPath = collection as AnyKeyPath
-    let callsite = collectionScopeCallsite(fileID: fileID, line: line, column: column)
-    let bucket = collectionScopeCache.validatedBucket(for: anyKeyPath, callsite: callsite)
+    let signature = CollectionScopeCacheSignature(
+      childStateType: ObjectIdentifier(CollectionState.Element.self),
+      childActionType: ObjectIdentifier(ChildAction.self),
+      actionPathIdentity: actionPathIdentity
+    )
+    let bucket = collectionScopeCache.bucket(
+      for: anyKeyPath,
+      signature: signature
+    )
     bucket.revision &+= 1
     let elements = state[keyPath: collection]
     var stores: [ScopedStore<R, CollectionState.Element, ChildAction>] = []
@@ -157,7 +162,8 @@ extension Store {
       bucket.offsetsByID[elementID] = offsetBox
 
       if let cached = bucket.storesByID[elementID]
-        as? ScopedStore<R, CollectionState.Element, ChildAction>
+        as? ScopedStore<R, CollectionState.Element, ChildAction>,
+        cached.isAlive
       {
         stores.append(cached)
         continue
@@ -198,6 +204,14 @@ extension Store {
     return stores
   }
 
+  /// Creates derived stores for an identifiable collection using a typed
+  /// collection action path.
+  ///
+  /// Repeated calls reuse the active row family across source locations when
+  /// the child types and opaque action-path identity match. Changing that
+  /// signature replaces the complete cached family, while previously returned
+  /// row handles keep their original action transform. The parent retains only
+  /// one active family per collection key path.
   public func scope<CollectionState, ChildAction>(
     collection: KeyPath<R.State, CollectionState>,
     action: CollectionActionPath<R.Action, CollectionState.Element.ID, ChildAction>,
@@ -213,9 +227,7 @@ extension Store {
     makeScopedCollectionStores(
       collection: collection,
       action: action.embed,
-      fileID: fileID,
-      line: line,
-      column: column
+      actionPathIdentity: action.identity
     )
   }
 

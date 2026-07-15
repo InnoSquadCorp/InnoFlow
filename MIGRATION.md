@@ -17,6 +17,10 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   `Store.scope(state:action:)` call allocating a distinct `ScopedStore` are
   affected. Calls with the same source location, state key path, child types,
   and `CasePath` identity now return the same live projection.
+- Consumers that reconstructed a `CollectionActionPath` but relied on
+  `Store.scope(collection:action:)` returning the previous row objects are
+  affected. Independently constructed paths now replace the active row family
+  so a row can never inherit an outdated action transform.
 
 ### Required action
 
@@ -60,6 +64,21 @@ expansion emits a stored static action path should keep that path so repeated
 body evaluation reuses one observer and projection identity. Generic or
 extension lexical contexts synthesize a computed action path with a fresh
 identity per access; those calls intentionally take the safe cache-miss path.
+
+Ordinary `store.scope(collection:action:)` calls remain source-compatible. To
+preserve stable row object identity, reuse a stored `CollectionActionPath`
+(normally the macro-generated `static let`). The collection cache retains one
+active signature per collection key path: matching child types and opaque path
+identity reuse the same ID-keyed rows across source locations. Changing either
+part replaces the complete cached family; previously returned row handles
+remain valid and keep their original action transform.
+
+Generic or extension lexical contexts synthesize a computed
+`CollectionActionPath` with a fresh identity per access. This is a safe family
+replacement rather than a crash or stale-transform reuse. If that code needs
+stable row object identity across repeated rendering, hoist the computed path
+into state owned for the relevant feature/view lifetime and pass the same path
+value back to `scope(collection:action:)`.
 
 ## 4.0.0
 

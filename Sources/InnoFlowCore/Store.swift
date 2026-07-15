@@ -185,14 +185,6 @@ public final class Store<R: Reducer> {
     }
   }
 
-  package func collectionScopeCallsite(
-    fileID: StaticString,
-    line: UInt,
-    column: UInt
-  ) -> CollectionScopeCallsite {
-    .init(fileID: fileID.description, line: line, column: column)
-  }
-
   package func singleScopeCallsite(
     fileID: StaticString,
     line: UInt,

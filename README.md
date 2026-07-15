@@ -221,6 +221,11 @@ Repeated `Store.scope(state:action:)` calls from the same source location reuse 
 projection when their state key path, child types, and `CasePath` identity match. The cache is weak,
 so discarding every external reference still releases the `ScopedStore`; constructing a new
 `CasePath` safely creates a separate projection instead of reusing an outdated action transform.
+Collection scoping retains one active ID-keyed row family per collection key path. It reuses that
+family across source locations when the child types and `CollectionActionPath` identity match;
+changing that signature replaces the whole family. Previously returned rows keep their original
+action transform, while newly scoped rows route through the new path. Reuse a stored path value when
+stable row object identity matters; a reconstructed path is an intentional safe replacement.
 Public scoping APIs use `CasePath` and `CollectionActionPath` exclusively. Closure-based action lifting is kept internal to the framework implementation.
 
 ```swift

@@ -19,10 +19,10 @@ package struct SingleScopeCacheKey: Hashable {
   package let childActionType: ObjectIdentifier
 }
 
-package struct CollectionScopeCallsite: Equatable {
-  package let fileID: String
-  package let line: UInt
-  package let column: UInt
+package struct CollectionScopeCacheSignature: Equatable {
+  package let childStateType: ObjectIdentifier
+  package let childActionType: ObjectIdentifier
+  package let actionPathIdentity: ActionPathIdentity
 }
 
 package struct SelectionCallsite: Hashable, Equatable {
@@ -149,21 +149,23 @@ package final class CollectionScopeOffsetBox {
 /// Per-collection cache for stable row projections and their latest fast-path offsets.
 @MainActor
 package final class CollectionScopeCacheBucket {
-  package let callsite: CollectionScopeCallsite
+  package let signature: CollectionScopeCacheSignature
   package var storesByID: [AnyHashable: AnyObject] = [:]
   package var offsetsByID: [AnyHashable: CollectionScopeOffsetBox] = [:]
   package var revision: UInt64 = 0
 
-  package init(callsite: CollectionScopeCallsite) {
-    self.callsite = callsite
+  package init(signature: CollectionScopeCacheSignature) {
+    self.signature = signature
   }
 }
 
-/// CollectionScopeCache pins a single call site to each collection key path and
-/// retains stable scoped-store identities for list rendering.
+/// CollectionScopeCache pins one active projection signature to each
+/// collection key path while retaining stable scoped-store identities for list
+/// rendering.
 ///
 /// Invariants:
-/// - one key path must map to one call site per Store instance
+/// - a matching signature reuses the complete row family
+/// - changing the child types or action-path identity replaces it
 /// - `storesByID` and `offsetsByID` are pruned to currently live collection ids
 @MainActor
 package final class CollectionScopeCache {
@@ -171,25 +173,15 @@ package final class CollectionScopeCache {
 
   package init() {}
 
-  package func validatedBucket(
+  package func bucket(
     for keyPath: AnyKeyPath,
-    callsite: CollectionScopeCallsite
+    signature: CollectionScopeCacheSignature
   ) -> CollectionScopeCacheBucket {
-    guard let bucket = buckets[keyPath] else {
-      return .init(callsite: callsite)
+    guard let bucket = buckets[keyPath], bucket.signature == signature else {
+      return .init(signature: signature)
     }
 
-    guard bucket.callsite != callsite else {
-      return bucket
-    }
-
-    preconditionFailure(
-      """
-      scope(collection:action:) must use a single call site per collection key path for a given Store instance.
-      Existing call site: \(bucket.callsite.fileID):\(bucket.callsite.line):\(bucket.callsite.column)
-      New call site: \(callsite.fileID):\(callsite.line):\(callsite.column)
-      """
-    )
+    return bucket
   }
 
   package func store(_ bucket: CollectionScopeCacheBucket, for keyPath: AnyKeyPath) {

@@ -56,6 +56,12 @@ The framework handles this race explicitly, but `ScopedStore` and
   identity token all match. The parent cache holds the projection weakly, so
   cache reuse never extends its lifetime. A newly constructed `CasePath` is a
   safe cache miss and cannot inherit an older action transform.
+- `Store.scope(collection:action:)` retains one active row family per
+  collection key path. Matching child types and opaque `CollectionActionPath`
+  identity reuse the ID-keyed rows across source locations. A signature change
+  replaces the complete cached family; existing external row handles keep
+  their original action transform, while the parent never pins multiple path
+  families for one collection.
 - Programming errors that are **not** lifecycle races still trap — in
   particular, constructing a `ScopedStore` whose state resolver returns `nil`
   at init time, and reading `ScopedStore.id` when the stable identifier type

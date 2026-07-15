@@ -6,12 +6,18 @@ import Foundation
 
 /// A lightweight action path abstraction for identifiable child actions that
 /// carry both an element id and a child action payload.
+///
+/// Value copies preserve one opaque runtime identity. Independently
+/// constructed paths have distinct identities so collection scope caches never
+/// reuse a row store with an outdated action transform.
 public struct CollectionActionPath<Root, ID, ChildAction>: Sendable {
   /// Embeds a child action for a specific element id back into the root action.
   public let embed: @Sendable (ID, ChildAction) -> Root
 
   /// Extracts an `(id, childAction)` pair from a root action when it matches.
   public let extract: @Sendable (Root) -> (ID, ChildAction)?
+
+  package let identity: ActionPathIdentity
 
   /// Creates a collection action path from explicit embedding and extraction closures.
   public init(
@@ -20,5 +26,6 @@ public struct CollectionActionPath<Root, ID, ChildAction>: Sendable {
   ) {
     self.embed = embed
     self.extract = extract
+    self.identity = ActionPathIdentity()
   }
 }

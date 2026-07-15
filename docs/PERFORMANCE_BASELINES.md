@@ -52,7 +52,13 @@ Reducer-driven state mutations propagate through `ProjectionObserverRegistry`, w
 - a cached snapshot for change detection
 - a weak handle to the registered observer
 
-For most apps the registry is dominated by collection scopes — `ForEachReducer` rows produce one `ScopedStore` per identifiable element. Memory therefore scales with active row count × per-row child-state size, not with the parent state size. Discard row handles on removal so the registry releases the entry; see [`docs/adr/ADR-store-action-queue-burst.md`](adr/ADR-store-action-queue-burst.md) for related ownership notes.
+For most apps the registry is dominated by collection scopes —
+`Store.scope(collection:action:)` produces one `ScopedStore` per identifiable
+element. Memory therefore scales with active row count × per-row child-state
+size, not with the parent state size. Discard row handles on removal so the
+registry releases the entry; see
+[`docs/adr/ADR-store-action-queue-burst.md`](adr/ADR-store-action-queue-burst.md)
+for related ownership notes.
 
 ### Scope cache hit ratio
 
@@ -65,11 +71,22 @@ access prunes its dead cache entry before creating a current-state projection;
 periodic cross-bucket maintenance during continued scoping bounds dead metadata
 from other signatures, and a quiescent `Store` releases the remainder on deinit.
 
-Collection scoping caches the per-element snapshot keyed by `Identifiable.ID`. The cache is hit when the same row receives an action and miss when the parent collection layout changed (insert/remove/reorder).
+Collection scoping strongly caches one active row family per collection key
+path, with rows keyed by `Identifiable.ID`. Child types and opaque
+`CollectionActionPath` identity form the active signature across source
+locations. A signature change replaces the complete family, bounding retained
+row scopes to one path family while preventing stale action transforms.
+Macro-generated stored static paths keep the steady-state cache hot;
+generic/extension computed paths should be hoisted and reused when stable row
+object identity matters.
 
-- a steady-state list with infrequent edits trends toward 100% hit ratio after warm-up
-- frequent reorders or pagination boundaries force misses, which is correct behavior — the cache is invalidated only when the underlying element identity or value changed
-- if hit-ratio profiling shows pathological misses, suspect feature code that recreates rows on every dispatch (mutating `[Item]` to a fresh array of equivalent values), not the scope cache itself
+Within the active family, a row resolves in O(1) when its cached offset still
+contains the same ID. If the ID moved, the resolver scans once by ID and updates
+that row's offset for subsequent reads.
+
+- a steady-state list trends toward 100% offset hits after warm-up
+- insert, removal, and reorder operations miss only for rows whose cached offset no longer contains their ID
+- value-only changes at a stable offset remain O(1), and rebuilding an equivalent array does not refresh collection observers
 
 These are guidelines, not blocking gates. If a future change measurably moves any of them and the change is intentional, capture the new value as a fixture in a dedicated commit alongside `EffectTimingBaselineGate` style refresh.
 
