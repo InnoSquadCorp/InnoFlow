@@ -57,16 +57,18 @@ extension InnoFlowMacro {
     }
 
     if let first = args[0].argument.as(IdentifierTypeSyntax.self) {
-      if first.name.text != "State" {
-        issues.append("first generic parameter must be `State`, found `\(first.name.text)`")
+      if first.name.text != "State" || first.genericArgumentClause != nil {
+        issues.append(
+          "first generic parameter must be `State`, found `\(first.trimmedDescription)`")
       }
     } else {
       issues.append("first generic parameter must be `State`")
     }
 
     if let second = args[1].argument.as(IdentifierTypeSyntax.self) {
-      if second.name.text != "Action" {
-        issues.append("second generic parameter must be `Action`, found `\(second.name.text)`")
+      if second.name.text != "Action" || second.genericArgumentClause != nil {
+        issues.append(
+          "second generic parameter must be `Action`, found `\(second.trimmedDescription)`")
       }
     } else {
       issues.append("second generic parameter must be `Action`")

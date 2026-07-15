@@ -1462,6 +1462,51 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow rejects generic clauses on State and Action")
+  func genericClausesOnStateAndActionAreRejected() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct SpecializedGenericsFeature {
+            struct State<Value: Sendable>: Sendable {}
+            enum Action<Value: Sendable>: Sendable {}
+
+            var body: some Reducer<State<Int>, Action<String>> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct SpecializedGenericsFeature {
+              struct State<Value: Sendable>: Sendable {}
+              enum Action<Value: Sendable>: Sendable {}
+
+              var body: some Reducer<State<Int>, Action<String>> {
+                  Reduce { state, action in .none }
+              }
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message: """
+              Invalid body signature for @InnoFlow.
+              Expected:
+              var body: some Reducer<State, Action>
+              Detected issues: first generic parameter must be `State`, found `State<Int>`; second generic parameter must be `Action`, found `Action<String>`.
+              Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
+              """,
+            line: 1,
+            column: 1
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow rejects reduce and body declared together")
   func conflictingAuthoringModesAreRejected() throws {
     #if canImport(InnoFlowMacros)
