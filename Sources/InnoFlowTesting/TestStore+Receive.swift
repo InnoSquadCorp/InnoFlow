@@ -18,6 +18,54 @@ package enum TestStoreReceiveResult<Action, Value> {
 }
 
 extension TestStore {
+  /// Receives according to the store's exhaustivity policy while preserving
+  /// one total wall-clock deadline. In non-exhaustive mode, valid mismatches
+  /// are reduced and their effects are walked before matching continues.
+  package func receiveMatchingResult<Value>(
+    timeout: Duration? = nil,
+    file: StaticString,
+    line: UInt,
+    matching matcher: (R.Action) -> TestStoreActionMatch<Value>
+  ) async -> TestStoreReceiveResult<R.Action, Value> {
+    let resolvedTimeout = timeout ?? effectTimeout
+    let deadline = wallClock.now.advanced(by: resolvedTimeout)
+    var didSkipMismatch = false
+
+    while true {
+      guard !Task.isCancelled else { return .cancelled }
+      if didSkipMismatch, wallClock.now >= deadline {
+        return .timedOut(timeout: resolvedTimeout)
+      }
+
+      let remaining = max(wallClock.now.duration(to: deadline), .zero)
+      let result = await receiveResult(timeout: remaining, matching: matcher)
+
+      switch result {
+      case .matched:
+        return result
+
+      case .mismatched(let action):
+        await applyUnassertedAction(action)
+        guard exhaustivity.isOn == false else {
+          return .mismatched(action: action)
+        }
+        reportSkippedAction(
+          action,
+          context: "receiving another action",
+          file: file,
+          line: line
+        )
+        didSkipMismatch = true
+
+      case .timedOut:
+        return .timedOut(timeout: resolvedTimeout)
+
+      case .cancelled:
+        return .cancelled
+      }
+    }
+  }
+
   /// Dequeues one valid effect action and evaluates it without applying the
   /// reducer. Invalidated actions are skipped under a single wall-clock
   /// deadline; a valid mismatch is consumed and returned immediately.

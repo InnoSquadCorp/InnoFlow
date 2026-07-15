@@ -61,12 +61,15 @@ where Root.State: Equatable {
     self.stateMismatchLabel = scopedTestStoreStateMismatchLabel(stableID: stableID)
   }
 
+  /// Sends a child action after applying the parent harness's exhaustivity
+  /// policy to any buffered effect actions.
   public func send(
     _ action: ChildAction,
     assert updateExpectedState: ((inout ChildState) -> Void)? = nil,
     file: StaticString = #filePath,
     line: UInt = #line
   ) async {
+    await parent.prepareForSend(file: file, line: line)
     let previousRootState = parent.state
     // Preserve the stale-handle contract before routing any action. A valid
     // collection child may remove itself during reduction; that distinct
@@ -103,7 +106,9 @@ where Root.State: Equatable {
     )
   }
 
-  /// Receives an exact child action using a timeout for this assertion only.
+  /// Receives an exact child action using one total timeout for this assertion.
+  /// In non-exhaustive mode, parent and non-matching child actions are reduced
+  /// while receiving continues.
   public func receive(
     _ expectedAction: ChildAction,
     timeout: Duration,
@@ -121,7 +126,8 @@ where Root.State: Equatable {
   }
 
   /// Receives the next child action, requires it to match a case path, and
-  /// returns its payload.
+  /// returns its payload. In non-exhaustive mode, parent and non-matching child
+  /// actions are reduced while receiving continues under one total timeout.
   @discardableResult
   public func receive<Value>(
     _ path: CasePath<ChildAction, Value>,
@@ -131,7 +137,7 @@ where Root.State: Equatable {
     file: StaticString = #filePath,
     line: UInt = #line
   ) async -> Value? {
-    let result = await receiveResult(timeout: timeout) { action in
+    let result = await receiveResult(timeout: timeout, file: file, line: line) { action in
       switch path.extract(action) {
       case .some(let value):
         return .matched(value)
@@ -173,7 +179,7 @@ where Root.State: Equatable {
       return nil
 
     case .timedOut(let resolvedTimeout):
-      testStoreAssertionFailure(
+      parent.assertionFailureReporter(
         decorateFailure(
           """
           Expected to receive a child action matching \(expectation).
@@ -181,8 +187,8 @@ where Root.State: Equatable {
           But timed out after \(resolvedTimeout).
           """
         ),
-        file: file,
-        line: line
+        file,
+        line
       )
       return nil
 
@@ -191,7 +197,9 @@ where Root.State: Equatable {
     }
   }
 
-  /// Receives and returns the next child action accepted by a predicate.
+  /// Receives and returns the next child action accepted by a predicate. In
+  /// non-exhaustive mode, parent and rejected child actions are reduced while
+  /// receiving continues under one total timeout.
   @discardableResult
   public func receive(
     where predicate: (ChildAction) -> Bool,
@@ -201,7 +209,7 @@ where Root.State: Equatable {
     file: StaticString = #filePath,
     line: UInt = #line
   ) async -> ChildAction? {
-    let result = await receiveResult(timeout: timeout) { action in
+    let result = await receiveResult(timeout: timeout, file: file, line: line) { action in
       predicate(action) ? .matched(action) : .mismatched
     }
     let expectation = description.map { "predicate '\($0)'" } ?? "the supplied predicate"
@@ -238,7 +246,7 @@ where Root.State: Equatable {
       return nil
 
     case .timedOut(let resolvedTimeout):
-      testStoreAssertionFailure(
+      parent.assertionFailureReporter(
         decorateFailure(
           """
           Expected to receive a child action satisfying \(expectation).
@@ -246,8 +254,8 @@ where Root.State: Equatable {
           But timed out after \(resolvedTimeout).
           """
         ),
-        file: file,
-        line: line
+        file,
+        line
       )
       return nil
 
@@ -263,7 +271,7 @@ where Root.State: Equatable {
     file: StaticString,
     line: UInt
   ) async where ChildAction: Equatable {
-    let result = await receiveResult(timeout: timeout) { childAction in
+    let result = await receiveResult(timeout: timeout, file: file, line: line) { childAction in
       childAction == expectedAction ? .matched(()) : .mismatched
     }
 
@@ -277,7 +285,7 @@ where Root.State: Equatable {
       )
 
     case .matched(let rootAction, .mismatchedParent), .mismatched(let rootAction):
-      testStoreAssertionFailure(
+      parent.assertionFailureReporter(
         decorateFailure(
           """
           Received unexpected parent action for scoped test store.
@@ -289,12 +297,12 @@ where Root.State: Equatable {
           \(rootAction)
           """
         ),
-        file: file,
-        line: line
+        file,
+        line
       )
 
     case .matched(_, .mismatchedChild(let childAction)):
-      testStoreAssertionFailure(
+      parent.assertionFailureReporter(
         decorateFailure(
           """
           Received unexpected child action.
@@ -306,12 +314,12 @@ where Root.State: Equatable {
           \(childAction)
           """
         ),
-        file: file,
-        line: line
+        file,
+        line
       )
 
     case .timedOut(let resolvedTimeout):
-      testStoreAssertionFailure(
+      parent.assertionFailureReporter(
         decorateFailure(
           """
           Expected to receive child action:
@@ -320,8 +328,8 @@ where Root.State: Equatable {
           But timed out after \(resolvedTimeout).
           """
         ),
-        file: file,
-        line: line
+        file,
+        line
       )
 
     case .cancelled:
@@ -331,22 +339,48 @@ where Root.State: Equatable {
 
   private func receiveResult<Value>(
     timeout: Duration?,
+    file: StaticString,
+    line: UInt,
     matching matcher: (ChildAction) -> TestStoreActionMatch<Value>
   ) async -> TestStoreReceiveResult<
     Root.Action,
     ScopedTestStoreActionMatch<ChildAction, Value>
   > {
-    await parent.receiveResult(timeout: timeout) { rootAction in
-      guard let childAction = actionExtractor(rootAction) else {
-        return .matched(.mismatchedParent)
+    _ = stateReader(parent.state)
+    var lastMismatch: ScopedTestStoreActionMatch<ChildAction, Value>?
+    let result: TestStoreReceiveResult<Root.Action, Value> =
+      await parent.receiveMatchingResult(
+        timeout: timeout,
+        file: file,
+        line: line
+      ) { rootAction in
+        guard let childAction = actionExtractor(rootAction) else {
+          lastMismatch = .mismatchedParent
+          return .mismatched
+        }
+
+        switch matcher(childAction) {
+        case .matched(let value):
+          lastMismatch = nil
+          return .matched(value)
+        case .mismatched:
+          lastMismatch = .mismatchedChild(childAction)
+          return .mismatched
+        }
       }
 
-      switch matcher(childAction) {
-      case .matched(let value):
-        return .matched(.matched(value))
-      case .mismatched:
-        return .matched(.mismatchedChild(childAction))
-      }
+    switch result {
+    case .matched(let rootAction, let value):
+      return .matched(action: rootAction, value: .matched(value))
+    case .mismatched(let rootAction):
+      return .matched(
+        action: rootAction,
+        value: lastMismatch ?? .mismatchedParent
+      )
+    case .timedOut(let timeout):
+      return .timedOut(timeout: timeout)
+    case .cancelled:
+      return .cancelled
     }
   }
 
@@ -380,7 +414,7 @@ where Root.State: Equatable {
     file: StaticString,
     line: UInt
   ) {
-    testStoreAssertionFailure(
+    parent.assertionFailureReporter(
       decorateFailure(
         """
         Received unexpected parent action for scoped test store.
@@ -391,8 +425,8 @@ where Root.State: Equatable {
         \(rootAction)
         """
       ),
-      file: file,
-      line: line
+      file,
+      line
     )
   }
 
@@ -402,7 +436,7 @@ where Root.State: Equatable {
     file: StaticString,
     line: UInt
   ) {
-    testStoreAssertionFailure(
+    parent.assertionFailureReporter(
       decorateFailure(
         """
         Received child action did not match \(expectation).
@@ -411,8 +445,8 @@ where Root.State: Equatable {
         \(childAction)
         """
       ),
-      file: file,
-      line: line
+      file,
+      line
     )
   }
 
@@ -499,7 +533,7 @@ where Root.State: Equatable {
         "Diff:\n\($0)\n\n"
       } ?? ""
 
-    testStoreAssertionFailure(
+    parent.assertionFailureReporter(
       decorateFailure(
         """
         \(stateMismatchLabel) \(eventDescription)
@@ -511,8 +545,8 @@ where Root.State: Equatable {
         \(actual)
         """
       ),
-      file: file,
-      line: line
+      file,
+      line
     )
   }
 }

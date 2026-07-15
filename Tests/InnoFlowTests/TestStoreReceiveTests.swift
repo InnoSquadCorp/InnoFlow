@@ -148,7 +148,7 @@ struct TestStoreReceiveTests {
     #expect(child.state.values == [3, 5])
   }
 
-  @Test("Scoped receive evaluates its action extractor once")
+  @Test("Scoped receive evaluates its action extractor once per dequeued action")
   func scopedReceiveEvaluatesActionExtractorOnce() async {
     let extractionCounter = ReceiveExtractionCounter()
     let actionPath = CasePath<ReceiveFeature.Action, ReceiveFeature.ChildAction>(
@@ -162,16 +162,17 @@ struct TestStoreReceiveTests {
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let child = store.scope(state: \ReceiveFeature.State.child, action: actionPath)
     child.exhaustivity = .off
+    store.deliverAction(.value(99), context: nil)
     store.deliverAction(.child(.value(11)), context: nil)
 
     _ = await child.receive(
       ReceiveFeature.ChildAction.valueCasePath,
-      timeout: .zero
+      timeout: .seconds(1)
     ) { state, payload in
       state.values = [payload]
     }
 
-    #expect(extractionCounter.count == 1)
+    #expect(extractionCounter.count == 2)
   }
 
   @Test("PhaseMap receive forwards its per-call timeout")

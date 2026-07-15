@@ -24,8 +24,8 @@ struct TestStoreFinishTests {
   func finishReportsEveryBufferedAction() async {
     let store = TestStore(reducer: FinishFeature(gate: RunStartGate()))
 
-    await store.send(.emitImmediately(1))
-    await store.send(.emitImmediately(2))
+    store.deliverAction(.response(1), context: nil)
+    store.deliverAction(.response(2), context: nil)
 
     guard
       case .unhandledActions(let actions) =
@@ -129,6 +129,61 @@ struct TestStoreFinishTests {
     }
     #expect(actions.count == 1)
     #expect(actions[0].contains("42"))
+  }
+
+  @Test("non-exhaustive finish reduces an action emitted while waiting")
+  func nonExhaustiveFinishReducesLateAction() async {
+    let gate = RunStartGate()
+    let store = TestStore(reducer: FinishFeature(gate: gate))
+    store.exhaustivity = .off
+
+    await store.send(.emitAfterGate(42))
+    let finishing = Task { @MainActor in
+      await store.finishResult(timeout: .seconds(1))
+    }
+
+    await gate.open()
+
+    #expect(await finishing.value == .success)
+    #expect(store.state.responses == [42])
+  }
+
+  @Test("non-exhaustive finish times out an immediate action loop")
+  func nonExhaustiveFinishTimesOutActionLoop() async {
+    let store = TestStore(reducer: FinishFeature(gate: RunStartGate()))
+    store.exhaustivity = .off
+    store.deliverAction(.loop, context: nil)
+
+    guard case .timedOut = await store.finishResult(timeout: .milliseconds(5)) else {
+      Issue.record("Expected finish to time out on a self-reenqueuing action")
+      return
+    }
+
+    #expect(store.finishActivity.snapshot.activeCount == 0)
+  }
+
+  @Test("non-exhaustive finish cancels a run started by a skipped action")
+  func nonExhaustiveFinishCancelsRunFromSkippedAction() async {
+    let store = TestStore(reducer: FinishFeature(gate: RunStartGate()))
+    store.exhaustivity = .off
+    store.deliverAction(.startSkippedRun, context: nil)
+
+    guard
+      case .timedOut(let snapshot) =
+        await store.finishResult(timeout: .milliseconds(20))
+    else {
+      Issue.record("Expected finish to time out on the skipped action's run")
+      return
+    }
+
+    #expect(snapshot.runCount == 1)
+    let released = await waitUntil(
+      timeout: .seconds(1),
+      pollInterval: .milliseconds(1)
+    ) {
+      store.finishActivity.snapshot.activeCount == 0
+    }
+    #expect(released)
   }
 
   @Test("finish wakes for an action before its run completes")
@@ -444,7 +499,9 @@ struct TestStoreFinishTests {
 }
 
 private struct FinishFeature: Reducer {
-  struct State: Equatable, Sendable, DefaultInitializable {}
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var responses: [Int] = []
+  }
 
   enum Action: Equatable, Sendable {
     case wait
@@ -454,6 +511,8 @@ private struct FinishFeature: Reducer {
     case debounce
     case trailing
     case response(Int)
+    case loop
+    case startSkippedRun
   }
 
   let gate: RunStartGate
@@ -487,8 +546,17 @@ private struct FinishFeature: Reducer {
       return .send(.response(1))
         .throttle("finish-throttle", for: .seconds(60), leading: false, trailing: true)
 
-    case .response:
+    case .response(let value):
+      state.responses.append(value)
       return .none
+
+    case .loop:
+      return .send(.loop)
+
+    case .startSkippedRun:
+      return .run { _, context in
+        try? await context.sleep(for: .seconds(60))
+      }
     }
   }
 }

@@ -5,6 +5,121 @@
 import Foundation
 
 extension TestStore {
+  package func prepareForSend(
+    file: StaticString,
+    line: UInt
+  ) async {
+    let deadline = wallClock.now.advanced(by: effectTimeout)
+    var skippedActionCount = 0
+    var skippedActionDescriptions: [String] = []
+    var didDrainAction = false
+
+    while let action = await popBufferedAction() {
+      // Give one already-buffered action a chance to recover even when the
+      // configured timeout is zero, then bound recursive synchronous sends.
+      if didDrainAction, wallClock.now >= deadline {
+        let sequence = markCancelledAll()
+        cancelAllEffectsSynchronously(upTo: sequence)
+        let actionList = formattedSkippedActions(
+          skippedActionDescriptions,
+          totalCount: skippedActionCount
+        )
+        assertionFailureReporter(
+          """
+          Timed out draining effect actions before a new action after \(effectTimeout).
+
+          Reduced \(skippedActionCount) action(s) before the deadline:
+          \(actionList)
+
+          Next unhandled action:
+          \(action)
+
+          Remaining effect work was cancelled before reducing the new action.
+          """,
+          file,
+          line
+        )
+        return
+      }
+      if skippedActionDescriptions.count < 20 {
+        skippedActionDescriptions.append(String(describing: action))
+      }
+      skippedActionCount += 1
+      await applyUnassertedAction(action)
+      didDrainAction = true
+    }
+
+    guard skippedActionCount > 0 else { return }
+
+    let actionList = formattedSkippedActions(
+      skippedActionDescriptions,
+      totalCount: skippedActionCount
+    )
+    switch exhaustivity {
+    case .on:
+      assertionFailureReporter(
+        """
+        TestStore received \(skippedActionCount) effect action(s) before a new action was sent:
+        \(actionList)
+
+        Receive every effect action before sending another action. The skipped actions were reduced to preserve runtime order.
+        """,
+        file,
+        line
+      )
+
+    case .off(let showSkippedAssertions):
+      guard showSkippedAssertions else { return }
+      skippedAssertionReporter(
+        """
+        TestStore skipped \(skippedActionCount) effect action(s) before sending a new action:
+        \(actionList)
+
+        The skipped actions were reduced to preserve runtime order.
+        """,
+        file,
+        line
+      )
+    }
+  }
+
+  private func formattedSkippedActions(
+    _ descriptions: [String],
+    totalCount: Int
+  ) -> String {
+    var lines = descriptions.map { "- \($0)" }
+    let omittedCount = totalCount - descriptions.count
+    if omittedCount > 0 {
+      lines.append("- ... \(omittedCount) more action(s)")
+    }
+    return lines.joined(separator: "\n")
+  }
+
+  package func applyUnassertedAction(_ action: R.Action) async {
+    let effect = reducer.reduce(into: &state, action: action)
+    let sequence = nextSequence()
+    await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
+  }
+
+  package func reportSkippedAction(
+    _ action: R.Action,
+    context: String,
+    file: StaticString,
+    line: UInt
+  ) {
+    guard exhaustivity.showsSkippedAssertions else { return }
+    skippedAssertionReporter(
+      """
+      TestStore skipped effect action while \(context):
+      \(action)
+
+      The skipped action was reduced to preserve runtime order.
+      """,
+      file,
+      line
+    )
+  }
+
   package func assertStateTransition(
     from previousState: R.State,
     expectedStateMutation: ((inout R.State) -> Bool)?,

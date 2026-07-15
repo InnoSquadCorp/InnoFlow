@@ -2,15 +2,17 @@
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-/// Controls how completely ``TestStore`` verifies state transitions.
+/// Controls how completely ``TestStore`` verifies state transitions and
+/// effect-emitted actions.
 public enum Exhaustivity: Equatable, Sendable {
-  /// Requires every state mutation to be asserted.
+  /// Requires every state mutation and effect-emitted action to be asserted.
   case on
 
-  /// Allows partial state assertions.
+  /// Allows partial state assertions and automatically reduces unexpected
+  /// effect-emitted actions.
   ///
   /// Set `showSkippedAssertions` to `true` to record non-failing warnings for
-  /// state transitions checked in non-exhaustive mode.
+  /// state transitions and actions checked in non-exhaustive mode.
   case off(showSkippedAssertions: Bool)
 
   /// Non-exhaustive testing without skipped-assertion warnings.

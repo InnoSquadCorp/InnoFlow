@@ -108,11 +108,10 @@ struct EffectTaskTests {
     let store = TestStore(reducer: ThrottleFeature(), initialState: .init(), clock: clock)
 
     await store.send(.trigger(1))
-    await store.send(.trigger(2))
-
     await store.receive(._emitted(1)) {
       $0.emitted = [1]
     }
+    await store.send(.trigger(2))
     await store.assertNoBufferedActions()
 
     await Task.yield()
@@ -147,11 +146,10 @@ struct EffectTaskTests {
       reducer: ThrottleLeadingTrailingFeature(), initialState: .init(), clock: clock)
 
     await store.send(.trigger(1))
-    await store.send(.trigger(2))
-
     await store.receive(._emitted(1)) {
       $0.emitted = [1]
     }
+    await store.send(.trigger(2))
     await Task.yield()
     await clock.advance(by: .milliseconds(80))
     await store.receive(._emitted(2)) {

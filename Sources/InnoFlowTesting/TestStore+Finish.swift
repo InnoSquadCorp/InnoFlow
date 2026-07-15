@@ -130,6 +130,10 @@ extension TestStore {
   /// Waits for all in-flight effects to finish and asserts that every emitted
   /// action has been received.
   ///
+  /// When ``exhaustivity`` is `.off`, unreceived actions are reduced and their
+  /// follow-up effects are drained until the harness becomes idle. Exhaustive
+  /// stores continue to report every unreceived action.
+  ///
   /// The timeout uses wall time and never advances a supplied
   /// ``ManualTestClock``. Advance the manual clock before calling `finish()`
   /// when delayed effects are expected to complete.
@@ -146,7 +150,11 @@ extension TestStore {
     line: UInt = #line
   ) async {
     let resolvedTimeout = timeout ?? effectTimeout
-    let result = await finishResult(timeout: resolvedTimeout)
+    let result = await finishResult(
+      timeout: resolvedTimeout,
+      file: file,
+      line: line
+    )
 
     switch result {
     case .success, .cancelled:
@@ -154,39 +162,44 @@ extension TestStore {
 
     case .unhandledActions(let actions):
       let actionList = actions.map { "- \($0)" }.joined(separator: "\n")
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
         TestStore finished with \(actions.count) unhandled effect action(s):
         \(actionList)
 
         Every effect-emitted action must be verified with `receive(_:assert:)` before the test finishes.
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
 
     case .timedOut(let snapshot):
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
-        Timed out waiting for TestStore effects to finish after \(resolvedTimeout).
+        Timed out waiting for TestStore to become idle after \(resolvedTimeout).
 
-        Active effects:
+        Active effects at timeout:
         - run: \(snapshot.runCount)
         - composite: \(snapshot.compositeCount)
         - debounce: \(snapshot.debounceCount)
         - throttle: \(snapshot.throttleCount)
 
-        Complete or cancel long-running effects before finishing. When using `ManualTestClock`, advance it far enough for delayed effects to fire before calling `finish()`.
+        Complete or cancel long-running effects before finishing. A continuously emitted action chain can also prevent the harness from becoming idle. When using `ManualTestClock`, advance it far enough for delayed effects to fire before calling `finish()`.
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
     }
   }
 
-  package func finishResult(timeout: Duration? = nil) async -> TestStoreFinishResult {
+  package func finishResult(
+    timeout: Duration? = nil,
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async -> TestStoreFinishResult {
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
+    var didDrainAction = false
 
     while true {
       if Task.isCancelled {
@@ -194,10 +207,30 @@ extension TestStore {
         return .cancelled
       }
 
-      let actions = await takeAllBufferedActionDescriptions()
-      if actions.isEmpty == false {
-        cancelRemainingEffectsForFinish()
-        return .unhandledActions(actions)
+      if exhaustivity.isOn {
+        let actions = await takeAllBufferedActionDescriptions()
+        if actions.isEmpty == false {
+          cancelRemainingEffectsForFinish()
+          return .unhandledActions(actions)
+        }
+      } else if let action = await popBufferedAction() {
+        // Always allow one already-buffered action to be reduced, even for a
+        // zero timeout. Subsequent actions remain bounded by the total
+        // deadline so a self-reenqueuing reducer cannot trap finish forever.
+        if didDrainAction, wallClock.now >= deadline {
+          let snapshot = finishActivity.snapshot
+          cancelRemainingEffectsForFinish()
+          return .timedOut(snapshot)
+        }
+        reportSkippedAction(
+          action,
+          context: "finishing",
+          file: file,
+          line: line
+        )
+        await applyUnassertedAction(action)
+        didDrainAction = true
+        continue
       }
 
       let snapshot = finishActivity.snapshot

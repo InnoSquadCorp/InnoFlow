@@ -8,12 +8,20 @@ import Foundation
 extension TestStore {
   // MARK: - Public APIs
 
+  /// Sends a user action and verifies its state transition.
+  ///
+  /// Buffered effect actions are reduced first. Exhaustive stores report
+  /// those actions as unreceived; non-exhaustive stores continue silently or
+  /// emit warnings according to ``exhaustivity``. Recovery is bounded by the
+  /// store's effect timeout so a recursively emitted action cannot block the
+  /// send forever.
   public func send(
     _ action: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     file: StaticString = #file,
     line: UInt = #line
   ) async {
+    await prepareForSend(file: file, line: line)
     let previousState = state
 
     let effect = reducer.reduce(into: &state, action: action)
@@ -52,7 +60,8 @@ extension TestStore {
   /// Receives an exact action using a timeout for this assertion only.
   ///
   /// The timeout is one total wall-clock budget, including time spent
-  /// discarding actions invalidated by effect cancellation.
+  /// discarding actions invalidated by effect cancellation or reducing
+  /// mismatches in non-exhaustive mode.
   public func receive(
     _ expectedAction: R.Action,
     timeout: Duration,
@@ -72,9 +81,11 @@ extension TestStore {
   /// Receives the next action, requires it to match a case path, and returns
   /// its payload.
   ///
-  /// A valid action that does not match is consumed and reported immediately.
-  /// When `Value` is optional, the nested optional return distinguishes a
-  /// matched `nil` payload from a mismatch, timeout, or cancellation.
+  /// In exhaustive mode, a valid action that does not match is reduced and
+  /// reported immediately. In non-exhaustive mode, mismatches are reduced and
+  /// receiving continues under one total timeout. When `Value` is optional,
+  /// the nested optional return distinguishes a matched `nil` payload from a
+  /// mismatch, timeout, or cancellation.
   @discardableResult
   public func receive<Value>(
     _ path: CasePath<R.Action, Value>,
@@ -84,7 +95,7 @@ extension TestStore {
     file: StaticString = #file,
     line: UInt = #line
   ) async -> Value? {
-    let result = await receiveResult(timeout: timeout) { action in
+    let result = await receiveMatchingResult(timeout: timeout, file: file, line: line) { action in
       switch path.extract(action) {
       case .some(let value):
         return .matched(value)
@@ -109,27 +120,27 @@ extension TestStore {
       return .some(value)
 
     case .mismatched(let action):
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
         Received action did not match \(expectation).
 
         Received:
         \(action)
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
       return nil
 
     case .timedOut(let resolvedTimeout):
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
         Expected to receive an action matching \(expectation).
 
         But timed out after \(resolvedTimeout).
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
       return nil
 
@@ -140,8 +151,10 @@ extension TestStore {
 
   /// Receives and returns the next action accepted by a predicate.
   ///
-  /// A valid action rejected by the predicate is consumed and reported
-  /// immediately. The predicate and assertion execute on the main actor.
+  /// In exhaustive mode, a valid action rejected by the predicate is reduced
+  /// and reported immediately. In non-exhaustive mode, rejected actions are
+  /// reduced and receiving continues under one total timeout. The predicate
+  /// and assertion execute on the main actor.
   @discardableResult
   public func receive(
     where predicate: (R.Action) -> Bool,
@@ -151,7 +164,7 @@ extension TestStore {
     file: StaticString = #file,
     line: UInt = #line
   ) async -> R.Action? {
-    let result = await receiveResult(timeout: timeout) { action in
+    let result = await receiveMatchingResult(timeout: timeout, file: file, line: line) { action in
       predicate(action) ? .matched(action) : .mismatched
     }
     let expectation = description.map { "predicate '\($0)'" } ?? "the supplied predicate"
@@ -170,27 +183,27 @@ extension TestStore {
       return .some(action)
 
     case .mismatched(let action):
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
         Received action did not satisfy \(expectation).
 
         Received:
         \(action)
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
       return nil
 
     case .timedOut(let resolvedTimeout):
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
         Expected to receive an action satisfying \(expectation).
 
         But timed out after \(resolvedTimeout).
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
       return nil
 
@@ -206,7 +219,7 @@ extension TestStore {
     file: StaticString,
     line: UInt
   ) async where R.Action: Equatable {
-    let result = await receiveResult(timeout: timeout) { action in
+    let result = await receiveMatchingResult(timeout: timeout, file: file, line: line) { action in
       action == expectedAction ? .matched(()) : .mismatched
     }
 
@@ -220,7 +233,7 @@ extension TestStore {
       )
 
     case .mismatched(let action):
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
         Received unexpected action.
 
@@ -230,20 +243,20 @@ extension TestStore {
         Received:
         \(action)
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
 
     case .timedOut(let resolvedTimeout):
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
         Expected to receive action:
         \(expectedAction)
 
         But timed out after \(resolvedTimeout).
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
 
     case .cancelled:
