@@ -143,14 +143,34 @@ package final class ProjectionObserverRegistry<Snapshot> {
     refreshPassCount &+= 1
     staleObserverHints &+= refresh(observers: &alwaysObservers)
 
-    let changedDependencyKeys = dependencyBuckets.compactMap { dependencyKey, bucket in
-      bucket.hasChanged(oldSnapshot, newSnapshot) ? dependencyKey : nil
+    var firstChangedDependencyKey: ProjectionDependencyKey?
+    var multipleChangedDependencyKeys: [ProjectionDependencyKey]?
+    for (dependencyKey, bucket) in dependencyBuckets {
+      guard bucket.hasChanged(oldSnapshot, newSnapshot) else { continue }
+
+      if let firstChangedDependencyKey {
+        if multipleChangedDependencyKeys == nil {
+          multipleChangedDependencyKeys = [firstChangedDependencyKey]
+        }
+        multipleChangedDependencyKeys?.append(dependencyKey)
+      } else {
+        firstChangedDependencyKey = dependencyKey
+      }
     }
-    let (pendingDependencyObservers, staleCount) = collectDependencyObservers(
-      for: changedDependencyKeys
-    )
-    staleObserverHints &+= staleCount
-    refresh(pendingObservers: pendingDependencyObservers)
+
+    if let multipleChangedDependencyKeys {
+      let (pendingDependencyObservers, staleCount) = collectDependencyObservers(
+        for: multipleChangedDependencyKeys
+      )
+      staleObserverHints &+= staleCount
+      refresh(pendingObservers: pendingDependencyObservers)
+    } else if let firstChangedDependencyKey {
+      let (pendingDependencyObservers, staleCount) = collectDependencyObservers(
+        for: firstChangedDependencyKey
+      )
+      staleObserverHints &+= staleCount
+      refresh(pendingObserverArray: pendingDependencyObservers)
+    }
 
     compactIfNeeded()
   }
@@ -204,6 +224,56 @@ package final class ProjectionObserverRegistry<Snapshot> {
         refreshedObservers &+= 1
       }
     }
+  }
+
+  private func refresh(
+    pendingObserverArray: ContiguousArray<any ProjectionObserver>
+  ) {
+    for observer in pendingObserverArray {
+      evaluatedObservers &+= 1
+      if observer.refreshFromParentStore() {
+        refreshedObservers &+= 1
+      }
+    }
+  }
+
+  private func collectDependencyObservers(
+    for dependencyKey: ProjectionDependencyKey
+  ) -> (ContiguousArray<any ProjectionObserver>, Int) {
+    guard var bucket = dependencyBuckets[dependencyKey] else { return ([], 0) }
+
+    var pendingObservers: ContiguousArray<any ProjectionObserver> = []
+    pendingObservers.reserveCapacity(bucket.observers.count)
+    var staleObserverIDs: [ObjectIdentifier]?
+
+    for (observerID, box) in bucket.observers {
+      guard let observer = box.observer as? any ProjectionObserver else {
+        if staleObserverIDs == nil {
+          staleObserverIDs = []
+        }
+        staleObserverIDs?.append(observerID)
+        continue
+      }
+      pendingObservers.append(observer)
+    }
+
+    guard let staleObserverIDs else { return (pendingObservers, 0) }
+
+    for observerID in staleObserverIDs {
+      bucket.observers.removeValue(forKey: observerID)
+    }
+    prunedObservers &+= UInt64(staleObserverIDs.count)
+
+    // Finish pruning the copied bucket before invoking any observer callback.
+    // A callback may register another observer in this bucket, so no copy may
+    // be written back after `pendingObservers` leaves this method.
+    if bucket.observers.isEmpty {
+      dependencyBuckets.removeValue(forKey: dependencyKey)
+    } else {
+      dependencyBuckets[dependencyKey] = bucket
+    }
+
+    return (pendingObservers, staleObserverIDs.count)
   }
 
   private func collectDependencyObservers(

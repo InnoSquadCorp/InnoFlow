@@ -33,6 +33,21 @@ private struct DescriptionCountingAction: Sendable, CustomStringConvertible {
   }
 }
 
+@MainActor
+private final class CallbackProjectionObserver: ProjectionObserver {
+  private let onRefresh: @MainActor () -> Bool
+  private(set) var refreshCount = 0
+
+  init(onRefresh: @escaping @MainActor () -> Bool = { false }) {
+    self.onRefresh = onRefresh
+  }
+
+  func refreshFromParentStore() -> Bool {
+    refreshCount += 1
+    return onRefresh()
+  }
+}
+
 @Suite("Store Instrumentation Tests", .serialized)
 @MainActor
 struct StoreInstrumentationTests {
@@ -819,6 +834,106 @@ struct StoreInstrumentationTests {
       to: .init(tracked: 1, other: 1)
     )
     #expect(probe.refreshCount == 1)
+  }
+
+  @Test("Projection observer registry evaluates a changed single bucket exactly once")
+  func projectionObserverRegistrySingleBucketEvaluation() {
+    let registry = ProjectionObserverRegistry<ProjectionObserverSnapshot>()
+    let probe = ProjectionObserverTestProbe(refreshResult: true)
+    registry.register(
+      probe,
+      registration: .dependency(
+        .keyPath(\ProjectionObserverSnapshot.tracked),
+        hasChanged: { previous, next in previous.tracked != next.tracked }
+      )
+    )
+
+    registry.refresh(
+      from: .init(tracked: 0, other: 0),
+      to: .init(tracked: 1, other: 0)
+    )
+
+    #expect(probe.refreshCount == 1)
+    #expect(registry.statsSnapshot.evaluatedObservers == 1)
+    #expect(registry.statsSnapshot.refreshedObservers == 1)
+  }
+
+  @Test("Projection observer registry preserves registration from a single-bucket callback")
+  func projectionObserverRegistrySingleBucketReentrantRegistration() {
+    let registry = ProjectionObserverRegistry<ProjectionObserverSnapshot>()
+    let lateObserver = ProjectionObserverTestProbe()
+    var didRegisterLateObserver = false
+    let registeringObserver = CallbackProjectionObserver {
+      guard !didRegisterLateObserver else { return false }
+      didRegisterLateObserver = true
+      registry.register(
+        lateObserver,
+        registration: .dependency(
+          .keyPath(\ProjectionObserverSnapshot.tracked),
+          hasChanged: { previous, next in previous.tracked != next.tracked }
+        )
+      )
+      return false
+    }
+    registry.register(
+      registeringObserver,
+      registration: .dependency(
+        .keyPath(\ProjectionObserverSnapshot.tracked),
+        hasChanged: { previous, next in previous.tracked != next.tracked }
+      )
+    )
+
+    registry.refresh(
+      from: .init(tracked: 0, other: 0),
+      to: .init(tracked: 1, other: 0)
+    )
+    #expect(registeringObserver.refreshCount == 1)
+    #expect(lateObserver.refreshCount == 0)
+    #expect(registry.statsSnapshot.registeredObservers == 2)
+
+    registry.refresh(
+      from: .init(tracked: 1, other: 0),
+      to: .init(tracked: 2, other: 0)
+    )
+    #expect(registeringObserver.refreshCount == 2)
+    #expect(lateObserver.refreshCount == 1)
+    #expect(registry.statsSnapshot.evaluatedObservers == 3)
+  }
+
+  @Test("Projection observer registry keeps multi-bucket dedupe and stale pruning semantics")
+  func projectionObserverRegistryMultiBucketDedupeAndStalePruning() {
+    let registry = ProjectionObserverRegistry<ProjectionObserverSnapshot>(
+      compactionDeadObserverThreshold: 99,
+      periodicCompactionInterval: 100
+    )
+    let registrations: [ProjectionDependencyRegistration<ProjectionObserverSnapshot>] = [
+      .init(
+        .keyPath(\ProjectionObserverSnapshot.tracked),
+        hasChanged: { previous, next in previous.tracked != next.tracked }
+      ),
+      .init(
+        .keyPath(\ProjectionObserverSnapshot.other),
+        hasChanged: { previous, next in previous.other != next.other }
+      ),
+    ]
+    let liveObserver = ProjectionObserverTestProbe(refreshResult: true)
+    registry.register(liveObserver, registration: .dependencies(registrations))
+    do {
+      let staleObserver = ProjectionObserverTestProbe()
+      registry.register(staleObserver, registration: .dependencies(registrations))
+    }
+
+    registry.refresh(
+      from: .init(tracked: 0, other: 0),
+      to: .init(tracked: 1, other: 1)
+    )
+
+    let stats = registry.statsSnapshot
+    #expect(liveObserver.refreshCount == 1)
+    #expect(stats.registeredObservers == 1)
+    #expect(stats.evaluatedObservers == 1)
+    #expect(stats.refreshedObservers == 1)
+    #expect(stats.prunedObservers == 2)
   }
 
   @Test("Projection observer registry compacts untouched dependency buckets after stale threshold")
