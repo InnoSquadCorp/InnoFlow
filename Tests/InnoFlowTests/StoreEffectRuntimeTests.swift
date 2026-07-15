@@ -1955,6 +1955,58 @@ struct StoreEffectRuntimeTests {
     #expect(weakStore == nil)
   }
 
+  @Test("Store release breaks awaited run composite ownership")
+  func storeReleaseBreaksAwaitedRunCompositeOwnership() async throws {
+    let clock = ManualTestClock()
+    var store: Store<AwaitedRunReleaseFeature>? = Store(
+      reducer: AwaitedRunReleaseFeature(),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+    weak var weakStore: Store<AwaitedRunReleaseFeature>?
+    weakStore = store
+
+    do {
+      store?.send(.start)
+      try #require(
+        await waitUntil {
+          store?.state.runStarted == true
+        }
+      )
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      #expect(store?.state.runCompleted == false)
+      #expect(store?.state.continued == false)
+    } catch {
+      await store?.cancelAllEffects()
+      await clock.advance(by: .seconds(60))
+      store = nil
+      throw error
+    }
+
+    store = nil
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(60))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+
+    #expect(released)
+    #expect(weakStore == nil)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+  }
+
   @Test(
     "Store release is not retained by a post-fire delayed nested effect",
     arguments: PostFireDelayedEffectKind.allCases
@@ -2104,11 +2156,12 @@ struct StoreEffectRuntimeTests {
     )
 
     await store.cancelEffects(id: id, context: context)
-    await store.startRun(
+    let task = await store.startRun(
       priority: nil,
       operation: { _, _ in
         await probe.markStarted()
-      }, context: context, awaited: true)
+      }, context: context)
+    _ = await task.result
 
     let metrics = await store.effectRuntimeMetrics
     #expect(metrics.preparedRuns == 1)

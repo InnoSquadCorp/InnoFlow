@@ -246,13 +246,15 @@ package protocol EffectDriver<Action>: AnyObject {
     context: EffectExecutionContext?
   )
 
-  /// Start a `.run` effect. If `awaited`, blocks until the operation completes.
+  /// Starts and registers a `.run` effect, returning its tracked task.
+  /// The walker decides whether to await completion after the driver's strong
+  /// reference has left scope.
+  @discardableResult
   func startRun(
     priority: TaskPriority?,
     operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void,
-    context: EffectExecutionContext?,
-    awaited: Bool
-  ) async
+    context: EffectExecutionContext?
+  ) async -> Task<Void, Never>
 
   // MARK: - Cancellation
 

@@ -385,6 +385,57 @@ struct TestStoreCoreTests {
     #expect(weakStore == nil)
   }
 
+  @Test("TestStore release breaks awaited run composite ownership")
+  func testStoreReleaseBreaksAwaitedRunCompositeOwnership() async throws {
+    let clock = ManualTestClock()
+    var store: TestStore<AwaitedRunReleaseFeature>? = TestStore(
+      reducer: AwaitedRunReleaseFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+    weak var weakStore: TestStore<AwaitedRunReleaseFeature>?
+    weakStore = store
+
+    do {
+      await store?.send(.start)
+      await store?.receive(._runStarted) {
+        $0.runStarted = true
+      }
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      #expect(store?.state.runCompleted == false)
+      #expect(store?.state.continued == false)
+      await store?.assertNoBufferedActions()
+    } catch {
+      await store?.cancelAllEffects()
+      await clock.advance(by: .seconds(60))
+      store = nil
+      throw error
+    }
+
+    store = nil
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(60))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+
+    #expect(released)
+    #expect(weakStore == nil)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+  }
+
   @Test(
     "TestStore release is not retained by a post-fire delayed nested effect",
     arguments: PostFireDelayedEffectKind.allCases

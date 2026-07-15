@@ -481,21 +481,17 @@ extension TestStore: EffectDriver {
     // expectations stay deterministic.
   }
 
+  @discardableResult
   package func startRun(
     priority: TaskPriority?,
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
-    context: EffectExecutionContext?,
-    awaited: Bool
-  ) async {
-    let task = startRunTask(
+    context: EffectExecutionContext?
+  ) async -> Task<Void, Never> {
+    startRunTask(
       priority: priority,
       operation: operation,
       context: context
     )
-
-    if awaited {
-      _ = await task.result
-    }
   }
 
   package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {

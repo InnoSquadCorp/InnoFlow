@@ -38,14 +38,14 @@ package struct EffectWalker<D: EffectDriver> {
       driver.deliverAction(action, context: context)
 
     case .run(let priority, let operation):
-      guard let driver else { return }
-      guard driver.shouldProceed(context: context) else { return }
-      await driver.startRun(
+      let task = await prepareRun(
         priority: priority,
         operation: operation,
-        context: context,
-        awaited: awaited
+        context: context
       )
+      if awaited, let task {
+        _ = await task.result
+      }
 
     case .merge(let children):
       if awaited {
@@ -137,6 +137,22 @@ package struct EffectWalker<D: EffectDriver> {
       guard let driver else { return }
       driver.reportActionDrop(action, reason: reason, context: context)
     }
+  }
+
+  /// Registers run work in a short-lived frame so an awaited run does not
+  /// retain the driver while the operation is suspended.
+  private func prepareRun(
+    priority: TaskPriority?,
+    operation: @escaping @Sendable (Send<D.Action>, EffectContext) async -> Void,
+    context: EffectExecutionContext?
+  ) async -> Task<Void, Never>? {
+    guard let driver else { return nil }
+    guard driver.shouldProceed(context: context) else { return nil }
+    return await driver.startRun(
+      priority: priority,
+      operation: operation,
+      context: context
+    )
   }
 
   /// Applies a cancellation boundary in a short-lived frame so an enclosing

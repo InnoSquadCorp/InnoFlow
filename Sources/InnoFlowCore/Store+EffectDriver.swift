@@ -49,12 +49,12 @@ extension Store: EffectDriver {
     recordDrop(action, reason: reason, context: context)
   }
 
+  @discardableResult
   package func startRun(
     priority: TaskPriority?,
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
-    context: EffectExecutionContext?,
-    awaited: Bool
-  ) async {
+    context: EffectExecutionContext?
+  ) async -> Task<Void, Never> {
     let sequence = context?.sequence ?? 0
     let token = UUID()
     let gate = RunStartGate()
@@ -207,10 +207,7 @@ extension Store: EffectDriver {
       task: task,
       gate: gate
     )
-
-    if awaited {
-      _ = await task.result
-    }
+    return task
   }
 
   package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {

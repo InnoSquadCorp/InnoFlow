@@ -1973,6 +1973,48 @@ struct AwaitedDebounceReleaseFeature: Reducer {
   }
 }
 
+struct AwaitedRunReleaseFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var runStarted = false
+    var runCompleted = false
+    var continued = false
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _runStarted
+    case _runCompleted
+    case _continued
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      return .concatenate(
+        .run { send, context in
+          await send(._runStarted)
+          try? await context.sleep(for: .seconds(60))
+          guard await context.isCancellationRequested() == false else { return }
+          await send(._runCompleted)
+        },
+        .send(._continued)
+      )
+
+    case ._runStarted:
+      state.runStarted = true
+      return .none
+
+    case ._runCompleted:
+      state.runCompleted = true
+      return .none
+
+    case ._continued:
+      state.continued = true
+      return .none
+    }
+  }
+}
+
 enum PostFireDelayedEffectKind: String, CaseIterable, Sendable {
   case debounce
   case trailingThrottle
