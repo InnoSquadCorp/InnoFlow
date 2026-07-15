@@ -270,8 +270,8 @@ extension Store: EffectDriver {
         return self.shouldProceed(context: context)
       }
 
-      guard shouldRun, let self else { return }
-      await self.walkEffect(nested, context: context, awaited: nestedAwaited)
+      guard shouldRun else { return }
+      await recurse(nested, context, nestedAwaited)
     }
 
     guard effectBridge.setDebounceDelayTask(task, for: id, generation: generation) else {

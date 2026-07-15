@@ -534,21 +534,27 @@ extension TestStore: EffectDriver {
     guard let generation = beginDebounce(scope) else { return nil }
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
 
-    let task = Task { @MainActor [weak self] in
+    let task = Task { [weak self] in
       do {
         try await delayClock.sleep(interval)
       } catch {
-        self?.finishDebounceTask(for: id, generation: generation)
+        _ = await MainActor.run {
+          self?.finishDebounceTask(for: id, generation: generation)
+        }
         return
       }
 
-      guard let self else { return }
-      defer {
-        self.finishDebounceTask(for: id, generation: generation)
+      let shouldRun = await MainActor.run { [weak self] in
+        guard let self else { return false }
+        guard !Task.isCancelled else { return false }
+        guard self.debounceTasksByID[id]?.generation == generation else { return false }
+        defer {
+          self.finishDebounceTask(for: id, generation: generation)
+        }
+        return self.shouldProceed(context: context)
       }
-      guard !Task.isCancelled else { return }
-      guard self.debounceTasksByID[id]?.generation == generation else { return }
-      guard self.shouldProceed(context: context) else { return }
+
+      guard shouldRun else { return }
       await recurse(nested, context, nestedAwaited)
     }
 
@@ -572,25 +578,34 @@ extension TestStore: EffectDriver {
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
-    let task = Task { @MainActor [weak self] in
+    let task = Task { [weak self] in
       do {
         try await delayClock.sleep(interval)
       } catch {
-        guard let self else { return }
-        if self.throttleState.generation(for: id) == generation {
-          self.throttleState.finishState(for: id, generation: generation)
+        await MainActor.run {
+          guard let self else { return }
+          if self.throttleState.generation(for: id) == generation {
+            self.throttleState.finishState(for: id, generation: generation)
+          }
         }
         return
       }
-      guard let self else { return }
-      guard self.throttleState.generation(for: id) == generation else { return }
-      defer {
-        if self.throttleState.generation(for: id) == generation {
-          self.throttleState.finishState(for: id, generation: generation)
+
+      let pending: ThrottleStateMap<R.Action>.PendingTrailing? =
+        await MainActor.run { [weak self] in
+          guard let self else { return nil }
+          guard self.throttleState.generation(for: id) == generation else { return nil }
+          defer {
+            if self.throttleState.generation(for: id) == generation {
+              self.throttleState.finishState(for: id, generation: generation)
+            }
+          }
+          guard let pending = self.throttleState.pending(for: id) else { return nil }
+          guard self.shouldProceed(context: pending.context) else { return nil }
+          return pending
         }
-      }
-      guard let pending = self.throttleState.pending(for: id) else { return }
-      guard self.shouldProceed(context: pending.context) else { return }
+
+      guard let pending else { return }
       await recurse(
         pending.effect,
         pending.context,

@@ -385,6 +385,74 @@ struct TestStoreCoreTests {
     #expect(weakStore == nil)
   }
 
+  @Test(
+    "TestStore release is not retained by a post-fire delayed nested effect",
+    arguments: PostFireDelayedEffectKind.allCases
+  )
+  func testStoreReleaseIsNotRetainedByPostFireDelayedNestedEffect(
+    kind: PostFireDelayedEffectKind
+  ) async throws {
+    let clock = ManualTestClock()
+    var store: TestStore<PostFireDelayedReleaseFeature>? = TestStore(
+      reducer: PostFireDelayedReleaseFeature(kind: kind),
+      initialState: .init(),
+      clock: clock
+    )
+    weak var weakStore: TestStore<PostFireDelayedReleaseFeature>?
+    weakStore = store
+
+    do {
+      await store?.send(.start)
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      await clock.advance(by: .seconds(60))
+      await store?.receive(._nestedStarted) {
+        $0.nestedStarted = true
+      }
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      #expect(store?.state.completed == false)
+      #expect(store?.state.continued == false)
+      await store?.assertNoBufferedActions()
+      switch kind {
+      case .debounce:
+        #expect(store?.debounceTasksByID[kind.outerID] == nil)
+      case .trailingThrottle:
+        #expect(store?.throttleState.generation(for: kind.outerID) == nil)
+      }
+    } catch {
+      await store?.cancelAllEffects()
+      await clock.advance(by: .seconds(60))
+      store = nil
+      throw error
+    }
+
+    store = nil
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(60))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+
+    #expect(released)
+    #expect(weakStore == nil)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+  }
+
   @Test("TestStore debounce skips stale effects at cancellation boundaries")
   func testStoreDebounceSkipsStaleEffectsAtCancellationBoundaries() async {
     let id = AnyEffectID(StaticEffectID("teststore-stale-debounce"))
@@ -423,22 +491,24 @@ struct TestStoreCoreTests {
     let releaseRecursion = RunStartGate()
     let probe = InstrumentationProbe()
 
-    await store.scheduleDebounce(
-      .none,
-      id: id,
-      interval: .zero,
-      context: .init(cancellationID: id, sequence: sequence),
-      scope: .init(ownerID: id, sequence: sequence),
-      nestedAwaited: false
-    ) { _, _, awaited in
-      probe.record("awaited:\(awaited)")
-      didRecurse.signal()
-      await releaseRecursion.wait()
-    }
+    let task = try #require(
+      await store.scheduleDebounce(
+        .none,
+        id: id,
+        interval: .zero,
+        context: .init(cancellationID: id, sequence: sequence),
+        scope: .init(ownerID: id, sequence: sequence),
+        nestedAwaited: false
+      ) { _, _, awaited in
+        probe.record("awaited:\(awaited)")
+        didRecurse.signal()
+        await releaseRecursion.wait()
+      }
+    )
 
     do {
       try #require(await didRecurse.wait())
-      let task = try #require(store.debounceTasksByID[id]?.task)
+      #expect(store.debounceTasksByID[id] == nil)
       await releaseRecursion.open()
       _ = await task.result
     } catch {

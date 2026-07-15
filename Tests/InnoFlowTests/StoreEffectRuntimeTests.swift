@@ -1955,6 +1955,75 @@ struct StoreEffectRuntimeTests {
     #expect(weakStore == nil)
   }
 
+  @Test(
+    "Store release is not retained by a post-fire delayed nested effect",
+    arguments: PostFireDelayedEffectKind.allCases
+  )
+  func storeReleaseIsNotRetainedByPostFireDelayedNestedEffect(
+    kind: PostFireDelayedEffectKind
+  ) async throws {
+    let clock = ManualTestClock()
+    var store: Store<PostFireDelayedReleaseFeature>? = Store(
+      reducer: PostFireDelayedReleaseFeature(kind: kind),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+    weak var weakStore: Store<PostFireDelayedReleaseFeature>?
+    weakStore = store
+
+    do {
+      store?.send(.start)
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      await clock.advance(by: .seconds(60))
+      try #require(
+        await waitUntil {
+          store?.state.nestedStarted == true
+        }
+      )
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      #expect(store?.state.completed == false)
+      #expect(store?.state.continued == false)
+      switch kind {
+      case .debounce:
+        #expect(store?.effectBridge.debounceGeneration(for: kind.outerID) == nil)
+      case .trailingThrottle:
+        #expect(store?.throttleState.generation(for: kind.outerID) == nil)
+      }
+    } catch {
+      await store?.cancelAllEffects()
+      await clock.advance(by: .seconds(60))
+      store = nil
+      throw error
+    }
+
+    store = nil
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(60))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+
+    #expect(released)
+    #expect(weakStore == nil)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+  }
+
   @Test("Store deinit prevents long-running effect completion")
   func storeDeinitPreventsLongRunningCompletion() async {
     let probe = DeinitCancellationProbe()

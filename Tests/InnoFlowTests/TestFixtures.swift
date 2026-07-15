@@ -1973,6 +1973,72 @@ struct AwaitedDebounceReleaseFeature: Reducer {
   }
 }
 
+enum PostFireDelayedEffectKind: String, CaseIterable, Sendable {
+  case debounce
+  case trailingThrottle
+
+  var outerID: AnyEffectID {
+    switch self {
+    case .debounce:
+      AnyEffectID(StaticEffectID("post-fire-outer-debounce"))
+    case .trailingThrottle:
+      AnyEffectID(StaticEffectID("post-fire-outer-throttle"))
+    }
+  }
+}
+
+struct PostFireDelayedReleaseFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var nestedStarted = false
+    var completed = false
+    var continued = false
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case _nestedStarted
+    case _completed
+    case _continued
+  }
+
+  let kind: PostFireDelayedEffectKind
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .start:
+      let nested = EffectTask<Action>.concatenate(
+        .send(._nestedStarted),
+        .send(._completed).debounce("post-fire-inner-debounce", for: .seconds(60))
+      )
+      let delayed: EffectTask<Action>
+      switch kind {
+      case .debounce:
+        delayed = nested.debounce("post-fire-outer-debounce", for: .seconds(60))
+      case .trailingThrottle:
+        delayed = nested.throttle(
+          "post-fire-outer-throttle",
+          for: .seconds(60),
+          leading: false,
+          trailing: true
+        )
+      }
+      return .concatenate(delayed, .send(._continued))
+
+    case ._nestedStarted:
+      state.nestedStarted = true
+      return .none
+
+    case ._completed:
+      state.completed = true
+      return .none
+
+    case ._continued:
+      state.continued = true
+      return .none
+    }
+  }
+}
+
 struct ThrottleLeadingTrailingFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var emitted: [Int] = []
