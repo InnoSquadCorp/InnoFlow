@@ -5,6 +5,25 @@
 @_exported public import InnoFlowCore
 public import SwiftUI
 
+@MainActor
+package func innoFlowOptionalPresentationBinding<R: Reducer, Child>(
+  store: Store<R>,
+  state stateKeyPath: KeyPath<R.State, Child?>,
+  onDismiss: @escaping @Sendable () -> R.Action
+) -> Binding<Bool> {
+  Binding(
+    get: { store.state[keyPath: stateKeyPath] != nil },
+    set: { newValue in
+      // SwiftUI only writes `false` here — the present-true edge is owned
+      // by the reducer that produced the non-nil state. Translate the
+      // false write into a dismiss action so the reducer can clear state.
+      guard newValue == false else { return }
+      guard store.state[keyPath: stateKeyPath] != nil else { return }
+      store.send(onDismiss())
+    }
+  )
+}
+
 extension View {
   /// Presents a sheet driven by an optional slice of a `Store`'s state.
   ///
@@ -98,16 +117,10 @@ private struct InnoFlowOptionalPresentation<R: Reducer, Child, Destination: View
 
   @MainActor
   private var isPresentedBinding: Binding<Bool> {
-    Binding(
-      get: { store.state[keyPath: stateKeyPath] != nil },
-      set: { newValue in
-        // SwiftUI only writes `false` here — the present-true edge is owned
-        // by the reducer that produced the non-nil state. Translate the
-        // false write into a dismiss action so the reducer can clear state.
-        guard newValue == false else { return }
-        guard store.state[keyPath: stateKeyPath] != nil else { return }
-        store.send(onDismiss())
-      }
+    innoFlowOptionalPresentationBinding(
+      store: store,
+      state: stateKeyPath,
+      onDismiss: onDismiss
     )
   }
 
