@@ -327,7 +327,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   /// builds; it is **not** intended as a stable lifecycle-aware read path.
   /// New non-UI call sites should prefer ``optionalState`` (or gate on
   /// ``isAlive``) and treat `nil` as "regenerate the projection." Use
-  /// ``requireAlive()`` when dead ownership must trap in every build. Reserve
+  /// ``ScopedStore/requireAlive(file:line:)`` when dead ownership must trap in every build. Reserve
   /// `state` for tick-bounded observers (SwiftUI view bodies, dynamic-member
   /// lookups) that must always return something.
   ///

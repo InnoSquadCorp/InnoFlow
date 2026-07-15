@@ -15,8 +15,9 @@ return .run { context in
 ```
 
 Each sequence element is emitted as the feature action. The sequence is created from the active
-``EffectContext``, so stream implementations can use ``EffectContext/sleep(for:)`` and
-``EffectContext/checkCancellation()`` to stay aligned with the store clock and cancellation
+``/InnoFlowCore/EffectContext``, so stream implementations can use
+``/InnoFlowCore/EffectContext/sleep(for:)`` and
+``/InnoFlowCore/EffectContext/checkCancellation()`` to stay aligned with the store clock and cancellation
 boundaries.
 
 When the stream element is not already an action, use the transforming overload:
@@ -46,5 +47,5 @@ return .run(sequence: makeEvents, transform: Action.event)
   .cancellable(streamID, cancelInFlight: true)
 ```
 
-The helper calls ``EffectContext/checkCancellation()`` between elements. Runtime emission gates
+The helper calls ``/InnoFlowCore/EffectContext/checkCancellation()`` between elements. Runtime emission gates
 still protect late actions that race with cancellation or store release.

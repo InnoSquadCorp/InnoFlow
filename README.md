@@ -33,6 +33,7 @@ Boundary references:
 - [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md) for `.sink`, `.osLog`, `.signpost`, and `.combined` examples
 - [`docs/PERFORMANCE_BASELINES.md`](docs/PERFORMANCE_BASELINES.md) for maintainer baseline policy
 - [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for TCA, ReactorKit, ReSwift, and SwiftRex positioning
+- [InnoFlow API reference](https://innosquadcorp.github.io/InnoFlow/documentation/innoflow/) for the facade, core runtime, composition, and phase symbols
 - [InnoFlowTesting API reference](https://innosquadcorp.github.io/InnoFlow/testing/documentation/innoflowtesting/) for the public test harness, clock, and instrumentation symbols
 
 For stable framework guarantees that should not drift with scorecards or line counts, see

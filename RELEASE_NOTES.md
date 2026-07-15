@@ -47,8 +47,9 @@ the READMEs until 5.0.0 is tagged.
     intermediate queue checkpoint. Removal is planned for 6.0.
 10. Extends compile contracts, the canonical sample suite, migration guidance,
     and localized README parity around the same 5.0 behavior. DocC now publishes
-    a separate `InnoFlowTesting` API reference under the existing site and
-    release archive roots.
+    warning-free combined `InnoFlowCore` / `InnoFlow` documentation plus a
+    separate `InnoFlowTesting` API reference under the existing site and release
+    archive roots.
 
 ### Known toolchain workarounds
 

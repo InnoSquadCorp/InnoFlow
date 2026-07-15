@@ -22,11 +22,8 @@ public protocol Reducer<State, Action> {
   /// The actions accepted by this reducer.
   associatedtype Action: Sendable
 
-  /// Applies an action to state and returns follow-up effects.
+  /// Applies `action` to mutable `state` and returns follow-up effects.
   ///
-  /// - Parameters:
-  ///   - state: Mutable state for synchronous transition.
-  ///   - action: Incoming action.
   /// - Returns: The effect task describing async follow-up work.
   func reduce(into state: inout State, action: Action) -> EffectTask<Action>
 }

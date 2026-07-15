@@ -1,6 +1,7 @@
 # Getting Started
 
-Create a feature with `@InnoFlow`, expose reducer composition from `body`, hold it in a ``Store``, and send actions from SwiftUI.
+Create a feature with `@InnoFlow`, expose reducer composition from `body`, hold it in a
+``/InnoFlowCore/Store``, and send actions from SwiftUI.
 
 ```swift
 import InnoFlow
@@ -63,14 +64,16 @@ macro declarations, so macro users must import `InnoFlow` directly.
 
 `binding(_:to:)` is an alias for `binding(_:send:)`. Prefer explicit labels in new code; existing trailing-closure calls such as `store.binding(\.$step) { .setStep($0) }` continue to resolve to `send:` for source compatibility.
 
-For multi-part features, compose reducers with ``Reduce``, ``CombineReducers``, ``Scope``, ``IfLet``, ``IfCaseLet``, and ``ForEachReducer`` instead of adding more authoring modes.
+For multi-part features, compose reducers with ``/InnoFlowCore/Reduce``,
+``/InnoFlowCore/CombineReducers``, ``/InnoFlowCore/Scope``, ``/InnoFlowCore/IfLet``,
+``/InnoFlowCore/IfCaseLet``, and ``/InnoFlowCore/ForEachReducer`` instead of adding more authoring modes.
 Use `@BindableField` for reducer-facing value fields, and pass the projected key path (`\.$field`) into `Store.binding(_:to:)` or `Store.binding(_:send:)`.
 
-- Use ``Scope`` when child state is always present.
-- Use ``IfLet`` when child state is optional.
-- Use ``IfCaseLet`` when child state lives behind an enum case.
-- Use ``ForEachReducer`` when child state is a collection of `Identifiable` rows.
-- Use ``SelectedStore`` when a view needs a read-only derived value that should refresh only when the selected `Equatable` output changes. Use `select(dependingOn:)` when that value comes from a single explicit state slice and the variadic `select(dependingOnAll:)` for two or more slices. Keep plain `select { ... }` for always-refresh fallback cases where the dependency cannot be expressed as key paths.
+- Use ``/InnoFlowCore/Scope`` when child state is always present.
+- Use ``/InnoFlowCore/IfLet`` when child state is optional.
+- Use ``/InnoFlowCore/IfCaseLet`` when child state lives behind an enum case.
+- Use ``/InnoFlowCore/ForEachReducer`` when child state is a collection of `Identifiable` rows.
+- Use ``/InnoFlowCore/SelectedStore`` when a view needs a read-only derived value that should refresh only when the selected `Equatable` output changes. Use `select(dependingOn:)` when that value comes from a single explicit state slice and the variadic `select(dependingOnAll:)` for two or more slices. Keep plain `select { ... }` for always-refresh fallback cases where the dependency cannot be expressed as key paths.
 
 If a feature needs constructor-time services, define an explicit nested `Dependencies` bundle and
 pass it from the app/coordinator layer instead of relying on reducer-side global lookup. That keeps

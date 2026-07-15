@@ -36,7 +36,7 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// Returns `false` once the parent store or scoped store backing this
   /// selection has been released, or once the selection has been marked
   /// inactive because its source collection entry was removed. Callers
-  /// can consult this before using ``requireAlive()`` or read
+  /// can consult this before using ``SelectedStore/requireAlive(file:line:)`` or read
   /// ``optionalValue`` when a dead selection should be treated as absence.
   public var isAlive: Bool {
     parentObject != nil && sourceIsAlive() && isActive
@@ -48,7 +48,7 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// Callers that need to distinguish "value is fresh" from "parent is
   /// gone" should consult this property and treat `nil` as "regenerate
   /// the selection." When the selection's liveness is a caller-owned
-  /// precondition, use ``requireAlive()`` instead — it returns `Value`
+  /// precondition, use ``SelectedStore/requireAlive(file:line:)`` instead — it returns `Value`
   /// directly and crashes loudly on a released parent.
   public var optionalValue: Value? {
     guard isAlive else { return nil }

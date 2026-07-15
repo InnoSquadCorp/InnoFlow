@@ -20,13 +20,15 @@ alone. `InnoFlowSwiftUI` and `InnoFlowTesting` reexport `InnoFlowCore`, but
 macro declarations stay in `InnoFlow`.
 
 `Store` executes actions through a single FIFO dispatch queue. Immediate follow-up actions from
-``EffectTask/send(_:)`` are queued rather than reducer-reentrant, async emissions from
-``EffectTask/run(priority:_:)-(_,(Send<Action>)->Void)`` re-enter the same queue after their suspension boundary,
-``EffectTask/concatenate(_:)-(EffectTask<Action>...)`` preserves declaration order, and ``EffectTask/merge(_:)-(EffectTask<Action>...)`` emits in
+``/InnoFlowCore/EffectTask/send(_:)`` are queued rather than reducer-reentrant, async emissions from
+``/InnoFlowCore/EffectTask/run(priority:_:)-(_,(Send<Action>)->Void)`` re-enter the same queue after their suspension boundary,
+``/InnoFlowCore/EffectTask/concatenate(_:)-(EffectTask<Action>...)`` preserves declaration order, and
+``/InnoFlowCore/EffectTask/merge(_:)-(EffectTask<Action>...)`` emits in
 child completion order.
 
 For larger features, model orchestration explicitly: parent actions coordinate child actions,
-long-running progress pipelines are composed with ``EffectTask/concatenate(_:)-(EffectTask<Action>...)``, and batch work
+long-running progress pipelines are composed with
+``/InnoFlowCore/EffectTask/concatenate(_:)-(EffectTask<Action>...)``, and batch work
 shares cancellation IDs for fan-out cancellation from the store boundary.
 
 `TestStore.exhaustivity` defaults to `.on`: every state mutation belongs in the
@@ -41,10 +43,10 @@ documents the complete testing-support symbol surface.
 
 Conditional child composition stays explicit:
 
-- use ``Scope`` for always-present child state
-- use ``IfLet`` for optional child state
-- use ``IfCaseLet`` for enum-backed child state
-- use ``ForEachReducer`` for collection-backed child state
+- use ``/InnoFlowCore/Scope`` for always-present child state
+- use ``/InnoFlowCore/IfLet`` for optional child state
+- use ``/InnoFlowCore/IfCaseLet`` for enum-backed child state
+- use ``/InnoFlowCore/ForEachReducer`` for collection-backed child state
 
 `IfLet` and `IfCaseLet` accept an optional `onMissing:` policy that controls
 behavior when a child action arrives while child state is unavailable. The
@@ -54,21 +56,22 @@ either build (useful for late-arriving effects from a dismissed flow), and
 `.crash` to trap with `preconditionFailure` in every build (useful when the
 late action is treated as a programming bug).
 
-For read-only derived values, use ``SelectedStore`` so large SwiftUI views can observe an `Equatable`
+For read-only derived values, use ``/InnoFlowCore/SelectedStore`` so large SwiftUI views can observe an `Equatable`
 projection without pulling an entire mutable child scope into the view tree. Use
 `select(dependingOn:)` for a single explicit state slice and the variadic
 `select(dependingOnAll:)` for two or more slices; both forms keep selective invalidation regardless
 of arity. Plain `select { ... }` remains the always-refresh fallback because general closures do
 not expose their dependencies.
 
-For lifecycle-aware reads outside SwiftUI view bodies, prefer ``SelectedStore/optionalValue`` and
-``ScopedStore/optionalState`` (or gate on the matching `isAlive` flag). `ScopedStore.state` and
+For lifecycle-aware reads outside SwiftUI view bodies, prefer
+``/InnoFlowCore/SelectedStore/optionalValue`` and ``/InnoFlowCore/ScopedStore/optionalState``
+(or gate on the matching `isAlive` flag). `ScopedStore.state` and
 projection dynamic-member reads keep a cached snapshot fallback for SwiftUI observer races, while
 both stores' `requireAlive()` accessors trap with `preconditionFailure` when the projection is
 dead. Treat `nil` from the optional accessors as "regenerate the projection." See
 ARCHITECTURE_CONTRACT.md - *Projection lifecycle contract*.
 
-Time-sensitive `.run` effects should use ``EffectContext``. That keeps `StoreClock` in control of
+Time-sensitive `.run` effects should use ``/InnoFlowCore/EffectContext``. That keeps `StoreClock` in control of
 debounce/throttle operators and explicit delays inside the effect body.
 When a dependency already exposes an `AsyncSequence`, use the sequence-based `EffectTask.run`
 overloads to consume stream elements without adding a custom effect operation.
@@ -80,9 +83,9 @@ The repo-level boundary guide for navigation, transport, and DI ownership lives 
 and the reducer-side dependency patterns live in
 [docs/DEPENDENCY_PATTERNS.md](https://github.com/InnoSquadCorp/InnoFlow/blob/main/docs/DEPENDENCY_PATTERNS.md).
 
-When a feature has meaningful domain phases, prefer ``PhaseMap`` as the canonical phase-transition
+When a feature has meaningful domain phases, prefer ``/InnoFlowCore/PhaseMap`` as the canonical phase-transition
 layer. `PhaseMap` runs after the base reducer, owns the declared phase key path, and exposes
-``PhaseTransitionGraph`` through `derivedGraph` so topology validation stays explicit without
+``/InnoFlowCore/PhaseTransitionGraph`` through `derivedGraph` so topology validation stays explicit without
 turning InnoFlow into a general FSM runtime.
 
 ## Topics
@@ -98,8 +101,8 @@ turning InnoFlow into a general FSM runtime.
 
 ### Core Symbols
 
-- ``Store``
-- ``Reducer``
-- ``PhaseMap``
-- ``PhaseTransition``
-- ``PhaseTransitionGraph``
+- ``/InnoFlowCore/Store``
+- ``/InnoFlowCore/Reducer``
+- ``/InnoFlowCore/PhaseMap``
+- ``/InnoFlowCore/PhaseTransition``
+- ``/InnoFlowCore/PhaseTransitionGraph``

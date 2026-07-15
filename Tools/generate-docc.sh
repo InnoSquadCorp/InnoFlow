@@ -63,6 +63,33 @@ generate_documentation() {
     --target "$target" \
     --output-path "$output_dir" \
     --disable-indexing \
+    --warnings-as-errors \
+    --transform-for-static-hosting \
+    --hosting-base-path "$hosting_base_path"
+}
+
+generate_combined_documentation() {
+  local output_dir="$1"
+  local hosting_base_path="$2"
+  shift 2
+
+  local target_arguments=()
+  local target
+  for target in "$@"; do
+    target_arguments+=(--target "$target")
+  done
+
+  mkdir -p "$output_dir"
+  echo "[docc] Generating combined DocC for targets '$*' -> $output_dir"
+  swift package \
+    --package-path "$DOCS_PACKAGE_DIR" \
+    --allow-writing-to-directory "$output_dir" \
+    generate-documentation \
+    "${target_arguments[@]}" \
+    --enable-experimental-combined-documentation \
+    --output-path "$output_dir" \
+    --disable-indexing \
+    --warnings-as-errors \
     --transform-for-static-hosting \
     --hosting-base-path "$hosting_base_path"
 }
@@ -125,9 +152,20 @@ verify_documentation_entry() {
   fi
 }
 
-generate_documentation "$TARGET" "$OUTPUT_DIR" "$HOSTING_BASE_PATH"
+if [[ "$TARGET" == "InnoFlow" ]]; then
+  generate_combined_documentation \
+    "$OUTPUT_DIR" \
+    "$HOSTING_BASE_PATH" \
+    "InnoFlowCore" \
+    "InnoFlow"
+else
+  generate_documentation "$TARGET" "$OUTPUT_DIR" "$HOSTING_BASE_PATH"
+fi
 write_redirect_index "$OUTPUT_DIR" "$TARGET"
 verify_documentation_entry "$OUTPUT_DIR" "$TARGET" "$HOSTING_BASE_PATH"
+if [[ "$TARGET" == "InnoFlow" ]]; then
+  verify_documentation_entry "$OUTPUT_DIR" "InnoFlowCore" "$HOSTING_BASE_PATH"
+fi
 
 # The public testing product has its own symbol graph. Keep the existing
 # InnoFlow site and release artifact root stable while publishing that graph
