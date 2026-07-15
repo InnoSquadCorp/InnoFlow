@@ -23,6 +23,7 @@ public final class Store<R: Reducer> {
   package let lifetime = StoreLifetimeToken()
   private let actionQueue = StoreActionQueue<R.Action>()
   package let effectBridge = StoreEffectBridge<R.Action>()
+  package let singleScopeCache = SingleScopeCache()
   package let collectionScopeCache = CollectionScopeCache()
   package let selectionCache = SelectionCache()
   private let observerRegistry = ProjectionObserverRegistry<R.State>()
@@ -189,6 +190,14 @@ public final class Store<R: Reducer> {
     line: UInt,
     column: UInt
   ) -> CollectionScopeCallsite {
+    .init(fileID: fileID.description, line: line, column: column)
+  }
+
+  package func singleScopeCallsite(
+    fileID: StaticString,
+    line: UInt,
+    column: UInt
+  ) -> SingleScopeCallsite {
     .init(fileID: fileID.description, line: line, column: column)
   }
 

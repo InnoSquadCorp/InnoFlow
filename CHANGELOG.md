@@ -17,6 +17,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   macro-authored features work across module and package-target boundaries.
   Access inherited from `public extension` / `package extension` namespaces
   and qualified nested feature conformances are covered as well.
+- `Store.scope(state:action:)` now weakly caches each live single-state
+  `ScopedStore` by source location, state key path, child types, and opaque
+  `CasePath` identity. Repeated calls reuse one projection and observer without
+  extending its lifetime; independently reconstructed action paths safely
+  create separate projections.
 - Store and TestStore run cancellation now applies only through the requesting
   effect sequence. A delayed cancellation from an older sequence no longer
   terminates a newer run registered under the same cancellation ID.
@@ -152,6 +157,14 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed (BREAKING)
 
+- `Store.scope(state:action:)` now includes defaulted `fileID`, `line`, and
+  `column` parameters so the runtime can preserve call-site identity. Ordinary
+  two-argument calls remain source-compatible, but code that stores
+  `store.scope` as a two-argument method value must wrap the call in a closure
+  or update its function type to include the three source-location arguments.
+  Repeated calls with the same full signature now return the same live
+  `ScopedStore`; callers that require distinct projections must use a distinct
+  source location or an independently constructed `CasePath`.
 - SwiftUI-specific APIs moved out of the core `InnoFlow` product and into
   `InnoFlowSwiftUI`. SwiftUI app targets that use bindings, previews, or
   animation helpers must add the `InnoFlowSwiftUI` product dependency and

@@ -86,11 +86,40 @@ extension Store {
   }
 
   /// Creates a derived store using a case path for action lifting.
+  ///
+  /// Repeated calls from the same source location reuse the live scoped store
+  /// when the state key path, child types, and case-path identity all match.
+  /// The cache is weak: releasing every external reference also releases the
+  /// scoped store. Independently reconstructed case paths safely create a new
+  /// projection instead of reusing an outdated action transform.
   public func scope<ChildState: Equatable, ChildAction>(
     state: KeyPath<R.State, ChildState>,
-    action: CasePath<R.Action, ChildAction>
+    action: CasePath<R.Action, ChildAction>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column
   ) -> ScopedStore<R, ChildState, ChildAction> {
-    makeScopedStore(state: state, action: action.embed)
+    let cacheKey = SingleScopeCacheKey(
+      callsite: singleScopeCallsite(fileID: fileID, line: line, column: column),
+      stateKeyPath: state as AnyKeyPath,
+      childStateType: ObjectIdentifier(ChildState.self),
+      childActionType: ObjectIdentifier(ChildAction.self)
+    )
+
+    if let cached: ScopedStore<R, ChildState, ChildAction> = singleScopeCache.cached(
+      for: cacheKey,
+      actionPathIdentity: action.identity
+    ) {
+      return cached
+    }
+
+    let scopedStore = makeScopedStore(state: state, action: action.embed)
+    singleScopeCache.store(
+      scopedStore,
+      for: cacheKey,
+      actionPathIdentity: action.identity
+    )
+    return scopedStore
   }
 
   /// Creates derived stores for each element in an identifiable collection.

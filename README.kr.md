@@ -129,6 +129,13 @@ Stepper(
 - `ForEachReducer`: collection child state
 - `SelectedStore`: 읽기 전용 파생 모델. 단일 명시적 key path는 `select(dependingOn:)`, 둘 이상의 key path는 가변 인자 `select(dependingOnAll:)`을 사용합니다. dependency를 선언할 수 없을 때 `select { ... }`는 always-refresh fallback입니다. dead projection은 `optionalValue`에서 `nil`이 되며, `requireAlive()`/dynamic member read는 release에서도 `preconditionFailure`로 실패합니다.
 
+런타임 `Store.scope(state:action:)`는 같은 호출 위치, state key path,
+child 타입, `CasePath` identity가 모두 일치할 때 살아 있는 `ScopedStore`를
+재사용합니다. 부모 `Store`는 이 projection을 약하게 보유하므로 수명을
+연장하지 않으며, 새로 생성한 `CasePath`는 이전 action transform을 재사용하지
+않고 안전하게 새 projection을 만듭니다. 이 계약은 reducer 합성 primitive인
+`Scope`나 테스트용 `TestStore.scope`의 identity 계약이 아닙니다.
+
 ## 샘플 카탈로그
 
 공식 샘플 앱은 10개 데모를 유지합니다.

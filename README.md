@@ -28,7 +28,7 @@ Boundary references:
 - [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bridges dependencies, instrumentation, and cross-framework boundaries for non-trivial features
 - [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
 - [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
-- [`MIGRATION.md`](MIGRATION.md) for 4.0.0 source-compatibility and release-readiness notes
+- [`MIGRATION.md`](MIGRATION.md) for current 5.0 development changes and prior release migrations
 - [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md) for `.sink`, `.osLog`, `.signpost`, and `.combined` examples
 - [`docs/PERFORMANCE_BASELINES.md`](docs/PERFORMANCE_BASELINES.md) for maintainer baseline policy
 - [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for TCA, ReactorKit, ReSwift, and SwiftRex positioning
@@ -213,7 +213,14 @@ var body: some Reducer<State, Action> {
 ### `Scope`
 
 `Scope` lifts child state, child action, and child effects into a parent reducer space.
-Scoped child state must conform to `Equatable`. The resulting `ScopedStore` caches the latest child snapshot, refreshes that projection during the parent store's action drain, and only invalidates observers when the child snapshot actually changes.
+Scoped child state must conform to `Equatable`. The reducer primitive and runtime projection API
+are separate: `Store.scope(state:action:)` returns a `ScopedStore` that caches the latest child
+snapshot, refreshes during the parent store's action drain, and only invalidates observers when the
+child snapshot actually changes.
+Repeated `Store.scope(state:action:)` calls from the same source location reuse the same live
+projection when their state key path, child types, and `CasePath` identity match. The cache is weak,
+so discarding every external reference still releases the `ScopedStore`; constructing a new
+`CasePath` safely creates a separate projection instead of reusing an outdated action transform.
 Public scoping APIs use `CasePath` and `CollectionActionPath` exclusively. Closure-based action lifting is kept internal to the framework implementation.
 
 ```swift

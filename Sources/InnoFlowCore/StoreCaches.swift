@@ -4,6 +4,21 @@
 
 import Foundation
 
+private let singleScopeCachePeriodicCompactionIntervalDefault: UInt64 = 64
+
+package struct SingleScopeCallsite: Hashable {
+  package let fileID: String
+  package let line: UInt
+  package let column: UInt
+}
+
+package struct SingleScopeCacheKey: Hashable {
+  package let callsite: SingleScopeCallsite
+  package let stateKeyPath: AnyKeyPath
+  package let childStateType: ObjectIdentifier
+  package let childActionType: ObjectIdentifier
+}
+
 package struct CollectionScopeCallsite: Equatable {
   package let fileID: String
   package let line: UInt
@@ -30,6 +45,94 @@ package enum SelectionSignature: Hashable {
 package struct SelectionCacheKey: Hashable {
   package let callsite: SelectionCallsite
   package let signature: SelectionSignature
+}
+
+@MainActor
+package final class SingleScopeCacheEntry {
+  package weak var scope: AnyObject?
+
+  package init(scope: AnyObject) {
+    self.scope = scope
+  }
+}
+
+/// Weakly caches live single-state projections by call site and projection
+/// signature. The action-path token is retained strongly so identity cannot
+/// collide through allocator address reuse after the caller releases a path.
+/// Matching buckets prune on every access; periodic cross-bucket maintenance
+/// bounds dead metadata from signatures that are no longer requested.
+@MainActor
+package final class SingleScopeCache {
+  private var entries: [SingleScopeCacheKey: [ActionPathIdentity: SingleScopeCacheEntry]] = [:]
+  private let periodicCompactionInterval: UInt64
+  private var accessCount: UInt64 = 0
+
+  package init() {
+    self.periodicCompactionInterval = singleScopeCachePeriodicCompactionIntervalDefault
+  }
+
+  package func cached<ParentReducer: Reducer, ChildState: Equatable, ChildAction>(
+    for key: SingleScopeCacheKey,
+    actionPathIdentity: ActionPathIdentity
+  ) -> ScopedStore<ParentReducer, ChildState, ChildAction>? {
+    compactIfNeeded()
+    var bucket = prunedBucket(for: key)
+    guard let entry = bucket[actionPathIdentity] else { return nil }
+
+    guard
+      let scope = entry.scope
+        as? ScopedStore<ParentReducer, ChildState, ChildAction>
+    else {
+      bucket.removeValue(forKey: actionPathIdentity)
+      update(bucket, for: key)
+      return nil
+    }
+
+    return scope
+  }
+
+  package func store<ParentReducer: Reducer, ChildState: Equatable, ChildAction>(
+    _ scope: ScopedStore<ParentReducer, ChildState, ChildAction>,
+    for key: SingleScopeCacheKey,
+    actionPathIdentity: ActionPathIdentity
+  ) {
+    var bucket = prunedBucket(for: key)
+    bucket[actionPathIdentity] = .init(scope: scope)
+    entries[key] = bucket
+  }
+
+  private func compactIfNeeded() {
+    accessCount &+= 1
+    guard accessCount.isMultiple(of: periodicCompactionInterval) else { return }
+
+    for key in Array(entries.keys) {
+      _ = prunedBucket(for: key)
+    }
+  }
+
+  private func prunedBucket(
+    for key: SingleScopeCacheKey
+  ) -> [ActionPathIdentity: SingleScopeCacheEntry] {
+    guard var bucket = entries[key] else { return [:] }
+    guard bucket.values.contains(where: { $0.scope == nil }) else {
+      return bucket
+    }
+
+    bucket = bucket.filter { $0.value.scope != nil }
+    update(bucket, for: key)
+    return bucket
+  }
+
+  private func update(
+    _ bucket: [ActionPathIdentity: SingleScopeCacheEntry],
+    for key: SingleScopeCacheKey
+  ) {
+    if bucket.isEmpty {
+      entries.removeValue(forKey: key)
+    } else {
+      entries[key] = bucket
+    }
+  }
 }
 
 @MainActor

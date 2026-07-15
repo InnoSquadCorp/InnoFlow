@@ -51,6 +51,11 @@ The framework handles this race explicitly, but `ScopedStore` and
 - `ScopedStore.isAlive` and `SelectedStore.isAlive` report the same liveness
   signal as a `Bool` for sites that only need to gate work and do not read the
   projected value.
+- Repeated `Store.scope(state:action:)` calls reuse a live `ScopedStore` only
+  when source location, state key path, child types, and the opaque `CasePath`
+  identity token all match. The parent cache holds the projection weakly, so
+  cache reuse never extends its lifetime. A newly constructed `CasePath` is a
+  safe cache miss and cannot inherit an older action transform.
 - Programming errors that are **not** lifecycle races still trap — in
   particular, constructing a `ScopedStore` whose state resolver returns `nil`
   at init time, and reading `ScopedStore.id` when the stable identifier type

@@ -56,6 +56,15 @@ For most apps the registry is dominated by collection scopes — `ForEachReducer
 
 ### Scope cache hit ratio
 
+Single-state scoping weakly caches a live projection by source location, state
+key path, child types, and `CasePath` identity. A steady SwiftUI body that
+repeats the same scope call reuses one `ScopedStore` and one parent observer;
+reconstructing the `CasePath` intentionally misses the cache. Releasing every
+external scope reference releases the projection. The next matching-signature
+access prunes its dead cache entry before creating a current-state projection;
+periodic cross-bucket maintenance during continued scoping bounds dead metadata
+from other signatures, and a quiescent `Store` releases the remainder on deinit.
+
 Collection scoping caches the per-element snapshot keyed by `Identifiable.ID`. The cache is hit when the same row receives an action and miss when the parent collection layout changed (insert/remove/reorder).
 
 - a steady-state list with infrequent edits trends toward 100% hit ratio after warm-up

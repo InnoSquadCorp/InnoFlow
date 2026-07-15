@@ -2,6 +2,65 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
+## 5.0.0 (in development)
+
+### Who is affected
+
+- Ordinary `store.scope(state:action:)` call sites are source-compatible and
+  require no changes.
+- Consumers that store `store.scope` itself as a two-argument method value are
+  affected. The method now includes defaulted `fileID`, `line`, and `column`
+  parameters so runtime scope identity can include the source location; Swift
+  does not apply default arguments when converting a method to a function
+  value.
+- Consumers that intentionally relied on every repeated
+  `Store.scope(state:action:)` call allocating a distinct `ScopedStore` are
+  affected. Calls with the same source location, state key path, child types,
+  and `CasePath` identity now return the same live projection.
+
+### Required action
+
+Either include the source-location parameters in the stored function type:
+
+```swift
+typealias LocatedScopeMethod = @MainActor @Sendable (
+  KeyPath<Feature.State, Feature.Child>,
+  CasePath<Feature.Action, Feature.ChildAction>,
+  StaticString,
+  UInt,
+  UInt
+) -> ScopedStore<Feature, Feature.Child, Feature.ChildAction>
+
+let scope: LocatedScopeMethod = store.scope
+let child = scope(
+  \.child,
+  Feature.Action.childCasePath,
+  #fileID,
+  #line,
+  #column
+)
+```
+
+Or preserve a two-argument function shape with a closure:
+
+```swift
+typealias ScopeMethod = @MainActor @Sendable (
+  KeyPath<Feature.State, Feature.Child>,
+  CasePath<Feature.Action, Feature.ChildAction>
+) -> ScopedStore<Feature, Feature.Child, Feature.ChildAction>
+
+let scope: ScopeMethod = { state, action in
+  store.scope(state: state, action: action)
+}
+```
+
+If a caller genuinely needs an independent projection, use a distinct source
+location or an independently constructed `CasePath`. Features whose macro
+expansion emits a stored static action path should keep that path so repeated
+body evaluation reuses one observer and projection identity. Generic or
+extension lexical contexts synthesize a computed action path with a fresh
+identity per access; those calls intentionally take the safe cache-miss path.
+
 ## 4.0.0
 
 ### Who is affected

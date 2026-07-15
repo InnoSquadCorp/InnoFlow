@@ -22,6 +22,94 @@ struct CompileContractTests {
     #expect(childPath.extract(childPath.embed(1, 42))?.1 == 42)
   }
 
+  @Test("Store.scope method values support both 5.0 migration forms")
+  func storeScopeMethodValueMigrationFormsCompile() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlowCore
+
+      struct ParentFeature: Reducer {
+          struct Child: Equatable, Sendable {
+              var count = 0
+          }
+
+          struct State: Sendable {
+              var child = Child()
+          }
+
+          enum Action: Sendable {
+              case child(ChildAction)
+
+              static let childCasePath = CasePath<Self, ChildAction>(
+                  embed: { .child($0) },
+                  extract: { action in
+                      guard case .child(let childAction) = action else { return nil }
+                      return childAction
+                  }
+              )
+          }
+
+          enum ChildAction: Sendable {
+              case increment
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              .none
+          }
+      }
+
+      typealias ChildStore = ScopedStore<
+          ParentFeature,
+          ParentFeature.Child,
+          ParentFeature.ChildAction
+      >
+
+      typealias LocatedScopeMethod = @MainActor @Sendable (
+          KeyPath<ParentFeature.State, ParentFeature.Child>,
+          CasePath<ParentFeature.Action, ParentFeature.ChildAction>,
+          StaticString,
+          UInt,
+          UInt
+      ) -> ChildStore
+
+      typealias TwoArgumentScopeMethod = @MainActor @Sendable (
+          KeyPath<ParentFeature.State, ParentFeature.Child>,
+          CasePath<ParentFeature.Action, ParentFeature.ChildAction>
+      ) -> ChildStore
+
+      @MainActor
+      func compileContract() {
+          let store = Store(reducer: ParentFeature(), initialState: .init())
+
+          let located: LocatedScopeMethod = store.scope
+          let first = located(
+              \\.child,
+              ParentFeature.Action.childCasePath,
+              #fileID,
+              #line,
+              #column
+          )
+
+          let wrapped: TwoArgumentScopeMethod = { state, action in
+              store.scope(state: state, action: action)
+          }
+          let second = wrapped(\\.child, ParentFeature.Action.childCasePath)
+
+          _ = first.count
+          _ = second.count
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
   @Test("EffectID accepts dynamic and non-string raw values")
   func effectIDAcceptsDynamicAndNonStringRawValues() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
