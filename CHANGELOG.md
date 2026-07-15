@@ -68,6 +68,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - `assertNoMoreActions()` is deprecated for the 5.x compatibility window. Use
   `finish()` for terminal verification or `assertNoBufferedActions()` for an
   intermediate queue checkpoint; removal is planned for 6.0.
+- The tag-driven release workflow now pins every third-party action to a full
+  commit SHA, disables persisted checkout credentials, and grants repository
+  write access only to the release-publishing job. Principle gates reject new
+  moving action references before they can enter the release path.
 
 ### Added
 

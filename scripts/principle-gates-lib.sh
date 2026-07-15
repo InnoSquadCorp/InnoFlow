@@ -786,6 +786,13 @@ run_authoring_policy_checks() {
   fi
 }
 
+run_workflow_security_checks() {
+  ensure_principle_gate_context
+
+  echo "[principle-gates] Checking GitHub Actions commit SHA pins"
+  "$SCRIPT_DIR/check-workflow-action-pins.sh" "$ROOT_DIR/.github/workflows"
+}
+
 run_release_build_checks() {
   ensure_principle_gate_context
 
@@ -947,6 +954,7 @@ run_sample_contract_checks() {
 }
 
 run_principle_gates_impl() {
+  run_workflow_security_checks "$@"
   run_authoring_surface_checks "$@"
   run_sample_static_contract_checks "$@"
   run_doc_contract_checks "$@"

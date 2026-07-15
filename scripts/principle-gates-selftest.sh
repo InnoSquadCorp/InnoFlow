@@ -255,6 +255,7 @@ run_cleanup_trap_isolation_tests() {
     source "$1"
 
     run_authoring_surface_checks() { :; }
+    run_workflow_security_checks() { :; }
     run_sample_static_contract_checks() { :; }
     run_doc_contract_checks() { :; }
     run_authoring_policy_checks() { :; }
@@ -274,8 +275,33 @@ run_cleanup_trap_isolation_tests() {
   ' bash "$SCRIPT_DIR/principle-gates-lib.sh"
 }
 
+run_workflow_action_pin_tests() {
+  local tmp_root
+  tmp_root="$(mktemp -d)"
+  trap 'rm -rf "$tmp_root"' RETURN
+
+  mkdir -p "$tmp_root/workflows"
+  cat >"$tmp_root/workflows/pinned.yml" <<'EOF'
+steps:
+  - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+  - uses: ./local-action
+  - uses: docker://alpine:3.22
+EOF
+  assert_success "$SCRIPT_DIR/check-workflow-action-pins.sh" "$tmp_root/workflows"
+
+  cat >"$tmp_root/workflows/floating.yml" <<'EOF'
+steps:
+  - uses: actions/checkout@v6
+EOF
+  assert_failure "$SCRIPT_DIR/check-workflow-action-pins.sh" "$tmp_root/workflows"
+
+  trap - RETURN
+  rm -rf "$tmp_root"
+}
+
 run_source_preserves_cwd_test
 run_cleanup_trap_isolation_tests
+run_workflow_action_pin_tests
 
 if command -v rg >/dev/null 2>&1; then
   run_search_tests "0" "rg"
