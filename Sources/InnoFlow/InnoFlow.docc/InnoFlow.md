@@ -35,6 +35,10 @@ and an omitted assertion closure means no state change. Set `.off` only for an
 intentionally partial test, use `finish()` at the terminal boundary, and use
 `assertNoBufferedActions()` for an intermediate queue checkpoint.
 
+The separately generated
+[InnoFlowTesting API reference](https://innosquadcorp.github.io/InnoFlow/testing/documentation/innoflowtesting/)
+documents the complete testing-support symbol surface.
+
 Conditional child composition stays explicit:
 
 - use ``Scope`` for always-present child state

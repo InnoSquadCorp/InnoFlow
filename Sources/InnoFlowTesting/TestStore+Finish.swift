@@ -142,8 +142,11 @@ extension TestStore {
   /// effects and their subsequent action emissions are suppressed. An effect
   /// that ignores cooperative cancellation may still continue its own work.
   ///
-  /// - Parameter timeout: The total wall-clock deadline. Pass `nil` to use the
-  ///   timeout configured when this `TestStore` was initialized.
+  /// - Parameters:
+  ///   - timeout: The total wall-clock deadline. Pass `nil` to use the timeout
+  ///     configured when this `TestStore` was initialized.
+  ///   - file: The source file reported when terminal verification fails.
+  ///   - line: The source line reported when terminal verification fails.
   public func finish(
     timeout: Duration? = nil,
     file: StaticString = #file,

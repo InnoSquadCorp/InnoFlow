@@ -32,9 +32,9 @@ public actor EffectTimingRecorder {
     case effectsCancelled
   }
 
-  /// A single observation. `timestampNanos` is measured from
-  /// ``EffectTimingRecorder.start`` using `ContinuousClock`, so values are
-  /// monotonic and comparable across the same recorder instance only.
+  /// A single observation. `timestampNanos` is measured from recorder
+  /// initialization using `ContinuousClock`, so values are monotonic and
+  /// comparable across the same recorder instance only.
   public struct Entry: Codable, Equatable, Sendable {
     public let phase: Phase
     public let sequence: UInt64

@@ -1,0 +1,31 @@
+# ``InnoFlowTesting``
+
+Deterministically verify reducer state transitions, effect actions, and timing.
+
+## Overview
+
+Use ``TestStore`` to send feature actions, receive actions emitted by effects,
+and assert every state transition. Exhaustivity defaults to ``Exhaustivity/on``;
+an omitted assertion closure means that the action must not change state.
+
+Use `finish()` at the terminal boundary to wait for framework-owned effects and
+verify that no effect actions remain. Use `assertNoBufferedActions()` only for
+an intermediate queue checkpoint. ``ScopedTestStore`` applies the same contract
+while asserting against the complete root state.
+
+For time-sensitive effects, inject ``ManualTestClock`` and advance it explicitly.
+``EffectTimingRecorder`` captures instrumentation events for repeatable baseline
+comparisons.
+
+## Topics
+
+### Reducer Harness
+
+- ``TestStore``
+- ``ScopedTestStore``
+- ``Exhaustivity``
+
+### Time and Instrumentation
+
+- ``ManualTestClock``
+- ``EffectTimingRecorder``

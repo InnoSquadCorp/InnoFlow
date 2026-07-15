@@ -71,6 +71,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- DocC generation now publishes the public `InnoFlowTesting` symbol graph at
+  `testing/documentation/innoflowtesting/` alongside the existing `InnoFlow`
+  site. The Pages root URL and release archive layout remain unchanged.
 - Public `Exhaustivity` and mutable `TestStore.exhaustivity` /
   `ScopedTestStore.exhaustivity` policies. The default `.on` verifies complete
   state transitions and effect actions. `.off(showSkippedAssertions:)` enables
