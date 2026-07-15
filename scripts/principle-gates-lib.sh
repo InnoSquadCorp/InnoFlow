@@ -618,10 +618,37 @@ validate_selected_store_dynamic_member_doc() {
   fi
 }
 
+verify_docc_plugin_pin() {
+  local generator_path="$1"
+  local release_policy_path="$2"
+  local plugin_version
+
+  plugin_version="$(
+    sed -nE 's/^DOCC_PLUGIN_VERSION="([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' "$generator_path"
+  )"
+  if [[ -z "$plugin_version" ]]; then
+    echo "[principle-gates] Failed: $generator_path must declare an exact semantic DOCC_PLUGIN_VERSION" >&2
+    return 1
+  fi
+  if ! grep -F 'swift-docc-plugin", exact:' "$generator_path" >/dev/null; then
+    echo "[principle-gates] Failed: $generator_path must inject swift-docc-plugin with exact:" >&2
+    return 1
+  fi
+  if grep -E 'swift-docc-plugin.*from:' "$generator_path" >/dev/null; then
+    echo "[principle-gates] Failed: $generator_path must not use a moving swift-docc-plugin range" >&2
+    return 1
+  fi
+  if ! grep -F "\`swift-docc-plugin\` $plugin_version" "$release_policy_path" >/dev/null; then
+    echo "[principle-gates] Failed: $release_policy_path must document swift-docc-plugin $plugin_version" >&2
+    return 1
+  fi
+}
+
 run_doc_contract_checks() {
   ensure_principle_gate_context
 
   echo "[principle-gates] Checking required documentation sections"
+  verify_docc_plugin_pin Tools/generate-docc.sh RELEASING.md || exit 1
   if [[ ! -f "ARCHITECTURE_CONTRACT.md" ]]; then
     echo "[principle-gates] Failed: ARCHITECTURE_CONTRACT.md is missing"
     exit 1

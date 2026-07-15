@@ -299,9 +299,34 @@ EOF
   rm -rf "$tmp_root"
 }
 
+run_docc_plugin_pin_tests() {
+  local tmp_root
+  tmp_root="$(mktemp -d)"
+  trap 'rm -rf "$tmp_root"' RETURN
+
+  cat >"$tmp_root/generate-docc.sh" <<'EOF'
+DOCC_PLUGIN_VERSION="1.5.0"
+dependency_line = 'swift-docc-plugin", exact: "{plugin_version}"'
+EOF
+  printf '%s\n' 'Use `swift-docc-plugin` 1.5.0 for documentation.' >"$tmp_root/RELEASING.md"
+  assert_success verify_docc_plugin_pin \
+    "$tmp_root/generate-docc.sh" \
+    "$tmp_root/RELEASING.md"
+
+  sed -i.bak 's/exact:/from:/' "$tmp_root/generate-docc.sh"
+  rm -f "$tmp_root/generate-docc.sh.bak"
+  assert_failure verify_docc_plugin_pin \
+    "$tmp_root/generate-docc.sh" \
+    "$tmp_root/RELEASING.md"
+
+  trap - RETURN
+  rm -rf "$tmp_root"
+}
+
 run_source_preserves_cwd_test
 run_cleanup_trap_isolation_tests
 run_workflow_action_pin_tests
+run_docc_plugin_pin_tests
 
 if command -v rg >/dev/null 2>&1; then
   run_search_tests "0" "rg"

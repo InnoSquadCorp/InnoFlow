@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 OUTPUT_DIR="${1:-$ROOT_DIR/.build/docc/InnoFlow}"
 TARGET="${2:-InnoFlow}"
 HOSTING_BASE_PATH="${3:-InnoFlow}"
+DOCC_PLUGIN_VERSION="1.5.0"
 DOCS_WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/innoflow-docc.XXXXXX")"
 DOCS_PACKAGE_DIR="$DOCS_WORK_DIR/package"
 DOCS_MANIFEST_PATH="$DOCS_PACKAGE_DIR/Package.swift"
@@ -25,14 +26,15 @@ rsync -a \
   --exclude '.git' \
   "$ROOT_DIR/" "$DOCS_PACKAGE_DIR/"
 
-python3 - "$DOCS_MANIFEST_PATH" <<'PY'
+python3 - "$DOCS_MANIFEST_PATH" "$DOCC_PLUGIN_VERSION" <<'PY'
 import pathlib
 import re
 import sys
 
 manifest_path = pathlib.Path(sys.argv[1])
+plugin_version = sys.argv[2]
 text = manifest_path.read_text()
-dependency_line = '        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),\n'
+dependency_line = f'        .package(url: "https://github.com/swiftlang/swift-docc-plugin", exact: "{plugin_version}"),\n'
 
 if "swift-docc-plugin" in text:
     raise SystemExit(0)
@@ -48,6 +50,8 @@ if not match:
 replacement = match.group(1) + dependency_line
 manifest_path.write_text(text[:match.start(1)] + replacement + text[match.end(1):])
 PY
+
+echo "[docc] Using swift-docc-plugin $DOCC_PLUGIN_VERSION (exact)"
 
 generate_documentation() {
   local target="$1"

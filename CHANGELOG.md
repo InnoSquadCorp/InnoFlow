@@ -72,6 +72,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   commit SHA, disables persisted checkout credentials, and grants repository
   write access only to the release-publishing job. Principle gates reject new
   moving action references before they can enter the release path.
+- Maintainer DocC generation now resolves `swift-docc-plugin` at exact version
+  1.5.0 inside its temporary package copy, keeping Pages and release archives
+  reproducible without adding the plugin to the consumer dependency graph.
 
 ### Added
 

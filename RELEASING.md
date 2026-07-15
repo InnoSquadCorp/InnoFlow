@@ -22,7 +22,7 @@ tag, run and confirm:
 1. Main package tests: `swift test -Xswiftc -warnings-as-errors`
 2. Release package tests: `swift test -c release -Xswiftc -warnings-as-errors`
 3. Sample package tests: `swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1 -Xswiftc -warnings-as-errors`
-4. DocC generation: `Tools/generate-docc.sh`
+4. DocC generation: `Tools/generate-docc.sh` (exact `swift-docc-plugin` 1.5.0)
 5. Release sync: `scripts/check-release-sync.sh`
 6. Doc parity: `scripts/check-doc-parity.sh`
 7. Full principle gates: `scripts/principle-gates.sh`
@@ -46,7 +46,9 @@ Before tagging a release:
 3. Run the main package test suite.
 4. Run the sample package test suite in `Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage` with `--jobs 1`.
 5. Run [scripts/principle-gates.sh](scripts/principle-gates.sh).
-6. Generate DocC through [Tools/generate-docc.sh](Tools/generate-docc.sh).
+6. Generate DocC through [Tools/generate-docc.sh](Tools/generate-docc.sh) and
+   confirm the combined `InnoFlowCore` / `InnoFlow` site plus the nested
+   `InnoFlowTesting` API reference are present.
 7. Confirm the README and localized README installation snippets match the intended public tag.
 8. Confirm [ARCHITECTURE_CONTRACT.md](ARCHITECTURE_CONTRACT.md) and localized README selection guidance match the current public contract.
 9. Confirm the GitHub Actions `Release Gate` workflow will run from the intended tag.
@@ -73,6 +75,7 @@ Each release should leave these entrypoints consistent:
 4. [RELEASE_NOTES.md](RELEASE_NOTES.md)
 5. [MIGRATION.md](MIGRATION.md)
 6. [Sources/InnoFlow/InnoFlow.docc/InnoFlow.md](Sources/InnoFlow/InnoFlow.docc/InnoFlow.md)
+7. [Sources/InnoFlowTesting/InnoFlowTesting.docc/InnoFlowTesting.md](Sources/InnoFlowTesting/InnoFlowTesting.docc/InnoFlowTesting.md)
 
 If a release changes package-consumer behavior or authoring contracts, update those docs in the same change.
 
@@ -84,6 +87,18 @@ If a release changes package-consumer behavior or authoring contracts, update th
 2. Running the macro test suite and compile-contract tests with warnings as errors.
 3. Running `swift format lint --strict --recursive Sources Tests Examples` with the Swift toolchain used by CI.
 4. Updating macro diagnostic expectations, migration notes, or release notes when the public authoring surface changes.
+
+## Swift-DocC Plugin Upgrade Policy
+
+`Tools/generate-docc.sh` injects `swift-docc-plugin` 1.5.0 as an exact
+dependency into a temporary package copy. This keeps the plugin out of the
+consumer dependency graph while ensuring local, Pages, and release-artifact
+generation resolve the same documentation tool.
+
+Upgrade that exact version only in an intentional documentation-tooling change
+that regenerates the combined `InnoFlowCore` / `InnoFlow` site and the nested
+`InnoFlowTesting` reference with warnings treated as errors. Update this policy
+and the changelog in the same commit.
 
 ## Automated Release Artifacts
 
