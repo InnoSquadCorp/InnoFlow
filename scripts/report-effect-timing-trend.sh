@@ -17,8 +17,7 @@ BUILD_PATH="${ROOT_DIR}/.build-effect-timing-trend"
 TEMP_CURRENT=""
 
 print_help() {
-  cat <<'HELP'
-report-effect-timing-trend.sh — non-blocking mean/p95 reporter for EffectTimingRecorder
+  printf '%s\n' 'report-effect-timing-trend.sh — non-blocking mean/p95 reporter for EffectTimingRecorder
 
 Optional:
   --baseline <path>    Baseline JSONL fixture
@@ -40,8 +39,7 @@ Exit codes:
 
 Examples:
   ./scripts/report-effect-timing-trend.sh
-  ./scripts/report-effect-timing-trend.sh --current /tmp/current-effect-timings.jsonl
-HELP
+  ./scripts/report-effect-timing-trend.sh --current /tmp/current-effect-timings.jsonl'
 }
 
 cleanup() {

@@ -38,8 +38,7 @@ BASELINE=""
 CURRENT=""
 
 print_help() {
-  cat <<'HELP'
-compare-effect-timings.sh — baseline comparison for EffectTimingRecorder JSONL
+  printf '%s\n' 'compare-effect-timings.sh — baseline comparison for EffectTimingRecorder JSONL
 
 Required:
   --baseline <path>   Committed baseline JSONL
@@ -65,8 +64,7 @@ Regenerate the committed baseline fixture from the repository root:
 
 Notes:
   The standalone script supports both p95 and mean.
-  The dedicated release-gate trend uses mean to reduce CI runner jitter sensitivity.
-HELP
+  The dedicated release-gate trend uses mean to reduce CI runner jitter sensitivity.'
 }
 
 while [[ $# -gt 0 ]]; do

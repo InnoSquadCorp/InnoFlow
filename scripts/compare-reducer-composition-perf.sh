@@ -11,8 +11,7 @@ BASELINE=""
 CURRENT=""
 
 print_help() {
-  cat <<'HELP'
-compare-reducer-composition-perf.sh — compare reducer composition benchmark JSONL
+  printf '%s\n' 'compare-reducer-composition-perf.sh — compare reducer composition benchmark JSONL
 
 Required:
   --baseline <path>   Baseline JSONL fixture
@@ -29,8 +28,7 @@ Generate fresh local results from the repository root:
     -Xswiftc -warnings-as-errors --filter PerfReducerComposition
 
 This tool is local-only by design. It does not participate in CI or
-`scripts/principle-gates.sh`.
-HELP
+`scripts/principle-gates.sh`.'
 }
 
 require_option_value() {
