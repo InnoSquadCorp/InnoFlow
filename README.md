@@ -741,6 +741,8 @@ await child.send(.start) {
 await child.receive(.finished) {
   $0.phase = .loaded
 }
+
+await child.finish()
 ```
 
 That projection assumes `ParentFeature.Action.childCasePath`, which `@InnoFlow` now synthesizes for matching single-payload child action cases.

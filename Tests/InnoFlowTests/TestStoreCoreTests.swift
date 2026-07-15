@@ -35,7 +35,7 @@ struct TestStoreCoreTests {
       $0.isLoading = false
     }
 
-    await store.assertNoBufferedActions()
+    await store.finish()
   }
 
   @Test("ActionQueue timeout does not consume actions delivered after timeout")
@@ -85,7 +85,7 @@ struct TestStoreCoreTests {
         $0.isLoading = false
       }
 
-      await store.assertNoBufferedActions()
+      await store.finish()
     }
   }
 
@@ -98,7 +98,7 @@ struct TestStoreCoreTests {
     }
 
     await store.cancelEffects(identifiedBy: "load")
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("TestStore drops emissions from cancelled uncooperative effects")
@@ -110,7 +110,7 @@ struct TestStoreCoreTests {
 
     await store.send(.start)
     await store.cancelEffects(identifiedBy: "uncooperative")
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("TestStore outer cancellation reaches nested cancellable run tasks")
@@ -131,7 +131,7 @@ struct TestStoreCoreTests {
     await store.cancelEffects(identifiedBy: "outer-cancellation")
     await clock.advance(by: .milliseconds(100))
 
-    await store.assertNoMoreActions()
+    await store.finish(timeout: .seconds(1))
   }
 
   @Test("TestStore drops direct .send actions after a cancellation boundary")
@@ -143,7 +143,7 @@ struct TestStoreCoreTests {
     )
 
     await store.send(.start)
-    await store.assertNoMoreActions()
+    await store.finish(timeout: .seconds(1))
   }
 
   @Test("TestStore stale cancellation preserves a newer run sequence")
@@ -185,7 +185,7 @@ struct TestStoreCoreTests {
     try #require(await newerRunFinished.wait())
 
     #expect(await probe.wasCancellationRequested == false)
-    await store.assertNoBufferedActions()
+    await store.finish()
   }
 
   @Test("TestStore filters stale queued actions at assertion time")
@@ -203,7 +203,7 @@ struct TestStoreCoreTests {
     await store.cancelEffects(id: id, context: .init(sequence: 1))
 
     await store.assertNoBufferedActions()
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("TestStore cancelled run tasks do not start after the gate opens")
@@ -222,7 +222,7 @@ struct TestStoreCoreTests {
     await drainAsyncWork()
 
     #expect(await probe.started == 0)
-    await store.assertNoBufferedActions()
+    await store.finish(timeout: .seconds(1))
   }
 
   @Test("TestStore release cancels pending debounce without retaining TestStore")
@@ -1230,7 +1230,7 @@ struct TestStoreCoreTests {
       await store.cancelEffects(identifiedBy: "uncooperative")
     }
 
-    await store.assertNoMoreActions()
+    await store.finish(timeout: .seconds(5))
   }
 
   @Test("TestStore diff renderer reports nested paths")
@@ -1593,7 +1593,7 @@ struct TestStoreCoreTests {
     await store.send(.advance, through: Harness.phaseMap) {
       $0.phase = .first
     }
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("PhaseMap derivedGraph can be validated with existing graph helpers")
@@ -1995,7 +1995,7 @@ struct TestStoreCoreTests {
     await child.receive(.finished) {
       $0.log = ["start", "finished"]
     }
-    await child.assertNoMoreActions()
+    await child.finish()
   }
 
   @Test("ScopedTestStore collection helper targets a single element by id")

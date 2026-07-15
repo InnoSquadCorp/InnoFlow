@@ -216,7 +216,7 @@ func loadingFlow() async {
     $0.phase = .loaded
   }
 
-  await store.assertNoMoreActions()
+  await store.finish()
 }
 ```
 
@@ -235,6 +235,8 @@ await child.send(.start) {
 await child.receive(.finished) {
   $0.phase = .loaded
 }
+
+await child.finish()
 ```
 
 Scoped child state must conform to `Equatable`. `ScopedStore` keeps a cached child snapshot, refreshes that projection during the parent store's action drain, and only invalidates observers when that snapshot actually changes.

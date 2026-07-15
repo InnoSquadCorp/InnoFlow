@@ -74,20 +74,18 @@ struct ForEachIdentifiedReducerTests {
     await store.send(.row(id: Self.idB, action: .toggleDone)) {
       $0.rows[id: Self.idB]?.done = true
     }
-    await store.assertNoMoreActions()
-
     #expect(store.state.rows[id: Self.idA]?.done == false)
     #expect(store.state.rows[id: Self.idB]?.done == true)
     #expect(store.state.rows.count == 3)
     #expect(store.state.rows.ids.first == Self.idA)
+    await store.finish()
   }
 
   @Test("ignores unknown ids without mutating the collection")
   func ignoresUnknownIDs() async {
     let store = TestStore(reducer: IdentifiedCollectionFeature(), initialState: .init())
     await store.send(.row(id: Self.idMissing, action: .toggleDone))
-    await store.assertNoMoreActions()
-
     #expect(store.state.rows.values.map(\.done) == [false, false, false])
+    await store.finish()
   }
 }

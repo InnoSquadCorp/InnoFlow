@@ -99,7 +99,7 @@ struct PhaseTransitionGraphTests {
       $0.value = "done"
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Graph validation reports unreachable phases and non-terminal dead ends")

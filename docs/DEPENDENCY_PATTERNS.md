@@ -244,6 +244,7 @@ func authenticationFlowSuccess() async {
   let feature = AuthenticationFlowFeature(authService: MockAuthService())
   let store = TestStore(reducer: feature)
   // ...
+  await store.finish()
 }
 ```
 
@@ -264,6 +265,10 @@ while await clock.sleeperCount < 1 { await Task.yield() }
 await clock.advance(by: .milliseconds(100))
 
 await store.receive(._tick(1))
+await store.send(.unsubscribe) {
+  $0.isSubscribed = false
+}
+await store.finish()
 ```
 
 `ManualTestClock.sleeperCount` is the right signal to wait on before

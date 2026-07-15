@@ -1793,7 +1793,7 @@ struct StoreEffectRuntimeTests {
     await store.receive(._second) {
       $0.received = ["first", "second"]
     }
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Store throttle leading+trailing skips trailing when no extra event")

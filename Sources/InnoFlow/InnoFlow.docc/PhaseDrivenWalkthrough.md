@@ -143,6 +143,8 @@ await store.receive(._loaded(MockTodoService.fixtures), through: phaseMap) {
   $0.phase = .loaded
   $0.todos = MockTodoService.fixtures
 }
+
+await store.assertNoBufferedActions()
 ```
 
 ```swift
@@ -156,6 +158,8 @@ await todo.send(.setIsDone(true))
 todo.assert {
   $0.isDone = true
 }
+
+await todo.finish()
 ```
 
 Use the parent `TestStore` for removal, loading, and phase transitions. Use the scoped child harness

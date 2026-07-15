@@ -68,7 +68,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.eventLog = ["queue increment requested", "queued follow-up applied -> count 1"]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Orchestration demo models parent-child refresh in order")
@@ -108,7 +108,7 @@ struct InnoFlowSampleAppFeatureTests {
       ]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Orchestration demo long-running sync reaches completion")
@@ -139,7 +139,7 @@ struct InnoFlowSampleAppFeatureTests {
       ]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Phase-driven sample follows the documented graph on success")
@@ -173,7 +173,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Phase-driven sample fails and recovers to idle when dismissing the error")
@@ -205,7 +205,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Phase-driven sample routes todo child actions by id")
@@ -230,7 +230,7 @@ struct InnoFlowSampleAppFeatureTests {
       }
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Orchestration demo child scope can be asserted through ScopedTestStore")
@@ -245,7 +245,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     #expect(store.state.refreshLog == ["profile child finished"])
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Phase-driven sample collection scope can target a single todo by id")
@@ -275,7 +275,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.isDone = true
     }
     #expect(store.state.todos.first(where: { $0.id == targetID })?.isDone == true)
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Router login cancels in-flight submit on logout")
@@ -299,7 +299,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     await clock.advance(by: .milliseconds(200))
-    await store.assertNoMoreActions()
+    await store.finish()
     #expect(store.state.authVersion == 0)
     #expect(store.state.isAuthenticated == false)
   }
@@ -354,7 +354,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Authentication flow transitions through mfaRequired to authenticated")
@@ -406,7 +406,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Authentication flow credential retry returns to submitting")
@@ -450,7 +450,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = "Invalid credentials"
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Authentication flow MFA retry stays on the MFA path")
@@ -503,7 +503,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   // MARK: - ListDetailPaginationDemo
@@ -535,7 +535,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.articles = MockArticlesService.page0
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("List-detail pagination detects end of feed when service yields empty page")
@@ -563,7 +563,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.hasReachedEnd = true
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("List-detail pagination routes row actions through collection scope")
@@ -593,7 +593,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.isFavorite = true
     }
     #expect(store.state.articles.first(where: { $0.id == targetID })?.isFavorite == true)
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   // MARK: - OfflineFirstDemo
@@ -616,7 +616,7 @@ struct InnoFlowSampleAppFeatureTests {
 
     await store.receive(._persistPendingSave)
     // No-op because title matches lastSavedTitle.
-    await store.assertNoMoreActions()
+    await store.assertNoBufferedActions()
 
     // Now make the draft dirty and persist.
     await store.send(.titleChanged("Edited title")) {
@@ -641,6 +641,7 @@ struct InnoFlowSampleAppFeatureTests {
         "confirmed: 'Edited title'",
       ]
     }
+    await store.finish()
   }
 
   @Test("Offline-first save rolls back when repository fails")
@@ -687,6 +688,7 @@ struct InnoFlowSampleAppFeatureTests {
         "rolled back current in-flight 'Broken edit' to 'Offline-first draft': mock-rejected",
       ]
     }
+    await store.finish()
   }
 
   @Test("Offline-first saveNow cancels pending debounce and avoids duplicate saves")
@@ -725,7 +727,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     await clock.advance(by: .milliseconds(100))
-    await store.assertNoMoreActions()
+    await store.finish()
     #expect(await repository.saveCount == 1)
   }
 
@@ -786,7 +788,8 @@ struct InnoFlowSampleAppFeatureTests {
 
     #expect(store.state.draft.title == "Newer local edit")
     #expect(store.state.draft.lastSavedTitle == "Offline-first draft")
-    await store.assertNoMoreActions()
+    await store.cancelAllEffects()
+    await store.finish()
   }
 
   // MARK: - RealtimeStreamDemo
@@ -821,7 +824,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.isSubscribed = false
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Realtime stream unsubscribe stops delivering ticks")
@@ -841,7 +844,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     await clock.advance(by: .seconds(1))
-    await store.assertNoMoreActions()
+    await store.finish()
     #expect(store.state.ticks.isEmpty)
   }
 
@@ -878,7 +881,10 @@ struct InnoFlowSampleAppFeatureTests {
       $0.ticks = [1, 1]
     }
 
-    await store.assertNoMoreActions()
+    await store.send(.unsubscribe) {
+      $0.isSubscribed = false
+    }
+    await store.finish()
   }
 
   // MARK: - FormValidationDemo
@@ -907,7 +913,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.hasAttemptedSubmit = true
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Form validation submits cleanly and reset clears bindable fields")
@@ -947,7 +953,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.hasAttemptedSubmit = false
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   // MARK: - BidirectionalWebSocketDemo
@@ -1003,7 +1009,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.canReconnect = true
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Bidirectional websocket preserves the draft when send fails")
@@ -1034,7 +1040,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.transcript = ["system: transport error mock send failure"]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Bidirectional websocket ignores send while disconnected")
@@ -1063,7 +1069,7 @@ struct InnoFlowSampleAppFeatureTests {
     }
 
     #expect(await socketClient.sendCount == 0)
-    await store.assertNoBufferedActions()
+    await store.finish()
   }
 
   @Test("Bidirectional websocket demo reconnects through the adapter boundary")
@@ -1099,7 +1105,12 @@ struct InnoFlowSampleAppFeatureTests {
       $0.canReconnect = false
     }
 
-    await store.assertNoMoreActions()
+    await store.send(.disconnectTapped) {
+      $0.connectionState = .disconnected
+      $0.statusNote = "Disconnected by sample action"
+      $0.canReconnect = true
+    }
+    await store.finish()
   }
 
   @Test("Bidirectional websocket failure resets connection state and surfaces reconnect")
@@ -1125,7 +1136,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.transcript = ["system: transport error mock transport failure"]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Bidirectional websocket reconnecting event keeps manual reconnect disabled")
@@ -1169,7 +1180,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.canReconnect = false
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Bidirectional websocket adapter mapper surfaces reconnecting for retryable errors")

@@ -45,7 +45,7 @@ struct EffectTaskTests {
       $0.count = 1
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.send emits a follow-up action")
@@ -58,7 +58,7 @@ struct EffectTaskTests {
       $0.logs = ["event"]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.cancellable keeps only the latest in-flight effect")
@@ -76,7 +76,7 @@ struct EffectTaskTests {
       $0.completed = [2]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.debounce keeps only the latest trigger")
@@ -99,7 +99,7 @@ struct EffectTaskTests {
       $0.emitted = [2]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.throttle uses leading-only semantics")
@@ -113,7 +113,7 @@ struct EffectTaskTests {
     await store.receive(._emitted(1)) {
       $0.emitted = [1]
     }
-    await store.assertNoMoreActions()
+    await store.assertNoBufferedActions()
 
     await Task.yield()
     await clock.advance(by: .milliseconds(160))
@@ -121,7 +121,7 @@ struct EffectTaskTests {
     await store.receive(._emitted(3)) {
       $0.emitted = [1, 3]
     }
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.throttle trailing-only executes latest at window end")
@@ -137,7 +137,7 @@ struct EffectTaskTests {
     await store.receive(._emitted(2)) {
       $0.emitted = [2]
     }
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.throttle leading+trailing executes both when window has extra event")
@@ -157,7 +157,7 @@ struct EffectTaskTests {
     await store.receive(._emitted(2)) {
       $0.emitted = [1, 2]
     }
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.animation executes nested send and run effects")
@@ -174,7 +174,7 @@ struct EffectTaskTests {
       $0.values = [1, 2]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.animation composes with debounce")
@@ -185,7 +185,7 @@ struct EffectTaskTests {
     await store.receive(._result(1)) {
       $0.value = 1
     }
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.concatenate preserves declared send order")
@@ -206,7 +206,7 @@ struct EffectTaskTests {
       $0.logs = ["start", "first", "second"]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.run emits follow-up actions after the async boundary")
@@ -224,7 +224,7 @@ struct EffectTaskTests {
       $0.logs = ["loadAsync", "loadedAsync"]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.merge emits in child completion order rather than declaration order")
@@ -249,7 +249,7 @@ struct EffectTaskTests {
       $0.emitted = ["fast", "slow"]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Parent-child orchestration can be modeled as ordered child actions")
@@ -274,7 +274,7 @@ struct EffectTaskTests {
       $0.log = ["refresh", "profile", "permissions", "finished"]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("Long-running orchestration can mix immediate and awaited progress actions")
@@ -292,7 +292,7 @@ struct EffectTaskTests {
       $0.finished = true
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.run consumes AsyncSequence actions")
@@ -317,7 +317,7 @@ struct EffectTaskTests {
       $0.values = [1, 2]
     }
 
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test("EffectTask.run AsyncSequence helper works with dynamic cancellation IDs")
@@ -342,7 +342,7 @@ struct EffectTaskTests {
     await store.send(.cancel(id))
     await clock.advance(by: .milliseconds(30))
 
-    await store.assertNoMoreActions()
+    await store.finish(timeout: .seconds(1))
   }
 
   @Test(
@@ -386,7 +386,7 @@ struct EffectTaskTests {
     await store.receive(._completed(winner.value)) {
       $0.completed = [winner.value]
     }
-    await store.assertNoMoreActions()
+    await store.finish()
   }
 
   @Test(
