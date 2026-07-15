@@ -764,11 +764,11 @@ extension TestStore: EffectDriver {
       let startGate = TestStoreRunStartGate()
       let endpoint = makeRunEndpoint()
       let task = Task { @MainActor in
-        guard await startGate.wait() else {
-          return
-        }
         defer {
           endpoint.finishTrackedTask(token: token)
+        }
+        guard await startGate.wait() else {
+          return
         }
         for child in children {
           guard !Task.isCancelled else { break }

@@ -88,6 +88,29 @@ struct TestStoreFinishTests {
     #expect(await finishing.value == .success)
   }
 
+  @Test("cancelling an unawaited concatenate releases finish activity")
+  func cancellingConcatenateReleasesFinishActivity() async {
+    let gate = RunStartGate()
+    let store = TestStore(
+      reducer: FinishCompositeFeature(gate: gate)
+    )
+
+    await store.send(.concatenate)
+    #expect(store.finishActivity.snapshot.compositeCount == 1)
+
+    await store.cancelAllEffects()
+    await gate.open()
+    let released = await waitUntil(
+      timeout: .seconds(1),
+      pollInterval: .milliseconds(1)
+    ) {
+      store.finishActivity.snapshot.activeCount == 0
+    }
+
+    #expect(released)
+    #expect(await store.finishResult(timeout: .zero) == .success)
+  }
+
   @Test("finish detects an action emitted while it is waiting")
   func finishDetectsLateAction() async {
     let gate = RunStartGate()
