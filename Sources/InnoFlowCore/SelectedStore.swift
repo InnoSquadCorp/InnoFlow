@@ -25,6 +25,7 @@ private func selectedStoreFailureMessage(
 public final class SelectedStore<Value: Equatable & Sendable> {
   private var cachedValue: Value
   @ObservationIgnored private weak var parentObject: AnyObject?
+  @ObservationIgnored private let sourceIsAlive: @MainActor () -> Bool
   @ObservationIgnored private let valueResolver: @MainActor () -> Value?
   @ObservationIgnored private let inactiveMessage: @MainActor () -> String
   @ObservationIgnored private let parentReleasedMessage: @MainActor () -> String
@@ -38,7 +39,7 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// can consult this before using ``requireAlive()`` or read
   /// ``optionalValue`` when a dead selection should be treated as absence.
   public var isAlive: Bool {
-    parentObject != nil && isActive
+    parentObject != nil && sourceIsAlive() && isActive
   }
 
   /// A read accessor that reports a released parent or inactive selection
@@ -74,7 +75,7 @@ public final class SelectedStore<Value: Equatable & Sendable> {
     guard parentObject != nil else {
       preconditionFailure(parentReleasedMessage(), file: file, line: line)
     }
-    guard isActive else {
+    guard sourceIsAlive(), isActive else {
       preconditionFailure(inactiveMessage(), file: file, line: line)
     }
     return cachedValue
@@ -83,12 +84,14 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   init(
     initialValue: Value,
     parentObject: AnyObject,
+    sourceIsAlive: @escaping @MainActor () -> Bool,
     valueResolver: @escaping @MainActor () -> Value?,
     inactiveMessage: @escaping @MainActor () -> String,
     parentReleasedMessage: @escaping @MainActor () -> String
   ) {
     self.cachedValue = initialValue
     self.parentObject = parentObject
+    self.sourceIsAlive = sourceIsAlive
     self.valueResolver = valueResolver
     self.inactiveMessage = inactiveMessage
     self.parentReleasedMessage = parentReleasedMessage
@@ -106,7 +109,7 @@ public final class SelectedStore<Value: Equatable & Sendable> {
 extension SelectedStore: ProjectionObserver {
   package func refreshFromParentStore() -> Bool {
     guard isActive else { return false }
-    guard parentObject != nil else {
+    guard parentObject != nil, sourceIsAlive() else {
       isActive = false
       return true
     }
@@ -213,6 +216,9 @@ extension Store {
     let selectedStore = SelectedStore(
       initialValue: initialValue(),
       parentObject: self,
+      sourceIsAlive: { @MainActor [weak self] in
+        self != nil
+      },
       valueResolver: valueResolver,
       inactiveMessage: { @MainActor @Sendable in
         selectedStoreFailureMessage(
@@ -387,6 +393,9 @@ extension ScopedStore {
     let selectedStore = SelectedStore(
       initialValue: initialValue(),
       parentObject: self,
+      sourceIsAlive: { @MainActor [weak self] in
+        self?.isAlive == true
+      },
       valueResolver: valueResolver,
       inactiveMessage: { @MainActor @Sendable [weak self] in
         guard let self else {

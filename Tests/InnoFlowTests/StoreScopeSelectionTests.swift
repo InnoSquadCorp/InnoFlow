@@ -291,6 +291,35 @@ struct StoreScopeSelectionTests {
     #expect(selected.optionalValue == nil)
   }
 
+  @Test("ScopedStore-derived SelectedStore reflects root Store release")
+  func scopedSelectedStoreReflectsRootStoreRelease() async {
+    var store: Store<ScopedBindableChildFeature>? = Store(
+      reducer: ScopedBindableChildFeature(),
+      initialState: .init()
+    )
+    weak var weakStore: Store<ScopedBindableChildFeature>?
+    weakStore = store
+    let scoped = store!.scope(
+      state: \.child,
+      action: ScopedBindableChildFeature.Action.childCasePath
+    )
+    let selected = scoped.select(\.step)
+
+    #expect(scoped.isAlive == true)
+    #expect(selected.isAlive == true)
+    #expect(selected.optionalValue == 1)
+
+    store = nil
+    await waitUntil {
+      weakStore == nil
+    }
+
+    #expect(weakStore == nil)
+    #expect(scoped.isAlive == false)
+    #expect(selected.isAlive == false)
+    #expect(selected.optionalValue == nil)
+  }
+
   @Test("SelectedStore does not retain its parent Store")
   func selectedStoreDoesNotRetainParentStore() async {
     var selected: SelectedStore<Int>?
