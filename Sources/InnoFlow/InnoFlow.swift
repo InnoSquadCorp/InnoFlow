@@ -20,7 +20,9 @@
 /// - `case child(ChildAction)` the macro synthesizes `Action.childCasePath`
 /// - `case todo(id: ID, action: ChildAction)` the macro synthesizes `Action.todoActionPath`
 ///
-/// Existing manual definitions with the same names are preserved.
+/// Generated action-path names must be unique and cannot reuse an existing
+/// static member name. Rename the enum case or expose a manually declared path
+/// under a different static name when a collision occurs.
 ///
 /// ## Example
 /// ```swift
