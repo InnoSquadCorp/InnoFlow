@@ -148,35 +148,22 @@ struct EffectTimingComparisonScriptTests {
 
   @Test("Comparison script help documents baseline regeneration")
   func comparisonScriptHelpDocumentsBaselineRegeneration() throws {
-    let process = Process()
-    process.executableURL = try repositoryFileURL(
-      relativePath: "scripts/compare-effect-timings.sh"
+    let result = try runCapturedProcess(
+      executableURL: try repositoryFileURL(
+        relativePath: "scripts/compare-effect-timings.sh"
+      ),
+      arguments: ["--help"]
     )
-    process.arguments = ["--help"]
 
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
-    try process.run()
-    process.waitUntilExit()
-
-    let stdoutText =
-      String(
-        data: stdout.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
-
-    #expect(process.terminationStatus == 0)
+    #expect(result.terminationStatus == 0)
     #expect(
-      stdoutText.contains(
+      result.stdout.contains(
         "INNOFLOW_WRITE_EFFECT_BASELINE=Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl")
     )
-    #expect(stdoutText.contains("EffectTimingBaselineGate"))
-    #expect(stdoutText.contains("1  metric regression detected"))
+    #expect(result.stdout.contains("EffectTimingBaselineGate"))
+    #expect(result.stdout.contains("1  metric regression detected"))
     #expect(
-      stdoutText.contains(
+      result.stdout.contains(
         "2  usage error, malformed data, incomplete capture, or missing dependency"))
   }
 
@@ -187,7 +174,7 @@ struct EffectTimingComparisonScriptTests {
     currentEntries: [[String: Any]],
     metric: String = "p95",
     tolerance: String = "0.10"
-  ) throws -> ScriptResult {
+  ) throws -> CapturedProcessResult {
     try runComparisonScript(
       baselinePayload: jsonlPayload(entries: baselineEntries),
       currentPayload: jsonlPayload(entries: currentEntries),
@@ -201,7 +188,7 @@ struct EffectTimingComparisonScriptTests {
     currentPayload: String,
     metric: String = "p95",
     tolerance: String = "0.10"
-  ) throws -> ScriptResult {
+  ) throws -> CapturedProcessResult {
     let temporaryDirectory = FileManager.default.temporaryDirectory
       .appendingPathComponent("effect-timing-script-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(
@@ -215,35 +202,16 @@ struct EffectTimingComparisonScriptTests {
     try baselinePayload.write(to: baselineURL, atomically: true, encoding: .utf8)
     try currentPayload.write(to: currentURL, atomically: true, encoding: .utf8)
 
-    let process = Process()
-    process.executableURL = try repositoryFileURL(
-      relativePath: "scripts/compare-effect-timings.sh"
-    )
-    process.arguments = [
-      "--baseline", baselineURL.path,
-      "--current", currentURL.path,
-      "--metric", metric,
-      "--tolerance", tolerance,
-    ]
-
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
-    try process.run()
-    process.waitUntilExit()
-
-    return ScriptResult(
-      terminationStatus: process.terminationStatus,
-      stdout: String(
-        data: stdout.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? "",
-      stderr: String(
-        data: stderr.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
+    return try runCapturedProcess(
+      executableURL: try repositoryFileURL(
+        relativePath: "scripts/compare-effect-timings.sh"
+      ),
+      arguments: [
+        "--baseline", baselineURL.path,
+        "--current", currentURL.path,
+        "--metric", metric,
+        "--tolerance", tolerance,
+      ]
     )
   }
 
@@ -310,10 +278,4 @@ struct EffectTimingComparisonScriptTests {
     struct RepositoryRootNotFound: Error {}
     throw RepositoryRootNotFound()
   }
-}
-
-private struct ScriptResult {
-  let terminationStatus: Int32
-  let stdout: String
-  let stderr: String
 }

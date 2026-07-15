@@ -52,29 +52,18 @@ struct EffectTimingTrendScriptTests {
 
   @Test("Trend script help documents non-blocking mean and p95 reporting")
   func trendScriptHelpDocumentsDualMetricReporting() throws {
-    let process = Process()
-    process.executableURL = try effectTimingRepositoryFileURL(
-      relativePath: "scripts/report-effect-timing-trend.sh"
+    let result = try runCapturedProcess(
+      executableURL: try effectTimingRepositoryFileURL(
+        relativePath: "scripts/report-effect-timing-trend.sh"
+      ),
+      arguments: ["--help"]
     )
-    process.arguments = ["--help"]
 
-    let stdout = Pipe()
-    process.standardOutput = stdout
-
-    try process.run()
-    process.waitUntilExit()
-
-    let stdoutText =
-      String(
-        data: stdout.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
-
-    #expect(process.terminationStatus == 0)
-    #expect(stdoutText.contains("mean"))
-    #expect(stdoutText.contains("p95"))
-    #expect(stdoutText.contains("non-blocking"))
-    #expect(stdoutText.contains("2  usage error, capture failure, or malformed/incomplete data"))
+    #expect(result.terminationStatus == 0)
+    #expect(result.stdout.contains("mean"))
+    #expect(result.stdout.contains("p95"))
+    #expect(result.stdout.contains("non-blocking"))
+    #expect(result.stdout.contains("2  usage error, capture failure, or malformed/incomplete data"))
   }
 
   // MARK: - Helpers
@@ -82,7 +71,7 @@ struct EffectTimingTrendScriptTests {
   private func runTrendScript(
     baselineEntries: [[String: Any]],
     currentEntries: [[String: Any]]
-  ) throws -> ScriptResult {
+  ) throws -> CapturedProcessResult {
     let temporaryDirectory = FileManager.default.temporaryDirectory
       .appendingPathComponent("effect-timing-trend-script-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(
@@ -96,33 +85,14 @@ struct EffectTimingTrendScriptTests {
     try writeJSONL(entries: baselineEntries, to: baselineURL)
     try writeJSONL(entries: currentEntries, to: currentURL)
 
-    let process = Process()
-    process.executableURL = try effectTimingRepositoryFileURL(
-      relativePath: "scripts/report-effect-timing-trend.sh"
-    )
-    process.arguments = [
-      "--baseline", baselineURL.path,
-      "--current", currentURL.path,
-    ]
-
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
-    try process.run()
-    process.waitUntilExit()
-
-    return ScriptResult(
-      terminationStatus: process.terminationStatus,
-      stdout: String(
-        data: stdout.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? "",
-      stderr: String(
-        data: stderr.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
+    return try runCapturedProcess(
+      executableURL: try effectTimingRepositoryFileURL(
+        relativePath: "scripts/report-effect-timing-trend.sh"
+      ),
+      arguments: [
+        "--baseline", baselineURL.path,
+        "--current", currentURL.path,
+      ]
     )
   }
 
@@ -168,10 +138,4 @@ struct EffectTimingTrendScriptTests {
       "timestampNanos": timestampNanos,
     ]
   }
-}
-
-private struct ScriptResult {
-  let terminationStatus: Int32
-  let stdout: String
-  let stderr: String
 }

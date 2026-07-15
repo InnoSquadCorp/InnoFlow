@@ -86,27 +86,18 @@ struct ReducerCompositionPerfComparisonScriptTests {
 
   @Test("Reducer perf comparison help documents local benchmark export")
   func reducerPerfComparisonHelpDocumentsLocalExport() throws {
-    let process = Process()
-    process.executableURL = try repositoryFileURL(
-      relativePath: "scripts/compare-reducer-composition-perf.sh"
+    let result = try runCapturedProcess(
+      executableURL: try repositoryFileURL(
+        relativePath: "scripts/compare-reducer-composition-perf.sh"
+      ),
+      arguments: ["--help"]
     )
-    process.arguments = ["--help"]
 
-    let stdout = Pipe()
-    process.standardOutput = stdout
-
-    try process.run()
-    process.waitUntilExit()
-
-    let stdoutText =
-      String(
-        data: stdout.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
-
-    #expect(process.terminationStatus == 0)
-    #expect(stdoutText.contains("INNOFLOW_REDUCER_PERF_OUTPUT=/tmp/reducer-composition-perf.jsonl"))
-    #expect(stdoutText.contains("PerfReducerComposition"))
+    #expect(result.terminationStatus == 0)
+    #expect(
+      result.stdout.contains(
+        "INNOFLOW_REDUCER_PERF_OUTPUT=/tmp/reducer-composition-perf.jsonl"))
+    #expect(result.stdout.contains("PerfReducerComposition"))
   }
 
   // MARK: - Helpers
@@ -115,7 +106,7 @@ struct ReducerCompositionPerfComparisonScriptTests {
     baselineEntries: [[String: Any]],
     currentEntries: [[String: Any]],
     tolerance: String = "0.25"
-  ) throws -> ScriptResult {
+  ) throws -> CapturedProcessResult {
     try requireJQ()
 
     let temporaryDirectory = FileManager.default.temporaryDirectory
@@ -132,77 +123,34 @@ struct ReducerCompositionPerfComparisonScriptTests {
     try writeJSONL(entries: baselineEntries, to: baselineURL)
     try writeJSONL(entries: currentEntries, to: currentURL)
 
-    let process = Process()
-    process.executableURL = try repositoryFileURL(
-      relativePath: "scripts/compare-reducer-composition-perf.sh"
-    )
-    process.arguments = [
-      "--baseline", baselineURL.path,
-      "--current", currentURL.path,
-      "--tolerance", tolerance,
-    ]
-
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
-    try process.run()
-    process.waitUntilExit()
-
-    return ScriptResult(
-      terminationStatus: process.terminationStatus,
-      stdout: String(
-        data: stdout.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? "",
-      stderr: String(
-        data: stderr.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
+    return try runCapturedProcess(
+      executableURL: try repositoryFileURL(
+        relativePath: "scripts/compare-reducer-composition-perf.sh"
+      ),
+      arguments: [
+        "--baseline", baselineURL.path,
+        "--current", currentURL.path,
+        "--tolerance", tolerance,
+      ]
     )
   }
 
-  private func runRawComparisonScript(arguments: [String]) throws -> ScriptResult {
-    let process = Process()
-    process.executableURL = try repositoryFileURL(
-      relativePath: "scripts/compare-reducer-composition-perf.sh"
-    )
-    process.arguments = arguments
-
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
-    try process.run()
-    process.waitUntilExit()
-
-    return ScriptResult(
-      terminationStatus: process.terminationStatus,
-      stdout: String(
-        data: stdout.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? "",
-      stderr: String(
-        data: stderr.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-      ) ?? ""
+  private func runRawComparisonScript(arguments: [String]) throws -> CapturedProcessResult {
+    try runCapturedProcess(
+      executableURL: try repositoryFileURL(
+        relativePath: "scripts/compare-reducer-composition-perf.sh"
+      ),
+      arguments: arguments
     )
   }
 
   private func requireJQ() throws {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["jq", "--version"]
-    let output = Pipe()
-    process.standardOutput = output
-    process.standardError = output
+    let result = try runCapturedProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+      arguments: ["jq", "--version"]
+    )
 
-    try process.run()
-    process.waitUntilExit()
-
-    guard process.terminationStatus == 0 else {
+    guard result.terminationStatus == 0 else {
       throw ScriptDependencyError.missingJQ
     }
   }
@@ -248,10 +196,4 @@ private enum ScriptDependencyError: Error, CustomStringConvertible {
   var description: String {
     "'jq' is required to run reducer perf comparison script tests. Install with: brew install jq"
   }
-}
-
-private struct ScriptResult {
-  let terminationStatus: Int32
-  let stdout: String
-  let stderr: String
 }

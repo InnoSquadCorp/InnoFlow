@@ -133,47 +133,22 @@ struct EffectTimingBaselineGate {
     }
   }
 
-  private struct ProcessResult: Sendable {
-    let terminationStatus: Int32
-    let stdout: String
-    let stderr: String
-  }
-
   private nonisolated func runComparisonProcess(
     scriptPath: String,
     baselinePath: String,
     currentPath: String,
     metric: String,
     tolerance: String
-  ) async throws -> ProcessResult {
+  ) async throws -> CapturedProcessResult {
     try await Task.detached {
-      let process = Process()
-      process.executableURL = URL(fileURLWithPath: scriptPath)
-      process.arguments = [
-        "--baseline", baselinePath,
-        "--current", currentPath,
-        "--metric", metric,
-        "--tolerance", tolerance,
-      ]
-
-      let stdout = Pipe()
-      let stderr = Pipe()
-      process.standardOutput = stdout
-      process.standardError = stderr
-
-      try process.run()
-      process.waitUntilExit()
-
-      return ProcessResult(
-        terminationStatus: process.terminationStatus,
-        stdout: String(
-          data: stdout.fileHandleForReading.readDataToEndOfFile(),
-          encoding: .utf8
-        ) ?? "",
-        stderr: String(
-          data: stderr.fileHandleForReading.readDataToEndOfFile(),
-          encoding: .utf8
-        ) ?? ""
+      try runCapturedProcess(
+        executableURL: URL(fileURLWithPath: scriptPath),
+        arguments: [
+          "--baseline", baselinePath,
+          "--current", currentPath,
+          "--metric", metric,
+          "--tolerance", tolerance,
+        ]
       )
     }.value
   }

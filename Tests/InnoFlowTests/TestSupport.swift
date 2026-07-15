@@ -4,7 +4,6 @@
 
 import Foundation
 import Testing
-import os
 
 @testable import InnoFlowCore
 @testable import InnoFlowTesting
@@ -418,16 +417,70 @@ extension TypecheckResult {
   }
 }
 
-private final class ThreadSafeDataBuffer: Sendable {
-  private let data = OSAllocatedUnfairLock<Data>(initialState: .init())
+struct CapturedProcessResult: Sendable {
+  let terminationStatus: Int32
+  let stdout: String
+  let stderr: String
+}
 
-  func append(_ chunk: Data) {
-    data.withLock { $0.append(chunk) }
+func runCapturedProcess(
+  executableURL: URL,
+  arguments: [String],
+  environment: [String: String] = [:],
+  currentDirectoryURL: URL? = nil
+) throws -> CapturedProcessResult {
+  // Tests consume output only after exit. Regular files avoid pipe backpressure
+  // and the end-of-file races of callback-based pipe draining.
+  let captureDirectory = FileManager.default.temporaryDirectory
+    .appendingPathComponent("innoflow-process-\(UUID().uuidString)", isDirectory: true)
+  try FileManager.default.createDirectory(
+    at: captureDirectory,
+    withIntermediateDirectories: true
+  )
+  defer { try? FileManager.default.removeItem(at: captureDirectory) }
+
+  let stdoutURL = captureDirectory.appendingPathComponent("stdout")
+  let stderrURL = captureDirectory.appendingPathComponent("stderr")
+  try Data().write(to: stdoutURL)
+  try Data().write(to: stderrURL)
+
+  let stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
+  let stderrHandle = try FileHandle(forWritingTo: stderrURL)
+  var captureHandlesAreClosed = false
+  defer {
+    if !captureHandlesAreClosed {
+      try? stdoutHandle.close()
+      try? stderrHandle.close()
+    }
   }
 
-  func snapshot() -> Data {
-    data.withLock { $0 }
+  let process = Process()
+  process.executableURL = executableURL
+  process.arguments = arguments
+  process.currentDirectoryURL = currentDirectoryURL
+  process.standardOutput = stdoutHandle
+  process.standardError = stderrHandle
+
+  if !environment.isEmpty {
+    var mergedEnvironment = ProcessInfo.processInfo.environment
+    for (key, value) in environment {
+      mergedEnvironment[key] = value
+    }
+    process.environment = mergedEnvironment
   }
+
+  try process.run()
+  process.waitUntilExit()
+
+  try stdoutHandle.close()
+  try stderrHandle.close()
+  captureHandlesAreClosed = true
+
+  return CapturedProcessResult(
+    terminationStatus: process.terminationStatus,
+    stdout: String(decoding: try Data(contentsOf: stdoutURL), as: UTF8.self),
+    stderr: String(decoding: try Data(contentsOf: stderrURL), as: UTF8.self)
+  )
 }
 
 enum CompileContractError: Error, CustomStringConvertible {
@@ -583,60 +636,20 @@ func typecheckSource(
   let sourceFile = temporaryDirectory.appendingPathComponent("CompileContract.swift")
   try source.write(to: sourceFile, atomically: true, encoding: .utf8)
 
-  let process = Process()
-  process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-  process.arguments = [
-    "swiftc",
-    "-typecheck",
-    sourceFile.path,
-    "-I",
-    moduleDirectory.path,
-  ]
-
-  let stdoutPipe = Pipe()
-  let stderrPipe = Pipe()
-  process.standardOutput = stdoutPipe
-  process.standardError = stderrPipe
-
-  let stdoutBuffer = ThreadSafeDataBuffer()
-  let stderrBuffer = ThreadSafeDataBuffer()
-
-  stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-    let data = handle.availableData
-    guard !data.isEmpty else { return }
-    stdoutBuffer.append(data)
-  }
-
-  stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-    let data = handle.availableData
-    guard !data.isEmpty else { return }
-    stderrBuffer.append(data)
-  }
-
-  try process.run()
-  process.waitUntilExit()
-
-  stdoutPipe.fileHandleForReading.readabilityHandler = nil
-  stderrPipe.fileHandleForReading.readabilityHandler = nil
-
-  var stderrData = stderrBuffer.snapshot()
-
-  var stdoutData = stdoutBuffer.snapshot()
-  let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-  let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-  if !stdoutTail.isEmpty {
-    stdoutData.append(stdoutTail)
-  }
-  if !stderrTail.isEmpty {
-    stderrData.append(stderrTail)
-  }
-
-  let stdoutText = String(data: stdoutData, encoding: .utf8) ?? ""
-  let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
+  let result = try runCapturedProcess(
+    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+    arguments: [
+      "swiftc",
+      "-typecheck",
+      sourceFile.path,
+      "-I",
+      moduleDirectory.path,
+    ]
+  )
 
   return TypecheckResult(
-    status: process.terminationStatus,
-    output: stdoutText + "\n" + stderrText
+    status: result.terminationStatus,
+    output: result.stdout + "\n" + result.stderr
   )
 }
 
@@ -727,62 +740,16 @@ func runProcess(
   environment: [String: String] = [:],
   currentDirectoryURL: URL? = nil
 ) throws -> ProcessResult {
-  let process = Process()
-  process.executableURL = executableURL
-  process.arguments = arguments
-  process.currentDirectoryURL = currentDirectoryURL
-
-  if !environment.isEmpty {
-    var mergedEnvironment = ProcessInfo.processInfo.environment
-    for (key, value) in environment {
-      mergedEnvironment[key] = value
-    }
-    process.environment = mergedEnvironment
-  }
-
-  let stdoutPipe = Pipe()
-  let stderrPipe = Pipe()
-  process.standardOutput = stdoutPipe
-  process.standardError = stderrPipe
-
-  let stdoutBuffer = ThreadSafeDataBuffer()
-  let stderrBuffer = ThreadSafeDataBuffer()
-
-  stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-    let data = handle.availableData
-    guard !data.isEmpty else { return }
-    stdoutBuffer.append(data)
-  }
-
-  stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-    let data = handle.availableData
-    guard !data.isEmpty else { return }
-    stderrBuffer.append(data)
-  }
-
-  try process.run()
-  process.waitUntilExit()
-
-  stdoutPipe.fileHandleForReading.readabilityHandler = nil
-  stderrPipe.fileHandleForReading.readabilityHandler = nil
-
-  var stdoutData = stdoutBuffer.snapshot()
-  var stderrData = stderrBuffer.snapshot()
-
-  let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-  let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-  if !stdoutTail.isEmpty {
-    stdoutData.append(stdoutTail)
-  }
-  if !stderrTail.isEmpty {
-    stderrData.append(stderrTail)
-  }
+  let result = try runCapturedProcess(
+    executableURL: executableURL,
+    arguments: arguments,
+    environment: environment,
+    currentDirectoryURL: currentDirectoryURL
+  )
 
   return ProcessResult(
-    status: process.terminationStatus,
-    output: (String(data: stdoutData, encoding: .utf8) ?? "")
-      + "\n"
-      + (String(data: stderrData, encoding: .utf8) ?? "")
+    status: result.terminationStatus,
+    output: result.stdout + "\n" + result.stderr
   )
 }
 
