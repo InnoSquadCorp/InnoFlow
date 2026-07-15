@@ -16,7 +16,7 @@ jobs:
     runs-on: macos-26
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -48,7 +48,7 @@ jobs:
     needs: lint
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -70,7 +70,7 @@ jobs:
     needs: lint
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -90,7 +90,7 @@ jobs:
     needs: lint
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -110,7 +110,7 @@ jobs:
         platform: [macOS, iOS, tvOS, watchOS, visionOS]
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -131,7 +131,7 @@ jobs:
     needs: [tests, thread-sanitizer, sample-tests, package-builds]
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -147,7 +147,7 @@ jobs:
     needs: sample-tests
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -170,7 +170,7 @@ jobs:
     needs: principle-gates
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -197,7 +197,7 @@ jobs:
        contains(github.event.pull_request.labels.*.name, 'run-asan'))
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -217,7 +217,7 @@ jobs:
     needs: sample-build
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Show Xcode version
         run: xcodebuild -version
