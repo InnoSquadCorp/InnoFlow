@@ -61,4 +61,25 @@ extension TestStore {
       line: line
     )
   }
+
+  /// Receives an action through a phase map using a timeout for this assertion
+  /// only.
+  public func receive<Phase: Hashable & Sendable>(
+    _ expectedAction: R.Action,
+    through phaseMap: PhaseMap<R.State, R.Action, Phase>,
+    timeout: Duration,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async where R.Action: Equatable {
+    await receive(
+      expectedAction,
+      tracking: phaseMap.phaseKeyPath,
+      through: phaseMap.derivedGraph,
+      timeout: timeout,
+      assert: updateExpectedState,
+      file: file,
+      line: line
+    )
+  }
 }

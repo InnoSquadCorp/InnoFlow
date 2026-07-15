@@ -121,4 +121,51 @@ extension TestStore {
       return
     }
   }
+
+  /// Receives an action under a per-assertion timeout and verifies the phase
+  /// transition against the supplied graph.
+  public func receive<Phase: Hashable & Sendable>(
+    _ expectedAction: R.Action,
+    tracking phase: KeyPath<R.State, Phase>,
+    through graph: PhaseTransitionGraph<Phase>,
+    timeout: Duration,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async where R.Action: Equatable {
+    let previousPhase = state[keyPath: phase]
+    await receive(
+      expectedAction,
+      timeout: timeout,
+      assert: updateExpectedState,
+      file: file,
+      line: line
+    )
+    let nextPhase = state[keyPath: phase]
+
+    guard previousPhase != nextPhase else { return }
+
+    guard graph.allows(from: previousPhase, to: nextPhase) else {
+      testStoreAssertionFailure(
+        """
+        Illegal phase transition detected while receiving effect action.
+
+        Action:
+        \(expectedAction)
+
+        From:
+        \(previousPhase)
+
+        To:
+        \(nextPhase)
+
+        Allowed next phases:
+        \(graph.successors(from: previousPhase))
+        """,
+        file: file,
+        line: line
+      )
+      return
+    }
+  }
 }

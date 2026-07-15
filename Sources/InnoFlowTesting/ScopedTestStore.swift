@@ -5,6 +5,12 @@
 import Foundation
 @_exported public import InnoFlowCore
 
+private enum ScopedTestStoreActionMatch<ChildAction, Value> {
+  case matched(Value)
+  case mismatchedParent
+  case mismatchedChild(ChildAction)
+}
+
 @dynamicMemberLookup
 @MainActor
 public struct ScopedTestStore<Root: Reducer, ChildState: Equatable, ChildAction>
@@ -81,23 +87,189 @@ where Root.State: Equatable {
     file: StaticString = #filePath,
     line: UInt = #line
   ) async where ChildAction: Equatable {
-    guard let rootAction = await parent.nextScopedActionWithinTimeout() else {
+    await receiveExact(
+      expectedAction,
+      timeout: nil,
+      assert: updateExpectedState,
+      file: file,
+      line: line
+    )
+  }
+
+  /// Receives an exact child action using a timeout for this assertion only.
+  public func receive(
+    _ expectedAction: ChildAction,
+    timeout: Duration,
+    assert updateExpectedState: ((inout ChildState) -> Void)? = nil,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async where ChildAction: Equatable {
+    await receiveExact(
+      expectedAction,
+      timeout: timeout,
+      assert: updateExpectedState,
+      file: file,
+      line: line
+    )
+  }
+
+  /// Receives the next child action, requires it to match a case path, and
+  /// returns its payload.
+  @discardableResult
+  public func receive<Value>(
+    _ path: CasePath<ChildAction, Value>,
+    caseName: String? = nil,
+    timeout: Duration? = nil,
+    assert updateExpectedState: ((inout ChildState, Value) -> Void)? = nil,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async -> Value? {
+    let result = await receiveResult(timeout: timeout) { action in
+      switch path.extract(action) {
+      case .some(let value):
+        return .matched(value)
+      case .none:
+        return .mismatched
+      }
+    }
+    let expectation = caseName.map { "case path '\($0)'" } ?? "the supplied case path"
+
+    switch result {
+    case .matched(let rootAction, .matched(let value)):
+      let stateAssertion: ((inout ChildState) -> Void)? = updateExpectedState.map { update in
+        { state in update(&state, value) }
+      }
+      await applyReceivedRootAction(
+        rootAction,
+        assert: stateAssertion,
+        file: file,
+        line: line
+      )
+      return .some(value)
+
+    case .matched(let rootAction, .mismatchedParent), .mismatched(let rootAction):
+      reportScopedParentMismatch(
+        rootAction: rootAction,
+        expectation: expectation,
+        file: file,
+        line: line
+      )
+      return nil
+
+    case .matched(_, .mismatchedChild(let childAction)):
+      reportScopedChildMismatch(
+        childAction: childAction,
+        expectation: expectation,
+        file: file,
+        line: line
+      )
+      return nil
+
+    case .timedOut(let resolvedTimeout):
       testStoreAssertionFailure(
         decorateFailure(
           """
-          Expected to receive child action:
-          \(expectedAction)
+          Expected to receive a child action matching \(expectation).
 
-          But timed out after \(parent.scopedEffectTimeout).
+          But timed out after \(resolvedTimeout).
           """
         ),
         file: file,
         line: line
       )
-      return
+      return nil
+
+    case .cancelled:
+      return nil
+    }
+  }
+
+  /// Receives and returns the next child action accepted by a predicate.
+  @discardableResult
+  public func receive(
+    where predicate: (ChildAction) -> Bool,
+    description: String? = nil,
+    timeout: Duration? = nil,
+    assert updateExpectedState: ((inout ChildState, ChildAction) -> Void)? = nil,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async -> ChildAction? {
+    let result = await receiveResult(timeout: timeout) { action in
+      predicate(action) ? .matched(action) : .mismatched
+    }
+    let expectation = description.map { "predicate '\($0)'" } ?? "the supplied predicate"
+
+    switch result {
+    case .matched(let rootAction, .matched(let childAction)):
+      let stateAssertion: ((inout ChildState) -> Void)? = updateExpectedState.map { update in
+        { state in update(&state, childAction) }
+      }
+      await applyReceivedRootAction(
+        rootAction,
+        assert: stateAssertion,
+        file: file,
+        line: line
+      )
+      return .some(childAction)
+
+    case .matched(let rootAction, .mismatchedParent), .mismatched(let rootAction):
+      reportScopedParentMismatch(
+        rootAction: rootAction,
+        expectation: expectation,
+        file: file,
+        line: line
+      )
+      return nil
+
+    case .matched(_, .mismatchedChild(let childAction)):
+      reportScopedChildMismatch(
+        childAction: childAction,
+        expectation: expectation,
+        file: file,
+        line: line
+      )
+      return nil
+
+    case .timedOut(let resolvedTimeout):
+      testStoreAssertionFailure(
+        decorateFailure(
+          """
+          Expected to receive a child action satisfying \(expectation).
+
+          But timed out after \(resolvedTimeout).
+          """
+        ),
+        file: file,
+        line: line
+      )
+      return nil
+
+    case .cancelled:
+      return nil
+    }
+  }
+
+  private func receiveExact(
+    _ expectedAction: ChildAction,
+    timeout: Duration?,
+    assert updateExpectedState: ((inout ChildState) -> Void)?,
+    file: StaticString,
+    line: UInt
+  ) async where ChildAction: Equatable {
+    let result = await receiveResult(timeout: timeout) { childAction in
+      childAction == expectedAction ? .matched(()) : .mismatched
     }
 
-    guard let childAction = actionExtractor(rootAction) else {
+    switch result {
+    case .matched(let rootAction, .matched):
+      await applyReceivedRootAction(
+        rootAction,
+        assert: updateExpectedState,
+        file: file,
+        line: line
+      )
+
+    case .matched(let rootAction, .mismatchedParent), .mismatched(let rootAction):
       testStoreAssertionFailure(
         decorateFailure(
           """
@@ -113,10 +285,8 @@ where Root.State: Equatable {
         file: file,
         line: line
       )
-      return
-    }
 
-    if childAction != expectedAction {
+    case .matched(_, .mismatchedChild(let childAction)):
       testStoreAssertionFailure(
         decorateFailure(
           """
@@ -132,9 +302,53 @@ where Root.State: Equatable {
         file: file,
         line: line
       )
+
+    case .timedOut(let resolvedTimeout):
+      testStoreAssertionFailure(
+        decorateFailure(
+          """
+          Expected to receive child action:
+          \(expectedAction)
+
+          But timed out after \(resolvedTimeout).
+          """
+        ),
+        file: file,
+        line: line
+      )
+
+    case .cancelled:
       return
     }
+  }
 
+  private func receiveResult<Value>(
+    timeout: Duration?,
+    matching matcher: (ChildAction) -> TestStoreActionMatch<Value>
+  ) async -> TestStoreReceiveResult<
+    Root.Action,
+    ScopedTestStoreActionMatch<ChildAction, Value>
+  > {
+    await parent.receiveResult(timeout: timeout) { rootAction in
+      guard let childAction = actionExtractor(rootAction) else {
+        return .matched(.mismatchedParent)
+      }
+
+      switch matcher(childAction) {
+      case .matched(let value):
+        return .matched(.matched(value))
+      case .mismatched:
+        return .matched(.mismatchedChild(childAction))
+      }
+    }
+  }
+
+  private func applyReceivedRootAction(
+    _ rootAction: Root.Action,
+    assert updateExpectedState: ((inout ChildState) -> Void)?,
+    file: StaticString,
+    line: UInt
+  ) async {
     var expectedState = state
     updateExpectedState?(&expectedState)
 
@@ -152,6 +366,48 @@ where Root.State: Equatable {
     }
 
     await parent.walkScopedEffect(effect)
+  }
+
+  private func reportScopedParentMismatch(
+    rootAction: Root.Action,
+    expectation: String,
+    file: StaticString,
+    line: UInt
+  ) {
+    testStoreAssertionFailure(
+      decorateFailure(
+        """
+        Received unexpected parent action for scoped test store.
+
+        Expected a child action matching \(expectation).
+
+        Received parent action:
+        \(rootAction)
+        """
+      ),
+      file: file,
+      line: line
+    )
+  }
+
+  private func reportScopedChildMismatch(
+    childAction: ChildAction,
+    expectation: String,
+    file: StaticString,
+    line: UInt
+  ) {
+    testStoreAssertionFailure(
+      decorateFailure(
+        """
+        Received child action did not match \(expectation).
+
+        Received:
+        \(childAction)
+        """
+      ),
+      file: file,
+      line: line
+    )
   }
 
   public func assert(

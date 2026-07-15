@@ -53,21 +53,186 @@ extension TestStore {
     file: StaticString = #file,
     line: UInt = #line
   ) async where R.Action: Equatable {
-    guard let action = await nextActionWithinTimeout() else {
+    await receiveExact(
+      expectedAction,
+      timeout: nil,
+      assert: updateExpectedState,
+      file: file,
+      line: line
+    )
+  }
+
+  /// Receives an exact action using a timeout for this assertion only.
+  ///
+  /// The timeout is one total wall-clock budget, including time spent
+  /// discarding actions invalidated by effect cancellation.
+  public func receive(
+    _ expectedAction: R.Action,
+    timeout: Duration,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async where R.Action: Equatable {
+    await receiveExact(
+      expectedAction,
+      timeout: timeout,
+      assert: updateExpectedState,
+      file: file,
+      line: line
+    )
+  }
+
+  /// Receives the next action, requires it to match a case path, and returns
+  /// its payload.
+  ///
+  /// A valid action that does not match is consumed and reported immediately.
+  /// When `Value` is optional, the nested optional return distinguishes a
+  /// matched `nil` payload from a mismatch, timeout, or cancellation.
+  @discardableResult
+  public func receive<Value>(
+    _ path: CasePath<R.Action, Value>,
+    caseName: String? = nil,
+    timeout: Duration? = nil,
+    assert updateExpectedState: ((inout R.State, Value) -> Void)? = nil,
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async -> Value? {
+    let result = await receiveResult(timeout: timeout) { action in
+      switch path.extract(action) {
+      case .some(let value):
+        return .matched(value)
+      case .none:
+        return .mismatched
+      }
+    }
+
+    let expectation = caseName.map { "case path '\($0)'" } ?? "the supplied case path"
+
+    switch result {
+    case .matched(let action, let value):
+      let stateAssertion: ((inout R.State) -> Void)? = updateExpectedState.map { update in
+        { state in update(&state, value) }
+      }
+      await applyReceivedAction(
+        action,
+        assert: stateAssertion,
+        file: file,
+        line: line
+      )
+      return .some(value)
+
+    case .mismatched(let action):
       testStoreAssertionFailure(
         """
-        Expected to receive action:
-        \(expectedAction)
+        Received action did not match \(expectation).
 
-        But timed out after \(effectTimeout).
+        Received:
+        \(action)
         """,
         file: file,
         line: line
       )
-      return
+      return nil
+
+    case .timedOut(let resolvedTimeout):
+      testStoreAssertionFailure(
+        """
+        Expected to receive an action matching \(expectation).
+
+        But timed out after \(resolvedTimeout).
+        """,
+        file: file,
+        line: line
+      )
+      return nil
+
+    case .cancelled:
+      return nil
+    }
+  }
+
+  /// Receives and returns the next action accepted by a predicate.
+  ///
+  /// A valid action rejected by the predicate is consumed and reported
+  /// immediately. The predicate and assertion execute on the main actor.
+  @discardableResult
+  public func receive(
+    where predicate: (R.Action) -> Bool,
+    description: String? = nil,
+    timeout: Duration? = nil,
+    assert updateExpectedState: ((inout R.State, R.Action) -> Void)? = nil,
+    file: StaticString = #file,
+    line: UInt = #line
+  ) async -> R.Action? {
+    let result = await receiveResult(timeout: timeout) { action in
+      predicate(action) ? .matched(action) : .mismatched
+    }
+    let expectation = description.map { "predicate '\($0)'" } ?? "the supplied predicate"
+
+    switch result {
+    case .matched(let action, _):
+      let stateAssertion: ((inout R.State) -> Void)? = updateExpectedState.map { update in
+        { state in update(&state, action) }
+      }
+      await applyReceivedAction(
+        action,
+        assert: stateAssertion,
+        file: file,
+        line: line
+      )
+      return .some(action)
+
+    case .mismatched(let action):
+      testStoreAssertionFailure(
+        """
+        Received action did not satisfy \(expectation).
+
+        Received:
+        \(action)
+        """,
+        file: file,
+        line: line
+      )
+      return nil
+
+    case .timedOut(let resolvedTimeout):
+      testStoreAssertionFailure(
+        """
+        Expected to receive an action satisfying \(expectation).
+
+        But timed out after \(resolvedTimeout).
+        """,
+        file: file,
+        line: line
+      )
+      return nil
+
+    case .cancelled:
+      return nil
+    }
+  }
+
+  private func receiveExact(
+    _ expectedAction: R.Action,
+    timeout: Duration?,
+    assert updateExpectedState: ((inout R.State) -> Void)?,
+    file: StaticString,
+    line: UInt
+  ) async where R.Action: Equatable {
+    let result = await receiveResult(timeout: timeout) { action in
+      action == expectedAction ? .matched(()) : .mismatched
     }
 
-    if action != expectedAction {
+    switch result {
+    case .matched(let action, _):
+      await applyReceivedAction(
+        action,
+        assert: updateExpectedState,
+        file: file,
+        line: line
+      )
+
+    case .mismatched(let action):
       testStoreAssertionFailure(
         """
         Received unexpected action.
@@ -81,9 +246,30 @@ extension TestStore {
         file: file,
         line: line
       )
+
+    case .timedOut(let resolvedTimeout):
+      testStoreAssertionFailure(
+        """
+        Expected to receive action:
+        \(expectedAction)
+
+        But timed out after \(resolvedTimeout).
+        """,
+        file: file,
+        line: line
+      )
+
+    case .cancelled:
       return
     }
+  }
 
+  private func applyReceivedAction(
+    _ action: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)?,
+    file: StaticString,
+    line: UInt
+  ) async {
     var expectedState = state
     updateExpectedState?(&expectedState)
 
@@ -307,14 +493,6 @@ extension TestStore {
   package func walkScopedEffect(_ effect: EffectTask<R.Action>) async {
     let sequence = nextSequence()
     await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
-  }
-
-  package func nextScopedActionWithinTimeout() async -> R.Action? {
-    await nextActionWithinTimeout()
-  }
-
-  package var scopedEffectTimeout: Duration {
-    effectTimeout
   }
 
   package var resolvedDiffLineLimit: Int {

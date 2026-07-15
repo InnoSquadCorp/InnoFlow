@@ -803,7 +803,7 @@ struct CompileContractTests {
     let source = """
       import InnoFlowTesting
 
-      struct LoadFeature: Reducer {
+      struct ExactFeature: Reducer {
           struct State: Equatable, Sendable, DefaultInitializable {
               var didLoad = false
               init() {}
@@ -819,10 +819,126 @@ struct CompileContractTests {
           }
       }
 
+      struct LoadFeature: Reducer {
+          struct ChildState: Equatable, Sendable {
+              var values: [Int] = []
+          }
+
+          struct State: Equatable, Sendable, DefaultInitializable {
+              var values: [Int] = []
+              var child = ChildState()
+              init() {}
+          }
+
+          enum ChildAction: Sendable {
+              case loaded(Int)
+
+              static let loadedCasePath = CasePath<Self, Int>(
+                  embed: Self.loaded,
+                  extract: { action in
+                      guard case .loaded(let value) = action else { return nil }
+                      return value
+                  }
+              )
+          }
+
+          enum Action: Sendable {
+              case loaded(Int)
+              case optional(Int?)
+              case child(ChildAction)
+
+              static let loadedCasePath = CasePath<Self, Int>(
+                  embed: Self.loaded,
+                  extract: { action in
+                      guard case .loaded(let value) = action else { return nil }
+                      return value
+                  }
+              )
+
+              static let optionalCasePath = CasePath<Self, Int?>(
+                  embed: Self.optional,
+                  extract: { action in
+                      guard case .optional(let value) = action else { return nil }
+                      return .some(value)
+                  }
+              )
+
+              static let childCasePath = CasePath<Self, ChildAction>(
+                  embed: Self.child,
+                  extract: { action in
+                      guard case .child(let childAction) = action else { return nil }
+                      return childAction
+                  }
+              )
+          }
+
+          func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+              switch action {
+              case .loaded(let value):
+                  state.values.append(value)
+              case .optional:
+                  break
+              case .child(.loaded(let value)):
+                  state.child.values.append(value)
+              }
+              return .none
+          }
+      }
+
       @MainActor
       func compileContract() async {
+          let exactStore = TestStore(reducer: ExactFeature())
+          await exactStore.receive(.load) { $0.didLoad = true }
+          await exactStore.receive(.load, timeout: .milliseconds(10)) {
+              $0.didLoad = true
+          }
+
           let store = TestStore(reducer: LoadFeature())
           _ = store.state
+          _ = await store.receive(
+              LoadFeature.Action.loadedCasePath,
+              caseName: "loaded",
+              timeout: .milliseconds(10)
+          ) { state, value in
+              state.values.append(value)
+          }
+          let optional: Int?? = await store.receive(
+              LoadFeature.Action.optionalCasePath,
+              timeout: .milliseconds(10)
+          )
+          _ = optional
+          _ = await store.receive(
+              where: {
+                  guard case .loaded(let value) = $0 else { return false }
+                  return value > 0
+              },
+              description: "positive loaded value",
+              timeout: .milliseconds(10)
+          ) { state, action in
+              guard case .loaded(let value) = action else { return }
+              state.values.append(value)
+          }
+
+          let child = store.scope(
+              state: \\LoadFeature.State.child,
+              action: LoadFeature.Action.childCasePath
+          )
+          _ = await child.receive(
+              LoadFeature.ChildAction.loadedCasePath,
+              timeout: .milliseconds(10)
+          ) { state, value in
+              state.values.append(value)
+          }
+          _ = await child.receive(
+              where: {
+                  guard case .loaded(let value) = $0 else { return false }
+                  return value > 0
+              },
+              timeout: .milliseconds(10)
+          ) { state, action in
+              guard case .loaded(let value) = action else { return }
+              state.values.append(value)
+          }
           await store.finish(timeout: .milliseconds(10))
       }
       """

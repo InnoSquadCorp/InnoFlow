@@ -37,6 +37,12 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- `TestStore.receive` and `ScopedTestStore.receive` now accept per-assertion
+  timeouts. New case-path and predicate overloads support non-`Equatable`
+  actions, return the matched payload/action, preserve matched optional `nil`
+  payloads, and use one wall-clock deadline while filtering invalidated effect
+  actions. Cancelling a receive removes its queue waiter without consuming a
+  later action.
 - `TestStore.finish(timeout:)` now waits for run, composite, debounce, and
   trailing-throttle work under one wall-clock deadline, then asserts that no
   effect-emitted actions remain. It requests cancellation and suppresses later

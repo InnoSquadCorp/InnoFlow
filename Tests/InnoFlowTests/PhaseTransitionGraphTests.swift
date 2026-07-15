@@ -89,7 +89,12 @@ struct PhaseTransitionGraphTests {
       $0.phase = .loading
     }
 
-    await store.receive(._loaded("done"), tracking: \.phase, through: PhaseDrivenFeature.graph) {
+    await store.receive(
+      ._loaded("done"),
+      tracking: \.phase,
+      through: PhaseDrivenFeature.graph,
+      timeout: .seconds(60)
+    ) {
       $0.phase = .loaded
       $0.value = "done"
     }

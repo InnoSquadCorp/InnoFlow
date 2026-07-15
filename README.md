@@ -685,6 +685,33 @@ emitted action was received. Its timeout uses wall time and never advances a
 trailing throttle is expected to fire. A scoped test store delegates `finish()`
 to the same parent queue and effect lifecycle.
 
+Each receive assertion can override the harness timeout. Case-path and
+predicate overloads also support actions that are not `Equatable`; they consume
+the next valid effect action and fail immediately when it does not match.
+
+```swift
+await store.receive(.finished, timeout: .milliseconds(250))
+
+let payload = await store.receive(
+  Feature.Action.loadedCasePath,
+  caseName: "loaded",
+  timeout: .seconds(1)
+) { state, payload in
+  state.value = payload
+}
+
+let action = await store.receive(
+  where: { $0.isSuccessfulResponse },
+  description: "successful response"
+)
+```
+
+The timeout is one wall-clock budget even when cancelled effect actions are
+discarded. Cancelling the waiting task removes its queue waiter without
+consuming actions delivered afterward. For an optional case-path payload, the
+return value is intentionally nested (`Payload??`) so a matched `nil` remains
+distinct from mismatch, timeout, or cancellation.
+
 State mismatch diagnostics now include a `Diff:` section before full expected/actual dumps. The renderer shows 12 lines by default, can be overridden per harness with `TestStore(..., diffLineLimit: 24)`, and also respects `INNOFLOW_TESTSTORE_DIFF_LINE_LIMIT`.
 
 For deeply composed reducers, project the parent `TestStore` instead of creating an independent child harness:
