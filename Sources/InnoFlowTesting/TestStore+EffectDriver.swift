@@ -100,15 +100,18 @@ package final class ActionQueue<Action: Sendable> {
 private final class TestStoreRunEndpoint<Action: Sendable> {
   private let isTaskActiveImpl: (UUID) -> Bool
   private let shouldProceedImpl: (EffectExecutionContext?) -> Bool
+  private let didEnqueueActionImpl: () -> Void
   private let finishTrackedTaskImpl: (UUID) -> Void
 
   init(
     isTaskActive: @escaping (UUID) -> Bool,
     shouldProceed: @escaping (EffectExecutionContext?) -> Bool,
+    didEnqueueAction: @escaping () -> Void,
     finishTrackedTask: @escaping (UUID) -> Void
   ) {
     self.isTaskActiveImpl = isTaskActive
     self.shouldProceedImpl = shouldProceed
+    self.didEnqueueActionImpl = didEnqueueAction
     self.finishTrackedTaskImpl = finishTrackedTask
   }
 
@@ -118,6 +121,10 @@ private final class TestStoreRunEndpoint<Action: Sendable> {
 
   func shouldProceed(context: EffectExecutionContext?) -> Bool {
     shouldProceedImpl(context)
+  }
+
+  func didEnqueueAction() {
+    didEnqueueActionImpl()
   }
 
   func finishTrackedTask(token: UUID) {
@@ -147,6 +154,7 @@ private actor TestStoreRunBridge<Action: Sendable> {
     guard await endpoint.isTaskActive(token: token) else { return }
     guard await endpoint.shouldProceed(context: context) else { return }
     await queue.enqueue(action, context: context)
+    await endpoint.didEnqueueAction()
   }
 
   func finish() async {
@@ -270,6 +278,9 @@ extension TestStore {
       shouldProceed: { [weak self] context in
         self?.shouldProceed(context: context) ?? false
       },
+      didEnqueueAction: { [weak self] in
+        self?.finishActivity.noteProgress()
+      },
       finishTrackedTask: { [weak self] token in
         self?.finishTrackedRunTask(token: token)
       }
@@ -282,6 +293,7 @@ extension TestStore {
     context: EffectExecutionContext?
   ) -> Task<Void, Never> {
     let token = UUID()
+    finishActivity.begin(.run, token: token)
     let startGate = TestStoreRunStartGate()
     let endpoint = makeRunEndpoint()
     let runBridge = TestStoreRunBridge(
@@ -449,6 +461,7 @@ extension TestStore {
 
   private func finishTrackedRunTask(token: UUID) {
     removeTrackedTask(token: token)
+    finishActivity.end(token)
   }
 
 }
@@ -469,6 +482,7 @@ extension TestStore: EffectDriver {
     // have raced ahead.
     guard shouldProceed(context: context) else { return }
     queue.enqueue(action, context: context)
+    finishActivity.noteProgress()
   }
 
   package func reportActionDrop(
@@ -529,34 +543,45 @@ extension TestStore: EffectDriver {
 
     guard let generation = beginDebounce(scope) else { return nil }
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
+    let activityToken = UUID()
+    finishActivity.begin(.debounce, token: activityToken)
+    let endpoint = makeRunEndpoint()
 
     let task = Task { [weak self] in
+      let didFinishDelay: Bool
       do {
         try await delayClock.sleep(interval)
+        didFinishDelay = true
       } catch {
         _ = await MainActor.run {
           self?.finishDebounceTask(for: id, generation: generation)
         }
-        return
+        didFinishDelay = false
       }
 
-      let shouldRun = await MainActor.run { [weak self] in
-        guard let self else { return false }
-        guard !Task.isCancelled else { return false }
-        guard self.debounceTasksByID[id]?.generation == generation else { return false }
-        defer {
-          self.finishDebounceTask(for: id, generation: generation)
+      if didFinishDelay {
+        let shouldRun = await MainActor.run { [weak self] in
+          guard let self else { return false }
+          guard !Task.isCancelled else { return false }
+          guard self.debounceTasksByID[id]?.generation == generation else { return false }
+          defer {
+            self.finishDebounceTask(for: id, generation: generation)
+          }
+          return self.shouldProceed(context: context)
         }
-        return self.shouldProceed(context: context)
+
+        if shouldRun {
+          await recurse(nested, context, nestedAwaited)
+        }
       }
 
-      guard shouldRun else { return }
-      await recurse(nested, context, nestedAwaited)
+      endpoint.finishTrackedTask(token: activityToken)
     }
 
     guard setDebounceTask(task, for: id, generation: generation) else {
       return nil
     }
+    trackEffectTask(token: activityToken, task: task, context: context)
     return task
   }
 
@@ -564,7 +589,7 @@ extension TestStore: EffectDriver {
   package func scheduleTrailingDrain(
     for id: AnyEffectID,
     interval: Duration,
-    schedulingContext _: EffectExecutionContext,
+    schedulingContext: EffectExecutionContext,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
@@ -574,21 +599,14 @@ extension TestStore: EffectDriver {
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
+    let activityToken = UUID()
+    finishActivity.begin(.throttle, token: activityToken)
+    let endpoint = makeRunEndpoint()
     let task = Task { [weak self] in
+      let pending: ThrottleStateMap<R.Action>.PendingTrailing?
       do {
         try await delayClock.sleep(interval)
-      } catch {
-        await MainActor.run {
-          guard let self else { return }
-          if self.throttleState.generation(for: id) == generation {
-            self.throttleState.finishState(for: id, generation: generation)
-          }
-        }
-        return
-      }
-
-      let pending: ThrottleStateMap<R.Action>.PendingTrailing? =
-        await MainActor.run { [weak self] in
+        pending = await MainActor.run { [weak self] in
           guard let self else { return nil }
           guard self.throttleState.generation(for: id) == generation else { return nil }
           defer {
@@ -600,15 +618,28 @@ extension TestStore: EffectDriver {
           guard self.shouldProceed(context: pending.context) else { return nil }
           return pending
         }
+      } catch {
+        await MainActor.run {
+          guard let self else { return }
+          if self.throttleState.generation(for: id) == generation {
+            self.throttleState.finishState(for: id, generation: generation)
+          }
+        }
+        pending = nil
+      }
 
-      guard let pending else { return }
-      await recurse(
-        pending.effect,
-        pending.context,
-        awaited || pending.requiresAwaitedCompletion
-      )
+      if let pending {
+        await recurse(
+          pending.effect,
+          pending.context,
+          awaited || pending.requiresAwaitedCompletion
+        )
+      }
+
+      endpoint.finishTrackedTask(token: activityToken)
     }
     throttleState.setTrailingTask(task, for: id)
+    trackEffectTask(token: activityToken, task: task, context: schedulingContext)
     return task
   }
 
@@ -642,9 +673,10 @@ extension TestStore: EffectDriver {
     } else {
       for child in children {
         let token = UUID()
+        finishActivity.begin(.composite, token: token)
         let task = Task { @MainActor [weak self] in
           defer {
-            self?.removeTrackedTask(token: token)
+            self?.finishTrackedRunTask(token: token)
           }
           guard self != nil else { return }
           await recurse(child, context, false)
@@ -674,6 +706,7 @@ extension TestStore: EffectDriver {
       }
     } else {
       let token = UUID()
+      finishActivity.begin(.composite, token: token)
       let startGate = TestStoreRunStartGate()
       let endpoint = makeRunEndpoint()
       let task = Task { @MainActor in

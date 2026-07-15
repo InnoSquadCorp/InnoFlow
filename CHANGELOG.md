@@ -37,6 +37,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- `TestStore.finish(timeout:)` now waits for run, composite, debounce, and
+  trailing-throttle work under one wall-clock deadline, then asserts that no
+  effect-emitted actions remain. It requests cancellation and suppresses later
+  emissions after a failure, never advances `ManualTestClock`, and is also
+  available on `ScopedTestStore`.
 - `StoreInstrumentation.didFailRun` and `StoreInstrumentationEvent.runFailed`
   surface non-cancellation errors that escape `EffectTask.run(sequence:)` and
   `EffectTask.run(sequence:transform:)`. Adapters `.sink`, `.combined`,

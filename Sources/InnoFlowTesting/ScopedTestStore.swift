@@ -181,6 +181,16 @@ where Root.State: Equatable {
     await parent.assertNoMoreActions(file: file, line: line)
   }
 
+  /// Waits for all parent-owned effects to finish and asserts that every
+  /// emitted action has been received through this shared test harness.
+  public func finish(
+    timeout: Duration? = nil,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async {
+    await parent.finish(timeout: timeout, file: file, line: line)
+  }
+
   public func assertNoBufferedActions(
     file: StaticString = #filePath,
     line: UInt = #line

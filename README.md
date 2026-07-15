@@ -675,9 +675,15 @@ func loadFlow() async {
     $0.profile = .fixture
   }
 
-  await store.assertNoMoreActions()
+  await store.finish()
 }
 ```
+
+`finish()` waits for all framework-owned effects and then asserts that every
+emitted action was received. Its timeout uses wall time and never advances a
+`ManualTestClock`, so advance manual time before finishing when a debounce or
+trailing throttle is expected to fire. A scoped test store delegates `finish()`
+to the same parent queue and effect lifecycle.
 
 State mismatch diagnostics now include a `Diff:` section before full expected/actual dumps. The renderer shows 12 lines by default, can be overridden per harness with `TestStore(..., diffLineLimit: 24)`, and also respects `INNOFLOW_TESTSTORE_DIFF_LINE_LIMIT`.
 

@@ -35,6 +35,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let wallClock = ContinuousClock()
   package let manualClock: ManualTestClock?
   package let queue = ActionQueue<R.Action>()
+  package let finishActivity = TestStoreFinishActivity()
 
   package var runningTasks: [UUID: TrackedEffectTask] = [:]
   package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]

@@ -820,9 +820,10 @@ struct CompileContractTests {
       }
 
       @MainActor
-      func compileContract() {
+      func compileContract() async {
           let store = TestStore(reducer: LoadFeature())
           _ = store.state
+          await store.finish(timeout: .milliseconds(10))
       }
       """
     try source.write(
