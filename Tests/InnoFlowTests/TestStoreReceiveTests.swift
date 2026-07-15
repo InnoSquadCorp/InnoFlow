@@ -115,6 +115,7 @@ struct TestStoreReceiveTests {
       state: \ReceiveFeature.State.child,
       action: ReceiveFeature.Action.childCasePath
     )
+    child.exhaustivity = .off
 
     store.deliverAction(.child(.value(3)), context: nil)
     let value = await child.receive(
@@ -122,7 +123,7 @@ struct TestStoreReceiveTests {
       caseName: "child.value",
       timeout: .zero
     ) { state, payload in
-      state.values.append(payload)
+      state.values = [payload]
     }
 
     store.deliverAction(.child(.value(5)), context: nil)
@@ -135,7 +136,7 @@ struct TestStoreReceiveTests {
       timeout: .zero,
       assert: { state, receivedAction in
         guard case .value(let payload) = receivedAction else { return }
-        state.values.append(payload)
+        state.values = [3, payload]
       }
     )
 
@@ -160,13 +161,14 @@ struct TestStoreReceiveTests {
     )
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let child = store.scope(state: \ReceiveFeature.State.child, action: actionPath)
+    child.exhaustivity = .off
     store.deliverAction(.child(.value(11)), context: nil)
 
     _ = await child.receive(
       ReceiveFeature.ChildAction.valueCasePath,
       timeout: .zero
     ) { state, payload in
-      state.values.append(payload)
+      state.values = [payload]
     }
 
     #expect(extractionCounter.count == 1)

@@ -2035,6 +2035,7 @@ struct TestStoreCoreTests {
       id: targetID,
       action: ScopedCollectionFeature.Action.todoActionPath
     )
+    todo.exhaustivity = .off
 
     await todo.send(.setDone(true))
     todo.assert {

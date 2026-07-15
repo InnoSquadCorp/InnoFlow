@@ -973,9 +973,16 @@ struct CompileContractTests {
           }
       }
 
+      func requireSendable<T: Sendable>(_ value: T) {}
+
       @MainActor
       func compileContract() async {
           let exactStore = TestStore(reducer: ExactFeature())
+          requireSendable(Exhaustivity.on)
+          let _: Bool = Exhaustivity.on == .off
+          let _: Exhaustivity = .off(showSkippedAssertions: true)
+          exactStore.exhaustivity = .off
+          _ = exactStore.exhaustivity
           await exactStore.receive(.load) { $0.didLoad = true }
           await exactStore.receive(.load, timeout: .milliseconds(10)) {
               $0.didLoad = true
@@ -1011,6 +1018,8 @@ struct CompileContractTests {
               state: \\LoadFeature.State.child,
               action: LoadFeature.Action.childCasePath
           )
+          child.exhaustivity = .off(showSkippedAssertions: true)
+          _ = child.exhaustivity
           _ = await child.receive(
               LoadFeature.ChildAction.loadedCasePath,
               timeout: .milliseconds(10)

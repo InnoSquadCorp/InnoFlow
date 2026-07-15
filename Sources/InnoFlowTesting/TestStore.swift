@@ -28,6 +28,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   // MARK: - Properties
 
   public package(set) var state: R.State
+  public var exhaustivity: Exhaustivity = .on
 
   package let reducer: R
   package let effectTimeout: Duration
@@ -36,6 +37,12 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let manualClock: ManualTestClock?
   package let queue = ActionQueue<R.Action>()
   package let finishActivity = TestStoreFinishActivity()
+  package var assertionFailureReporter: (String, StaticString, UInt) -> Void = {
+    testStoreAssertionFailure($0, file: $1, line: $2)
+  }
+  package var skippedAssertionReporter: (String, StaticString, UInt) -> Void = {
+    testStoreAssertionWarning($0, file: $1, line: $2)
+  }
 
   package var runningTasks: [UUID: TrackedEffectTask] = [:]
   package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]

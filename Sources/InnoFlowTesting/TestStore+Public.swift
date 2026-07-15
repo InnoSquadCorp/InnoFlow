@@ -14,34 +14,21 @@ extension TestStore {
     file: StaticString = #file,
     line: UInt = #line
   ) async {
-    var expectedState = state
-    updateExpectedState?(&expectedState)
+    let previousState = state
 
     let effect = reducer.reduce(into: &state, action: action)
-
-    if updateExpectedState != nil, state != expectedState {
-      let diffSection =
-        renderStateDiff(
-          expected: expectedState,
-          actual: state,
-          lineLimit: diffLineLimit
-        ).map {
-          "Diff:\n\($0)\n\n"
-        } ?? ""
-      testStoreAssertionFailure(
-        """
-        State mismatch after action.
-
-        \(diffSection)Expected:
-        \(expectedState)
-
-        Actual:
-        \(state)
-        """,
-        file: file,
-        line: line
-      )
-    }
+    assertStateTransition(
+      from: previousState,
+      expectedStateMutation: updateExpectedState.map { update in
+        { state in
+          update(&state)
+          return true
+        }
+      },
+      eventDescription: "mismatch after action.",
+      file: file,
+      line: line
+    )
 
     let sequence = nextSequence()
     await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
@@ -270,34 +257,21 @@ extension TestStore {
     file: StaticString,
     line: UInt
   ) async {
-    var expectedState = state
-    updateExpectedState?(&expectedState)
+    let previousState = state
 
     let effect = reducer.reduce(into: &state, action: action)
-
-    if updateExpectedState != nil, state != expectedState {
-      let diffSection =
-        renderStateDiff(
-          expected: expectedState,
-          actual: state,
-          lineLimit: diffLineLimit
-        ).map {
-          "Diff:\n\($0)\n\n"
-        } ?? ""
-      testStoreAssertionFailure(
-        """
-        State mismatch after receiving action.
-
-        \(diffSection)Expected:
-        \(expectedState)
-
-        Actual:
-        \(state)
-        """,
-        file: file,
-        line: line
-      )
-    }
+    assertStateTransition(
+      from: previousState,
+      expectedStateMutation: updateExpectedState.map { update in
+        { state in
+          update(&state)
+          return true
+        }
+      },
+      eventDescription: "mismatch after receiving action.",
+      file: file,
+      line: line
+    )
 
     let sequence = nextSequence()
     await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
@@ -378,6 +352,7 @@ extension TestStore {
         var childState = rootState[keyPath: state]
         update(&childState)
         rootState[keyPath: state] = childState
+        return true
       },
       actionExtractor: extractAction,
       actionEmbedder: embedAction
@@ -424,10 +399,11 @@ extension TestStore {
       expectedStateUpdater: { rootState, update in
         var collectionState = rootState[keyPath: collection]
         guard let index = collectionState.firstIndex(where: { $0.id == id }) else {
-          preconditionFailure(staleMessage)
+          return false
         }
         update(&collectionState[index])
         rootState[keyPath: collection] = collectionState
+        return true
       },
       actionExtractor: { rootAction in
         guard let (receivedID, childAction) = extractAction(rootAction), receivedID == id else {

@@ -36,6 +36,35 @@ func testStoreAssertionFailure(
   #endif
 }
 
+func testStoreAssertionWarning(
+  _ message: String,
+  file: StaticString,
+  line: UInt
+) {
+  #if DEBUG
+    print("⚠️ TestStore Assertion Skipped:")
+    print(message)
+    print("File: \(file), Line: \(line)")
+  #endif
+
+  #if canImport(Testing)
+    Issue.record(
+      Comment(rawValue: "\(file):\(line): \(message)"),
+      severity: .warning,
+      sourceLocation: SourceLocation(
+        fileID: String(describing: file),
+        filePath: String(describing: file),
+        line: Int(line),
+        column: 1
+      )
+    )
+  #elseif canImport(XCTest)
+    print("⚠️ \(file):\(line): \(message)")
+  #else
+    print("⚠️ \(file):\(line): \(message)")
+  #endif
+}
+
 func scopedTestStoreFailureContext(stableID: AnyHashable?) -> String? {
   guard let stableID else { return nil }
   return "Scoped collection element (id: \(String(describing: stableID)))"

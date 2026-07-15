@@ -18,7 +18,7 @@ where Root.State: Equatable {
   private let parent: TestStore<Root>
   private let diffLineLimit: Int
   private let stateReader: (Root.State) -> ChildState
-  private let expectedStateUpdater: (inout Root.State, (inout ChildState) -> Void) -> Void
+  private let expectedStateUpdater: (inout Root.State, (inout ChildState) -> Void) -> Bool
   private let actionExtractor: @Sendable (Root.Action) -> ChildAction?
   private let actionEmbedder: @Sendable (ChildAction) -> Root.Action
   private let failureContext: String?
@@ -26,6 +26,11 @@ where Root.State: Equatable {
 
   public var state: ChildState {
     stateReader(parent.state)
+  }
+
+  public var exhaustivity: Exhaustivity {
+    get { parent.exhaustivity }
+    nonmutating set { parent.exhaustivity = newValue }
   }
 
   public subscript<Value>(dynamicMember keyPath: KeyPath<ChildState, Value>) -> Value {
@@ -41,7 +46,7 @@ where Root.State: Equatable {
   init(
     parent: TestStore<Root>,
     stateReader: @escaping (Root.State) -> ChildState,
-    expectedStateUpdater: @escaping (inout Root.State, (inout ChildState) -> Void) -> Void,
+    expectedStateUpdater: @escaping (inout Root.State, (inout ChildState) -> Void) -> Bool,
     actionExtractor: @escaping @Sendable (Root.Action) -> ChildAction?,
     actionEmbedder: @escaping @Sendable (ChildAction) -> Root.Action,
     stableID: AnyHashable? = nil
@@ -62,21 +67,23 @@ where Root.State: Equatable {
     file: StaticString = #filePath,
     line: UInt = #line
   ) async {
-    var expectedState = state
-    updateExpectedState?(&expectedState)
+    let previousRootState = parent.state
+    // Preserve the stale-handle contract before routing any action. A valid
+    // collection child may remove itself during reduction; that distinct
+    // post-reduction case is handled by the failable expected-state updater.
+    _ = stateReader(previousRootState)
 
     let effect = parent.applyScopedAction(actionEmbedder(action))
-    let actualState = stateReader(parent.state)
-
-    if updateExpectedState != nil, actualState != expectedState {
-      reportStateMismatch(
-        expected: expectedState,
-        actual: actualState,
-        eventDescription: "mismatch after action.",
-        file: file,
-        line: line
-      )
-    }
+    parent.assertStateTransition(
+      from: previousRootState,
+      expectedStateMutation: rootStateUpdater(from: updateExpectedState),
+      mismatchLabel: "Scoped root state",
+      eventDescription: "mismatch after action.",
+      failureContext: failureContext,
+      exhaustiveGuidance: scopedExhaustivityGuidance,
+      file: file,
+      line: line
+    )
 
     await parent.walkScopedEffect(effect)
   }
@@ -349,21 +356,20 @@ where Root.State: Equatable {
     file: StaticString,
     line: UInt
   ) async {
-    var expectedState = state
-    updateExpectedState?(&expectedState)
+    let previousRootState = parent.state
+    _ = stateReader(previousRootState)
 
     let effect = parent.applyScopedAction(rootAction)
-    let actualState = stateReader(parent.state)
-
-    if updateExpectedState != nil, actualState != expectedState {
-      reportStateMismatch(
-        expected: expectedState,
-        actual: actualState,
-        eventDescription: "mismatch after receiving action.",
-        file: file,
-        line: line
-      )
-    }
+    parent.assertStateTransition(
+      from: previousRootState,
+      expectedStateMutation: rootStateUpdater(from: updateExpectedState),
+      mismatchLabel: "Scoped root state",
+      eventDescription: "mismatch after receiving action.",
+      failureContext: failureContext,
+      exhaustiveGuidance: scopedExhaustivityGuidance,
+      file: file,
+      line: line
+    )
 
     await parent.walkScopedEffect(effect)
   }
@@ -456,6 +462,20 @@ where Root.State: Equatable {
 
   package var resolvedDiffLineLimit: Int {
     diffLineLimit
+  }
+
+  private var scopedExhaustivityGuidance: String {
+    "Scoped exhaustive assertions compare the full root state. Use the parent TestStore when the action intentionally changes parent or sibling state."
+  }
+
+  private func rootStateUpdater(
+    from updateExpectedState: ((inout ChildState) -> Void)?
+  ) -> ((inout Root.State) -> Bool)? {
+    updateExpectedState.map { update in
+      { rootState in
+        expectedStateUpdater(&rootState, update)
+      }
+    }
   }
 
   private func decorateFailure(_ message: String) -> String {
