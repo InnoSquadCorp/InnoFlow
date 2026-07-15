@@ -525,9 +525,11 @@ struct StoreEffectRuntimeTests {
     await store.cancelAllEffects()
   }
 
-  @Test("Trailing drain keeps an awaited requirement across unawaited replacement")
+  @Test("Trailing drain uses latest context and keeps awaited requirement across replacement")
   func trailingDrainKeepsAwaitedRequirementAcrossReplacement() async throws {
     let timingID = AnyEffectID(StaticEffectID("monotonic-awaited-trailing-throttle"))
+    let schedulingContext = EffectExecutionContext(cancellationID: timingID, sequence: 1)
+    let replacementContext = EffectExecutionContext(cancellationID: timingID, sequence: 2)
     let sleepProbe = CancellationAwareSleepProbe()
     let didRecurse = AsyncTestSignal()
     let awaitedProbe = InstrumentationProbe()
@@ -543,29 +545,32 @@ struct StoreEffectRuntimeTests {
 
     store.throttleState.storePending(
       .none,
-      context: nil,
+      context: schedulingContext,
       requiresAwaitedCompletion: true,
-      for: timingID
-    )
-    store.throttleState.storePending(
-      .send(.increment),
-      context: nil,
-      requiresAwaitedCompletion: false,
       for: timingID
     )
     let trailingTask = store.scheduleTrailingDrain(
       for: timingID,
       interval: .seconds(60),
+      schedulingContext: schedulingContext,
       awaited: false
-    ) { [store] _, _, awaited in
+    ) { [store] _, context, awaited in
       _ = store.count
+      awaitedProbe.record("sequence:\(context?.sequence ?? 0)")
       awaitedProbe.record("awaited:\(awaited)")
       didRecurse.signal()
     }
 
     do {
       try #require(await sleepProbe.started.wait())
+      store.throttleState.storePending(
+        .send(.increment),
+        context: replacementContext,
+        requiresAwaitedCompletion: false,
+        for: timingID
+      )
       #expect(store.throttleState.pending(for: timingID)?.requiresAwaitedCompletion == true)
+      #expect(store.throttleState.pending(for: timingID)?.context?.sequence == 2)
       #expect(
         effectOperationSignature(store.throttleState.pending(for: timingID)?.effect ?? .none)
           == "send(increment)"
@@ -581,13 +586,14 @@ struct StoreEffectRuntimeTests {
       throw error
     }
 
-    #expect(awaitedProbe.events == ["awaited:true"])
+    #expect(awaitedProbe.events == ["sequence:2", "awaited:true"])
     await store.cancelAllEffects()
   }
 
-  @Test("Debounce clears delayed state when the store clock fails")
+  @Test("Debounce reports scheduling context and clears state when the store clock fails")
   func debounceClearsStateAfterClockFailure() async {
     let timingID = AnyEffectID(StaticEffectID("debounce-clock-failure"))
+    let dropProbe = InstrumentationProbe()
     let instant = ContinuousClock().now
     let store = Store(
       reducer: CounterFeature(),
@@ -595,6 +601,14 @@ struct StoreEffectRuntimeTests {
       clock: .init(
         now: { instant },
         sleep: { _ in throw TestClockFailure() }
+      ),
+      instrumentation: .init(
+        didDropAction: { event in
+          guard event.reason == .throttledOrDebouncedCancellation else { return }
+          dropProbe.record(
+            "drop:\(event.cancellationID?.description ?? "nil"):\(event.sequence.map(String.init) ?? "nil")"
+          )
+        }
       )
     )
     let sequence = store.effectBridge.nextSequence()
@@ -616,43 +630,72 @@ struct StoreEffectRuntimeTests {
     #expect(store.effectBridge.debounceScope(for: timingID) == nil)
     #expect(store.effectBridge.debounceGeneration(for: timingID) == nil)
     #expect(recurseProbe.events.isEmpty)
+    #expect(dropProbe.events == ["drop:debounce-clock-failure:\(sequence)"])
   }
 
-  @Test("Trailing throttle clears delayed state when the store clock fails")
+  @Test("Trailing throttle reports scheduling context and clears state on clock failure")
   func trailingThrottleClearsStateAfterClockFailure() async throws {
     let timingID = AnyEffectID(StaticEffectID("throttle-clock-failure"))
-    let dropped = AsyncTestSignal()
+    let sleepStarted = AsyncTestSignal()
+    let releaseSleep = RunStartGate()
+    let dropProbe = InstrumentationProbe()
     let instant = ContinuousClock().now
     let store = Store(
       reducer: CounterFeature(),
       initialState: .init(),
       clock: .init(
         now: { instant },
-        sleep: { _ in throw TestClockFailure() }
+        sleep: { _ in
+          sleepStarted.signal()
+          await releaseSleep.wait()
+          throw TestClockFailure()
+        }
       ),
       instrumentation: .init(
         didDropAction: { event in
-          if event.reason == .throttledOrDebouncedCancellation {
-            dropped.signal()
-          }
+          guard event.reason == .throttledOrDebouncedCancellation else { return }
+          dropProbe.record(
+            "drop:\(event.cancellationID?.description ?? "nil"):\(event.sequence.map(String.init) ?? "nil")"
+          )
         }
       )
     )
     let effect = EffectTask<CounterFeature.Action>.none
       .throttle(timingID, for: .seconds(60), leading: false, trailing: true)
 
-    await store.walkEffect(
-      effect,
-      context: .init(sequence: 1),
-      awaited: true
-    )
-    try #require(await dropped.wait())
+    let walk = Task { @MainActor in
+      await store.walkEffect(
+        effect,
+        context: .init(sequence: 1),
+        awaited: true
+      )
+    }
+
+    do {
+      try #require(await sleepStarted.wait())
+      await store.walkEffect(
+        effect,
+        context: .init(sequence: 2),
+        awaited: false
+      )
+      #expect(store.throttleState.scope(for: timingID)?.sequence == 2)
+      #expect(store.throttleState.pending(for: timingID)?.context?.sequence == 2)
+      await releaseSleep.open()
+      _ = await walk.result
+    } catch {
+      await releaseSleep.open()
+      walk.cancel()
+      _ = await walk.result
+      throw error
+    }
 
     #expect(store.throttleState.scope(for: timingID) == nil)
     #expect(store.throttleState.generation(for: timingID) == nil)
     #expect(store.throttleState.pending(for: timingID) == nil)
     #expect(store.throttleState.windowEnd(for: timingID) == nil)
+    #expect(store.throttleState.trailingTask(for: timingID) == nil)
     #expect(store.throttleState.latestAdmissionSequence(for: timingID) == nil)
+    #expect(dropProbe.events == ["drop:throttle-clock-failure:1"])
   }
 
   private func assertStaleOuterCancellationPreservesNewerDelayedEffect(

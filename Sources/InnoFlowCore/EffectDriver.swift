@@ -296,10 +296,13 @@ package protocol EffectDriver<Action>: AnyObject {
   /// `awaited` records whether the call that opened the window needs the
   /// trailing window to complete. Later pending replacements can only promote
   /// that requirement through `PendingTrailing.requiresAwaitedCompletion`.
+  /// `schedulingContext` identifies the effect frame that created the sleeper;
+  /// a successful drain still recurses with the latest pending context.
   @discardableResult
   func scheduleTrailingDrain(
     for id: AnyEffectID,
     interval: Duration,
+    schedulingContext: EffectExecutionContext,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (

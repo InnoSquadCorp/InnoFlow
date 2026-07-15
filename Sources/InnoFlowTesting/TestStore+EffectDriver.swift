@@ -566,6 +566,7 @@ extension TestStore: EffectDriver {
   package func scheduleTrailingDrain(
     for id: AnyEffectID,
     interval: Duration,
+    schedulingContext _: EffectExecutionContext,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (

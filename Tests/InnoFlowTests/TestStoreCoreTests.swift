@@ -686,7 +686,12 @@ struct TestStoreCoreTests {
     await store.cancelEffects(id: id, context: .init(sequence: 1))
     store.throttleState.storePending(
       EffectTask<CounterFeature.Action>.none, context: context, for: id)
-    store.scheduleTrailingDrain(for: id, interval: .milliseconds(0), awaited: false) { _, _, _ in
+    store.scheduleTrailingDrain(
+      for: id,
+      interval: .milliseconds(0),
+      schedulingContext: context,
+      awaited: false
+    ) { _, _, _ in
       probe.record("recursed")
     }
 
@@ -714,7 +719,12 @@ struct TestStoreCoreTests {
       context: .init(cancellationID: id, sequence: sequence),
       for: id
     )
-    store.scheduleTrailingDrain(for: id, interval: .seconds(60), awaited: false) { _, _, _ in }
+    store.scheduleTrailingDrain(
+      for: id,
+      interval: .seconds(60),
+      schedulingContext: .init(cancellationID: id, sequence: sequence),
+      awaited: false
+    ) { _, _, _ in }
     let trailingTask = try #require(store.throttleState.trailingTask(for: id))
 
     trailingTask.cancel()

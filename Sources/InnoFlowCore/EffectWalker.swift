@@ -242,6 +242,7 @@ package struct EffectWalker<D: EffectDriver> {
           ?? driver.scheduleTrailingDrain(
             for: id,
             interval: now.duration(to: windowEnd),
+            schedulingContext: throttleContext,
             awaited: awaited,
             recurse: recurse
           )
@@ -274,6 +275,7 @@ package struct EffectWalker<D: EffectDriver> {
       trailingTask = driver.scheduleTrailingDrain(
         for: id,
         interval: interval,
+        schedulingContext: throttleContext,
         awaited: awaited,
         recurse: recurse
       )

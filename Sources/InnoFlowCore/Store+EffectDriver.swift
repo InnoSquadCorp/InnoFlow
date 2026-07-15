@@ -290,6 +290,7 @@ extension Store: EffectDriver {
   package func scheduleTrailingDrain(
     for id: AnyEffectID,
     interval: Duration,
+    schedulingContext: EffectExecutionContext,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
@@ -309,7 +310,11 @@ extension Store: EffectDriver {
           if self.throttleState.generation(for: id) == generation {
             self.throttleState.finishState(for: id, generation: generation)
           }
-          self.recordDrop(nil, reason: .throttledOrDebouncedCancellation, context: nil)
+          self.recordDrop(
+            nil,
+            reason: .throttledOrDebouncedCancellation,
+            context: schedulingContext
+          )
         }
         return
       }
