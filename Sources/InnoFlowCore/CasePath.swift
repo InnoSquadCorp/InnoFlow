@@ -8,6 +8,7 @@ import Foundation
 public struct CasePath<Root, Value>: Sendable {
   public let embed: @Sendable (Value) -> Root
   public let extract: @Sendable (Root) -> Value?
+  package let identity: ActionPathIdentity
 
   public init(
     embed: @escaping @Sendable (Value) -> Root,
@@ -15,5 +16,6 @@ public struct CasePath<Root, Value>: Sendable {
   ) {
     self.embed = embed
     self.extract = extract
+    self.identity = ActionPathIdentity()
   }
 }
