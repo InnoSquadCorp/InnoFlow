@@ -12,6 +12,16 @@ import os
 @Suite("Compile Contract Tests")
 struct CompileContractTests {
 
+  @Test("Generic extension features expose synthesized action paths")
+  func genericExtensionFeatureActionPathsCompile() {
+    let replacePath = GenericExtensionNamespace<Int>.Feature.Action.replaceCasePath
+    let childPath = GenericExtensionNamespace<Int>.Feature.Action.childActionPath
+
+    #expect(replacePath.extract(replacePath.embed(42)) == 42)
+    #expect(childPath.extract(childPath.embed(1, 42))?.0 == 1)
+    #expect(childPath.extract(childPath.embed(1, 42))?.1 == 42)
+  }
+
   @Test("EffectID accepts dynamic and non-string raw values")
   func effectIDAcceptsDynamicAndNonStringRawValues() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
@@ -439,6 +449,31 @@ struct CompileContractTests {
           }
       }
 
+      @InnoFlow
+      public struct GenericFeature<Value: Equatable & Sendable> {
+          public struct State: Equatable, Sendable, DefaultInitializable {
+              public var value: Value?
+              public init() {}
+          }
+
+          public enum Action: Equatable, Sendable {
+              case replace(Value)
+              case child(id: Int, action: Value)
+          }
+
+          public init() {}
+
+          var body: some Reducer<State, Action> {
+              Reduce { state, action in
+                  switch action {
+                  case .replace(let value), .child(_, let value):
+                      state.value = value
+                  }
+                  return .none
+              }
+          }
+      }
+
       @InnoFlow(phaseManaged: true)
       package struct PackageFeature {
           package struct State: Equatable, Sendable, DefaultInitializable {
@@ -544,6 +579,12 @@ struct CompileContractTests {
       let _ = feature.reduce(into: &state, action: .increment)
       let _ = PublicFeature.Action.childCasePath
       let _ = PublicFeature.Action.rowActionPath
+
+      var genericState = GenericFeature<Int>.State()
+      let genericFeature = GenericFeature<Int>()
+      let _ = genericFeature.reduce(into: &genericState, action: .replace(42))
+      let _ = GenericFeature<Int>.Action.replaceCasePath.embed(42)
+      let _ = GenericFeature<Int>.Action.childActionPath.embed(1, 42)
 
       var packageState = PackageFeature.State()
       let packageFeature = PackageFeature()

@@ -14,6 +14,33 @@ import os
 
 // MARK: - Fixtures
 
+struct GenericExtensionNamespace<Value: Equatable & Sendable> {}
+
+extension GenericExtensionNamespace {
+  @InnoFlow
+  struct Feature {
+    struct State: Equatable, Sendable, DefaultInitializable {
+      var value: Value?
+      init() {}
+    }
+
+    enum Action: Equatable, Sendable {
+      case replace(Value)
+      case child(id: Int, action: Value)
+    }
+
+    var body: some Reducer<State, Action> {
+      Reduce { state, action in
+        switch action {
+        case .replace(let value), .child(_, let value):
+          state.value = value
+        }
+        return .none
+      }
+    }
+  }
+}
+
 struct CounterFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var count = 0

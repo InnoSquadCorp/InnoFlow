@@ -324,6 +324,73 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow uses computed action paths inside generic features")
+  func genericFeatureUsesComputedActionPaths() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct GenericFeature<Value: Sendable> {
+            struct State: Sendable {}
+            enum Action: Sendable {
+                case child(Value)
+                case row(id: Int, action: Value)
+            }
+
+            var body: some Reducer<State, Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct GenericFeature<Value: Sendable> {
+              struct State: Sendable {}
+              enum Action: Sendable {
+                  case child(Value)
+                  case row(id: Int, action: Value)
+              }
+
+              var body: some Reducer<State, Action> {
+                  Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension GenericFeature: Reducer {}
+          extension GenericFeature.Action {
+            static var childCasePath: CasePath<Self, Value> {
+              CasePath<Self, Value>(
+                embed: { childAction in
+                  .child(childAction)
+                },
+                extract: { action in
+                  guard case .child(let childAction) = action else { return nil }
+                  return childAction
+                }
+              )
+            }
+            static var rowActionPath: CollectionActionPath<Self, Int, Value> {
+              CollectionActionPath<Self, Int, Value>(
+                embed: { id, action in
+                  .row(id: id, action: action)
+                },
+                extract: { action in
+                  guard case let .row(id, childAction) = action else { return nil }
+                  return (id, childAction)
+                }
+              )
+            }
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow synthesizes collection action paths from id/action labels")
   func collectionActionPathUsesLabelsNotActionSuffix() throws {
     #if canImport(InnoFlowMacros)

@@ -18,6 +18,10 @@ extension InnoFlowMacro {
       declaration: actionEnum,
       in: context
     )
+    let requiresComputedProperty = actionPathRequiresComputedProperty(
+      actionEnum: actionEnum,
+      context: context
+    )
     let existingNames = Set(
       actionEnum.memberBlock.members.flatMap { member -> [String] in
         if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
@@ -56,6 +60,7 @@ extension InnoFlowMacro {
           let member = synthesizedActionPathMember(
             for: element,
             accessPrefix: accessPrefix,
+            requiresComputedProperty: requiresComputedProperty,
             existingNames: existingNames,
             seenGeneratedNames: &seenGeneratedNames,
             context: context
@@ -73,6 +78,7 @@ extension InnoFlowMacro {
   private static func synthesizedActionPathMember(
     for element: EnumCaseElementSyntax,
     accessPrefix: String,
+    requiresComputedProperty: Bool,
     existingNames: Set<String>,
     seenGeneratedNames: inout Set<String>,
     context: some MacroExpansionContext
@@ -116,6 +122,23 @@ extension InnoFlowMacro {
       }
 
       let childActionType = parameter.type.trimmedDescription
+      if requiresComputedProperty {
+        return .init(
+          declaration: """
+            \(accessPrefix)static var \(memberName): CasePath<Self, \(childActionType)> {
+              CasePath<Self, \(childActionType)>(
+                embed: { childAction in
+                  .\(caseName)(childAction)
+                },
+                extract: { action in
+                  guard case .\(caseName)(let childAction) = action else { return nil }
+                  return childAction
+                }
+              )
+            }
+            """
+        )
+      }
       return .init(
         declaration: """
           \(accessPrefix)static let \(memberName) = CasePath<Self, \(childActionType)>(
@@ -171,6 +194,23 @@ extension InnoFlowMacro {
 
       let idType = idParameter.type.trimmedDescription
       let childActionType = actionParameter.type.trimmedDescription
+      if requiresComputedProperty {
+        return .init(
+          declaration: """
+            \(accessPrefix)static var \(memberName): CollectionActionPath<Self, \(idType), \(childActionType)> {
+              CollectionActionPath<Self, \(idType), \(childActionType)>(
+                embed: { id, action in
+                  .\(caseName)(id: id, action: action)
+                },
+                extract: { action in
+                  guard case let .\(caseName)(id, childAction) = action else { return nil }
+                  return (id, childAction)
+                }
+              )
+            }
+            """
+        )
+      }
       return .init(
         declaration: """
           \(accessPrefix)static let \(memberName) = CollectionActionPath<Self, \(idType), \(childActionType)>(
@@ -196,6 +236,37 @@ extension InnoFlowMacro {
     }
 
     return nil
+  }
+
+  private static func actionPathRequiresComputedProperty(
+    actionEnum: EnumDeclSyntax,
+    context: some MacroExpansionContext
+  ) -> Bool {
+    if actionEnum.genericParameterClause != nil {
+      return true
+    }
+
+    return context.lexicalContext.contains { lexicalContext in
+      // An extension's syntax does not reveal whether its extended nominal
+      // type is generic. Nested declarations inherit that generic context, so
+      // conservatively avoid stored properties in every extension context.
+      if lexicalContext.is(ExtensionDeclSyntax.self) {
+        return true
+      }
+      if let structDecl = lexicalContext.as(StructDeclSyntax.self) {
+        return structDecl.genericParameterClause != nil
+      }
+      if let enumDecl = lexicalContext.as(EnumDeclSyntax.self) {
+        return enumDecl.genericParameterClause != nil
+      }
+      if let classDecl = lexicalContext.as(ClassDeclSyntax.self) {
+        return classDecl.genericParameterClause != nil
+      }
+      if let actorDecl = lexicalContext.as(ActorDeclSyntax.self) {
+        return actorDecl.genericParameterClause != nil
+      }
+      return false
+    }
   }
 
   private static func isOptionalPayloadType(_ type: TypeSyntax) -> Bool {
