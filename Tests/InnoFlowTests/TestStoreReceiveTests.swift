@@ -289,36 +289,54 @@ struct TestStoreReceiveTests {
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let cancellationID = AnyEffectID(StaticEffectID("receive-total-deadline"))
     let staleContext = EffectExecutionContext(cancellationID: cancellationID, sequence: 1)
+    let totalTimeout = Duration.seconds(5)
+    let minimumConsumedBudget = Duration.milliseconds(50)
+    var observedTimeouts: [Duration] = []
+    var receiveResult: TestStoreReceiveResult<ReceiveFeature.Action, Void>?
+    store.queue.waitTimeoutObserver = { observedTimeouts.append($0) }
 
-    let staleDelivery = Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(150))
-      guard !Task.isCancelled else { return false }
-      guard store.queue.pendingWaiterCount == 1 else { return false }
-
-      store.deliverAction(.ignored, context: staleContext)
-      guard store.queue.pendingWaiterCount == 0 else { return false }
-      _ = store.markCancelled(id: cancellationID, upTo: 1)
-
-      return await waitUntil(timeout: .milliseconds(100), pollInterval: .milliseconds(1)) {
-        store.queue.pendingWaiterCount == 1
+    let receiving = Task { @MainActor in
+      receiveResult = await store.receiveResult(timeout: totalTimeout) { _ in
+        TestStoreActionMatch.matched(())
       }
     }
-    let clock = ContinuousClock()
-    let startedAt = clock.now
 
-    let result = await store.receiveResult(timeout: .milliseconds(300)) { _ in
-      TestStoreActionMatch.matched(())
+    let didInstallFirstWaiter = await waitUntil {
+      observedTimeouts.count == 1 && store.queue.pendingWaiterCount == 1
     }
-    let elapsed = startedAt.duration(to: clock.now)
-    let didConsumeStaleAction = await staleDelivery.value
-
-    #expect(didConsumeStaleAction)
-    guard case .timedOut(timeout: .milliseconds(300)) = result else {
-      Issue.record("Expected the total receive budget to time out")
+    guard didInstallFirstWaiter else {
+      receiving.cancel()
+      _ = await receiving.value
+      store.queue.waitTimeoutObserver = nil
+      Issue.record("Expected the initial receive waiter to be installed")
       return
     }
-    #expect(elapsed >= .milliseconds(240))
-    #expect(elapsed < .milliseconds(400))
+
+    try? await Task.sleep(for: .milliseconds(100))
+    store.deliverAction(.ignored, context: staleContext)
+    _ = store.markCancelled(id: cancellationID, upTo: 1)
+
+    let didInstallSecondWaiter = await waitUntil {
+      observedTimeouts.count == 2 && store.queue.pendingWaiterCount == 1
+    }
+    receiving.cancel()
+    _ = await receiving.value
+    store.queue.waitTimeoutObserver = nil
+
+    #expect(didInstallSecondWaiter)
+    guard observedTimeouts.count == 2 else {
+      Issue.record("Expected one wait budget before and after the invalidated action")
+      return
+    }
+    guard case .cancelled = receiveResult else {
+      Issue.record("Expected cancellation after observing the reused deadline")
+      return
+    }
+
+    let consumedBudget = observedTimeouts[0] - observedTimeouts[1]
+    #expect(observedTimeouts[1] > .zero)
+    #expect(consumedBudget >= minimumConsumedBudget)
+    #expect(store.queue.pendingWaiterCount == 0)
   }
 }
 

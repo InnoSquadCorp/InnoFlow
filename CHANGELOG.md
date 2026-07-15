@@ -78,6 +78,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - Official main and release test commands now use the same `--jobs 1` and
   `--no-parallel` scheduling contract as CI and principle gates, preventing
   randomized effect suites from starving unrelated wall-clock assertions.
+- The invalidated-action receive deadline regression now compares the wait
+  budgets forwarded to the queue instead of enforcing a tight wall-clock
+  completion ceiling, preserving deadline-reset coverage on shared runners.
 
 ### Added
 

@@ -67,6 +67,10 @@ package final class ActionQueue<Action: Sendable> {
     waiters.count
   }
 
+  // Internal diagnostics hook for verifying forwarded wait budgets without
+  // coupling tests to scheduler-dependent wall-clock completion thresholds.
+  var waitTimeoutObserver: ((Duration) -> Void)?
+
   func enqueue(_ action: Action, context: EffectExecutionContext?) {
     let queuedAction = QueuedAction(action: action, context: context)
     while !waiters.isEmpty {
@@ -90,6 +94,8 @@ package final class ActionQueue<Action: Sendable> {
       compactBufferIfNeeded()
       return queuedAction
     }
+
+    waitTimeoutObserver?(timeout)
 
     let waiterID = UUID()
     let resolution = ActionQueueWaiterResolution()
