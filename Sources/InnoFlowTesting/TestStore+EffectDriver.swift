@@ -262,14 +262,8 @@ extension TestStore {
     }
   }
 
-  private func startRunTask(
-    priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
-    context: EffectExecutionContext?
-  ) -> Task<Void, Never> {
-    let token = UUID()
-    let startGate = TestStoreRunStartGate()
-    let endpoint = TestStoreRunEndpoint<R.Action>(
+  private func makeRunEndpoint() -> TestStoreRunEndpoint<R.Action> {
+    TestStoreRunEndpoint(
       isTaskActive: { [weak self] token in
         self?.isRunTaskActive(token: token) ?? false
       },
@@ -280,6 +274,16 @@ extension TestStore {
         self?.finishTrackedRunTask(token: token)
       }
     )
+  }
+
+  private func startRunTask(
+    priority: TaskPriority?,
+    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    context: EffectExecutionContext?
+  ) -> Task<Void, Never> {
+    let token = UUID()
+    let startGate = TestStoreRunStartGate()
+    let endpoint = makeRunEndpoint()
     let runBridge = TestStoreRunBridge(
       endpoint: endpoint,
       queue: queue,
@@ -447,13 +451,6 @@ extension TestStore {
     removeTrackedTask(token: token)
   }
 
-  private func sleepForDriver(_ duration: Duration) async throws {
-    if let manualClock {
-      try await manualClock.sleep(for: duration)
-    } else {
-      try await Task.sleep(for: duration)
-    }
-  }
 }
 
 // MARK: - EffectDriver Conformance
@@ -534,19 +531,20 @@ extension TestStore: EffectDriver {
     guard shouldProceed(context: context) else { return }
 
     guard let generation = beginDebounce(scope) else { return }
+    let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
 
     let task = Task { @MainActor [weak self] in
+      do {
+        try await delayClock.sleep(interval)
+      } catch {
+        self?.finishDebounceTask(for: id, generation: generation)
+        return
+      }
+
       guard let self else { return }
       defer {
         self.finishDebounceTask(for: id, generation: generation)
       }
-
-      do {
-        try await self.sleepForDriver(interval)
-      } catch {
-        return
-      }
-
       guard !Task.isCancelled else { return }
       guard self.debounceTasksByID[id]?.generation == generation else { return }
       guard self.shouldProceed(context: context) else { return }
@@ -575,16 +573,18 @@ extension TestStore: EffectDriver {
   ) -> Task<Void, Never> {
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
-    let task = Task { [weak self] in
-      guard let self else { return }
+    let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
+    let task = Task { @MainActor [weak self] in
       do {
-        try await self.sleepForDriver(interval)
+        try await delayClock.sleep(interval)
       } catch {
+        guard let self else { return }
         if self.throttleState.generation(for: id) == generation {
           self.throttleState.finishState(for: id, generation: generation)
         }
         return
       }
+      guard let self else { return }
       guard self.throttleState.generation(for: id) == generation else { return }
       defer {
         if self.throttleState.generation(for: id) == generation {
@@ -666,17 +666,18 @@ extension TestStore: EffectDriver {
     } else {
       let token = UUID()
       let startGate = TestStoreRunStartGate()
-      let task = Task { @MainActor [weak self] in
+      let endpoint = makeRunEndpoint()
+      let task = Task { @MainActor in
         guard await startGate.wait() else {
           return
         }
-        guard let self else { return }
         defer {
-          self.removeTrackedTask(token: token)
+          endpoint.finishTrackedTask(token: token)
         }
         for child in children {
           guard !Task.isCancelled else { break }
-          guard self.shouldProceed(context: context) else { break }
+          guard endpoint.isTaskActive(token: token) else { break }
+          guard endpoint.shouldProceed(context: context) else { break }
           await recurse(child, context, true)
         }
       }

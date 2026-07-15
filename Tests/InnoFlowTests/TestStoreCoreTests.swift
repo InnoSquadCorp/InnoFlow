@@ -225,6 +225,126 @@ struct TestStoreCoreTests {
     await store.assertNoBufferedActions()
   }
 
+  @Test("TestStore release cancels pending debounce without retaining TestStore")
+  func testStoreReleaseCancelsPendingDebounceWithoutRetainingTestStore() async throws {
+    let clock = ManualTestClock()
+    weak var weakStore: TestStore<DebounceFeature>?
+
+    do {
+      var store: TestStore<DebounceFeature>? = TestStore(
+        reducer: DebounceFeature(),
+        initialState: .init(),
+        clock: clock
+      )
+      weakStore = store
+      await store?.send(.trigger(1))
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      store = nil
+    }
+
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(1))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+
+    #expect(released)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+    #expect(weakStore == nil)
+  }
+
+  @Test("TestStore release cancels pending trailing throttle without retaining TestStore")
+  func testStoreReleaseCancelsPendingTrailingThrottleWithoutRetainingTestStore() async throws {
+    let clock = ManualTestClock()
+    weak var weakStore: TestStore<ThrottleTrailingFeature>?
+
+    do {
+      var store: TestStore<ThrottleTrailingFeature>? = TestStore(
+        reducer: ThrottleTrailingFeature(),
+        initialState: .init(),
+        clock: clock
+      )
+      weakStore = store
+      await store?.send(.trigger(1))
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      store = nil
+    }
+
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(1))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+
+    #expect(released)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+    #expect(weakStore == nil)
+  }
+
+  @Test("TestStore release breaks awaited trailing throttle composite ownership")
+  func testStoreReleaseBreaksAwaitedTrailingThrottleCompositeOwnership() async throws {
+    let clock = ManualTestClock()
+    weak var weakStore: TestStore<AwaitedTrailingReleaseFeature>?
+
+    do {
+      var store: TestStore<AwaitedTrailingReleaseFeature>? = TestStore(
+        reducer: AwaitedTrailingReleaseFeature(),
+        initialState: .init(),
+        clock: clock
+      )
+      weakStore = store
+      await store?.send(.start)
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      store = nil
+    }
+
+    let released = await waitUntil {
+      weakStore == nil
+    }
+    if !released {
+      await clock.advance(by: .seconds(60))
+      await waitUntil {
+        weakStore == nil
+      }
+    }
+
+    #expect(released)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 0
+      }
+    )
+    #expect(weakStore == nil)
+  }
+
   @Test("TestStore debounce skips stale effects at cancellation boundaries")
   func testStoreDebounceSkipsStaleEffectsAtCancellationBoundaries() async {
     let id = AnyEffectID(StaticEffectID("teststore-stale-debounce"))
