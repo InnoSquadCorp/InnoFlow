@@ -1731,7 +1731,7 @@ struct StoreScopeSelectionTests {
         == true)
   }
 
-  @Test("ScopedStore debugDescription reports lifecycle and stable id context")
+  @Test("ScopedStore debugDescription reports actor-independent identity context")
   func scopedStoreDebugDescription() {
     let store = Store(reducer: ScopedCollectionFeature(), initialState: .init())
     let scopedTodos = store.scope(
@@ -1743,8 +1743,26 @@ struct StoreScopeSelectionTests {
     #expect(description.contains("ScopedStore(") == true)
     #expect(description.contains(String(reflecting: ScopedCollectionFeature.self)) == true)
     #expect(description.contains(String(reflecting: ScopedCollectionFeature.Todo.self)) == true)
-    #expect(description.contains("parentAlive: true") == true)
-    #expect(description.contains("active: true") == true)
     #expect(description.contains(String(describing: scopedTodos[0].id)) == true)
+    #expect(description.contains("lifecycle: inspect isAlive on MainActor") == true)
+  }
+
+  @Test("ScopedStore debugDescription is safe outside the main actor")
+  func scopedStoreDebugDescriptionOutsideMainActor() async {
+    let store = Store(reducer: ScopedCollectionFeature(), initialState: .init())
+    let scopedTodos = store.scope(
+      collection: \.todos,
+      action: ScopedCollectionFeature.Action.todoActionPath
+    )
+    let scopedTodo = scopedTodos[0]
+
+    let description = await Task.detached {
+      scopedTodo.debugDescription
+    }.value
+
+    #expect(description.contains("ScopedStore(") == true)
+    #expect(description.contains(String(reflecting: ScopedCollectionFeature.self)) == true)
+    #expect(description.contains(String(reflecting: ScopedCollectionFeature.Todo.self)) == true)
+    #expect(description.contains(String(describing: scopedTodo.id)) == true)
   }
 }

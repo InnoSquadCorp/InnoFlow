@@ -29,6 +29,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   outdated action transform. Previously returned row handles keep their
   original routing, and the parent retains at most one active family per
   collection key path.
+- `ScopedStore.debugDescription` is now safe to evaluate from any executor. It
+  reports immutable type and stable-identity context only; read `isAlive` on
+  the main actor when current projection liveness is required.
 - Store and TestStore run cancellation now applies only through the requesting
   effect sequence. A delayed cancellation from an older sequence no longer
   terminates a newer run registered under the same cancellation ID.

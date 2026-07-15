@@ -318,6 +318,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package let selectionCache = SelectionCache()
   @ObservationIgnored package var isActive = true
   @ObservationIgnored package nonisolated(unsafe) let stableID: AnyHashable?
+  @ObservationIgnored private nonisolated let stableIDDebugDescription: String?
 
   /// The current child state, falling back to the last cached snapshot
   /// when the parent store is released or the projection is inactive.
@@ -395,6 +396,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     self.parent = parent
     self.stateResolver = stateResolver
     self.stableID = stableID
+    self.stableIDDebugDescription = stableID.map(String.init(describing:))
     self.failureKind = failureKind
     self.actionTransform = actionTransform
     parent.registerProjectionObserver(self, registration: observerRegistration)
@@ -482,12 +484,15 @@ extension ScopedStore: ProjectionObserver {
 }
 
 extension ScopedStore: CustomDebugStringConvertible {
+  /// An actor-independent identity summary suitable for background logging.
+  ///
+  /// Mutable lifecycle state is intentionally omitted. Read ``isAlive`` on
+  /// the main actor when current projection liveness is required.
   public nonisolated var debugDescription: String {
-    MainActor.assumeIsolated {
-      """
-      ScopedStore(parentType: \(String(reflecting: ParentReducer.self)), childType: \(String(reflecting: ChildState.self)), parentAlive: \(parent != nil), active: \(isActive), stableID: \(stableID.map(String.init(describing:)) ?? "nil"))
-      """
-    }
+    "ScopedStore(parentType: \(String(reflecting: ParentReducer.self)), "
+      + "childType: \(String(reflecting: ChildState.self)), "
+      + "stableID: \(stableIDDebugDescription ?? "nil"), "
+      + "lifecycle: inspect isAlive on MainActor)"
   }
 }
 
