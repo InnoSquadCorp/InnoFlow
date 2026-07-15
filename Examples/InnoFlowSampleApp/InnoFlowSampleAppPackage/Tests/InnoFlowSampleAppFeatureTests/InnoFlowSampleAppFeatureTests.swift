@@ -233,18 +233,17 @@ struct InnoFlowSampleAppFeatureTests {
     await store.finish()
   }
 
-  @Test("Orchestration demo child scope can be asserted through ScopedTestStore")
+  @Test("Orchestration child actions with parent mutations are asserted through TestStore")
   @MainActor
-  func orchestrationScopedChildTesting() async {
+  func orchestrationParentMutationTesting() async {
     let store = TestStore(reducer: OrchestrationFeature())
-    let profile = store.scope(state: \.profile, action: OrchestrationFeature.Action.profileCasePath)
 
-    await profile.send(.markReady) {
-      $0.isReady = true
-      $0.log = ["profile ready"]
+    await store.send(.profile(.markReady)) {
+      $0.profile.isReady = true
+      $0.profile.log = ["profile ready"]
+      $0.refreshLog = ["profile child finished"]
     }
 
-    #expect(store.state.refreshLog == ["profile child finished"])
     await store.finish()
   }
 
@@ -269,9 +268,7 @@ struct InnoFlowSampleAppFeatureTests {
       action: PhaseDrivenTodoFeature.Action.todoActionPath
     )
 
-    await todo.send(.setIsDone(true))
-
-    todo.assert {
+    await todo.send(.setIsDone(true)) {
       $0.isDone = true
     }
     #expect(store.state.todos.first(where: { $0.id == targetID })?.isDone == true)
@@ -587,9 +584,7 @@ struct InnoFlowSampleAppFeatureTests {
       action: ListDetailPaginationFeature.Action.articleActionPath
     )
 
-    await article.send(.toggleFavorite)
-
-    article.assert {
+    await article.send(.toggleFavorite) {
       $0.isFavorite = true
     }
     #expect(store.state.articles.first(where: { $0.id == targetID })?.isFavorite == true)

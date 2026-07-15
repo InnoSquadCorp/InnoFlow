@@ -29,6 +29,12 @@ For larger features, model orchestration explicitly: parent actions coordinate c
 long-running progress pipelines are composed with ``EffectTask/concatenate(_:)-(EffectTask<Action>...)``, and batch work
 shares cancellation IDs for fan-out cancellation from the store boundary.
 
+`TestStore.exhaustivity` defaults to `.on`: every state mutation belongs in the
+matching `send` or `receive` assertion, every effect action must be received,
+and an omitted assertion closure means no state change. Set `.off` only for an
+intentionally partial test, use `finish()` at the terminal boundary, and use
+`assertNoBufferedActions()` for an intermediate queue checkpoint.
+
 Conditional child composition stays explicit:
 
 - use ``Scope`` for always-present child state

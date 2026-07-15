@@ -92,6 +92,8 @@ await store.receive(._loaded(items), through: phaseMap) {
   $0.phase = .loaded
   $0.items = items
 }
+
+await store.finish()
 ```
 
 Rules:

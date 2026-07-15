@@ -1013,6 +1013,7 @@ struct CompileContractTests {
               guard case .loaded(let value) = action else { return }
               state.values.append(value)
           }
+          await store.assertNoBufferedActions()
 
           let child = store.scope(
               state: \\LoadFeature.State.child,
@@ -1036,7 +1037,9 @@ struct CompileContractTests {
               guard case .loaded(let value) = action else { return }
               state.values.append(value)
           }
+          await child.assertNoBufferedActions()
           await store.finish(timeout: .milliseconds(10))
+          await child.finish(timeout: .milliseconds(10))
       }
       """
     try source.write(

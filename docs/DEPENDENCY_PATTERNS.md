@@ -259,12 +259,16 @@ let store = TestStore(
   reducer: RealtimeStreamFeature(tickInterval: .milliseconds(100)),
   clock: clock
 )
-await store.send(.subscribe)
+await store.send(.subscribe) {
+  $0.isSubscribed = true
+}
 
 while await clock.sleeperCount < 1 { await Task.yield() }
 await clock.advance(by: .milliseconds(100))
 
-await store.receive(._tick(1))
+await store.receive(._tick(1)) {
+  $0.ticks = [1]
+}
 await store.send(.unsubscribe) {
   $0.isSubscribed = false
 }

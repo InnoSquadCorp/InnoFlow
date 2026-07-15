@@ -84,8 +84,8 @@
   "sectionCounts": [
     {
       "file": "README.md",
-      "label": "InnoFlow 4.0.0 direction",
-      "pattern": "^## InnoFlow 4\\.0\\.0 direction$",
+      "label": "InnoFlow 5.0.0 development direction",
+      "pattern": "^## InnoFlow 5\\.0\\.0 development direction$",
       "count": 1
     },
     {
@@ -161,6 +161,26 @@
     {
       "label": "SwiftUI integration product",
       "pattern": "InnoFlowSwiftUI",
+      "files": [
+        "README.md",
+        "README.kr.md",
+        "README.jp.md",
+        "README.cn.md"
+      ]
+    },
+    {
+      "label": "Core runtime product",
+      "pattern": "InnoFlowCore",
+      "files": [
+        "README.md",
+        "README.kr.md",
+        "README.jp.md",
+        "README.cn.md"
+      ]
+    },
+    {
+      "label": "TestStore exhaustivity contract",
+      "pattern": "TestStore\\.exhaustivity",
       "files": [
         "README.md",
         "README.kr.md",

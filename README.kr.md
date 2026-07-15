@@ -6,6 +6,8 @@
 
 InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단방향 아키텍처 프레임워크입니다.
 
+`main` 문서는 5.0 개발 계약을 설명하며, 아래 설치 예시는 최신 안정 릴리스인 4.0.0을 유지합니다.
+
 ## 핵심 방향
 
 - 공식 feature authoring은 `var body: some Reducer<State, Action>`입니다.
@@ -13,6 +15,7 @@ InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단
 - `PhaseMap`은 phase-heavy feature의 canonical runtime phase-transition layer입니다.
 - `PhaseTransitionGraph`는 generic automata runtime이 아니라 opt-in validation layer입니다.
 - binding은 `@BindableField`와 projected key path를 통해 명시적으로 연결합니다.
+- `TestStore.exhaustivity`는 기본값이 `.on`이며, 모든 상태 전환과 effect action을 빠짐없이 검증합니다.
 - 앱 라우팅, transport, 세션 라이프사이클, 생성 시점 의존성 그래프는 앱 경계 바깥에서 소유합니다.
 
 경계 문서:
@@ -42,7 +45,7 @@ dependencies: [
 ```swift
 .target(
   name: "YourDomain",
-  dependencies: ["InnoFlow"]
+  dependencies: ["InnoFlowCore"]
 )
 
 .target(
@@ -52,13 +55,14 @@ dependencies: [
 
 .testTarget(
   name: "YourAppTests",
-  dependencies: ["InnoFlow", "InnoFlowTesting"]
+  dependencies: ["InnoFlowCore", "InnoFlowTesting"]
 )
 ```
 
-non-UI feature/domain target은 `InnoFlow`만 의존하면 됩니다. SwiftUI app target은
-`InnoFlowSwiftUI`를 함께 의존해 `Store.binding`, `ScopedStore.binding`,
-`Store.preview`, `EffectTask.animation(Animation?)`를 사용합니다.
+runtime-only non-UI feature/domain target은 `InnoFlowCore`만 의존하면 됩니다.
+`@InnoFlow` macro를 사용하는 target은 `InnoFlow`를 직접 의존해야 합니다. SwiftUI
+app target은 `InnoFlowSwiftUI`를 함께 의존해 `Store.binding`,
+`ScopedStore.binding`, `Store.preview`, `EffectTask.animation(Animation?)`를 사용합니다.
 
 ## 빠른 링크
 

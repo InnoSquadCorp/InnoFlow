@@ -6,6 +6,9 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ### Who is affected
 
+- Consumers building the 5.0 development line with a Swift toolchain older
+  than 6.3 are affected. All package targets now compile in Swift 6 language
+  mode under the Swift 6.3 toolchain contract.
 - Ordinary `store.scope(state:action:)` call sites are source-compatible and
   require no changes.
 - Consumers that store `store.scope` itself as a two-argument method value are
@@ -29,10 +32,67 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   it through `scoped.requireAlive` are affected. The new real
   `ScopedStore.requireAlive()` method takes precedence over dynamic-member
   lookup, so that expression now resolves to a function value.
+- Tests that relied on partial `TestStore` state assertions are affected.
+  `TestStore.exhaustivity` now defaults to `.on`, and an omitted `send` or
+  `receive` assertion closure means that the reducer must not change state.
+- Tests that sent a new user action while effect actions were still pending are
+  affected. Exhaustive stores reduce those pending actions to preserve runtime
+  order and report that each one should have been received first.
+- Tests that assumed a mismatched effect action was discarded are affected.
+  The action is now reduced exactly once before exhaustive mode reports the
+  mismatch; non-exhaustive mode continues searching under one total deadline.
+- Call sites using `assertNoMoreActions()` are affected by a deprecation
+  warning. Its legacy behavior remains available during the 5.x line and is
+  planned for removal in 6.0.
 
 ### Required action
 
-Either include the source-location parameters in the stored function type:
+Upgrade downstream development and CI environments to Swift 6.3 or newer
+before adopting the 5.0 line. The root package, compile-contract clients,
+canonical sample package, Xcode sample targets, and DocC workflow are validated
+against that toolchain contract.
+
+For exhaustive tests, describe every complete state transition and receive
+every effect-emitted action:
+
+```swift
+let store = TestStore(reducer: Feature())
+
+await store.send(.start) {
+  $0.phase = .loading
+}
+
+await store.receive(._finished(.fixture)) {
+  $0.phase = .loaded
+  $0.value = .fixture
+}
+
+await store.finish()
+```
+
+Use `finish()` at the terminal boundary and `assertNoBufferedActions()` only
+for an intermediate, immediate queue checkpoint. Replace
+`assertNoMoreActions()` according to that intent; there is no single renamed
+replacement because the legacy API mixed both purposes.
+
+If a test is intentionally partial or needs an incremental migration, opt out
+explicitly:
+
+```swift
+store.exhaustivity = .off(showSkippedAssertions: true)
+```
+
+In `.off` mode, expected-state closures start from the actual post-reducer
+state, unexpected effect actions are reduced automatically, and
+`showSkippedAssertions: true` emits non-failing warnings. `finish()` drains
+buffered, late, and follow-up actions until the harness is idle.
+
+Scoped stores forward the parent exhaustivity policy. Because exhaustive child
+assertions compare the complete root state, send through the parent
+`TestStore` when a child action intentionally mutates parent or sibling state.
+
+For scoped projection identity changes, either include the source-location
+parameters in the stored function type:
 
 ```swift
 typealias LocatedScopeMethod = @MainActor @Sendable (
@@ -109,7 +169,7 @@ projection is a programming error.
 
 ### Who is affected
 
-- Consumers adopting the 4.0.0 public surface before the release tag is cut.
+- Consumers upgrading from 3.x to the 4.0.0 public surface.
 - Consumers that directly referenced `ReducerBuilder` underscored implementation
   wrapper types instead of composing through public reducers.
 - SwiftUI app targets that call `Store.binding`, `ScopedStore.binding`,

@@ -147,6 +147,10 @@ await store.receive(._loaded(MockTodoService.fixtures), through: phaseMap) {
 await store.assertNoBufferedActions()
 ```
 
+`assertNoBufferedActions()` is an intermediate, immediate queue checkpoint.
+End the complete test with `finish()` after all expected effects and actions
+have been handled.
+
 ```swift
 let todo = store.scope(
   collection: \.todos,
@@ -154,8 +158,7 @@ let todo = store.scope(
   action: PhaseDrivenTodoFeature.Action.todoActionPath
 )
 
-await todo.send(.setIsDone(true))
-todo.assert {
+await todo.send(.setIsDone(true)) {
   $0.isDone = true
 }
 

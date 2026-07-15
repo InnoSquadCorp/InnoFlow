@@ -22,6 +22,36 @@ This document captures the stable framework guarantees that should not drift wit
 - Use `select(dependingOn:)` for a single explicit state slice; use the variadic `select(dependingOnAll:)` for two or more slices. Both forms keep selective invalidation regardless of arity.
 - Closure-based `select { ... }` remains an always-refresh fallback when dependency reads cannot be declared soundly.
 
+## TestStore exhaustivity contract
+
+- `TestStore.exhaustivity` defaults to `.on`. Every reducer state mutation must
+  be described by the matching `send` or `receive` assertion closure, and every
+  effect-emitted action must be consumed with `receive`.
+- Omitting an assertion closure in exhaustive mode asserts that state does not
+  change. Assertion closures describe the complete transition from the state
+  before the action.
+- Before sending a new user action, already-buffered effect actions are reduced
+  to preserve runtime ordering. Exhaustive mode reports them as unreceived;
+  non-exhaustive mode skips them silently or emits warnings according to the
+  configured policy.
+- A valid receive mismatch is reduced exactly once. Exhaustive mode reports it
+  immediately. Non-exhaustive mode continues searching for the requested
+  action, and mismatch recovery plus waiting share one total wall-clock
+  deadline.
+- `.off` enables partial state assertions. Its expected-state closure starts
+  from the actual post-reducer state, and unexpected actions still run through
+  the reducer and effect system. `.off(showSkippedAssertions: true)` emits
+  non-failing warnings for skipped state or action assertions.
+- Scoped test stores forward the parent exhaustivity policy. Exhaustive scoped
+  assertions compare the complete root state; actions that intentionally
+  change parent or sibling state should be asserted through the parent
+  `TestStore`.
+- `finish()` is the terminal assertion. `.on` fails on unreceived actions;
+  `.off` reduces buffered, late, and follow-up actions until the harness is
+  idle. `assertNoBufferedActions()` is an immediate intermediate checkpoint.
+  The ambiguous `assertNoMoreActions()` API is deprecated in 5.x and planned
+  for removal in 6.0.
+
 ## Projection lifecycle contract
 
 `ScopedStore` and `SelectedStore` are projections of a parent `Store`. Their

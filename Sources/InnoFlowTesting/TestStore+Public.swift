@@ -290,6 +290,17 @@ extension TestStore {
     await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
   }
 
+  /// Performs the legacy single-action absence check.
+  ///
+  /// This does not wait for the complete effect lifecycle. Use `finish()` at
+  /// the terminal test boundary or `assertNoBufferedActions()` for an
+  /// intermediate queue checkpoint.
+  @available(
+    *,
+    deprecated,
+    message:
+      "Use finish() for terminal verification, or assertNoBufferedActions() for an intermediate queue checkpoint."
+  )
   public func assertNoMoreActions(
     file: StaticString = #file,
     line: UInt = #line

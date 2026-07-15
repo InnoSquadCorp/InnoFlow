@@ -54,9 +54,29 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   later call enables trailing delivery, while preserving the original deadline.
 - TestStore debounce now preserves the caller's awaited mode instead of always
   recursing as awaited work.
+- `TestStore` now defaults to exhaustive state and effect-action assertions.
+  A missing assertion closure means no state change; pending actions are
+  reduced before a new send and reported in exhaustive mode; valid receive
+  mismatches are reduced once before failure. Non-exhaustive receives reduce
+  mismatches and continue under one total wall-clock deadline.
+- Non-exhaustive `finish()` now reduces buffered, late, and follow-up actions
+  until the harness becomes idle. Exhaustive `finish()` continues to fail on
+  every unreceived action under the same total deadline.
+- Cancelled sequential effects now close their finish activity even when
+  cancellation happens between concatenated children, so `finish()` no longer
+  waits for a sequence that has already terminated.
+- `assertNoMoreActions()` is deprecated for the 5.x compatibility window. Use
+  `finish()` for terminal verification or `assertNoBufferedActions()` for an
+  intermediate queue checkpoint; removal is planned for 6.0.
 
 ### Added
 
+- Public `Exhaustivity` and mutable `TestStore.exhaustivity` /
+  `ScopedTestStore.exhaustivity` policies. The default `.on` verifies complete
+  state transitions and effect actions. `.off(showSkippedAssertions:)` enables
+  partial state assertions, automatic reduction of unexpected actions, and
+  optional non-failing skipped-assertion warnings. Scoped stores forward the
+  parent policy and continue to compare the complete root state.
 - `TestStore.receive` and `ScopedTestStore.receive` now accept per-assertion
   timeouts. New case-path and predicate overloads support non-`Equatable`
   actions, return the matched payload/action, preserve matched optional `nil`
@@ -68,110 +88,13 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   effect-emitted actions remain. It requests cancellation and suppresses later
   emissions after a failure, never advances `ManualTestClock`, and is also
   available on `ScopedTestStore`.
-- `StoreInstrumentation.didFailRun` and `StoreInstrumentationEvent.runFailed`
-  surface non-cancellation errors that escape `EffectTask.run(sequence:)` and
-  `EffectTask.run(sequence:transform:)`. Adapters `.sink`, `.combined`,
-  `.osLog`, and `.signpost` all fan the new event out without changing existing
-  signatures (additive default closure on the initializer).
-- `validatePhaseTransitions(tracking:through:diagnostics:)` accepts an optional
-  `PhaseValidationDiagnostics` reporter that surfaces undeclared transitions
-  in every build configuration. The historical `.disabled` default still
-  preserves the debug-only `assertionFailure` behaviour.
-- `PhaseMapDiagnostics` now ships standard adapters: `.sink`, `.combined`,
-  `.osLog(logger:)`, and `.signpost(signposter:name:)`. The shape mirrors
-  `StoreInstrumentation` so projects can wire phase-map violations into the
-  same observability backend as effect lifecycle events.
-- `scripts/principle-gates.sh` now enforces `assertPhaseMapCovers(...)`
-  coverage for any phase-managed feature introduced in `Sources/InnoFlow`.
-  Examples and macro fixtures are intentionally excluded.
-- `StoreInstrumentationMetricsCollector` ships a built-in metrics counter
-  that aggregates `StoreInstrumentation` events into a `Sendable`
-  `StoreInstrumentationMetricsSnapshot`. Pair via `.combined(...)` with any
-  other adapter (`.osLog`, `.signpost`, `.sink`).
-- [`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md)
-  inventories every `@_optimize(none)` and other compiler workaround,
-  including the upstream issue link and the retest trigger. The principle
-  gates already emit a warning when a newer toolchain is detected; this
-  document is the human-readable companion.
-- [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bundles the
-  authoring → dependencies → instrumentation → cross-framework flow into a
-  single guide.
-- `InnoFlowSwiftUI` is now a separate product/target for SwiftUI-only
-  conveniences: `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
-  `EffectTask.animation(Animation?)`.
-- `EffectTask.run` now has `AsyncSequence` helpers for streams that emit
-  actions directly or transform elements into optional actions.
-- `IdentifiedArray<ID, Element>` and the `IdentifiedArrayOf<Element>` alias
-  ship in `InnoFlowCore` with O(1) `subscript(id:)`, ordered insertion, and
-  duplicate-id assertion semantics. `ForEachIdentifiedReducer` routes through
-  the new collection for O(1) child lookup; the existing
-  `ForEachReducer<[Element]>` overload stays in place for source-compatible
-  call sites. Child reducers used with `ForEachIdentifiedReducer` must not
-  mutate their own `id`, because the reducer writes copied child state back
-  through `IdentifiedArray[id:]`.
-- `PhaseMap.validationReport(expectedTriggersByPhase:)` now also reports
-  duplicate `From(...)` blocks through `duplicateSourcePhases`, and `On(...)`
-  accepts an explicit `selfTransitionPolicy: .ignore | .forbid | .allow`
-  parameter (default `.ignore`, preserving prior behavior). `derivedGraph` is
-  precomputed at construction time so repeated reads are free.
-- `StoreInstrumentation.combined(_:)` accepts a flat `[StoreInstrumentation]`
-  in addition to the variadic form, enabling dynamic adapter composition.
-- `EffectContext.testing(errorReporter:)` factory exposes the test-friendly
-  context shape so AsyncSequence-run-failure assertions can use a custom
-  error reporter without reaching into package-internal initializers.
-- `SelectedStore.select(memoize:)` accepts an explicit
-  `memoize: Bool` parameter on closure-based selections so callers can opt
-  into snapshot-equality memoization for `.custom` dependency keys.
-- `InnoFlowSwiftUI` ships `View.innoFlowSheet(store:state:onDismiss:content:)`,
-  `View.innoFlowFullScreenCover(store:state:onDismiss:content:)` (non-macOS),
-  and `View.innoFlowNavigationDestination(store:state:onDismiss:content:)`
-  for IfLet-style optional-state presentation; reducers own the present-true
-  edge, the modifiers translate SwiftUI's dismiss into the supplied
-  `onDismiss` action.
-
-### Changed
-
-- `EffectTask.run(sequence:)` and `EffectTask.run(sequence:transform:)` no
-  longer swallow arbitrary thrown errors. `CancellationError` continues to stop
-  the effect silently; any other error is forwarded to
-  `StoreInstrumentation.didFailRun` (with the error description and type name
-  preserved as `Sendable` strings) before the effect terminates. The terminate
-  behavior is unchanged, so reducers that previously relied on silent failure
-  still see no spurious actions.
-- `EffectID<RawValue>` supports dynamic cancellation identifiers when
-  `RawValue: Hashable & Sendable`; `StaticEffectID` remains the string-literal
-  convenience alias.
-- `IfLet` and `IfCaseLet` accept an `onMissing:` `OnMissingPolicy` parameter
-  that controls behavior when a child action arrives while child state is
-  unavailable. The default `.assertOnly` preserves the existing contract
-  (debug `assertionFailure`, release silent no-op). New options: `.ignore`
-  drops the action silently in every build configuration, and `.crash` traps
-  with `preconditionFailure` in every build configuration.
-- OSS contribution templates now cover security reporting, conduct,
-  bug reports, feature requests, and pull-request verification.
-- `StoreInstrumentation.didStartRun` is now emitted only after the run gate
-  opens, the cancellation/lifetime checks pass, and the run is committed to
-  the runtime. Cancel-before-start no longer fires a phantom
-  `didStartRun`/`didFinishRun` pair on the same event; the start/finish/
-  fail/cancel counts now balance exactly.
-- `IfLet` and `IfCaseLet` `.assertOnly` drops now fire
-  `StoreInstrumentation.didDropAction` with the new
-  `.missingChildState` reason in release builds. The DEBUG
-  `assertionFailure` is preserved. This is a public `ActionDropReason` enum
-  case addition; downstream exhaustive switches should handle it or include
-  `@unknown default`.
-- `EffectContext`'s public initializer now exposes `errorReporter:`, so
-  AsyncSequence-run failures route through a user-supplied reporter
-  before the effect terminates. The default reporter is a no-op.
-- `PhaseMap.derivedGraph` is precomputed once instead of being recomputed
-  on every read.
-- `Reduce`'s `ReducerBuilder` accumulator now collects children into a
-  flat array instead of nesting one closure per `buildPartialBlock` call.
-  N-step builder blocks walk in a single iteration; `EffectTask.merge`
-  collapses the resulting effect list in one allocation.
 
 ### Changed (BREAKING)
 
+- `TestStore.exhaustivity` defaults to `.on`. Tests that previously omitted a
+  state assertion after a mutation, asserted only part of a transition, or
+  left effect actions unreceived must become exhaustive or explicitly opt into
+  `.off`. In `.on`, an omitted assertion closure asserts no state change.
 - `Store.scope(state:action:)` now includes defaulted `fileID`, `line`, and
   `column` parameters so the runtime can preserve call-site identity. Ordinary
   two-argument calls remain source-compatible, but code that stores
@@ -180,139 +103,6 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   Repeated calls with the same full signature now return the same live
   `ScopedStore`; callers that require distinct projections must use a distinct
   source location or an independently constructed `CasePath`.
-- SwiftUI-specific APIs moved out of the core `InnoFlow` product and into
-  `InnoFlowSwiftUI`. SwiftUI app targets that use bindings, previews, or
-  animation helpers must add the `InnoFlowSwiftUI` product dependency and
-  import it. Non-UI feature/domain targets can keep depending on `InnoFlow`
-  alone.
-- `ReducerBuilder` no longer exposes implementation-only underscore wrapper
-  types such as `_EmptyReducer`, `_ReducerSequence`, `_OptionalReducer`,
-  `_ConditionalReducer`, and `_ArrayReducer` as public API. Builder entry
-  points continue to return `some Reducer<State, Action>` through public
-  authoring surfaces like `Reduce`, `CombineReducers`, `Scope`, `IfLet`,
-  `IfCaseLet`, and `ForEachReducer`; downstream code that directly named the
-  underscore wrappers must stop doing so.
-- `EffectContext.isCancelled` has been removed. Use
-  `try await context.checkCancellation()` as the authoritative cancellation
-  boundary, or `await context.isCancellationRequested()` when a non-throwing
-  async probe is required.
-- `EffectID` is now generic. Existing explicit `EffectID` type annotations
-  should migrate to `StaticEffectID` for string identifiers or
-  `EffectID<RawValue>` for typed dynamic identifiers.
-- `StoreInstrumentation` event payloads expose cancellation identifiers as
-  `AnyEffectID?` so typed effect IDs can be observed uniformly. Event
-  initializers still accept typed `EffectID` values, and `AnyEffectID.rawValue`
-  exposes the erased raw value for instrumentation consumers.
-- `SelectedStore` no longer ships fixed-arity `select(dependingOn:)` overloads
-  for two through six tuple-packed slices. The single-slice `select(dependingOn:)`
-  convenience and the variadic `select(dependingOnAll:)` parameter-pack
-  overload are now the only typed-dependency selection forms; multi-slice
-  call sites must migrate from `dependingOn: (\.a, \.b)` to
-  `dependingOnAll: \.a, \.b`. Closure-based `select { ... }` is unchanged.
-- `SelectedStore.value` has been removed. Reads must go through
-  `optionalValue` (returns `nil` once the projection deactivates) or
-  `requireAlive()` (traps with `preconditionFailure` when the projection is
-  dead). Dynamic member lookup, `subscript`, and the SwiftUI bindings continue
-  to route through the `requireAlive()` path. `ScopedStore.state` keeps its
-  SwiftUI observer-race cached snapshot fallback; replace `store.value` with
-  `store.optionalValue ?? fallback` or `store.requireAlive()`.
-- `TestStore.deliverAction` now drains on the same `@MainActor` serial
-  queue as `Store.send`, dropping the per-action `Task { @MainActor }`
-  scheduling hop. Tests that relied on the asymmetric scheduling between
-  Store and TestStore (e.g. tests that called `await store.send(.x)`
-  expecting an extra `Task` round-trip to interleave with a separate
-  `await`) will see one fewer scheduling boundary; assert against the
-  reducer-visible sequence, not the scheduler.
-
-### Changed
-
-- Root and canonical sample package platform floors now target iOS 18,
-  macOS 15, tvOS 18, watchOS 11, and visionOS 2 (Swift 6.0 standard library).
-  The bump unlocks direct use of typed throws, `sending` parameters, and
-  other Swift 6.0 modernization without availability branches. Apps that
-  still need to support iOS 17 / macOS 14 must stay on the 3.x line.
-- The canonical sample package no longer has a hard dependency on
-  `InnoNetworkWebSocket`. Scripted/protocol-backed clients remain compiled
-  sample coverage; the concrete InnoNetwork adapter now lives as a
-  non-compiled app-boundary integration snippet.
-- The root package now opts targets into the Swift 6 package contract
-  (`.swiftLanguageMode(.v6)`, `ExistentialAny`, and
-  `InternalImportsByDefault`) while keeping library evolution out of this PR.
-- `swift-syntax` is pinned exactly to `603.0.1`, with the upgrade policy
-  documented in `RELEASING.md`.
-
-### Fixed
-
-- Compile-contract tests now locate built modules correctly when SwiftPM is
-  invoked with a custom `--build-path`, avoiding accidental fallback to stale
-  `.build` products from the repository root.
-- Principle gates and CI now run canonical sample macro-heavy test/build steps
-  serially and fail if sample logs contain Swift macro/plugin internal
-  diagnostic noise such as `Internal Error:`, `DecodingError.dataCorrupted`,
-  or `Corrupted JSON`.
-- CI now includes a ThreadSanitizer package-test job, and principle gates
-  enforce README core-pattern synchronization plus the absence of `SwiftUI`
-  imports in the core `InnoFlow` target.
-- Added weak-retention coverage proving `ScopedStore` and `SelectedStore`
-  projections do not retain their parent `Store` after release.
-- Effect run lifecycle instrumentation now keeps `didStartRun`,
-  `didFinishRun`, and `didFailRun` mutually exclusive per run: cancel-before-start
-  runs emit no phantom start/finish pair, and `reportError` follows a
-  first-error-wins contract without also emitting `didFinishRun`.
-- Child-action drops from `IfLet` / `IfCaseLet` compositions now route through
-  the internal diagnostic-drop effect path and surface as
-  `didDropAction(.missingChildState)` so release builds preserve observability
-  for parent-child desynchronization.
-- `StoreCaches.validatedBucket` and `SelectionCache.cached` now trap with
-  `precondition` in every build configuration when the cache identity
-  contract is violated, instead of silently aliasing under release.
-- `ScopedStore` flushes its observer-prune queue immediately when the
-  child projection deactivates inside `drainQueueIfNeeded`, so dispatch
-  bursts followed by quiescence cannot grow the observer dictionary
-  unboundedly.
-- `TestStore`'s ActionQueue tracks unawaited concurrent child tasks so
-  `cancelAllEffectsSynchronously` actually cancels them, and waiter
-  wakeup is now FIFO (was previously dictionary-order, non-deterministic).
-- `InnoFlow` macros now emit a swift-diagnostics `.error` for
-  `@InnoFlow(phaseManaged:)` when the argument is non-literal, and elevate
-  unsynthesizable CasePath cases from `.note` to `.warning` with concrete
-  remediation text. Projects compiling with `-warnings-as-errors` may need to
-  fix optional, labeled, or multi-payload action cases, or update explicit
-  diagnostic suppressions for the unchanged diagnostic IDs.
-- `PhaseMap` illegal-phase-mutation revert now snapshots and restores the
-  full state instead of only the phase keypath, so domain fields touched
-  in the same reducer step cannot drift out of sync with the rejected
-  phase.
-
-### Documentation
-
-- Removed the retired `FRAMEWORK_EVALUATION*` documents and their localized
-  README links. Adjacent-library positioning now lives in
-  `docs/FRAMEWORK_COMPARISON.md`.
-- Refreshed the TCA comparison and README positioning to document when to
-  choose InnoFlow's smaller explicit-boundary model over TCA's broader
-  application architecture.
-- Projection lifecycle contract now documents `ScopedStore.optionalState` /
-  `SelectedStore.optionalValue` (and the `isAlive` flags) as the recommended
-  read path for non-SwiftUI call sites. The legacy `SelectedStore.value`
-  cached-fallback accessor has been removed; reads now go through
-  `optionalValue` or `requireAlive()`. Affected surfaces:
-  `ARCHITECTURE_CONTRACT.md`, `docs/MIGRATION_3_1.md`,
-  `Sources/InnoFlow/InnoFlow.docc/InnoFlow.md`, and the doc comments on
-  `ScopedStore.state`, `SelectedStore.requireAlive()`,
-  `SelectedStore.optionalValue`, `SelectedStore.isAlive`, and
-  `SelectedStore` dynamic-member reads.
-- README and `RELEASE_NOTES.md` now surface the
-  [`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md)
-  entry for the `@_optimize(none)` workaround needed when generic
-  Reducer-composed Stores deinit under specific Swift 6.3 toolchains, so
-  the affected shape and remediation snippet do not require grep to
-  find.
-- `MIGRATION.md` 4.0.0 section now spells out the breaking changes
-  introduced on the evaluation-followups branch (SelectedStore.value
-  removal, TestStore synchronous delivery, IdentifiedArray ForEach
-  overload). CLAUDE.md remains canonical; AGENTS.md is a short
-  redirect.
 
 ## [4.0.0] - 2026-04-29
 

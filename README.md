@@ -6,7 +6,7 @@ English | [한국어](./README.kr.md) | [日本語](./README.jp.md) | [简体中
 
 InnoFlow is a SwiftUI-first unidirectional architecture framework for business and domain state transitions.
 
-## InnoFlow 4.0.0 direction
+## InnoFlow 5.0.0 development direction
 
 The framework now treats the following as source-of-truth principles:
 
@@ -15,6 +15,7 @@ The framework now treats the following as source-of-truth principles:
 - Composition happens through `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`.
 - `PhaseTransitionGraph` is an opt-in validation layer, not a generic automata runtime.
 - Binding remains explicit opt-in through `@BindableField`, and SwiftUI bindings use projected key paths such as `\.$step`.
+- The `TestStore.exhaustivity` contract defaults to `.on`, requiring complete state-transition and effect-action assertions.
 - InnoFlow owns business/domain transitions only.
 
 Cross-framework ownership stays explicit:
@@ -53,7 +54,8 @@ longer comparison against TCA, ReactorKit, ReSwift, and SwiftRex.
 
 The 5.0 development line requires a Swift 6.3 or newer toolchain and compiles
 all package targets in Swift 6 language mode. The canonical sample and DocC
-workflow use the same toolchain contract.
+workflow use the same toolchain contract. Until 5.0.0 is tagged, the package
+dependency below continues to point at the latest stable release, 4.0.0.
 
 ### Swift Package Manager
 
@@ -180,7 +182,7 @@ struct CounterView: View {
 
 ## Composition Surface
 
-InnoFlow 4.0.0 uses a small composition surface instead of multiple authoring styles.
+The InnoFlow 5.0 development line uses a small composition surface instead of multiple authoring styles.
 
 ### `Reduce`
 
@@ -668,6 +670,10 @@ runtime semantics, and unmatched actions remain legal no-ops by default.
 ## Testing
 
 `InnoFlowTesting` provides `TestStore` for deterministic reducer tests.
+`TestStore.exhaustivity` defaults to `.on`: every reducer state mutation must
+appear in the matching `send` or `receive` assertion, and every effect-emitted
+action must be consumed with `receive`. Omitting an assertion closure means
+"the state does not change," not "skip state checking."
 
 ```swift
 import InnoFlowTesting
@@ -684,7 +690,7 @@ func loadFlow() async {
     $0.phase = .loading
   }
 
-  await store.send(._loaded(.fixture), through: phaseMap) {
+  await store.receive(._loaded(.fixture), through: phaseMap) {
     $0.phase = .loaded
     $0.profile = .fixture
   }
@@ -693,18 +699,38 @@ func loadFlow() async {
 }
 ```
 
-`finish()` waits for all framework-owned effects and then asserts that every
-emitted action was received. Its timeout uses wall time and never advances a
+`finish()` is the terminal test assertion. With exhaustive mode `.on`, it waits
+for all framework-owned effects and fails when any emitted action was not
+received. With `.off`, it reduces buffered, late, and follow-up actions until
+the harness is idle. Its timeout uses wall time and never advances a
 `ManualTestClock`, so advance manual time before finishing when a debounce or
 trailing throttle is expected to fire. A scoped test store delegates `finish()`
-to the same parent queue and effect lifecycle.
+to the same parent queue and effect lifecycle. Use
+`assertNoBufferedActions()` only as an intermediate, immediate queue
+checkpoint; `assertNoMoreActions()` is deprecated because it is neither a
+complete terminal assertion nor an immediate checkpoint.
 
-Each receive assertion can override the harness timeout. Case-path and
-predicate overloads also support actions that are not `Equatable`; they consume
-the next valid effect action and fail immediately when it does not match.
+For migration or intentionally partial tests, opt out explicitly:
 
 ```swift
-await store.receive(.finished, timeout: .milliseconds(250))
+store.exhaustivity = .off(showSkippedAssertions: true)
+```
+
+In `.off` mode, assertion closures start from the actual post-reducer state and
+therefore describe only the fields being checked. Unexpected effect actions
+are still reduced, and `showSkippedAssertions: true` reports non-failing
+warnings for skipped state or action assertions.
+
+Each receive assertion can override the harness timeout. Case-path and
+predicate overloads also support actions that are not `Equatable`. In `.on`
+mode, a valid mismatch is reduced once and then reported immediately. In
+`.off` mode, mismatches are reduced while the receive continues searching for
+the requested action under one total wall-clock deadline.
+
+```swift
+await store.receive(.finished, timeout: .milliseconds(250)) {
+  $0.phase = .finished
+}
 
 let payload = await store.receive(
   Feature.Action.loadedCasePath,
@@ -717,7 +743,9 @@ let payload = await store.receive(
 let action = await store.receive(
   where: { $0.isSuccessfulResponse },
   description: "successful response"
-)
+) { state, _ in
+  state.phase = .finished
+}
 ```
 
 The timeout is one wall-clock budget even when cancelled effect actions are
@@ -746,6 +774,9 @@ await child.finish()
 ```
 
 That projection assumes `ParentFeature.Action.childCasePath`, which `@InnoFlow` now synthesizes for matching single-payload child action cases.
+Exhaustive scoped assertions still compare the complete root state. When a
+child action intentionally changes parent or sibling state, assert that action
+through the parent `TestStore`.
 Collection-scoped projections keep per-element `ScopedStore` identity stable by `id`, and row observers only invalidate when their own element snapshot changes.
 If an element is removed, discard any old row-scoped handle and recreate projections from the parent store. `ScopedStore.state` and projection dynamic-member reads keep a cached snapshot fallback for SwiftUI observer races, stale scoped sends become no-ops when the projection is dead, and non-UI callers should use `optionalState` / `optionalValue` for graceful absence or `requireAlive()` when a dead projection is a programmer error. `ScopedTestStore` keeps the testing contract louder and traps stale direct access via `preconditionFailure`.
 
@@ -769,8 +800,7 @@ let todo = store.scope(
   action: ParentFeature.Action.todoActionPath
 )
 
-await todo.send(.setIsDone(true))
-todo.assert {
+await todo.send(.setIsDone(true)) {
   $0.isDone = true
 }
 ```

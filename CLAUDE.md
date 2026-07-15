@@ -16,7 +16,7 @@ This file explains the current InnoFlow authoring model and repository rules.
 - Respect unidirectional flow and explicit side-effect boundaries.
 - Prefer general-purpose architecture changes over case-specific patches.
 
-## InnoFlow 4.0.0 rules
+## InnoFlow 5.0.0 development rules
 
 These rules are source-of-truth and are enforced by macro diagnostics, tests, and principle gates.
 
@@ -219,6 +219,19 @@ func loadingFlow() async {
   await store.finish()
 }
 ```
+
+`TestStore.exhaustivity` defaults to `.on`. Every state mutation must be
+described in the matching `send` or `receive` assertion closure, and every
+effect action must be consumed with `receive`; omitting a closure asserts that
+state does not change. Use `.off` only for intentionally partial tests. In that
+mode, expected-state closures start from the actual post-reducer state,
+unexpected actions are reduced, and `.off(showSkippedAssertions: true)` emits
+non-failing warnings.
+
+Use `finish()` as the terminal assertion. Exhaustive stores fail on unreceived
+actions; non-exhaustive stores drain them and their follow-up effects until
+idle. Use `assertNoBufferedActions()` only for an intermediate queue
+checkpoint. `assertNoMoreActions()` is deprecated.
 
 State mismatches include a `Diff:` section before the full expected/actual dump. The renderer defaults to 12 lines, can be overridden with `TestStore(..., diffLineLimit: 24)`, and also reads `INNOFLOW_TESTSTORE_DIFF_LINE_LIMIT`.
 

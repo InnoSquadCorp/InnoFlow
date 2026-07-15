@@ -4,15 +4,20 @@ This document defines the minimum release quality bar for InnoFlow.
 
 Current stable public release target: `4.0.0`
 
-## 4.0.0 Staged Readiness
+The `main` branch is the 5.0 development line. Keep installation snippets and
+tag-enforced release metadata on 4.0.0 until the 5.0.0 release is deliberately
+staged and tagged.
 
-The 4.0.0 release tag is exactly `4.0.0`; do not create or document a
-`v4.0.0` tag. Local validation can prove that the staged release surface is
-internally consistent, but it does not make the package publish-ready by
-itself. Publication is ready only after the tag-triggered GitHub Actions
-`Release Gate` succeeds for the `4.0.0` tag.
+## Stable 4.0.0 and 5.0 development readiness
 
-Before creating the tag, run and confirm:
+The published 4.0.0 release tag is exactly `4.0.0`; do not create or document a
+`v4.0.0` tag. Local validation proves that the stable surface remains
+internally consistent while 5.0 work continues on `main`. A future release is
+publish-ready only after its exact tag triggers a successful GitHub Actions
+`Release Gate`.
+
+For the current development line, and again before creating the next release
+tag, run and confirm:
 
 1. Main package tests: `swift test -Xswiftc -warnings-as-errors`
 2. Release package tests: `swift test -c release -Xswiftc -warnings-as-errors`
@@ -22,8 +27,8 @@ Before creating the tag, run and confirm:
 6. Doc parity: `scripts/check-doc-parity.sh`
 7. Full principle gates: `scripts/principle-gates.sh`
 
-After creating or fetching the exact `4.0.0` tag, release-tag enforcement must
-also pass locally:
+To audit the currently published stable tag locally, release-tag enforcement
+must also pass:
 
 ```bash
 INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=4.0.0 scripts/check-release-sync.sh

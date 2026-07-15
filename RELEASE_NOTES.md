@@ -1,52 +1,52 @@
 # InnoFlow Release Notes
 
-## Unreleased Release Hardening
+## 5.0.0 (in development)
 
-This hardening pass removes retired evaluation artifacts, tightens the public
-surface around reducer builders and effect cancellation, raises supported
-platform floors for Swift 6.0 modernization, and makes canonical sample
-validation stricter. It also finalizes the 4.0.0 public split between the core
-`InnoFlow` product and the SwiftUI integration product `InnoFlowSwiftUI`.
+The 5.0 development line makes testing and store projections stricter by
+default. `TestStore` now verifies complete state transitions and every
+effect-emitted action, while live single-state and collection scopes have
+explicit identity and lifecycle contracts. The package requires Swift 6.3 or
+newer; 4.0.0 remains the latest stable release and the installation target in
+the READMEs until 5.0.0 is tagged.
 
 ### Changed
 
-1. Removed public underscored reducer-builder implementation wrappers from the
-   supported API surface. Public feature authoring remains
-   `var body: some Reducer<State, Action>` composed from `Reduce`,
-   `CombineReducers`, `Scope`, and the other public reducer combinators.
-2. Moved SwiftUI-only helpers into `InnoFlowSwiftUI`: `Store.binding`,
-   `ScopedStore.binding`, `Store.preview`, and
-   `EffectTask.animation(Animation?)`. SwiftUI apps should depend on both
-   `InnoFlow` and `InnoFlowSwiftUI`; non-UI feature/domain targets can depend
-   on `InnoFlow` alone.
-3. Removed `EffectContext.isCancelled`; effects should use
-   `try await context.checkCancellation()` or the async
-   `await context.isCancellationRequested()` probe.
-4. Raised root and canonical sample package floors to iOS 18, macOS 15,
-   tvOS 18, watchOS 11, and visionOS 2 (Swift 6.0 standard library) so the
-   framework can adopt typed throws, `sending` parameters, and other Swift
-   6.0 modernization without availability branches. Apps that still need
-   iOS 17 / macOS 14 support must stay on 3.x.
-5. Removed the sample package's compiled `InnoNetworkWebSocket` dependency and
-   kept concrete transport integration as a non-compiled app-boundary snippet.
-6. Enabled the Swift 6 package contract, pinned `swift-syntax` exactly to
-   `603.0.1`, added a ThreadSanitizer CI job, and hardened principle gates so
-   README core patterns, core SwiftUI-import boundaries, and Swift macro/plugin
-   diagnostic corruption cannot drift silently.
-7. Added OSS contribution templates for security reports, conduct, issues, and
-   pull requests.
-8. Hardened effect cancellation so non-awaited `.merge` / `.concatenate`
-   wrapper tasks are tracked and cancelled with their store boundary.
-9. Preserved every active cancellation boundary through nested `.cancellable`
-   wrappers so cancelling an outer id also reaches already-started inner runs.
-10. Shared cancellation-boundary sequencing between `Store` and `TestStore`,
-   including idempotent finish accounting for cancelled in-flight tokens.
-11. Tightened phase-managed macro diagnostics so unrelated member accesses in a
-    `phaseMap` body no longer suppress missing-phase warnings.
-12. Reduced collection hot-path overhead in `ForEachReducer` and
-    collection-scoped store cache pruning.
-13. Enabled tag-triggered release gates to run principle validation with release
-    tag enforcement.
+1. Requires a Swift 6.3 or newer toolchain while compiling package targets in
+   Swift 6 language mode. Root and canonical sample package floors remain
+   iOS 18, macOS 15, tvOS 18, watchOS 11, and visionOS 2.
+2. Propagates `public` and `package` access from `@InnoFlow` features to
+   synthesized reducer entry points and action paths, including qualified
+   nested features and inherited extension access.
+3. Adds opaque action-path identity and live scope caches. Repeated
+   single-state scopes reuse a live projection only when source location,
+   child types, state key path, and action-path identity match. Collection
+   scopes retain one active row family per collection key path and replace the
+   family when its child types or action-path identity changes.
+4. Unifies projection lifecycle reads around optional, cached view-facing,
+   and strict `requireAlive()` paths. `ScopedStore.debugDescription` no longer
+   crosses the main-actor boundary for state or liveness reads.
+5. Makes run, merge, concatenate, debounce, and throttle cancellation
+   sequence-specific in both `Store` and `TestStore`. Delayed cancellation
+   from older work no longer terminates a newer effect registered under the
+   same identifier, and cancelled sequential effects finish their lifecycle
+   accounting without hanging `finish()`.
+6. Preserves awaited ordering through trailing throttles, including replacement
+   and late trailing-enable cases, while keeping the original throttle window
+   deadline.
+7. Adds public `Exhaustivity`. `TestStore.exhaustivity` defaults to `.on`, so
+   every state transition and effect action must be asserted. `.off` supports
+   partial state assertions and automatically reduces unexpected actions;
+   `.off(showSkippedAssertions: true)` also emits non-failing warnings.
+8. Expands `receive` with per-assertion timeouts, case-path and predicate
+   matching, and one total wall-clock deadline. Exhaustive mismatches are
+   reduced once and reported; non-exhaustive receives reduce mismatches and
+   keep searching. `finish()` fails on unreceived actions in `.on` and drains
+   buffered, late, and follow-up actions to idle in `.off`.
+9. Deprecates `assertNoMoreActions()` for the 5.x compatibility window. Use
+    `finish()` for terminal verification or `assertNoBufferedActions()` for an
+    intermediate queue checkpoint. Removal is planned for 6.0.
+10. Extends compile contracts, the canonical sample suite, DocC, migration
+    guidance, and localized README parity around the same 5.0 behavior.
 
 ### Known toolchain workarounds
 
@@ -58,30 +58,34 @@ dispatch — and is tracked in
 [`docs/SWIFT_TOOLCHAIN_TRACKING.md`](docs/SWIFT_TOOLCHAIN_TRACKING.md) along
 with the retest steps and the gate that warns on Swift 6.4+.
 
-## Migration Note
+## 5.0 Migration Note
 
 ### What changed
 
-- Direct references to `_EmptyReducer`, `_ReducerSequence`, `_OptionalReducer`,
-  `_ConditionalReducer`, or `_ArrayReducer` are no longer supported.
-- SwiftUI binding, preview, and animation helpers are imported from
-  `InnoFlowSwiftUI` instead of the core `InnoFlow` target.
-- Cancellation is checked through the async runtime boundary instead of a
-  synchronous boolean snapshot.
-- `FRAMEWORK_EVALUATION*` documents were retired; adjacent-library comparison
-  now lives in `docs/FRAMEWORK_COMPARISON.md`.
+- The package now requires Swift 6.3 or newer.
+- Repeated single-state and collection scopes use opaque action-path identity
+  as part of their cache contract.
+- Projection reads now distinguish optional absence, cached SwiftUI
+  observer-race fallback, and strict `requireAlive()` access.
+- `TestStore` now performs exhaustive state and effect-action assertions by
+  default. An omitted assertion closure asserts that state does not change.
+- Scoped exhaustive assertions compare the complete root state, even when the
+  action is sent through a child projection.
 
 ### What you may need to update
 
-- Replace direct underscore wrapper type references with public reducer
-  composition.
-- Add `InnoFlowSwiftUI` as a target dependency and import it from SwiftUI code
-  that calls `Store.binding`, `ScopedStore.binding`, `Store.preview`, or
-  `EffectTask.animation(Animation?)`.
-- Replace `context.isCancelled` with `checkCancellation()` or
-  `isCancellationRequested()`.
-- Run canonical sample package tests with `--jobs 1` and sample Xcode builds
-  with `-jobs 1` in downstream release gates.
+- Upgrade downstream builds to a Swift 6.3 or newer toolchain.
+- If code stores `store.scope` as a two-argument method value, wrap it in a
+  closure or include the defaulted source-location parameters in the function
+  type. Reuse a stored action path when stable projection identity is needed.
+- Use `optionalState` / `optionalValue` for release-tolerant non-UI reads and
+  `requireAlive()` when a dead projection is a programming error. Resolve child
+  properties named `requireAlive` through an explicit state access path.
+- Add complete state assertions to every mutating `send` and `receive`, receive
+  every effect action, and end tests with `finish()`. For intentionally partial
+  tests, set `store.exhaustivity = .off` (or enable skipped-assertion warnings).
+- Replace terminal `assertNoMoreActions()` calls with `finish()` and
+  intermediate uses with `assertNoBufferedActions()`.
 
 ## 4.0.0 Release
 
