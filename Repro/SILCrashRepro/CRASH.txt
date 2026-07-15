@@ -97,7 +97,7 @@ stops crashing.
 
 InnoFlow workaround
 -------------------
-`Sources/InnoFlow/Store.swift` marks the isolated deinit
+`Sources/InnoFlowCore/Store.swift` marks the isolated deinit
 `@_optimize(none)`, which removes it from the EarlyPerfInliner's work set.
 Deinit is not a hot path, so the optimization loss is negligible and the
 public `@MainActor isolated deinit` lifecycle semantics are unchanged.

@@ -17,7 +17,7 @@ store that holds builder-composed reducer types. The closest upstream tracker is
 When moving to Swift 6.4 or newer, rerun this reproducer and try removing
 `@_optimize(none)` from:
 
-- `Sources/InnoFlow/Store.swift`
+- `Sources/InnoFlowCore/Store.swift`
 - `Sources/InnoFlowTesting/TestStore.swift`
 
 If the reproducer and the main release build both pass without the workaround,
