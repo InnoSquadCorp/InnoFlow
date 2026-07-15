@@ -644,11 +644,27 @@ verify_docc_plugin_pin() {
   fi
 }
 
+verify_release_test_commands() {
+  local release_policy_path="$1"
+  local main_command='swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors'
+  local release_command='swift test -c release --jobs 1 --no-parallel -Xswiftc -warnings-as-errors'
+
+  if ! grep -F "$main_command" "$release_policy_path" >/dev/null; then
+    echo "[principle-gates] Failed: $release_policy_path must document the deterministic main test command" >&2
+    return 1
+  fi
+  if ! grep -F "$release_command" "$release_policy_path" >/dev/null; then
+    echo "[principle-gates] Failed: $release_policy_path must document the deterministic release test command" >&2
+    return 1
+  fi
+}
+
 run_doc_contract_checks() {
   ensure_principle_gate_context
 
   echo "[principle-gates] Checking required documentation sections"
   verify_docc_plugin_pin Tools/generate-docc.sh RELEASING.md || exit 1
+  verify_release_test_commands RELEASING.md || exit 1
   if [[ ! -f "ARCHITECTURE_CONTRACT.md" ]]; then
     echo "[principle-gates] Failed: ARCHITECTURE_CONTRACT.md is missing"
     exit 1

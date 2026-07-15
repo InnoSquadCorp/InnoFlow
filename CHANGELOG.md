@@ -75,6 +75,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - Maintainer DocC generation now resolves `swift-docc-plugin` at exact version
   1.5.0 inside its temporary package copy, keeping Pages and release archives
   reproducible without adding the plugin to the consumer dependency graph.
+- Official main and release test commands now use the same `--jobs 1` and
+  `--no-parallel` scheduling contract as CI and principle gates, preventing
+  randomized effect suites from starving unrelated wall-clock assertions.
 
 ### Added
 

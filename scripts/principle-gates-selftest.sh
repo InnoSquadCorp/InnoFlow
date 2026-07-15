@@ -323,10 +323,30 @@ EOF
   rm -rf "$tmp_root"
 }
 
+run_release_test_command_tests() {
+  local tmp_root
+  tmp_root="$(mktemp -d)"
+  trap 'rm -rf "$tmp_root"' RETURN
+
+  cat >"$tmp_root/RELEASING.md" <<'EOF'
+`swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
+`swift test -c release --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
+EOF
+  assert_success verify_release_test_commands "$tmp_root/RELEASING.md"
+
+  sed -i.bak 's/ --no-parallel//' "$tmp_root/RELEASING.md"
+  rm -f "$tmp_root/RELEASING.md.bak"
+  assert_failure verify_release_test_commands "$tmp_root/RELEASING.md"
+
+  trap - RETURN
+  rm -rf "$tmp_root"
+}
+
 run_source_preserves_cwd_test
 run_cleanup_trap_isolation_tests
 run_workflow_action_pin_tests
 run_docc_plugin_pin_tests
+run_release_test_command_tests
 
 if command -v rg >/dev/null 2>&1; then
   run_search_tests "0" "rg"

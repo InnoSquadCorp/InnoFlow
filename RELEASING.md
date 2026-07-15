@@ -19,8 +19,8 @@ publish-ready only after its exact tag triggers a successful GitHub Actions
 For the current development line, and again before creating the next release
 tag, run and confirm:
 
-1. Main package tests: `swift test -Xswiftc -warnings-as-errors`
-2. Release package tests: `swift test -c release -Xswiftc -warnings-as-errors`
+1. Main package tests: `swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
+2. Release package tests: `swift test -c release --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
 3. Sample package tests: `swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1 -Xswiftc -warnings-as-errors`
 4. DocC generation: `Tools/generate-docc.sh` (exact `swift-docc-plugin` 1.5.0)
 5. Release sync: `scripts/check-release-sync.sh`
@@ -43,7 +43,9 @@ Before tagging a release:
 
 1. Update [CHANGELOG.md](CHANGELOG.md).
 2. Decide whether [MIGRATION.md](MIGRATION.md) needs a new entry.
-3. Run the main package test suite.
+3. Run both deterministic main and release package test commands above; keep
+   `--jobs 1 --no-parallel` so shared-runner scheduling cannot invalidate
+   wall-clock timeout assertions.
 4. Run the sample package test suite in `Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage` with `--jobs 1`.
 5. Run [scripts/principle-gates.sh](scripts/principle-gates.sh).
 6. Generate DocC through [Tools/generate-docc.sh](Tools/generate-docc.sh) and
