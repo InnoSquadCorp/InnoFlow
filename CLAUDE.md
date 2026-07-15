@@ -260,10 +260,13 @@ Collection-scoped projections also preserve per-element `ScopedStore` identity b
 ```text
 InnoFlow/
 ├── Sources/
-│   ├── InnoFlow/
+│   ├── InnoFlow/                        # authoring facade + macro declarations
+│   │   └── InnoFlow.swift
+│   ├── InnoFlowCore/
 │   │   ├── Reducer.swift
 │   │   ├── ReducerComposition.swift
 │   │   ├── Store.swift                  # main actor state owner + action queue entry point
+│   │   ├── Store+EffectDriver.swift
 │   │   ├── StoreEffectBridge.swift      # store/runtime bridge
 │   │   ├── EffectRuntime.swift          # actor runtime bookkeeping
 │   │   ├── StoreActionQueue.swift       # queued action drain support
@@ -272,12 +275,9 @@ InnoFlow/
 │   │   ├── StoreLifetimeToken.swift
 │   │   ├── ScopedStore.swift            # child projections + collection scoping
 │   │   ├── SelectedStore.swift          # derived read models + dependency-aware refresh
-│   │   ├── Store+SwiftUIBindings.swift  # binding surface
-│   │   ├── Store+SwiftUIPreviews.swift  # Store.preview(...)
 │   │   ├── BindableField.swift
 │   │   ├── BindableProperty.swift
 │   │   ├── EffectTask.swift
-│   │   ├── EffectTask+SwiftUI.swift
 │   │   ├── EffectWalker.swift
 │   │   ├── EffectDriver.swift
 │   │   ├── StoreInstrumentation.swift
@@ -287,8 +287,18 @@ InnoFlow/
 │   │   ├── PhaseMap.swift
 │   │   ├── PhaseTransitionGraph.swift
 │   │   └── PhaseValidationReducer.swift
-│   ├── InnoFlowMacros/
+│   ├── InnoFlowSwiftUI/
+│   │   ├── Store+SwiftUIBindings.swift  # binding surface
+│   │   ├── Store+SwiftUIPreviews.swift  # Store.preview(...)
+│   │   ├── Store+Presentation.swift
+│   │   └── EffectTask+SwiftUI.swift
+│   ├── InnoFlowMacros/                  # @InnoFlow implementation
 │   └── InnoFlowTesting/
+│       ├── TestStore.swift
+│       ├── TestStore+Public.swift
+│       ├── TestStore+Finish.swift
+│       ├── ScopedTestStore.swift
+│       └── ManualTestClock.swift
 └── Examples/InnoFlowSampleApp/
 ```
 
