@@ -26,7 +26,12 @@ jobs:
       - name: Run main package tests
         run: |
           set -eo pipefail
-          swift test -Xswiftc -warnings-as-errors
+          # Keep the release gate under the same deterministic scheduling
+          # contract as CI and the local principle gates.
+          swift test \
+            --jobs 1 \
+            --no-parallel \
+            -Xswiftc -warnings-as-errors
 
       - name: Run sample package tests
         run: |

@@ -56,7 +56,13 @@ jobs:
       - name: Run package tests
         run: |
           set -eo pipefail
-          swift test --package-path "$GITHUB_WORKSPACE" -Xswiftc -warnings-as-errors
+          # Randomized effect suites can otherwise starve unrelated
+          # MainActor-bound timeout tests on shared macOS runners.
+          swift test \
+            --package-path "$GITHUB_WORKSPACE" \
+            --jobs 1 \
+            --no-parallel \
+            -Xswiftc -warnings-as-errors
 
   thread-sanitizer:
     name: Package Tests (ThreadSanitizer)
