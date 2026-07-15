@@ -603,6 +603,21 @@ run_sample_static_contract_checks() {
   fi
 }
 
+validate_selected_store_dynamic_member_doc() {
+  local lifecycle_doc="$1"
+  local stale_dynamic_member_pattern
+  stale_dynamic_member_pattern='(`?SelectedStore`?[[:space:]]+`?[Dd]ynamic-member`?[[:space:]]+reads[[:space:]]+(must[[:space:]]+|will[[:space:]]+|always[[:space:]]+)?(trap(s|ped)?|crash(es|ed)?|fail(s|ed)?[[:space:]]+with[[:space:]]+preconditionFailure|call(s)?[[:space:]]+preconditionFailure)[^.!?]{0,160}(optimized|release))|((optimized|release)[^.!?]{0,160}`?SelectedStore`?[[:space:]]+`?[Dd]ynamic-member`?[[:space:]]+reads[[:space:]]+(must[[:space:]]+|will[[:space:]]+|always[[:space:]]+)?(trap(s|ped)?|crash(es|ed)?|fail(s|ed)?[[:space:]]+with[[:space:]]+preconditionFailure|call(s)?[[:space:]]+preconditionFailure))'
+
+  if ! search_multiline 'SelectedStore[\s\S]{0,320}[Dd]ynamic-member[\s\S]{0,240}(cached|last valid snapshot)' "$lifecycle_doc" >/dev/null; then
+    echo "[principle-gates] Failed: $lifecycle_doc must tie SelectedStore dynamic-member reads to the cached-snapshot contract"
+    return 1
+  fi
+  if search_multiline "$stale_dynamic_member_pattern" "$lifecycle_doc" >/dev/null; then
+    echo "[principle-gates] Failed: $lifecycle_doc must not describe dynamic-member reads as trapping in optimized builds"
+    return 1
+  fi
+}
+
 run_doc_contract_checks() {
   ensure_principle_gate_context
 
@@ -708,14 +723,18 @@ run_doc_contract_checks() {
   search_lines "SelectedStore" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "optionalValue" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "requireAlive" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
-  if search_lines 'state`/`value|state / value|cached-fallback `value`|cached-fallback value|`value` accessors|SelectedStore[^[:cntrl:]]*cached fallback|SelectedStore[^[:cntrl:]]*cached snapshot' README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc; then
-    echo "[principle-gates] Failed: current docs must not describe SelectedStore.value or SelectedStore cached fallback as a live contract"
+  if search_lines 'state`/`value|state / value|cached-fallback `value`|cached-fallback value|`value` accessors' README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc; then
+    echo "[principle-gates] Failed: current docs must not describe SelectedStore.value as a live contract"
     exit 1
   fi
   if search_lines_excluding "SelectedStore\\.value" "removed|not a cached-fallback accessor" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc; then
     echo "[principle-gates] Failed: current docs may only mention SelectedStore.value as removed API"
     exit 1
   fi
+  local lifecycle_doc
+  for lifecycle_doc in README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc/InnoFlow.md; do
+    validate_selected_store_dynamic_member_doc "$lifecycle_doc" || exit 1
+  done
   search_lines "dependingOn:" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "always-refresh fallback|always refresh fallback" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "PhaseMap" README.md ARCHITECTURE_CONTRACT.md CLAUDE.md PHASE_DRIVEN_MODELING.md Sources/InnoFlow/InnoFlow.docc Examples/InnoFlowSampleApp/README.md >/dev/null

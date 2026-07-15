@@ -52,9 +52,9 @@ of arity. Plain `select { ... }` remains the always-refresh fallback because gen
 not expose their dependencies.
 
 For lifecycle-aware reads outside SwiftUI view bodies, prefer ``SelectedStore/optionalValue`` and
-``ScopedStore/optionalState`` (or gate on the matching `isAlive` flag). `ScopedStore.state`
-keeps a cached snapshot fallback for SwiftUI observer races, while ``SelectedStore/requireAlive()``
-and `SelectedStore` dynamic-member reads trap with `preconditionFailure` when the projection is
+``ScopedStore/optionalState`` (or gate on the matching `isAlive` flag). `ScopedStore.state` and
+projection dynamic-member reads keep a cached snapshot fallback for SwiftUI observer races, while
+both stores' `requireAlive()` accessors trap with `preconditionFailure` when the projection is
 dead. Treat `nil` from the optional accessors as "regenerate the projection." See
 ARCHITECTURE_CONTRACT.md - *Projection lifecycle contract*.
 

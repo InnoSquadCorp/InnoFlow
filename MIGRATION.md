@@ -21,6 +21,14 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   `Store.scope(collection:action:)` returning the previous row objects are
   affected. Independently constructed paths now replace the active row family
   so a row can never inherit an outdated action transform.
+- Consumers that relied on `SelectedStore` dynamic-member reads trapping after
+  parent release or source-collection removal in optimized builds are affected.
+  Those view-facing reads now return the last valid snapshot, matching
+  `ScopedStore`'s observer-race behavior.
+- Consumers whose child state declares a member named `requireAlive` and reads
+  it through `scoped.requireAlive` are affected. The new real
+  `ScopedStore.requireAlive()` method takes precedence over dynamic-member
+  lookup, so that expression now resolves to a function value.
 
 ### Required action
 
@@ -79,6 +87,23 @@ replacement rather than a crash or stale-transform reuse. If that code needs
 stable row object identity across repeated rendering, hoist the computed path
 into state owned for the relevant feature/view lifetime and pass the same path
 value back to `scope(collection:action:)`.
+
+`SelectedStore` dynamic-member reads are now reserved for SwiftUI view bodies
+and similarly tick-bounded observers. If a dead projection must remain a hard
+failure in every build, replace `selected.someMember` with
+`selected.requireAlive().someMember`. For release-tolerant non-UI reads, use
+`selected.optionalValue` and regenerate the projection when it returns `nil`.
+
+`ScopedStore` now provides the same explicit strict path through
+`scoped.requireAlive()`. Its existing `state` and dynamic-member reads retain
+the view-facing cached fallback, while `optionalState` remains the
+release-tolerant absence path.
+
+If child state already has a property named `requireAlive`, make that lookup
+explicit. Use `scoped.state.requireAlive` only in a SwiftUI view body that needs
+the cached observer-race fallback, `scoped.optionalState?.requireAlive` for a
+release-tolerant non-UI read, or `scoped.requireAlive().requireAlive` when a dead
+projection is a programming error.
 
 ## 4.0.0
 

@@ -74,6 +74,22 @@ EOF
 import SwiftUI
 ```
 EOF
+
+  cat >"$root/docs/SelectedStoreLifecycleGood.md" <<'EOF'
+SelectedStore dynamic-member reads use the last valid cached snapshot in optimized builds.
+EOF
+
+  cat >"$root/docs/SelectedStoreLifecycleContradiction.md" <<'EOF'
+SelectedStore dynamic-member reads trap in release. ScopedStore dynamic-member reads use cached snapshots.
+EOF
+
+  cat >"$root/docs/SelectedStoreLifecyclePrefixContradiction.md" <<'EOF'
+In release builds, SelectedStore dynamic-member reads trap. ScopedStore dynamic-member reads use cached snapshots.
+EOF
+
+  cat >"$root/docs/SelectedStoreLifecycleTieredGood.md" <<'EOF'
+SelectedStore dynamic-member reads use cached snapshots in release; use requireAlive() to trap in release.
+EOF
 }
 
 write_doc_parity_contract() {
@@ -153,6 +169,10 @@ run_search_tests() {
   assert_failure search_swift_lines '^[[:space:]]*(@_exported[[:space:]]+)?(public[[:space:]]+)?import[[:space:]]+SwiftUI$' "$tmp_root/docs"
 
   assert_equals "$(count_line_matches '^## InnoFlow 3.0 direction$' "$tmp_root/docs/README.md")" "1"
+  assert_success validate_selected_store_dynamic_member_doc "$tmp_root/docs/SelectedStoreLifecycleGood.md"
+  assert_failure validate_selected_store_dynamic_member_doc "$tmp_root/docs/SelectedStoreLifecycleContradiction.md"
+  assert_failure validate_selected_store_dynamic_member_doc "$tmp_root/docs/SelectedStoreLifecyclePrefixContradiction.md"
+  assert_success validate_selected_store_dynamic_member_doc "$tmp_root/docs/SelectedStoreLifecycleTieredGood.md"
 
   trap - RETURN
   rm -rf "$tmp_root"

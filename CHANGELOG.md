@@ -32,6 +32,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - `ScopedStore.debugDescription` is now safe to evaluate from any executor. It
   reports immutable type and stable-identity context only; read `isAlive` on
   the main actor when current projection liveness is required.
+- Projection lifecycle reads now use one tiered contract. `ScopedStore` adds
+  strict `requireAlive()`, while `SelectedStore` dynamic-member reads diagnose
+  stale ownership in debug and return the last cached snapshot in optimized
+  SwiftUI observer races. Both stores keep optional accessors for explicit
+  absence and `requireAlive()` for all-build strictness.
 - Store and TestStore run cancellation now applies only through the requesting
   effect sequence. A delayed cancellation from an older sequence no longer
   terminates a newer run registered under the same cancellation ID.

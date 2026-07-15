@@ -38,6 +38,50 @@ struct StaleScopeCrashContractTests {
     #expect(result.normalizedOutput.contains("SelectedStore") == true)
     #expect(result.normalizedOutput.contains("parent store was released") == true)
   }
+
+  @Test("Stale SelectedStore dynamic-member reads assert in a debug subprocess")
+  func staleSelectedStoreDynamicMemberDebugContract() throws {
+    let result = try runStaleScopedStoreHarness(
+      scenario: .selectedDynamicMemberParentReleased
+    )
+
+    #expect(result.status != 0)
+    #expect(result.normalizedOutput.contains("SelectedStore") == true)
+    #expect(result.normalizedOutput.contains("parent store was released") == true)
+  }
+
+  @Test("Inactive SelectedStore dynamic-member reads assert in a debug subprocess")
+  func inactiveSelectedStoreDynamicMemberDebugContract() throws {
+    let result = try runStaleScopedStoreHarness(
+      scenario: .selectedDynamicMemberSourceInactive
+    )
+
+    #expect(result.status != 0)
+    #expect(result.normalizedOutput.contains("SelectedStore") == true)
+    #expect(result.normalizedOutput.contains("source collection entry was removed") == true)
+  }
+
+  @Test("ScopedStore requireAlive traps after parent release in optimized execution")
+  func staleScopedStoreRequireAliveReleaseContract() throws {
+    let result = try runStaleScopedStoreReleaseHarness(
+      scenario: .scopedRequireAliveParentReleased
+    )
+
+    // Optimized `preconditionFailure` preserves the trap but may strip its
+    // diagnostic string, so exit status is the release contract here.
+    #expect(result.status != 0)
+  }
+
+  @Test("ScopedStore requireAlive traps after source removal in optimized execution")
+  func inactiveScopedStoreRequireAliveReleaseContract() throws {
+    let result = try runStaleScopedStoreReleaseHarness(
+      scenario: .scopedRequireAliveCollectionEntryRemoved
+    )
+
+    // Keep the inactive-source guard as strict as the parent-release guard in
+    // optimized builds. Diagnostic text may be stripped, so assert the trap.
+    #expect(result.status != 0)
+  }
 }
 
 @Suite("Stale Scope Release Contract Tests", .serialized)
@@ -57,7 +101,7 @@ struct StaleScopeReleaseContractTests {
   }
 
   @Test(
-    "Stale SelectedStore exposes nil optionalValue after parent release in release-like execution"
+    "Stale SelectedStore exposes nil optionalValue and cached dynamic members in release-like execution"
   )
   func staleSelectedStoreReleaseNoCrash() throws {
     let result = try runStaleScopedStoreReleaseHarness(scenario: .selectedParentReleased)

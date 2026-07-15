@@ -690,6 +690,8 @@ enum StaleScopedStoreScenario: String {
   case parentReleased = "parent-released"
   case collectionEntryRemoved = "collection-entry-removed"
   case selectedParentReleased = "selected-parent-released"
+  case selectedDynamicMemberParentReleased = "selected-dynamic-member-parent-released"
+  case selectedDynamicMemberSourceInactive = "selected-dynamic-member-source-inactive"
 }
 
 enum StaleScopeHarnessError: Error, CustomStringConvertible {
@@ -826,6 +828,9 @@ enum StaleScopedStoreReleaseScenario: String {
   case parentReleased = "parent-released"
   case collectionEntryRemoved = "collection-entry-removed"
   case selectedParentReleased = "selected-parent-released"
+  case scopedRequireAliveParentReleased = "scoped-require-alive-parent-released"
+  case scopedRequireAliveCollectionEntryRemoved =
+    "scoped-require-alive-collection-entry-removed"
 }
 
 func runStaleScopedStoreReleaseHarness(
@@ -1338,6 +1343,26 @@ private let staleScopedStoreHarnessSource = #"""
         // cached-fallback accessor was removed.
         _ = selected.requireAlive()
 
+      case "selected-dynamic-member-parent-released":
+        let selected: SelectedStore<ParentReleasedFeature.Child> = {
+          let store = Store(reducer: ParentReleasedFeature(), initialState: .init())
+          return store.select(\.child)
+        }()
+        // Dynamic-member reads keep a debug assertion for stale ownership,
+        // while optimized builds use the cached snapshot for observer races.
+        _ = selected[dynamicMember: \.value]
+
+      case "selected-dynamic-member-source-inactive":
+        let store = Store(reducer: CollectionRemovedFeature(), initialState: .init())
+        let targetID = store.state.todos[0].id
+        let row = store.scope(
+          collection: \.todos,
+          action: CollectionRemovedFeature.Action.todoActionPath
+        )[0]
+        let selectedTitle = row.select(\.title)
+        store.send(.remove(id: targetID))
+        _ = selectedTitle[dynamicMember: \.count]
+
       default:
         fatalError("Unknown stale scope scenario")
       }
@@ -1756,14 +1781,14 @@ private let staleScopedStoreReleaseHarnessSource = #"""
         print("ok")
 
       case "selected-parent-released":
-        let selected: SelectedStore<Int> = {
+        let selected: SelectedStore<ReleaseParentReleasedFeature.Child> = {
           let store = Store(
             reducer: ReleaseParentReleasedFeature(), initialState: .init())
-          return store.select(\.child.value)
+          return store.select(\.child)
         }()
-        // After H1 removed `value`'s release-mode cached fallback, the
-        // safe-read path is `optionalValue` which must report nil once the
-        // parent store has been released. `isAlive` mirrors the contract.
+        // The removed `value` property is not restored: lifecycle-aware reads
+        // use `optionalValue`, while observer-facing dynamic-member reads keep
+        // the optimized cached-snapshot fallback.
         guard selected.isAlive == false else {
           fputs("Expected selected.isAlive == false after parent release\n", stderr)
           Foundation.exit(1)
@@ -1774,7 +1799,56 @@ private let staleScopedStoreReleaseHarnessSource = #"""
             stderr)
           Foundation.exit(1)
         }
+        guard selected[dynamicMember: \.value] == 42 else {
+          fputs("Expected cached SelectedStore dynamic-member value 42\n", stderr)
+          Foundation.exit(1)
+        }
+
+        let collectionStore = Store(
+          reducer: ReleaseCollectionRemovedFeature(), initialState: .init())
+        let targetID = collectionStore.state.todos[0].id
+        let row = collectionStore.scope(
+          collection: \.todos,
+          action: ReleaseCollectionRemovedFeature.Action.todoActionPath
+        )[0]
+        let selectedTitle = row.select(\.title)
+        collectionStore.send(.remove(id: targetID))
+        guard selectedTitle.optionalValue == nil else {
+          fputs("Expected removed-row selection to expose nil optionalValue\n", stderr)
+          Foundation.exit(1)
+        }
+        guard selectedTitle[dynamicMember: \.count] == 3 else {
+          fputs("Expected cached removed-row title count 3\n", stderr)
+          Foundation.exit(1)
+        }
         print("ok")
+
+      case "scoped-require-alive-parent-released":
+        let scoped:
+          ScopedStore<
+            ReleaseParentReleasedFeature,
+            ReleaseParentReleasedFeature.Child,
+            ReleaseParentReleasedFeature.ChildAction
+          > = {
+            let store = Store(
+              reducer: ReleaseParentReleasedFeature(), initialState: .init())
+            return store.scope(
+              state: \.child,
+              action: ReleaseParentReleasedFeature.Action.childCasePath
+            )
+          }()
+        _ = scoped.requireAlive()
+
+      case "scoped-require-alive-collection-entry-removed":
+        let store = Store(
+          reducer: ReleaseCollectionRemovedFeature(), initialState: .init())
+        let targetID = store.state.todos[0].id
+        let row = store.scope(
+          collection: \.todos,
+          action: ReleaseCollectionRemovedFeature.Action.todoActionPath
+        )[0]
+        store.send(.remove(id: targetID))
+        _ = row.requireAlive()
 
       default:
         fputs("Unknown stale scope release scenario\n", stderr)

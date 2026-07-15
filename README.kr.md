@@ -127,7 +127,7 @@ Stepper(
 - `IfLet`: optional child state
 - `IfCaseLet`: enum-backed child state
 - `ForEachReducer`: collection child state
-- `SelectedStore`: 읽기 전용 파생 모델. 단일 명시적 key path는 `select(dependingOn:)`, 둘 이상의 key path는 가변 인자 `select(dependingOnAll:)`을 사용합니다. dependency를 선언할 수 없을 때 `select { ... }`는 always-refresh fallback입니다. dead projection은 `optionalValue`에서 `nil`이 되며, `requireAlive()`/dynamic member read는 release에서도 `preconditionFailure`로 실패합니다.
+- `SelectedStore`: 읽기 전용 파생 모델. 단일 명시적 key path는 `select(dependingOn:)`, 둘 이상의 key path는 가변 인자 `select(dependingOnAll:)`을 사용합니다. dependency를 선언할 수 없을 때 `select { ... }`는 always-refresh fallback입니다. dynamic member read는 SwiftUI observer race를 위해 debug에서 진단하고 release에서 마지막 snapshot을 반환합니다. 비 UI 코드는 dead projection을 `optionalValue`의 `nil`로 처리하거나, 모든 빌드에서 엄격한 `requireAlive()`를 사용합니다.
 
 런타임 `Store.scope(state:action:)`는 같은 호출 위치, state key path,
 child 타입, `CasePath` identity가 모두 일치할 때 살아 있는 `ScopedStore`를

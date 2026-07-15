@@ -302,6 +302,19 @@ struct StoreScopeSelectionTests {
     #expect(selected.optionalValue == 1)
   }
 
+  @Test("ScopedStore requireAlive returns the live child state")
+  func scopedStoreRequireAliveWhileAlive() {
+    let store = Store(reducer: ScopedCounterFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child,
+      action: ScopedCounterFeature.Action.selfCasePath
+    )
+
+    #expect(scoped.requireAlive().count == 0)
+    scoped.send(.childIncrement)
+    #expect(scoped.requireAlive().count == 1)
+  }
+
   @Test("SelectedStore.optionalValue surfaces released parent as nil without asserting")
   func selectedStoreOptionalValueAfterParentRelease() {
     let selected: SelectedStore<Int> = {

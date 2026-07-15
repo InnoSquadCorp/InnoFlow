@@ -126,7 +126,7 @@ Stepper(
 - `IfLet`: optional child state
 - `IfCaseLet`: enum-backed child state
 - `ForEachReducer`: collection child state
-- `SelectedStore`: 只读派生模型。单个显式 key path 使用 `select(dependingOn:)`，两个或更多使用可变参数的 `select(dependingOnAll:)`；无法声明 dependency 时，`select { ... }` 是 always-refresh fallback。dead projection 下 `optionalValue` 返回 `nil`，`requireAlive()` / dynamic member read 在 release 中也会触发 `preconditionFailure`。
+- `SelectedStore`: 只读派生模型。单个显式 key path 使用 `select(dependingOn:)`，两个或更多使用可变参数的 `select(dependingOnAll:)`；无法声明 dependency 时，`select { ... }` 是 always-refresh fallback。dynamic member read 为 SwiftUI observer race 在 debug 中给出诊断，并在 release 中返回最后的 snapshot。非 UI 代码应通过 `optionalValue` 的 `nil` 处理 dead projection，或使用在所有构建中都严格失败的 `requireAlive()`。
 
 ## 样例目录
 

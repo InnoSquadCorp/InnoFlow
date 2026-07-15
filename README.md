@@ -320,8 +320,10 @@ ForEachReducer(
 
 `SelectedStore` is a read-only derived projection for expensive `Equatable` read models. Use it when
 you want a view to refresh only when the selected value actually changes.
-Read live projections with `requireAlive()` when liveness is a precondition, or use
-`optionalValue` when a released projection should be handled as absence.
+Dynamic-member reads are SwiftUI view-body conveniences: they diagnose stale
+ownership in debug and use the last cached snapshot in optimized builds. Use
+`requireAlive()` when liveness is a precondition, or `optionalValue` when a
+released projection should be handled as absence.
 
 ```swift
 let summary = store.select { state in
@@ -743,7 +745,7 @@ await child.receive(.finished) {
 
 That projection assumes `ParentFeature.Action.childCasePath`, which `@InnoFlow` now synthesizes for matching single-payload child action cases.
 Collection-scoped projections keep per-element `ScopedStore` identity stable by `id`, and row observers only invalidate when their own element snapshot changes.
-If an element is removed, discard any old row-scoped handle and recreate projections from the parent store. `ScopedStore.state` keeps a cached snapshot fallback for SwiftUI observer races, stale scoped sends become no-ops when the projection is dead, and `SelectedStore` callers should use `optionalValue` for graceful absence or `requireAlive()` when a dead projection is a programmer error. `ScopedTestStore` keeps the testing contract louder and traps stale direct access via `preconditionFailure`.
+If an element is removed, discard any old row-scoped handle and recreate projections from the parent store. `ScopedStore.state` and projection dynamic-member reads keep a cached snapshot fallback for SwiftUI observer races, stale scoped sends become no-ops when the projection is dead, and non-UI callers should use `optionalState` / `optionalValue` for graceful absence or `requireAlive()` when a dead projection is a programmer error. `ScopedTestStore` keeps the testing contract louder and traps stale direct access via `preconditionFailure`.
 
 For store-level debounce and throttle tests, inject a `StoreClock`:
 

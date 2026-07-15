@@ -127,7 +127,7 @@ Stepper(
 - `IfLet`: optional child state
 - `IfCaseLet`: enum-backed child state
 - `ForEachReducer`: collection child state
-- `SelectedStore`: 読み取り専用の派生モデル。単一の明示的な key path には `select(dependingOn:)` を使い、2 つ以上の key path には可変長引数の `select(dependingOnAll:)` を使います。dependency を宣言できない場合の `select { ... }` は always-refresh fallback です。dead projection では `optionalValue` が `nil` を返し、`requireAlive()` / dynamic member read は release でも `preconditionFailure` になります。
+- `SelectedStore`: 読み取り専用の派生モデル。単一の明示的な key path には `select(dependingOn:)` を使い、2 つ以上の key path には可変長引数の `select(dependingOnAll:)` を使います。dependency を宣言できない場合の `select { ... }` は always-refresh fallback です。dynamic member read は SwiftUI の observer race に備え、debug では診断し、release では最後の snapshot を返します。非 UI コードでは dead projection を `optionalValue` の `nil` として扱うか、すべてのビルドで厳格な `requireAlive()` を使います。
 
 ## サンプルカタログ
 

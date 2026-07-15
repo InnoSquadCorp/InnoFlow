@@ -325,18 +325,19 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   ///
   /// This accessor exists so SwiftUI observer races do not crash release
   /// builds; it is **not** intended as a stable lifecycle-aware read path.
-  /// New call sites should prefer ``optionalState`` (or gate on
-  /// ``isAlive``) and treat `nil` as "regenerate the projection." Reserve
-  /// `state` for tick-bounded observers (SwiftUI view bodies, dynamic
-  /// member lookups) that must always return something.
+  /// New non-UI call sites should prefer ``optionalState`` (or gate on
+  /// ``isAlive``) and treat `nil` as "regenerate the projection." Use
+  /// ``requireAlive()`` when dead ownership must trap in every build. Reserve
+  /// `state` for tick-bounded observers (SwiftUI view bodies, dynamic-member
+  /// lookups) that must always return something.
   ///
   /// See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
   public var state: ChildState {
     // Lifecycle race: a SwiftUI observer may read this projection on the same
     // tick that its parent store is released. Rather than aborting the
-    // process in release builds, return the last valid cached projection —
-    // the observer refresh pass will invalidate dependents within the next
-    // tick. Debug builds surface the race via `assertionFailure`.
+    // process in release builds, return the last valid cached projection.
+    // This fallback is intended only for that observer race; debug builds
+    // surface a stale read via `assertionFailure`.
     guard parent != nil else {
       assertionFailure(parentReleasedMessage())
       return cachedState
@@ -371,6 +372,25 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   /// property and treat `nil` as "regenerate the projection."
   public var optionalState: ChildState? {
     guard isAlive else { return nil }
+    return cachedState
+  }
+
+  /// Returns the current child state when this projection is alive, otherwise
+  /// crashes with a descriptive precondition failure in every build mode.
+  ///
+  /// Use this for ownership paths where liveness is a caller-owned
+  /// precondition. SwiftUI view bodies should normally use dynamic-member
+  /// reads, while release-tolerant non-UI code should use ``optionalState``.
+  public func requireAlive(
+    file: StaticString = #fileID,
+    line: UInt = #line
+  ) -> ChildState {
+    guard parent != nil else {
+      preconditionFailure(parentReleasedMessage(), file: file, line: line)
+    }
+    guard isActive else {
+      preconditionFailure(staleMessage(), file: file, line: line)
+    }
     return cachedState
   }
 

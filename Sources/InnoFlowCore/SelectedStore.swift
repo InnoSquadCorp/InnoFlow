@@ -47,10 +47,9 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   ///
   /// Callers that need to distinguish "value is fresh" from "parent is
   /// gone" should consult this property and treat `nil` as "regenerate
-  /// the selection." When the selection's liveness is a precondition of
-  /// the call site (e.g., the value is read inside a SwiftUI view body
-  /// guarded by `if selected.isAlive`), use ``requireAlive()`` instead —
-  /// it returns `Value` directly and crashes loudly on a released parent.
+  /// the selection." When the selection's liveness is a caller-owned
+  /// precondition, use ``requireAlive()`` instead — it returns `Value`
+  /// directly and crashes loudly on a released parent.
   public var optionalValue: Value? {
     guard isAlive else { return nil }
     return cachedValue
@@ -61,10 +60,10 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   ///
   /// Use this from call sites that have already verified liveness (via
   /// ``isAlive``) or where reading after a released parent is a contract
-  /// violation — for instance, inside a tightly-scoped SwiftUI view body
-  /// that takes its lifetime from the parent store. The crash is
-  /// intentionally loud in both debug and release so a missing
-  /// regenerate-on-dismiss step does not silently surface stale data.
+  /// violation. The crash is intentionally loud in both debug and release so
+  /// a missing regenerate-on-dismiss step does not silently surface stale
+  /// data. SwiftUI view bodies that must survive a same-tick observer race can
+  /// use dynamic-member reads instead.
   ///
   /// Replaces the removed `value` accessor whose cached fallback could
   /// silently leak stale state in release builds.
@@ -98,11 +97,20 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   }
 
   public subscript<Member>(dynamicMember keyPath: KeyPath<Value, Member>) -> Member {
-    // dynamicMember reads route through `requireAlive()` so a released
-    // parent or inactive selection surfaces as a loud precondition
-    // failure rather than a silent stale-cache read. Call sites that
-    // tolerate dead selections must use `optionalValue` explicitly.
-    requireAlive()[keyPath: keyPath]
+    // SwiftUI can read a projection on the same tick that its parent is
+    // released. Match ScopedStore's observer-facing contract: diagnose the
+    // stale read in debug, but keep optimized view-body evaluation alive with
+    // the last valid snapshot. Non-UI callers should use optionalValue or
+    // requireAlive() so their lifecycle policy remains explicit.
+    guard parentObject != nil else {
+      assertionFailure(parentReleasedMessage())
+      return cachedValue[keyPath: keyPath]
+    }
+    guard sourceIsAlive(), isActive else {
+      assertionFailure(inactiveMessage())
+      return cachedValue[keyPath: keyPath]
+    }
+    return cachedValue[keyPath: keyPath]
   }
 }
 

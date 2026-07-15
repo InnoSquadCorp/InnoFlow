@@ -29,23 +29,26 @@ lifetime is bounded by the parent. SwiftUI observers, however, can read a
 projection on the same run-loop tick that its parent is being released — a
 race that is internal to the integration, not a programming error.
 
-The framework handles this race explicitly, but `ScopedStore` and
-`SelectedStore` now expose different read contracts:
+The framework handles this race explicitly. `ScopedStore` and `SelectedStore`
+expose the same tiered read contract:
 
 - `ScopedStore.state` and `ScopedStore` dynamic-member reads return the **last
   valid cached snapshot** when the parent is gone or the projection has been
-  marked inactive. The observer refresh pass invalidates dependents within the
-  next tick, so this fallback is bounded to the SwiftUI observer race it exists
-  to cover.
+  marked inactive. This fallback exists only for SwiftUI's same-tick observer
+  race; the API cannot bound how long an external handle is retained, so it is
+  not a general lifecycle-aware read path.
 - `ScopedStore.send(_:)` is a **silent no-op** once the parent is gone or the
   projection is inactive.
 - `ScopedStore.optionalState` returns `nil` for the same dead-projection cases
   where `ScopedStore.state` would use its cached snapshot fallback.
 - `SelectedStore.optionalValue` returns `nil` when the parent is gone or the
   projection is inactive. Treat `nil` as "regenerate the projection."
-- `SelectedStore.requireAlive()` and `SelectedStore` dynamic-member reads trap
-  with `preconditionFailure` when the projection is dead, including release
-  builds. Use this path only when liveness is a caller-owned precondition.
+- `SelectedStore` dynamic-member reads follow the same observer-facing policy
+  as `ScopedStore`: they diagnose a dead projection in debug and return the
+  last valid cached snapshot in optimized builds.
+- `ScopedStore.requireAlive()` and `SelectedStore.requireAlive()` trap with
+  `preconditionFailure` when the projection is dead, including release builds.
+  Use these explicit paths only when liveness is a caller-owned precondition.
 - `SelectedStore.value` is removed from the 4.0.0 public surface; it is not a
   cached-fallback accessor.
 - `ScopedStore.isAlive` and `SelectedStore.isAlive` report the same liveness
@@ -68,15 +71,15 @@ The framework handles this race explicitly, but `ScopedStore` and
   does not match the child state's `Identifiable.ID`.
 
 **Recommended for new code:** use `optionalState` / `optionalValue` or
-`isAlive` for release-tolerant liveness handling. Reserve `ScopedStore.state`
-for SwiftUI view bodies and similar tick-bounded observers that must always
-return a child snapshot. Reserve `SelectedStore.requireAlive()` and
-dynamic-member reads for ownership paths where a dead projection is a
-programming error.
+`isAlive` for release-tolerant non-UI handling. Reserve `ScopedStore.state` and
+both stores' dynamic-member reads for SwiftUI view bodies and similar
+tick-bounded observers that must always return a snapshot. The API cannot
+enforce that short lifetime, so long-lived handles must use the optional or
+`requireAlive()` accessors instead. Use `requireAlive()` for ownership paths
+where a dead projection is a programming error.
 
 This contract applies to single-child `Scope`, collection `ForEachReducer`
-children, and derived `SelectedStore` projections with the `SelectedStore`
-exceptions listed above.
+children, and derived `SelectedStore` projections.
 
 ## Phase-driven modeling
 
