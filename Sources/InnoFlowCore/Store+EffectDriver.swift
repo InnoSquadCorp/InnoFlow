@@ -177,19 +177,31 @@ extension Store: EffectDriver {
         },
         checkCancellation: checkCancellation,
         reportError: { error in
-          // First-error-wins: the start/finish/fail/cancel contract is 1:1
-          // per run, so swallow any subsequent reportError calls instead of
-          // fanning out duplicate didFailRun events.
-          guard runFailedBox.setIfUnset() else { return }
-          instrumentation.didFailRun(
-            .init(
-              token: token,
-              cancellationID: context?.cancellationID,
-              sequence: context?.sequence,
-              errorDescription: String(describing: error),
-              errorTypeName: String(describing: type(of: error))
+          let errorDescription = String(describing: error)
+          let errorTypeName = String(describing: type(of: error))
+
+          await MainActor.run {
+            // Cancellation-first and first-error-wins are decided atomically
+            // with Store's MainActor-isolated cancellation boundaries. This
+            // prevents an uncooperative operation from reclassifying a run as
+            // failed after cancellation has already been accepted.
+            guard
+              !lifetime.isReleased,
+              let self,
+              self.effectBridge.shouldProceed(context: context),
+              runFailedBox.setIfUnset()
+            else { return }
+
+            instrumentation.didFailRun(
+              .init(
+                token: token,
+                cancellationID: context?.cancellationID,
+                sequence: context?.sequence,
+                errorDescription: errorDescription,
+                errorTypeName: errorTypeName
+              )
             )
-          )
+          }
         }
       )
 

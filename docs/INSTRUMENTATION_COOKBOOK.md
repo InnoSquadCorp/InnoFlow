@@ -7,9 +7,12 @@ logging, tracing, or metrics backend owned by the app.
 ## Effect Run Failures
 
 `StoreInstrumentation.didFailRun` surfaces non-cancellation errors thrown from
-`EffectTask.run(sequence:)` (and the `transform` overload) that previously
-terminated the effect silently. Cancellation still propagates without firing
-the hook so cooperative shutdown paths stay clean.
+an active `EffectTask.run(sequence:)` (and the `transform` overload) that
+previously terminated the effect silently. Cancellation still propagates
+without firing the hook so cooperative shutdown paths stay clean. Store
+arbitrates failure eligibility against its MainActor cancellation boundary:
+when cancellation is accepted first, a later domain error from uncooperative
+work is discarded instead of firing `didFailRun`.
 
 ```swift
 let instrumentation: StoreInstrumentation<Feature.Action> = .init(
@@ -31,6 +34,8 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .init(
 `RunFailedEvent` carries the error as `errorDescription` and `errorTypeName`
 (both `String`) instead of `any Error`, so adapters cannot accidentally cross
 the Swift 6 `Sendable` boundary by capturing the original error reference.
+The cancellation check and `didFailRun` invocation share one non-suspending
+MainActor turn; keep instrumentation callbacks short and non-blocking.
 
 ## Built-in Metrics Counter
 

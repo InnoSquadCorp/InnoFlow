@@ -22,10 +22,12 @@ does not wait for effects or reduce actions, so it is not a substitute for
 work begins or arrives afterward.
 
 Runtime failures are independent of exhaustivity. If either
-`EffectTask.run(sequence:)` overload receives a non-cancellation error,
-``TestStore`` records one failure at the action assertion that created the
-effect, including through delayed and composed execution. Cancellation errors
-remain normal cooperative termination.
+`EffectTask.run(sequence:)` overload receives a non-cancellation error while
+its run is still active, ``TestStore`` records one failure at the action
+assertion that created the effect, including through delayed and composed
+execution. Cancellation errors remain normal cooperative termination. If the
+harness accepts cancellation first, a later domain error from uncooperative
+work is discarded instead of being reclassified as a test failure.
 
 For time-sensitive effects, inject ``ManualTestClock`` and advance it explicitly.
 ``EffectTimingRecorder`` captures instrumentation events for repeatable baseline

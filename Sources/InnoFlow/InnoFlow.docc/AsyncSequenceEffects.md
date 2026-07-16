@@ -49,3 +49,12 @@ return .run(sequence: makeEvents, transform: Action.event)
 
 The helper calls ``/InnoFlowCore/EffectContext/checkCancellation()`` between elements. Runtime emission gates
 still protect late actions that race with cancellation or store release.
+
+## Failure Arbitration
+
+A non-cancellation error escaping an active sequence is forwarded once to the
+host failure channel: `StoreInstrumentation.didFailRun` for `Store`, or the
+originating action assertion for `TestStore`. The host serializes that decision
+against its MainActor cancellation boundary. If cancellation is accepted
+first, a later domain error from an iterator that ignores cancellation is
+discarded and the run is not reclassified as failed.

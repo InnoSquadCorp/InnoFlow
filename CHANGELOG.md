@@ -72,12 +72,17 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   exhaustive mode, one optional skipped-assertion warning in warning mode, or
   remains silent in `.off`; it never waits for effects or reduces actions and
   does not duplicate a completed `finish()` result.
-- `TestStore` now surfaces non-cancellation errors from both
+- `TestStore` now surfaces non-cancellation errors from active runs in both
   `EffectTask.run(sequence:)` overloads as one hard failure per run. The
   diagnostic preserves the public action assertion that created the effect,
-  even through debounce, throttle, cancellation, animation, or composition;
-  cancellation errors remain successful termination and exhaustivity cannot
-  suppress runtime failures.
+  even through debounce, throttle, cancellation, animation, or composition.
+  Cancellation errors remain successful termination, cancellation accepted
+  first discards a later domain error, and exhaustivity cannot suppress an
+  active run failure.
+- `Store` now arbitrates run failures against its MainActor cancellation
+  boundary before claiming `didFailRun`. Once cancellation is accepted, a
+  later domain error from uncooperative sequence work is discarded; an active
+  run still reports its first error exactly once.
 - Cancelled sequential effects now close their finish activity even when
   cancellation happens between concatenated children, so `finish()` no longer
   waits for a sequence that has already terminated.

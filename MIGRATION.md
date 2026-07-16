@@ -106,7 +106,10 @@ cancel expected work and still end with `finish()`.
 Handle expected `AsyncSequence` failures inside the effect and convert them
 into domain actions that the test can receive. Reserve thrown cancellation for
 normal cooperative termination. `.off` relaxes state and action assertions;
-it does not hide runtime errors.
+it does not hide runtime errors. Once Store or TestStore has accepted an effect
+cancellation, however, a later domain error from cancellation-ignoring work is
+classified as part of that cancelled run and is not reported through
+`didFailRun` or the TestStore assertion channel.
 
 Scoped stores forward the parent exhaustivity policy. Because exhaustive child
 assertions compare the complete root state, send through the parent

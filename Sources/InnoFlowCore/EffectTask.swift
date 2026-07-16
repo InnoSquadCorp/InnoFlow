@@ -283,9 +283,10 @@ public struct EffectTask<Action: Sendable>: Sendable {
   ///
   /// The sequence is built from the active ``EffectContext`` so producers can use the
   /// store-controlled clock and cancellation checks. Cancellation stops the effect
-  /// silently; any other thrown error is forwarded to the host runtime's failure
-  /// channel before the effect terminates. `Store` emits
-  /// `StoreInstrumentation.didFailRun`; `TestStore` records an assertion failure.
+  /// silently; any other thrown error from an active run is forwarded to the host
+  /// runtime's failure channel before the effect terminates. If host cancellation
+  /// is accepted first, a later error from uncooperative work is discarded. `Store`
+  /// emits `StoreInstrumentation.didFailRun`; `TestStore` records an assertion failure.
   public static func run<S: AsyncSequence & Sendable>(
     priority: TaskPriority? = nil,
     _ makeSequence: @escaping @Sendable (EffectContext) async throws -> S
@@ -308,9 +309,11 @@ public struct EffectTask<Action: Sendable>: Sendable {
   /// Runs an async sequence and transforms each element into an optional action.
   ///
   /// Returning `nil` from `transform` drops that element without ending the effect.
-  /// Cancellation stops the effect silently; any other thrown error is forwarded to
-  /// the host runtime's failure channel before the effect terminates. `Store` emits
-  /// `StoreInstrumentation.didFailRun`; `TestStore` records an assertion failure.
+  /// Cancellation stops the effect silently; any other thrown error from an active
+  /// run is forwarded to the host runtime's failure channel before the effect
+  /// terminates. If host cancellation is accepted first, a later error from
+  /// uncooperative work is discarded. `Store` emits `StoreInstrumentation.didFailRun`;
+  /// `TestStore` records an assertion failure.
   public static func run<S: AsyncSequence & Sendable>(
     priority: TaskPriority? = nil,
     sequence makeSequence: @escaping @Sendable (EffectContext) async throws -> S,

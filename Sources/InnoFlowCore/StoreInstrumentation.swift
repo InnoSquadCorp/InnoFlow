@@ -134,11 +134,13 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     }
   }
 
-  /// An error escaped from `EffectTask.run(...)` work. Carried as descriptions
-  /// rather than the raw error because `any Error` is not unconditionally
-  /// `Sendable` under Swift 6 strict concurrency, and instrumentation is an
-  /// observation hook (e.g., logs, metrics, traces) that does not need to
-  /// re-throw or inspect the concrete error type.
+  /// An error escaped from active `EffectTask.run(...)` work. Store arbitrates
+  /// failure against its MainActor cancellation boundary before invoking
+  /// `didFailRun`; cancellation accepted first suppresses a later error from
+  /// uncooperative work. Values are carried as descriptions rather than the raw
+  /// error because `any Error` is not unconditionally `Sendable` under Swift 6
+  /// strict concurrency, and instrumentation is an observation hook (e.g., logs,
+  /// metrics, traces) that does not need to re-throw or inspect the concrete type.
   public struct RunFailedEvent: Sendable {
     public let token: UUID
     public let cancellationID: AnyEffectID?

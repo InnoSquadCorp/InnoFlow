@@ -47,7 +47,10 @@ the READMEs until 5.0.0 is tagged.
    waiting or reducing actions. Non-cancellation errors escaping either
    `EffectTask.run(sequence:)` overload now record one hard failure at the
    originating action assertion; cancellation remains successful termination,
-   and `.off` does not suppress runtime errors.
+   and `.off` does not suppress runtime errors. Store and TestStore now
+   arbitrate those failures against their MainActor cancellation boundary, so
+   cancellation accepted first suppresses a later domain error from
+   uncooperative sequence work.
 9. Deprecates `assertNoMoreActions()` for the 5.x compatibility window. Use
     `finish()` for terminal verification or `assertNoBufferedActions()` for an
     intermediate queue checkpoint. Removal is planned for 6.0.
@@ -97,7 +100,9 @@ with the retest steps and the gate that warns on Swift 6.4+.
   tests, set `store.exhaustivity = .off` (or enable skipped-assertion warnings).
   Deinitialization cancels but never drains remaining actions or effects.
 - Handle expected `AsyncSequence` errors inside `EffectTask.run` or convert
-  them into actions. `.off` does not suppress errors that escape a run.
+  them into actions. `.off` does not suppress errors that escape an active run;
+  cancellation accepted before a late error keeps the run classified as
+  cancelled.
 - Replace terminal `assertNoMoreActions()` calls with `finish()` and
   intermediate uses with `assertNoBufferedActions()`.
 

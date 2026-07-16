@@ -54,6 +54,30 @@ private struct EmitOnceThenThrowSequence<Element: Sendable>: AsyncSequence, Send
   }
 }
 
+/// An async sequence that deliberately ignores task cancellation while waiting,
+/// then throws a domain error after its host Store has accepted cancellation.
+private struct CancellationIgnoringThrowSequence<Element: Sendable>: AsyncSequence, Sendable {
+  let started: AsyncTestSignal
+  let release: RunStartGate
+  let error: SequenceTestError
+
+  struct AsyncIterator: AsyncIteratorProtocol, Sendable {
+    let started: AsyncTestSignal
+    let release: RunStartGate
+    let error: SequenceTestError
+
+    mutating func next() async throws -> Element? {
+      started.signal()
+      await release.wait()
+      throw error
+    }
+  }
+
+  func makeAsyncIterator() -> AsyncIterator {
+    AsyncIterator(started: started, release: release, error: error)
+  }
+}
+
 private struct SequenceErrorFeature: Reducer {
   enum Action: Equatable, Sendable {
     case emitThrowingStart
@@ -102,6 +126,52 @@ private struct SequenceErrorFeature: Reducer {
         )
       }
       .debounce("sequence-error", for: .seconds(1))
+
+    case .received(let value):
+      state.values.append(value)
+      return .none
+    }
+  }
+}
+
+private struct CancelledSequenceErrorFeature: Reducer {
+  enum Action: Equatable, Sendable {
+    case startDirect
+    case startTransformed
+    case received(Int)
+  }
+
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var values: [Int] = []
+  }
+
+  let started: AsyncTestSignal
+  let release: RunStartGate
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .startDirect:
+      return EffectTask.run { _ in
+        CancellationIgnoringThrowSequence<Action>(
+          started: started,
+          release: release,
+          error: SequenceTestError(message: "cancelled-direct-boom")
+        )
+      }
+      .cancellable("late-sequence-error")
+
+    case .startTransformed:
+      return EffectTask.run(
+        sequence: { _ in
+          CancellationIgnoringThrowSequence<Int>(
+            started: started,
+            release: release,
+            error: SequenceTestError(message: "cancelled-transform-boom")
+          )
+        },
+        transform: Action.received
+      )
+      .cancellable("late-sequence-error")
 
     case .received(let value):
       state.values.append(value)
@@ -216,6 +286,53 @@ struct EffectTaskRunSequenceErrorTests {
     #expect(event.contains("SequenceTestError"))
     #expect(event.contains("transform-boom"))
     #expect(store.values == [2])
+  }
+
+  @Test("Cancellation accepted before a direct sequence error suppresses didFailRun")
+  func cancelledDirectSequenceErrorDoesNotFail() async throws {
+    try await assertCancelledLateErrorDoesNotFail(startAction: .startDirect)
+  }
+
+  @Test("Cancellation accepted before a transformed sequence error suppresses didFailRun")
+  func cancelledTransformedSequenceErrorDoesNotFail() async throws {
+    try await assertCancelledLateErrorDoesNotFail(startAction: .startTransformed)
+  }
+
+  private func assertCancelledLateErrorDoesNotFail(
+    startAction: CancelledSequenceErrorFeature.Action
+  ) async throws {
+    let probe = InstrumentationProbe()
+    let started = AsyncTestSignal()
+    let release = RunStartGate()
+    let terminal = AsyncTestSignal()
+    let store = Store(
+      reducer: CancelledSequenceErrorFeature(started: started, release: release),
+      initialState: .init(),
+      instrumentation: .init(
+        didFinishRun: { _ in
+          probe.record("finish")
+          terminal.signal()
+        },
+        didFailRun: { event in
+          probe.record("fail:\(event.errorDescription)")
+          terminal.signal()
+        },
+        didCancelEffects: { _ in
+          probe.record("cancel")
+        }
+      )
+    )
+
+    store.send(startAction)
+    try #require(await started.wait())
+    await store.cancelEffects(identifiedBy: "late-sequence-error")
+    await release.open()
+    try #require(await terminal.wait())
+
+    #expect(probe.events.filter { $0.hasPrefix("fail:") }.isEmpty)
+    #expect(probe.events.filter { $0 == "finish" }.count == 1)
+    #expect(probe.events.filter { $0 == "cancel" }.count == 1)
+    #expect(store.values.isEmpty)
   }
 }
 

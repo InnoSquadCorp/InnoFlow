@@ -22,6 +22,18 @@ This document captures the stable framework guarantees that should not drift wit
 - Use `select(dependingOn:)` for a single explicit state slice; use the variadic `select(dependingOnAll:)` for two or more slices. Both forms keep selective invalidation regardless of arity.
 - Closure-based `select { ... }` remains an always-refresh fallback when dependency reads cannot be declared soundly.
 
+## Effect runtime failure contract
+
+- A non-cancellation error escaping an active `EffectTask.run` sequence is
+  forwarded to the host failure channel exactly once per run.
+- Cancellation and failure eligibility are arbitrated against the host's
+  MainActor-isolated cancellation boundary. If cancellation is accepted first,
+  a later domain error from uncooperative work is discarded instead of being
+  reclassified as a run failure.
+- `StoreInstrumentation.didFailRun` is invoked only after that arbitration.
+  Instrumentation callbacks are synchronous observation hooks and should remain
+  short and non-blocking.
+
 ## TestStore exhaustivity contract
 
 - `TestStore.exhaustivity` defaults to `.on`. Every reducer state mutation must
@@ -43,9 +55,11 @@ This document captures the stable framework guarantees that should not drift wit
   the reducer and effect system. `.off(showSkippedAssertions: true)` emits
   non-failing warnings for skipped state or action assertions.
 - Exhaustivity never hides runtime failures. A non-cancellation error escaping
-  an `EffectTask.run` sequence records one hard failure at the public action
-  assertion that created the run, including through delayed and composed
-  effects. Multiple reports from one run use a first-error-wins contract.
+  an active `EffectTask.run` sequence records one hard failure at the public
+  action assertion that created the run, including through delayed and
+  composed effects. Multiple reports from one run use a first-error-wins
+  contract; cancellation accepted first discards a later error under the host
+  arbitration contract above.
 - Scoped test stores forward the parent exhaustivity policy. Exhaustive scoped
   assertions compare the complete root state; actions that intentionally
   change parent or sibling state should be asserted through the parent
