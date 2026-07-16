@@ -156,6 +156,7 @@ children, and derived `SelectedStore` projections.
 
 - `EffectContext` is the canonical effect helper surface. Prefer `context.sleep(for:)` over raw `Task.sleep(...)` inside `.run`.
 - Cancellation is cooperative. Runtime teardown continues as best-effort async cleanup.
+- `EffectTask.concatenate` rechecks both task cancellation and the effect-sequence boundary before every child, including inside nested concatenations. Once cancellation is accepted, no remaining child starts.
 - The runtime is designed to be deadlock-resistant and avoids coupling reducer semantics to middleware-style interception.
 
 ### `Store.send(_:)` scheduling contract

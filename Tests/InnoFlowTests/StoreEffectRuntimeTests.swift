@@ -170,6 +170,69 @@ struct StoreEffectRuntimeTests {
     #expect(probe.events == ["drop:late:cancellationBoundary"])
   }
 
+  @Test("Store stops a nested concatenate after its cancellation boundary")
+  func storeStopsNestedConcatenateAfterCancellationBoundary() async {
+    let outerID = AnyEffectID(StaticEffectID("nested-concatenate-outer"))
+    let victimID = AnyEffectID(StaticEffectID("nested-concatenate-victim"))
+    let store = Store(reducer: CounterFeature(), initialState: .init())
+    let sequence = store.effectBridge.nextSequence()
+    let effect = EffectTask<CounterFeature.Action>.concatenate(
+      .concatenate(
+        .cancel(outerID),
+        .cancel(victimID)
+      ),
+      .send(.increment)
+    )
+    .cancellable(outerID)
+
+    await store.walkEffect(
+      effect,
+      context: .init(sequence: sequence),
+      awaited: true
+    )
+
+    #expect(store.effectBridge.shouldStart(sequence: sequence, cancellationID: outerID) == false)
+    #expect(store.effectBridge.shouldStart(sequence: sequence, cancellationID: victimID))
+    #expect(store.count == 0)
+  }
+
+  @Test("Store stops an awaited concatenate after task cancellation")
+  func storeStopsAwaitedConcatenateAfterTaskCancellation() async throws {
+    let victimID = AnyEffectID(StaticEffectID("task-cancelled-concatenate-victim"))
+    let firstChildStarted = AsyncTestSignal()
+    let releaseFirstChild = RunStartGate()
+    let store = Store(reducer: CounterFeature(), initialState: .init())
+    let sequence = store.effectBridge.nextSequence()
+    let effect = EffectTask<CounterFeature.Action>.concatenate(
+      .run { _, _ in
+        firstChildStarted.signal()
+        await releaseFirstChild.wait()
+      },
+      .cancel(victimID)
+    )
+    let walk = Task { @MainActor in
+      await store.walkEffect(
+        effect,
+        context: .init(sequence: sequence),
+        awaited: true
+      )
+    }
+
+    do {
+      try #require(await firstChildStarted.wait())
+      walk.cancel()
+      await releaseFirstChild.open()
+      _ = await walk.result
+    } catch {
+      walk.cancel()
+      await releaseFirstChild.open()
+      _ = await walk.result
+      throw error
+    }
+
+    #expect(store.effectBridge.shouldStart(sequence: sequence, cancellationID: victimID))
+  }
+
   @Test("Store stale cancellation preserves a newer run sequence")
   func storeStaleCancellationPreservesNewerRunSequence() async throws {
     let staleCancellationReady = AsyncTestSignal()

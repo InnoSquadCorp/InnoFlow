@@ -31,7 +31,9 @@ the READMEs until 5.0.0 is tagged.
    sequence-specific in both `Store` and `TestStore`. Delayed cancellation
    from older work no longer terminates a newer effect registered under the
    same identifier, and cancelled sequential effects finish their lifecycle
-   accounting without hanging `finish()`.
+   accounting without hanging `finish()`. Nested concatenations recheck the
+   cancellation boundary before every child, so accepted cancellation cannot
+   start later child effects or contaminate unrelated cancellation IDs.
 6. Preserves awaited ordering through trailing throttles, including replacement
    and late trailing-enable cases, while keeping the original throttle window
    deadline.

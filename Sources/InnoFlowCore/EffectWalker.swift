@@ -70,6 +70,7 @@ package struct EffectWalker<D: EffectDriver> {
     case .concatenate(let children):
       if awaited {
         for child in children {
+          guard shouldProceed(context: context) else { return }
           await recurse(child, context, true)
         }
       } else {
@@ -137,6 +138,14 @@ package struct EffectWalker<D: EffectDriver> {
       guard let driver else { return }
       driver.reportActionDrop(action, reason: reason, context: context)
     }
+  }
+
+  /// Rechecks sequential child admission without retaining the driver across
+  /// the child's awaited work. Nested concatenations use this boundary after
+  /// every completed child so accepted cancellation cannot start siblings.
+  private func shouldProceed(context: EffectExecutionContext?) -> Bool {
+    guard !Task.isCancelled, let driver else { return false }
+    return driver.shouldProceed(context: context)
   }
 
   /// Registers run work in a short-lived frame so an awaited run does not

@@ -349,11 +349,19 @@ public struct EffectTask<Action: Sendable>: Sendable {
   }
 
   /// Runs effects sequentially.
+  ///
+  /// Cancellation is rechecked before every child, including children inside
+  /// nested concatenations. Once cancellation is accepted, remaining effects
+  /// are not started.
   public static func concatenate(_ effects: Self...) -> Self {
     concatenate(effects)
   }
 
   /// Runs effects sequentially from a collection.
+  ///
+  /// Cancellation is rechecked before every child, including children inside
+  /// nested concatenations. Once cancellation is accepted, remaining effects
+  /// are not started.
   public static func concatenate(_ effects: [Self]) -> Self {
     let live = effects.filter { !$0.isNone }
     guard !live.isEmpty else { return .none }

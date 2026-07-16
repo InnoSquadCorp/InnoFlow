@@ -86,9 +86,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   boundary before claiming `didFailRun`. Once cancellation is accepted, a
   later domain error from uncooperative sequence work is discarded; an active
   run still reports its first error exactly once.
-- Cancelled sequential effects now close their finish activity even when
-  cancellation happens between concatenated children, so `finish()` no longer
-  waits for a sequence that has already terminated.
+- Cancelled sequential effects now recheck task and effect-sequence boundaries
+  before every child, including inside nested concatenations. Remaining child
+  effects, including further cancellation effects, no longer start after an
+  accepted cancellation, and finish activity closes without making `finish()`
+  wait for a sequence that has already terminated.
 - `assertNoMoreActions()` is deprecated for the 5.x compatibility window. Use
   `finish()` for terminal verification or `assertNoBufferedActions()` for an
   intermediate queue checkpoint; removal is planned for 6.0.

@@ -146,6 +146,32 @@ struct TestStoreCoreTests {
     await store.finish(timeout: .seconds(1))
   }
 
+  @Test("TestStore stops a nested concatenate after its cancellation boundary")
+  func testStoreStopsNestedConcatenateAfterCancellationBoundary() async {
+    let outerID = AnyEffectID(StaticEffectID("nested-concatenate-outer"))
+    let victimID = AnyEffectID(StaticEffectID("nested-concatenate-victim"))
+    let store = TestStore(reducer: CounterFeature(), initialState: .init())
+    let sequence = store.nextSequence()
+    let effect = EffectTask<CounterFeature.Action>.concatenate(
+      .concatenate(
+        .cancel(outerID),
+        .cancel(victimID)
+      ),
+      .send(.increment)
+    )
+    .cancellable(outerID)
+
+    await store.walker.walk(
+      effect,
+      context: .init(sequence: sequence),
+      awaited: true
+    )
+
+    #expect(store.shouldStart(sequence: sequence, cancellationID: outerID) == false)
+    #expect(store.shouldStart(sequence: sequence, cancellationID: victimID))
+    #expect(await store.popBufferedAction() == nil)
+  }
+
   @Test("TestStore stale cancellation preserves a newer run sequence")
   func testStoreStaleCancellationPreservesNewerRunSequence() async throws {
     let staleCancellationReady = AsyncTestSignal()
