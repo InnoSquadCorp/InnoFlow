@@ -9,7 +9,9 @@ import Foundation
 ///
 /// Value copies preserve one opaque runtime identity. Independently
 /// constructed paths have distinct identities so collection scope caches never
-/// reuse a row store with an outdated action transform.
+/// reuse a row store with an outdated action transform. `@InnoFlow`-generated
+/// computed paths recreate a stable identity for the same specialized root and
+/// private generated marker.
 public struct CollectionActionPath<Root, ID, ChildAction>: Sendable {
   /// Embeds a child action for a specific element id back into the root action.
   public let embed: @Sendable (ID, ChildAction) -> Root
@@ -24,8 +26,40 @@ public struct CollectionActionPath<Root, ID, ChildAction>: Sendable {
     embed: @escaping @Sendable (ID, ChildAction) -> Root,
     extract: @escaping @Sendable (Root) -> (ID, ChildAction)?
   ) {
+    self.init(
+      embed: embed,
+      extract: extract,
+      identity: ActionPathIdentity()
+    )
+  }
+
+  /// Framework hook used by `@InnoFlow` for generated computed action paths.
+  ///
+  /// Application code should use ``init(embed:extract:)`` so independently
+  /// constructed transforms retain independent cache identities.
+  @_documentation(visibility: internal)
+  public static func _innoFlowGenerated<Marker>(
+    marker: Marker.Type,
+    embed: @escaping @Sendable (ID, ChildAction) -> Root,
+    extract: @escaping @Sendable (Root) -> (ID, ChildAction)?
+  ) -> Self {
+    Self(
+      embed: embed,
+      extract: extract,
+      identity: ActionPathIdentity.generatedCollectionActionPath(
+        root: Root.self,
+        marker: marker
+      )
+    )
+  }
+
+  private init(
+    embed: @escaping @Sendable (ID, ChildAction) -> Root,
+    extract: @escaping @Sendable (Root) -> (ID, ChildAction)?,
+    identity: ActionPathIdentity
+  ) {
     self.embed = embed
     self.extract = extract
-    self.identity = ActionPathIdentity()
+    self.identity = identity
   }
 }

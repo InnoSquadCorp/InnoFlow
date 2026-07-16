@@ -57,8 +57,9 @@ package final class SingleScopeCacheEntry {
 }
 
 /// Weakly caches live single-state projections by call site and projection
-/// signature. The action-path token is retained strongly so identity cannot
-/// collide through allocator address reuse after the caller releases a path.
+/// signature. The action-path token is retained strongly so manual reference
+/// identity cannot collide through allocator address reuse after the caller
+/// releases a path; generated tokens may compare by their stable macro key.
 /// Matching buckets prune on every access; periodic cross-bucket maintenance
 /// bounds dead metadata from signatures that are no longer requested.
 @MainActor

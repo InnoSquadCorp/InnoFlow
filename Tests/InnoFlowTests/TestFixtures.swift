@@ -41,6 +41,35 @@ extension GenericExtensionNamespace {
   }
 }
 
+@InnoFlow
+struct GenericCollectionScopeFeature<Value: Equatable & Sendable> {
+  struct Row: Equatable, Identifiable, Sendable {
+    let id: Int
+    var value: Value?
+  }
+
+  struct State: Equatable, Sendable {
+    var rows = [Row(id: 0)]
+  }
+
+  enum Action: Equatable, Sendable {
+    case row(id: Int, action: Value)
+  }
+
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .row(let id, let value):
+        guard let index = state.rows.firstIndex(where: { $0.id == id }) else {
+          return .none
+        }
+        state.rows[index].value = value
+        return .none
+      }
+    }
+  }
+}
+
 struct CounterFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {
     var count = 0

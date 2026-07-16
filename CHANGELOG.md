@@ -29,6 +29,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   outdated action transform. Previously returned row handles keep their
   original routing, and the parent retains at most one active family per
   collection key path.
+- Macro-generated computed `CasePath` and `CollectionActionPath` accessors now
+  recreate a stable identity from the specialized root action type and a
+  private per-member marker. Generic and extension features therefore reuse
+  live projections and row families without manually hoisting the generated
+  path value; explicitly constructed paths remain independently identified.
 - `ScopedStore.debugDescription` is now safe to evaluate from any executor. It
   reports immutable type and stable-identity context only; read `isAlive` on
   the main actor when current projection liveness is required.

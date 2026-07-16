@@ -91,7 +91,8 @@ extension Store {
   /// when the state key path, child types, and case-path identity all match.
   /// The cache is weak: releasing every external reference also releases the
   /// scoped store. Independently reconstructed case paths safely create a new
-  /// projection instead of reusing an outdated action transform.
+  /// projection instead of reusing an outdated action transform. Computed
+  /// macro-generated paths preserve their identity across repeated access.
   public func scope<ChildState: Equatable, ChildAction>(
     state: KeyPath<R.State, ChildState>,
     action: CasePath<R.Action, ChildAction>,
@@ -210,8 +211,9 @@ extension Store {
   /// Repeated calls reuse the active row family across source locations when
   /// the child types and opaque action-path identity match. Changing that
   /// signature replaces the complete cached family, while previously returned
-  /// row handles keep their original action transform. The parent retains only
-  /// one active family per collection key path.
+  /// row handles keep their original action transform. Computed macro-generated
+  /// paths preserve the matching identity across repeated access. The parent
+  /// retains only one active family per collection key path.
   public func scope<CollectionState, ChildAction>(
     collection: KeyPath<R.State, CollectionState>,
     action: CollectionActionPath<R.Action, CollectionState.Element.ID, ChildAction>,

@@ -89,6 +89,10 @@ expose the same tiered read contract:
   identity token all match. The parent cache holds the projection weakly, so
   cache reuse never extends its lifetime. A newly constructed `CasePath` is a
   safe cache miss and cannot inherit an older action transform.
+- Macro-generated computed action paths use the specialized root action type
+  and a private per-member marker as their opaque identity. Generic and
+  extension accessors therefore preserve cache identity across repeated reads,
+  while application-constructed paths retain reference identity.
 - `Store.scope(collection:action:)` retains one active row family per
   collection key path. Matching child types and opaque `CollectionActionPath`
   identity reuse the ID-keyed rows across source locations. A signature change

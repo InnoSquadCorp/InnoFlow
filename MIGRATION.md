@@ -130,8 +130,10 @@ If a caller genuinely needs an independent projection, use a distinct source
 location or an independently constructed `CasePath`. Features whose macro
 expansion emits a stored static action path should keep that path so repeated
 body evaluation reuses one observer and projection identity. Generic or
-extension lexical contexts synthesize a computed action path with a fresh
-identity per access; those calls intentionally take the safe cache-miss path.
+extension lexical contexts still synthesize computed action paths, but 5.0
+assigns each generated member a stable identity from its specialized root
+action type and a private generated marker. Repeated access therefore reuses
+the same live projection without a manual hoist.
 
 Ordinary `store.scope(collection:action:)` calls remain source-compatible. To
 preserve stable row object identity, reuse a stored `CollectionActionPath`
@@ -142,11 +144,10 @@ part replaces the complete cached family; previously returned row handles
 remain valid and keep their original action transform.
 
 Generic or extension lexical contexts synthesize a computed
-`CollectionActionPath` with a fresh identity per access. This is a safe family
-replacement rather than a crash or stale-transform reuse. If that code needs
-stable row object identity across repeated rendering, hoist the computed path
-into state owned for the relevant feature/view lifetime and pass the same path
-value back to `scope(collection:action:)`.
+`CollectionActionPath` whose generated identity is stable for the specialized
+root action type and a private per-member marker. Repeated rendering therefore
+reuses the active row family. Construct a path explicitly only when a separate
+routing identity is intentional.
 
 `SelectedStore` dynamic-member reads are now reserved for SwiftUI view bodies
 and similarly tick-bounded observers. If a dead projection must remain a hard

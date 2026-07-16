@@ -77,8 +77,10 @@ path, with rows keyed by `Identifiable.ID`. Child types and opaque
 locations. A signature change replaces the complete family, bounding retained
 row scopes to one path family while preventing stale action transforms.
 Macro-generated stored static paths keep the steady-state cache hot;
-generic/extension computed paths should be hoisted and reused when stable row
-object identity matters.
+generic/extension computed paths use a stable generated identity per
+specialized root action type and private per-member marker, so repeated access
+also keeps the active row family hot. Explicitly reconstructed paths remain
+intentional signature changes.
 
 Within the active family, a row resolves in O(1) when its cached offset still
 contains the same ID. If the ID moved, the resolver scans once by ID and updates

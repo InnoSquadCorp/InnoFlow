@@ -24,6 +24,10 @@ extension InnoFlowMacro {
     )
     let existingNames = Set(
       actionEnum.memberBlock.members.flatMap { member -> [String] in
+        if let enumCaseDecl = member.decl.as(EnumCaseDeclSyntax.self) {
+          return enumCaseDecl.elements.map { $0.name.text }
+        }
+
         if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
           guard variableDecl.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) })
           else {
@@ -43,6 +47,25 @@ extension InnoFlowMacro {
             return []
           }
           return [functionDecl.name.text]
+        }
+
+        if let enumDecl = member.decl.as(EnumDeclSyntax.self) {
+          return [enumDecl.name.text]
+        }
+        if let structDecl = member.decl.as(StructDeclSyntax.self) {
+          return [structDecl.name.text]
+        }
+        if let classDecl = member.decl.as(ClassDeclSyntax.self) {
+          return [classDecl.name.text]
+        }
+        if let actorDecl = member.decl.as(ActorDeclSyntax.self) {
+          return [actorDecl.name.text]
+        }
+        if let protocolDecl = member.decl.as(ProtocolDeclSyntax.self) {
+          return [protocolDecl.name.text]
+        }
+        if let typeAliasDecl = member.decl.as(TypeAliasDeclSyntax.self) {
+          return [typeAliasDecl.name.text]
         }
 
         return []
@@ -68,7 +91,9 @@ extension InnoFlowMacro {
         else {
           continue
         }
-        declarations.append(DeclSyntax(stringLiteral: member.declaration))
+        for declaration in member.declarations {
+          declarations.append(DeclSyntax(stringLiteral: declaration))
+        }
       }
     }
 
@@ -123,10 +148,18 @@ extension InnoFlowMacro {
 
       let childActionType = parameter.type.trimmedDescription
       if requiresComputedProperty {
+        let markerName = generatedActionPathIdentityMarkerName(
+          for: memberName,
+          existingNames: existingNames,
+          seenGeneratedNames: &seenGeneratedNames
+        )
         return .init(
-          declaration: """
+          declarations: [
+            "private enum \(markerName) {}",
+            """
             \(accessPrefix)static var \(memberName): CasePath<Self, \(childActionType)> {
-              CasePath<Self, \(childActionType)>(
+              CasePath<Self, \(childActionType)>._innoFlowGenerated(
+                marker: \(markerName).self,
                 embed: { childAction in
                   .\(caseName)(childAction)
                 },
@@ -136,11 +169,12 @@ extension InnoFlowMacro {
                 }
               )
             }
-            """
+            """,
+          ]
         )
       }
       return .init(
-        declaration: """
+        declarations: ["""
           \(accessPrefix)static let \(memberName) = CasePath<Self, \(childActionType)>(
             embed: { childAction in
               .\(caseName)(childAction)
@@ -150,7 +184,7 @@ extension InnoFlowMacro {
               return childAction
             }
           )
-          """
+          """]
       )
     }
 
@@ -195,10 +229,18 @@ extension InnoFlowMacro {
       let idType = idParameter.type.trimmedDescription
       let childActionType = actionParameter.type.trimmedDescription
       if requiresComputedProperty {
+        let markerName = generatedActionPathIdentityMarkerName(
+          for: memberName,
+          existingNames: existingNames,
+          seenGeneratedNames: &seenGeneratedNames
+        )
         return .init(
-          declaration: """
+          declarations: [
+            "private enum \(markerName) {}",
+            """
             \(accessPrefix)static var \(memberName): CollectionActionPath<Self, \(idType), \(childActionType)> {
-              CollectionActionPath<Self, \(idType), \(childActionType)>(
+              CollectionActionPath<Self, \(idType), \(childActionType)>._innoFlowGenerated(
+                marker: \(markerName).self,
                 embed: { id, action in
                   .\(caseName)(id: id, action: action)
                 },
@@ -208,11 +250,12 @@ extension InnoFlowMacro {
                 }
               )
             }
-            """
+            """,
+          ]
         )
       }
       return .init(
-        declaration: """
+        declarations: ["""
           \(accessPrefix)static let \(memberName) = CollectionActionPath<Self, \(idType), \(childActionType)>(
             embed: { id, action in
               .\(caseName)(id: id, action: action)
@@ -222,7 +265,7 @@ extension InnoFlowMacro {
               return (id, childAction)
             }
           )
-          """
+          """]
       )
     }
 
@@ -312,10 +355,23 @@ extension InnoFlowMacro {
     seenGeneratedNames.insert(memberName)
     return false
   }
+
+  private static func generatedActionPathIdentityMarkerName(
+    for memberName: String,
+    existingNames: Set<String>,
+    seenGeneratedNames: inout Set<String>
+  ) -> String {
+    var markerName = "__InnoFlowGeneratedActionPathIdentity_\(memberName)"
+    while existingNames.contains(markerName) || seenGeneratedNames.contains(markerName) {
+      markerName.append("_")
+    }
+    seenGeneratedNames.insert(markerName)
+    return markerName
+  }
 }
 
 private struct SynthesizedActionPathMember {
-  let declaration: String
+  let declarations: [String]
 }
 
 enum InnoFlowActionPathsMessage: DiagnosticMessage {

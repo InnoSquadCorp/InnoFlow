@@ -32,6 +32,35 @@ struct SingleScopeCacheTests {
     #expect(after.refreshedObservers == before.refreshedObservers + 1)
   }
 
+  @Test("Generic macro CasePath access reuses one live projection")
+  func genericMacroCasePathReusesLiveProjection() {
+    typealias Feature = GenericExtensionNamespace<Int>.Feature
+    let store = Store(reducer: Feature(), initialState: .init())
+    let line: UInt = 50
+    let first = store.scope(
+      state: \.value,
+      action: Feature.Action.replaceCasePath,
+      fileID: #fileID,
+      line: line,
+      column: 0
+    )
+    let second = store.scope(
+      state: \.value,
+      action: Feature.Action.replaceCasePath,
+      fileID: #fileID,
+      line: line,
+      column: 0
+    )
+
+    #expect(first === second)
+    #expect(store.projectionObserverStats.registeredObservers == 1)
+
+    second.send(42)
+
+    #expect(store.state.value == 42)
+    #expect(first.state == 42)
+  }
+
   @Test("Every single-state scope identity dimension separates projections")
   func separatesEveryIdentityDimension() {
     let store = makeStore()
@@ -282,7 +311,7 @@ struct SingleScopeCacheTests {
     #expect(firstIdentity == nil)
   }
 
-  @Test("Action-path identity hashing follows reference identity")
+  @Test("Manually constructed action-path identity hashing follows reference identity")
   func actionPathIdentityHashing() {
     let first = SingleScopeCacheFeature.Action.makePrimaryCasePath()
     let firstCopy = first

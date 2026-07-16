@@ -15,11 +15,17 @@ struct CompileContractTests {
   @Test("Generic extension features expose synthesized action paths")
   func genericExtensionFeatureActionPathsCompile() {
     let replacePath = GenericExtensionNamespace<Int>.Feature.Action.replaceCasePath
+    let replacePathAgain = GenericExtensionNamespace<Int>.Feature.Action.replaceCasePath
+    let stringReplacePath = GenericExtensionNamespace<String>.Feature.Action.replaceCasePath
     let childPath = GenericExtensionNamespace<Int>.Feature.Action.childActionPath
+    let childPathAgain = GenericExtensionNamespace<Int>.Feature.Action.childActionPath
 
     #expect(replacePath.extract(replacePath.embed(42)) == 42)
     #expect(childPath.extract(childPath.embed(1, 42))?.0 == 1)
     #expect(childPath.extract(childPath.embed(1, 42))?.1 == 42)
+    #expect(replacePath.identity == replacePathAgain.identity)
+    #expect(replacePath.identity != stringReplacePath.identity)
+    #expect(childPath.identity == childPathAgain.identity)
   }
 
   @Test("Store.scope method values support both 5.0 migration forms")

@@ -136,16 +136,19 @@ Stepper(
 런타임 `Store.scope(state:action:)`는 같은 호출 위치, state key path,
 child 타입, `CasePath` identity가 모두 일치할 때 살아 있는 `ScopedStore`를
 재사용합니다. 부모 `Store`는 이 projection을 약하게 보유하므로 수명을
-연장하지 않으며, 새로 생성한 `CasePath`는 이전 action transform을 재사용하지
-않고 안전하게 새 projection을 만듭니다. 이 계약은 reducer 합성 primitive인
-`Scope`나 테스트용 `TestStore.scope`의 identity 계약이 아닙니다.
+연장하지 않으며, 명시적으로 새로 생성한 `CasePath`는 이전 action transform을
+재사용하지 않고 안전하게 새 projection을 만듭니다. generic이나 extension 문맥에서
+computed static accessor가 필요한 경우에도 매크로가 생성한 path identity는 안정적으로
+유지됩니다. 이 계약은 reducer 합성 primitive인 `Scope`나 테스트용
+`TestStore.scope`의 identity 계약이 아닙니다.
 
 런타임 `Store.scope(collection:action:)`는 collection key path마다 하나의 활성
 row family만 보유합니다. child 타입과 `CollectionActionPath` identity가 일치하면
 호출 위치가 달라도 ID별 `ScopedStore`를 재사용하고, signature가 달라지면 family
 전체를 교체합니다. 이전에 반환된 row는 기존 action transform을 유지하고 새로
-scope한 row는 새 path로 라우팅됩니다. 안정적인 row 객체 identity가 필요하면
-저장해 둔 path 값을 재사용하고, path 재생성은 의도적인 안전한 교체로 취급하세요.
+scope한 row는 새 path로 라우팅됩니다. 매크로가 생성한 path는 반복 접근해도 row
+객체 identity를 유지하며, path를 명시적으로 재생성하면 의도적인 안전한 교체로
+취급됩니다.
 
 ## 샘플 카탈로그
 

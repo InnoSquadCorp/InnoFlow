@@ -68,6 +68,25 @@ struct CollectionScopeCacheTests {
     #expect(first[0] === second[0])
   }
 
+  @Test("Generic macro collection paths reuse the active row family")
+  func genericMacroCollectionPathReusesActiveFamily() {
+    typealias Feature = GenericCollectionScopeFeature<Int>
+    let store = Store(reducer: Feature(), initialState: .init())
+    let firstPath = Feature.Action.rowActionPath
+    let secondPath = Feature.Action.rowActionPath
+    let first = store.scope(collection: \.rows, action: firstPath)
+    let second = store.scope(collection: \.rows, action: secondPath)
+
+    #expect(firstPath.identity !== secondPath.identity)
+    #expect(firstPath.identity == secondPath.identity)
+    #expect(first[0] === second[0])
+
+    second[0].send(42)
+
+    #expect(store.state.rows[0].value == 42)
+    #expect(first[0].value == 42)
+  }
+
   @Test("Alternating collection action paths replace only the active row family")
   func alternatingActionPathsReplaceActiveFamily() {
     let store = Store(reducer: CollectionScopeCacheFeature(), initialState: .init())

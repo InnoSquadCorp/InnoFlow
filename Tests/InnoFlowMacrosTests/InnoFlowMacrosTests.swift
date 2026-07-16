@@ -335,6 +335,7 @@ struct InnoFlowMacrosTests {
             enum Action: Sendable {
                 case child(Value)
                 case row(id: Int, action: Value)
+                private enum __InnoFlowGeneratedActionPathIdentity_childCasePath {}
             }
 
             var body: some Reducer<State, Action> {
@@ -348,6 +349,8 @@ struct InnoFlowMacrosTests {
               enum Action: Sendable {
                   case child(Value)
                   case row(id: Int, action: Value)
+                  private enum __InnoFlowGeneratedActionPathIdentity_childCasePath {
+                  }
               }
 
               var body: some Reducer<State, Action> {
@@ -360,8 +363,11 @@ struct InnoFlowMacrosTests {
           }
           extension GenericFeature: Reducer {}
           extension GenericFeature.Action {
+            private enum __InnoFlowGeneratedActionPathIdentity_childCasePath_ {
+            }
             static var childCasePath: CasePath<Self, Value> {
-              CasePath<Self, Value>(
+              CasePath<Self, Value>._innoFlowGenerated(
+                marker: __InnoFlowGeneratedActionPathIdentity_childCasePath_.self,
                 embed: { childAction in
                   .child(childAction)
                 },
@@ -371,8 +377,11 @@ struct InnoFlowMacrosTests {
                 }
               )
             }
+            private enum __InnoFlowGeneratedActionPathIdentity_rowActionPath {
+            }
             static var rowActionPath: CollectionActionPath<Self, Int, Value> {
-              CollectionActionPath<Self, Int, Value>(
+              CollectionActionPath<Self, Int, Value>._innoFlowGenerated(
+                marker: __InnoFlowGeneratedActionPathIdentity_rowActionPath.self,
                 embed: { id, action in
                   .row(id: id, action: action)
                 },
