@@ -317,6 +317,14 @@ package protocol EffectDriver<Action>: AnyObject {
       ) async -> Void
   ) -> Task<Void, Never>
 
+  /// Refreshes runtime-specific ownership when an active trailing drain is
+  /// reused by a newer pending effect. Production Store ownership lives in
+  /// `throttleState`; TestStore also reindexes its finish/cancellation task.
+  func refreshTrailingDrainOwnership(
+    for id: AnyEffectID,
+    context: EffectExecutionContext
+  )
+
   /// Current clock instant for throttle window comparison.
   var now: ContinuousClock.Instant { get async }
 

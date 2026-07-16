@@ -285,15 +285,22 @@ package struct EffectWalker<D: EffectDriver> {
           for: id
         )
 
-        let trailingTask =
-          driver.throttleState.trailingTask(for: id)
-          ?? driver.scheduleTrailingDrain(
+        let trailingTask: Task<Void, Never>
+        if let activeTrailingTask = driver.throttleState.trailingTask(for: id) {
+          driver.refreshTrailingDrainOwnership(
+            for: id,
+            context: throttleContext
+          )
+          trailingTask = activeTrailingTask
+        } else {
+          trailingTask = driver.scheduleTrailingDrain(
             for: id,
             interval: now.duration(to: windowEnd),
             schedulingContext: throttleContext,
             awaited: awaited,
             recurse: recurse
           )
+        }
         return .init(
           runsLeadingEffect: false,
           trailingTaskToAwait: awaited ? trailingTask : nil

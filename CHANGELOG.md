@@ -54,7 +54,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - Store and TestStore debounce/throttle state now retains its timing owner,
   inherited cancellation IDs, and effect sequence. Outer cancellation clears
   nested delayed work immediately, while stale ID/global cancellation preserves
-  newer sleepers, throttle windows, and trailing drains.
+  newer sleepers, throttle windows, and trailing drains. TestStore also
+  reindexes a reused trailing drain to the latest pending sequence and
+  cancellation-ID set without replacing its finish activity.
 - Store and TestStore awaited trailing throttles now keep concatenate children
   sequential through the trailing run's completion, including when newer
   unawaited events replace the pending effect inside the active window.

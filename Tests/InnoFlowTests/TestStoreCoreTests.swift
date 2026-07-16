@@ -797,6 +797,7 @@ struct TestStoreCoreTests {
     #expect(store.throttleState.pending(for: id) == nil)
     #expect(store.throttleState.windowEnd(for: id) == nil)
     #expect(store.throttleState.trailingTask(for: id) == nil)
+    #expect(store.throttleActivityTokenByID[id] == nil)
     #expect(store.throttleState.latestAdmissionSequence(for: id) == nil)
   }
 
@@ -884,6 +885,83 @@ struct TestStoreCoreTests {
       _ = await walkTask.result
       throw error
     }
+  }
+
+  @Test(
+    "TestStore latest trailing throttle survives stale cancellation",
+    arguments: StaleThrottleCancellationKind.allCases
+  )
+  func testStoreLatestTrailingThrottleSurvivesStaleCancellation(
+    kind: StaleThrottleCancellationKind
+  ) async throws {
+    let timingID = AnyEffectID(StaticEffectID("teststore-stale-trailing-owner"))
+    let firstOuterID = AnyEffectID(StaticEffectID("teststore-stale-trailing-first-outer"))
+    let latestOuterID = AnyEffectID(StaticEffectID("teststore-stale-trailing-latest-outer"))
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+    let firstSequence = store.nextSequence()
+    let firstEffect = EffectTask<CounterFeature.Action>.send(.increment)
+      .throttle(timingID, for: .seconds(60), leading: false, trailing: true)
+      .cancellable(firstOuterID)
+
+    await store.walker.walk(
+      firstEffect,
+      context: .init(sequence: firstSequence),
+      awaited: false
+    )
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
+    let trailingTask = try #require(store.throttleState.trailingTask(for: timingID))
+
+    let latestSequence = store.nextSequence()
+    let latestEffect = EffectTask<CounterFeature.Action>.send(.decrement)
+      .throttle(timingID, for: .seconds(60), leading: false, trailing: true)
+      .cancellable(latestOuterID)
+    await store.walker.walk(
+      latestEffect,
+      context: .init(sequence: latestSequence),
+      awaited: false
+    )
+
+    #expect(store.throttleState.scope(for: timingID)?.sequence == latestSequence)
+    #expect(store.throttleState.pending(for: timingID)?.context?.sequence == latestSequence)
+    let activityToken = try #require(store.throttleActivityTokenByID[timingID])
+    #expect(store.runningTasks[activityToken]?.sequence == latestSequence)
+    #expect(store.taskIDsByEffectID[firstOuterID]?.contains(activityToken) != true)
+    #expect(store.taskIDsByEffectID[latestOuterID]?.contains(activityToken) == true)
+
+    switch kind {
+    case .effectID:
+      await store.cancelEffects(id: firstOuterID, context: .init(sequence: latestSequence))
+    case .allEffects:
+      store.markCancelledAll(upTo: firstSequence)
+      store.cancelAllEffectsSynchronously(upTo: firstSequence)
+    }
+
+    #expect(trailingTask.isCancelled == false)
+    #expect(store.throttleState.scope(for: timingID)?.sequence == latestSequence)
+
+    await clock.advance(by: .seconds(60))
+    _ = await trailingTask.result
+
+    await store.receive(.decrement) {
+      $0.count = -1
+    }
+    await store.assertNoBufferedActions()
+    await store.finish()
+    #expect(store.finishActivity.snapshot.activeCount == 0)
+    #expect(store.throttleActivityTokenByID[timingID] == nil)
+    #expect(store.runningTasks.isEmpty)
+    #expect(store.taskIDsByEffectID[firstOuterID] == nil)
+    #expect(store.taskIDsByEffectID[latestOuterID] == nil)
+    #expect(store.taskIDsByEffectID[timingID] == nil)
   }
 
   @Test("TestStore debounce replaces equal sequences and preserves newer work from stale calls")
@@ -2074,4 +2152,9 @@ struct TestStoreCoreTests {
       $0.isDone = true
     }
   }
+}
+
+enum StaleThrottleCancellationKind: String, CaseIterable, Sendable {
+  case effectID
+  case allEffects
 }

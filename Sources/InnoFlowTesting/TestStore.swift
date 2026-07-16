@@ -62,6 +62,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package var runningTasks: [UUID: TrackedEffectTask] = [:]
   package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]
   package var debounceTasksByID: [AnyEffectID: TrackedDebounceTask] = [:]
+  package var throttleActivityTokenByID: [AnyEffectID: UUID] = [:]
   package var nextDebounceGenerationValue: UInt64 = 0
   package let effectBoundaries = EffectCancellationBoundaries()
   package let throttleState = ThrottleStateMap<R.Action>()

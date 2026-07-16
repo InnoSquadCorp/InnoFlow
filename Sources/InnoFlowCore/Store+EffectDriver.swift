@@ -352,6 +352,14 @@ extension Store: EffectDriver {
     return task
   }
 
+  package func refreshTrailingDrainOwnership(
+    for id: AnyEffectID,
+    context: EffectExecutionContext
+  ) {
+    // Store cancellation reaches the active drain through the latest
+    // `ThrottleStateMap` scope, so it has no separate task index to refresh.
+  }
+
   package var now: ContinuousClock.Instant {
     get async {
       await clock.now()

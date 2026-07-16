@@ -36,7 +36,9 @@ the READMEs until 5.0.0 is tagged.
    start later child effects or contaminate unrelated cancellation IDs.
 6. Preserves awaited ordering through trailing throttles, including replacement
    and late trailing-enable cases, while keeping the original throttle window
-   deadline.
+   deadline. Reused TestStore drains adopt the latest pending sequence and
+   cancellation IDs, so stale ID/global cancellation cannot discard newer
+   trailing work and post-fire recursion remains visible to `finish()`.
 7. Adds public `Exhaustivity`. `TestStore.exhaustivity` defaults to `.on`, so
    every state transition and effect action must be asserted. `.off` supports
    partial state assertions and automatically reduces unexpected actions;

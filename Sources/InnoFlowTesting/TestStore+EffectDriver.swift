@@ -293,6 +293,21 @@ extension TestStore {
     }
   }
 
+  private func refreshTrackedTask(
+    token: UUID,
+    context: EffectExecutionContext?
+  ) {
+    guard let trackedTask = runningTasks[token] else { return }
+    removeTaskIDIndexes(token: token)
+    runningTasks[token] = .init(
+      task: trackedTask.task,
+      sequence: context?.sequence ?? 0
+    )
+    for id in Set(context?.cancellationIDs ?? []) {
+      taskIDsByEffectID[id, default: []].insert(token)
+    }
+  }
+
   private func nextDebounceGeneration() -> UInt64 {
     nextDebounceGenerationValue &+= 1
     return nextDebounceGenerationValue
@@ -531,7 +546,15 @@ extension TestStore {
 
   private func removeTrackedTask(token: UUID) {
     runningTasks.removeValue(forKey: token)
+    removeTaskIDIndexes(token: token)
 
+    for id in Array(throttleActivityTokenByID.keys)
+    where throttleActivityTokenByID[id] == token {
+      throttleActivityTokenByID.removeValue(forKey: id)
+    }
+  }
+
+  private func removeTaskIDIndexes(token: UUID) {
     for id in Array(taskIDsByEffectID.keys) {
       guard var tokens = taskIDsByEffectID[id] else { continue }
       tokens.remove(token)
@@ -751,8 +774,21 @@ extension TestStore: EffectDriver {
       endpoint.finishTrackedTask(token: activityToken)
     }
     throttleState.setTrailingTask(task, for: id)
+    throttleActivityTokenByID[id] = activityToken
     trackEffectTask(token: activityToken, task: task, context: schedulingContext)
     return task
+  }
+
+  package func refreshTrailingDrainOwnership(
+    for id: AnyEffectID,
+    context: EffectExecutionContext
+  ) {
+    guard let token = throttleActivityTokenByID[id] else { return }
+    guard runningTasks[token] != nil else {
+      throttleActivityTokenByID.removeValue(forKey: id)
+      return
+    }
+    refreshTrackedTask(token: token, context: context)
   }
 
   package var now: ContinuousClock.Instant {
