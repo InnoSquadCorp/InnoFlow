@@ -44,7 +44,10 @@ the READMEs until 5.0.0 is tagged.
    buffered, late, and follow-up actions to idle in `.off`. Deinitialization
    now catches valid buffered actions or active effects when `finish()` is
    omitted, using the same failure/warning/silent exhaustivity policy without
-   waiting or reducing actions.
+   waiting or reducing actions. Non-cancellation errors escaping either
+   `EffectTask.run(sequence:)` overload now record one hard failure at the
+   originating action assertion; cancellation remains successful termination,
+   and `.off` does not suppress runtime errors.
 9. Deprecates `assertNoMoreActions()` for the 5.x compatibility window. Use
     `finish()` for terminal verification or `assertNoBufferedActions()` for an
     intermediate queue checkpoint. Removal is planned for 6.0.
@@ -75,7 +78,8 @@ with the retest steps and the gate that warns on Swift 6.4+.
   observer-race fallback, and strict `requireAlive()` access.
 - `TestStore` now performs exhaustive state and effect-action assertions by
   default. An omitted assertion closure asserts that state does not change,
-  and leaving terminal work behind now fails when the store is deinitialized.
+  leaving terminal work behind now fails when the store is deinitialized, and
+  a thrown non-cancellation sequence error can no longer complete silently.
 - Scoped exhaustive assertions compare the complete root state, even when the
   action is sent through a child projection.
 
@@ -92,6 +96,8 @@ with the retest steps and the gate that warns on Swift 6.4+.
   every effect action, and end tests with `finish()`. For intentionally partial
   tests, set `store.exhaustivity = .off` (or enable skipped-assertion warnings).
   Deinitialization cancels but never drains remaining actions or effects.
+- Handle expected `AsyncSequence` errors inside `EffectTask.run` or convert
+  them into actions. `.off` does not suppress errors that escape a run.
 - Replace terminal `assertNoMoreActions()` calls with `finish()` and
   intermediate uses with `assertNoBufferedActions()`.
 

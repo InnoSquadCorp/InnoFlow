@@ -15,7 +15,7 @@ The framework now treats the following as source-of-truth principles:
 - Composition happens through `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`.
 - `PhaseTransitionGraph` is an opt-in validation layer, not a generic automata runtime.
 - Binding remains explicit opt-in through `@BindableField`, and SwiftUI bindings use projected key paths such as `\.$step`.
-- The `TestStore.exhaustivity` contract defaults to `.on`, requiring complete state-transition and effect-action assertions.
+- The `TestStore.exhaustivity` contract defaults to `.on`, requiring complete state-transition and effect-action assertions; runtime effect errors always fail independently of that policy.
 - InnoFlow owns business/domain transitions only.
 
 Cross-framework ownership stays explicit:
@@ -713,6 +713,12 @@ to the same parent queue and effect lifecycle. Use
 `assertNoBufferedActions()` only as an intermediate, immediate queue
 checkpoint; `assertNoMoreActions()` is deprecated because it is neither a
 complete terminal assertion nor an immediate checkpoint.
+
+An `AsyncSequence` consumed by `EffectTask.run` may terminate with
+`CancellationError` normally. Any other error is a hard `TestStore` failure,
+reported once at the `send` or `receive` assertion that created the effect even
+when debounce, throttle, animation, or composition delays the run. This
+runtime-error contract also applies when `exhaustivity` is `.off`.
 
 If a `TestStore` leaves scope with valid buffered actions or active
 framework-owned effects, deinitialization provides a synchronous safety net.

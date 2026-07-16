@@ -46,6 +46,10 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   snapshots that work, cancels it, and then records one terminal-verification
   failure from the captured snapshot. Idle stores and stores whose `finish()`
   already completed or reported a failure are unaffected.
+- Tests whose `EffectTask.run(sequence:)` stream throws a non-cancellation
+  error are affected. `TestStore` previously discarded that error and could
+  let `finish()` succeed; it now records one hard failure at the action
+  assertion that created the run, regardless of exhaustivity.
 - Call sites using `assertNoMoreActions()` are affected by a deprecation
   warning. Its legacy behavior remains available during the 5.x line and is
   planned for removal in 6.0.
@@ -98,6 +102,11 @@ failure; `.off(showSkippedAssertions: true)` records one warning; `.off`
 cancels silently. Tests that intentionally exercise `TestStore` release with
 active work can opt out explicitly, but ordinary tests should receive or
 cancel expected work and still end with `finish()`.
+
+Handle expected `AsyncSequence` failures inside the effect and convert them
+into domain actions that the test can receive. Reserve thrown cancellation for
+normal cooperative termination. `.off` relaxes state and action assertions;
+it does not hide runtime errors.
 
 Scoped stores forward the parent exhaustivity policy. Because exhaustive child
 assertions compare the complete root state, send through the parent

@@ -46,7 +46,7 @@ extension TestStore {
         skippedActionDescriptions.append(String(describing: action))
       }
       skippedActionCount += 1
-      await applyUnassertedAction(action)
+      await applyUnassertedAction(action, file: file, line: line)
       didDrainAction = true
     }
 
@@ -96,10 +96,17 @@ extension TestStore {
     return lines.joined(separator: "\n")
   }
 
-  package func applyUnassertedAction(_ action: R.Action) async {
+  package func applyUnassertedAction(
+    _ action: R.Action,
+    file: StaticString,
+    line: UInt
+  ) async {
     let effect = reducer.reduce(into: &state, action: action)
-    let sequence = nextSequence()
-    await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
+    await walker.walk(
+      effect,
+      context: nextEffectContext(file: file, line: line),
+      awaited: false
+    )
   }
 
   package func reportSkippedAction(

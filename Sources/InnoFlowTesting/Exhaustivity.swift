@@ -4,6 +4,8 @@
 
 /// Controls how completely ``TestStore`` verifies state transitions and
 /// effect-emitted actions.
+///
+/// This policy does not suppress runtime errors escaping `EffectTask.run`.
 public enum Exhaustivity: Equatable, Sendable {
   /// Requires every state mutation and effect-emitted action to be asserted.
   case on

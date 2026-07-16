@@ -3,9 +3,10 @@ import os
 
 /// Single-write latch that records whether an effect run's `reportError` hook
 /// fired during its lifetime. The Store driver consults the latch after the
-/// run's operation closure returns and suppresses the trailing `didFinishRun`
-/// when it is set, keeping the `didStartRun`/`didFailRun` pair 1:1 even when
-/// `reportError` is invoked from a `@Sendable` closure on a non-main task.
+/// run's operation closure returns and suppresses the trailing `didFinishRun`;
+/// TestStore uses the same atomic gate to record one assertion failure. This
+/// keeps each host's failure signal 1:1 even when `reportError` is invoked from
+/// a `@Sendable` closure on a non-main task.
 ///
 /// The latch is intentionally specific to the run-failure signal so the
 /// "first-error-wins" contract is documented exactly once, at this type, and

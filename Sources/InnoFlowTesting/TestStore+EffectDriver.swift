@@ -168,17 +168,20 @@ private final class TestStoreRunEndpoint<Action: Sendable> {
   private let isTaskActiveImpl: (UUID) -> Bool
   private let shouldProceedImpl: (EffectExecutionContext?) -> Bool
   private let didEnqueueActionImpl: () -> Void
+  private let reportRunFailureImpl: (String, EffectOrigin?) -> Void
   private let finishTrackedTaskImpl: (UUID) -> Void
 
   init(
     isTaskActive: @escaping (UUID) -> Bool,
     shouldProceed: @escaping (EffectExecutionContext?) -> Bool,
     didEnqueueAction: @escaping () -> Void,
+    reportRunFailure: @escaping (String, EffectOrigin?) -> Void,
     finishTrackedTask: @escaping (UUID) -> Void
   ) {
     self.isTaskActiveImpl = isTaskActive
     self.shouldProceedImpl = shouldProceed
     self.didEnqueueActionImpl = didEnqueueAction
+    self.reportRunFailureImpl = reportRunFailure
     self.finishTrackedTaskImpl = finishTrackedTask
   }
 
@@ -192,6 +195,16 @@ private final class TestStoreRunEndpoint<Action: Sendable> {
 
   func didEnqueueAction() {
     didEnqueueActionImpl()
+  }
+
+  func reportRunFailure(
+    _ message: String,
+    origin: EffectOrigin?,
+    token: UUID,
+    context: EffectExecutionContext?
+  ) {
+    guard isTaskActiveImpl(token), shouldProceedImpl(context) else { return }
+    reportRunFailureImpl(message, origin)
   }
 
   func finishTrackedTask(token: UUID) {
@@ -348,6 +361,14 @@ extension TestStore {
       didEnqueueAction: { [weak self] in
         self?.finishActivity.noteProgress()
       },
+      reportRunFailure: { [weak self] message, origin in
+        guard let self else { return }
+        let source =
+          origin.map { ($0.file, $0.line) }
+          ?? self.terminalVerificationSource
+          ?? (#file, #line)
+        self.assertionFailureReporter(message, source.0, source.1)
+      },
       finishTrackedTask: { [weak self] token in
         self?.finishTrackedRunTask(token: token)
       }
@@ -363,6 +384,7 @@ extension TestStore {
     beginFinishActivity(.run, token: token, context: context)
     let startGate = TestStoreRunStartGate()
     let endpoint = makeRunEndpoint()
+    let runFailureLatch = RunFailureLatch()
     let runBridge = TestStoreRunBridge(
       endpoint: endpoint,
       queue: queue,
@@ -422,7 +444,25 @@ extension TestStore {
             return true
           }
         },
-        checkCancellation: checkCancellation
+        checkCancellation: checkCancellation,
+        reportError: { error in
+          guard runFailureLatch.setIfUnset() else { return }
+          let errorTypeName = String(describing: type(of: error))
+          let errorDescription = String(describing: error)
+          await endpoint.reportRunFailure(
+            """
+            EffectTask.run failed with an unhandled error.
+
+            Error type: \(errorTypeName)
+            Error: \(errorDescription)
+
+            Handle expected errors inside the effect or convert them into actions that the reducer can verify.
+            """,
+            origin: context?.origin,
+            token: token,
+            context: context
+          )
+        }
       )
 
       await operation(send, effectContext)

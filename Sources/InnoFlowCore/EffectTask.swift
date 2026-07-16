@@ -182,12 +182,11 @@ public struct EffectContext: Sendable {
     try await checkCancellationProvider()
   }
 
-  /// Reports a non-cancellation error escaping an effect to the host store's
-  /// instrumentation. Cancellation errors must be propagated by `throw` instead.
+  /// Reports a non-cancellation error escaping an effect to the host driver's
+  /// failure channel. Cancellation errors must be propagated by `throw` instead.
   ///
-  /// First-error-wins per run: the Store driver suppresses the trailing
-  /// `didFinishRun` once `reportError` fires and ignores subsequent calls so
-  /// the `didStartRun`/`didFailRun` pair stays 1:1. Effects that wish to
+  /// First-error-wins per run: Store suppresses the trailing `didFinishRun`,
+  /// while TestStore records one assertion failure. Effects that wish to
   /// surface multiple failures must aggregate them before calling this.
   package func reportError(_ error: any Error) async {
     await errorReporter(error)
@@ -284,8 +283,9 @@ public struct EffectTask<Action: Sendable>: Sendable {
   ///
   /// The sequence is built from the active ``EffectContext`` so producers can use the
   /// store-controlled clock and cancellation checks. Cancellation stops the effect
-  /// silently; any other thrown error is forwarded to the host store's instrumentation
-  /// (`StoreInstrumentation.didFailRun`) before the effect terminates.
+  /// silently; any other thrown error is forwarded to the host runtime's failure
+  /// channel before the effect terminates. `Store` emits
+  /// `StoreInstrumentation.didFailRun`; `TestStore` records an assertion failure.
   public static func run<S: AsyncSequence & Sendable>(
     priority: TaskPriority? = nil,
     _ makeSequence: @escaping @Sendable (EffectContext) async throws -> S
@@ -309,8 +309,8 @@ public struct EffectTask<Action: Sendable>: Sendable {
   ///
   /// Returning `nil` from `transform` drops that element without ending the effect.
   /// Cancellation stops the effect silently; any other thrown error is forwarded to
-  /// the host store's instrumentation (`StoreInstrumentation.didFailRun`) before the
-  /// effect terminates.
+  /// the host runtime's failure channel before the effect terminates. `Store` emits
+  /// `StoreInstrumentation.didFailRun`; `TestStore` records an assertion failure.
   public static func run<S: AsyncSequence & Sendable>(
     priority: TaskPriority? = nil,
     sequence makeSequence: @escaping @Sendable (EffectContext) async throws -> S,

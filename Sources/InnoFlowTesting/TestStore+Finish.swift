@@ -255,7 +255,7 @@ extension TestStore {
           file: file,
           line: line
         )
-        await applyUnassertedAction(action)
+        await applyUnassertedAction(action, file: file, line: line)
         didDrainAction = true
         continue
       }

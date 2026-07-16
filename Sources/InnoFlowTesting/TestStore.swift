@@ -18,6 +18,10 @@ import Foundation
 /// one diagnostic according to ``exhaustivity``. That safety net does not wait
 /// for effects or reduce buffered actions. A completed or failed `finish()` is
 /// not reported again unless new work begins or arrives later.
+///
+/// Non-cancellation errors escaping `EffectTask.run` are always reported once
+/// at the public action assertion that created the effect. This runtime-failure
+/// contract is independent of ``exhaustivity``.
 @MainActor
 public final class TestStore<R: Reducer> where R.State: Equatable {
 
@@ -135,6 +139,16 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   package func nextSequence() -> UInt64 {
     effectBoundaries.nextSequence()
+  }
+
+  package func nextEffectContext(
+    file: StaticString,
+    line: UInt
+  ) -> EffectExecutionContext {
+    .init(
+      sequence: nextSequence(),
+      origin: .init(file: file, line: line)
+    )
   }
 
   package func shouldStart(sequence: UInt64, cancellationID: AnyEffectID?) -> Bool {

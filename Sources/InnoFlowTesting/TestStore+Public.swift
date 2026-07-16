@@ -38,8 +38,11 @@ extension TestStore {
       line: line
     )
 
-    let sequence = nextSequence()
-    await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
+    await walker.walk(
+      effect,
+      context: nextEffectContext(file: file, line: line),
+      awaited: false
+    )
   }
 
   public func receive(
@@ -286,8 +289,11 @@ extension TestStore {
       line: line
     )
 
-    let sequence = nextSequence()
-    await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
+    await walker.walk(
+      effect,
+      context: nextEffectContext(file: file, line: line),
+      awaited: false
+    )
   }
 
   /// Performs the legacy single-action absence check.
@@ -490,9 +496,21 @@ extension TestStore {
     reducer.reduce(into: &state, action: action)
   }
 
+  package func walkScopedEffect(
+    _ effect: EffectTask<R.Action>,
+    file: StaticString,
+    line: UInt
+  ) async {
+    await walker.walk(
+      effect,
+      context: nextEffectContext(file: file, line: line),
+      awaited: false
+    )
+  }
+
   package func walkScopedEffect(_ effect: EffectTask<R.Action>) async {
-    let sequence = nextSequence()
-    await walker.walk(effect, context: .init(sequence: sequence), awaited: false)
+    let source = terminalVerificationSource ?? (#file, #line)
+    await walkScopedEffect(effect, file: source.file, line: source.line)
   }
 
   package var resolvedDiffLineLimit: Int {

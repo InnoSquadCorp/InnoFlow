@@ -46,7 +46,7 @@ extension TestStore {
         return result
 
       case .mismatched(let action):
-        await applyUnassertedAction(action)
+        await applyUnassertedAction(action, file: file, line: line)
         guard exhaustivity.isOn == false else {
           return .mismatched(action: action)
         }

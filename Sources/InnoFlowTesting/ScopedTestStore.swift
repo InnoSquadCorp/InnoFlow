@@ -88,7 +88,7 @@ where Root.State: Equatable {
       line: line
     )
 
-    await parent.walkScopedEffect(effect)
+    await parent.walkScopedEffect(effect, file: file, line: line)
   }
 
   public func receive(
@@ -405,7 +405,7 @@ where Root.State: Equatable {
       line: line
     )
 
-    await parent.walkScopedEffect(effect)
+    await parent.walkScopedEffect(effect, file: file, line: line)
   }
 
   private func reportScopedParentMismatch(

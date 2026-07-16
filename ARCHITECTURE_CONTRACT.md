@@ -42,6 +42,10 @@ This document captures the stable framework guarantees that should not drift wit
   from the actual post-reducer state, and unexpected actions still run through
   the reducer and effect system. `.off(showSkippedAssertions: true)` emits
   non-failing warnings for skipped state or action assertions.
+- Exhaustivity never hides runtime failures. A non-cancellation error escaping
+  an `EffectTask.run` sequence records one hard failure at the public action
+  assertion that created the run, including through delayed and composed
+  effects. Multiple reports from one run use a first-error-wins contract.
 - Scoped test stores forward the parent exhaustivity policy. Exhaustive scoped
   assertions compare the complete root state; actions that intentionally
   change parent or sibling state should be asserted through the parent

@@ -21,6 +21,12 @@ does not wait for effects or reduce actions, so it is not a substitute for
 `finish()`. A completed or failed `finish()` is not reported again unless new
 work begins or arrives afterward.
 
+Runtime failures are independent of exhaustivity. If either
+`EffectTask.run(sequence:)` overload receives a non-cancellation error,
+``TestStore`` records one failure at the action assertion that created the
+effect, including through delayed and composed execution. Cancellation errors
+remain normal cooperative termination.
+
 For time-sensitive effects, inject ``ManualTestClock`` and advance it explicitly.
 ``EffectTimingRecorder`` captures instrumentation events for repeatable baseline
 comparisons.

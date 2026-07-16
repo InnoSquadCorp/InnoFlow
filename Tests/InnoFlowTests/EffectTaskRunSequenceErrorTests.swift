@@ -7,6 +7,7 @@ import Testing
 import os
 
 @testable import InnoFlowCore
+@testable import InnoFlowTesting
 
 private enum SequenceErrorMode: Sendable {
   case cancellation
@@ -55,8 +56,10 @@ private struct EmitOnceThenThrowSequence<Element: Sendable>: AsyncSequence, Send
 
 private struct SequenceErrorFeature: Reducer {
   enum Action: Equatable, Sendable {
+    case emitThrowingStart
     case startThrowing(SequenceErrorMode)
     case startThrowingTransformed(SequenceErrorMode)
+    case startDebouncedThrowing(SequenceErrorMode)
     case received(Int)
   }
 
@@ -66,6 +69,9 @@ private struct SequenceErrorFeature: Reducer {
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     switch action {
+    case .emitThrowingStart:
+      return .send(.startThrowing(.custom))
+
     case .startThrowing(let mode):
       return .run { _ in
         EmitOnceThenThrowSequence<Action>(
@@ -86,6 +92,16 @@ private struct SequenceErrorFeature: Reducer {
         },
         transform: { value in .received(value) }
       )
+
+    case .startDebouncedThrowing(let mode):
+      return EffectTask.run { _ in
+        EmitOnceThenThrowSequence<Action>(
+          element: .received(1),
+          mode: mode,
+          customError: SequenceTestError(message: "debounced-boom")
+        )
+      }
+      .debounce("sequence-error", for: .seconds(1))
 
     case .received(let value):
       state.values.append(value)
@@ -203,6 +219,220 @@ struct EffectTaskRunSequenceErrorTests {
   }
 }
 
+@Suite("TestStore EffectTask.run(sequence:) error handling", .serialized)
+@MainActor
+struct TestStoreRunSequenceErrorTests {
+
+  @Test("Custom sequence errors fail at the action that started the effect")
+  func customErrorFailsAtOriginatingAction() async throws {
+    let store = TestStore(reducer: SequenceErrorFeature())
+    var failures: [(message: String, file: String, line: UInt)] = []
+    store.assertionFailureReporter = { message, file, line in
+      failures.append((message, String(describing: file), line))
+    }
+
+    await store.send(
+      .startThrowing(.custom),
+      file: "SequenceStart.swift",
+      line: 123
+    )
+    await store.receive(
+      .received(1),
+      assert: { $0.values = [1] },
+      file: "LaterReceive.swift",
+      line: 456
+    )
+    await store.finish()
+
+    #expect(failures.count == 1)
+    let failure = try #require(failures.first)
+    #expect(failure.message.contains("SequenceTestError"))
+    #expect(failure.message.contains("boom"))
+    #expect(failure.file == "SequenceStart.swift")
+    #expect(failure.line == 123)
+  }
+
+  @Test("Transformed sequence errors use the same hard-failure contract")
+  func transformedCustomErrorFailsOnce() async throws {
+    let store = TestStore(reducer: SequenceErrorFeature())
+    var failures: [String] = []
+    store.assertionFailureReporter = { message, _, _ in
+      failures.append(message)
+    }
+
+    await store.send(.startThrowingTransformed(.custom))
+    await store.receive(.received(2)) {
+      $0.values = [2]
+    }
+    await store.finish()
+
+    #expect(failures.count == 1)
+    #expect(failures.first?.contains("SequenceTestError") == true)
+    #expect(failures.first?.contains("transform-boom") == true)
+  }
+
+  @Test("Sequence cancellation remains a successful TestStore completion")
+  func cancellationDoesNotFail() async {
+    let store = TestStore(reducer: SequenceErrorFeature())
+    var failures: [String] = []
+    store.assertionFailureReporter = { message, _, _ in
+      failures.append(message)
+    }
+
+    await store.send(.startThrowing(.cancellation))
+    await store.receive(.received(1)) {
+      $0.values = [1]
+    }
+    await store.finish()
+
+    #expect(failures.isEmpty)
+  }
+
+  @Test("TestStore reports only the first error from one run")
+  func firstReportedErrorWins() async throws {
+    let store = TestStore(reducer: DoubleReportFeature())
+    var failures: [(message: String, file: String, line: UInt)] = []
+    store.assertionFailureReporter = { message, file, line in
+      failures.append((message, String(describing: file), line))
+    }
+
+    await store.send(
+      .fireTwice,
+      file: "FirstError.swift",
+      line: 321
+    )
+    await store.receive(.done) {
+      $0.done = true
+    }
+    await store.finish()
+
+    #expect(failures.count == 1)
+    let failure = try #require(failures.first)
+    #expect(failure.message.contains("first"))
+    #expect(failure.message.contains("second") == false)
+    #expect(failure.file == "FirstError.swift")
+    #expect(failure.line == 321)
+  }
+
+  @Test("Runtime sequence errors fail even when exhaustivity is off")
+  func runtimeErrorIgnoresExhaustivityPolicy() async {
+    let store = TestStore(reducer: SequenceErrorFeature())
+    store.exhaustivity = .off
+    var failures: [String] = []
+    store.assertionFailureReporter = { message, _, _ in
+      failures.append(message)
+    }
+
+    await store.send(.startThrowing(.custom))
+    await store.receive(.received(1)) {
+      $0.values = [1]
+    }
+    await store.finish()
+
+    #expect(failures.count == 1)
+    #expect(failures.first?.contains("boom") == true)
+  }
+
+  @Test("Delayed sequence errors preserve the action origin across later interactions")
+  func delayedErrorPreservesOrigin() async throws {
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: SequenceErrorFeature(),
+      clock: clock
+    )
+    var failures: [(message: String, file: String, line: UInt)] = []
+    store.assertionFailureReporter = { message, file, line in
+      failures.append((message, String(describing: file), line))
+    }
+
+    await store.send(
+      .startDebouncedThrowing(.custom),
+      file: "DebouncedStart.swift",
+      line: 654
+    )
+    try #require(
+      await waitUntilAsync {
+        await clock.sleeperCount == 1
+      }
+    )
+    await store.send(
+      .received(9),
+      assert: { $0.values = [9] },
+      file: "LaterInteraction.swift",
+      line: 987
+    )
+
+    await clock.advance(by: .seconds(1))
+    await store.receive(.received(1)) {
+      $0.values = [9, 1]
+    }
+    await store.finish()
+
+    #expect(failures.count == 1)
+    let failure = try #require(failures.first)
+    #expect(failure.message.contains("debounced-boom"))
+    #expect(failure.file == "DebouncedStart.swift")
+    #expect(failure.line == 654)
+  }
+
+  @Test("Effects created by receive report at the receive assertion")
+  func receivedActionEffectUsesReceiveOrigin() async throws {
+    let store = TestStore(reducer: SequenceErrorFeature())
+    var failures: [(message: String, file: String, line: UInt)] = []
+    store.assertionFailureReporter = { message, file, line in
+      failures.append((message, String(describing: file), line))
+    }
+
+    await store.send(
+      .emitThrowingStart,
+      file: "InitialSend.swift",
+      line: 111
+    )
+    await store.receive(
+      .startThrowing(.custom),
+      file: "EffectStartingReceive.swift",
+      line: 222
+    )
+    await store.receive(.received(1)) {
+      $0.values = [1]
+    }
+    await store.finish()
+
+    #expect(failures.count == 1)
+    let failure = try #require(failures.first)
+    #expect(failure.message.contains("boom"))
+    #expect(failure.file == "EffectStartingReceive.swift")
+    #expect(failure.line == 222)
+  }
+
+  @Test("A cancelled run drops a domain error reported after cancellation")
+  func cancelledRunDropsLateError() async throws {
+    let started = AsyncTestSignal()
+    let release = RunStartGate()
+    let completed = AsyncTestSignal()
+    let store = TestStore(
+      reducer: LateReportAfterCancellationFeature(
+        started: started,
+        release: release,
+        completed: completed
+      )
+    )
+    var failures: [String] = []
+    store.assertionFailureReporter = { message, _, _ in
+      failures.append(message)
+    }
+
+    await store.send(.start)
+    try #require(await started.wait())
+    await store.cancelAllEffects()
+    await release.open()
+    try #require(await completed.wait())
+    await store.finish()
+
+    #expect(failures.isEmpty)
+  }
+}
+
 private struct DoubleReportFeature: Reducer {
   enum Action: Equatable, Sendable {
     case fireTwice
@@ -224,6 +454,27 @@ private struct DoubleReportFeature: Reducer {
     case .done:
       state.done = true
       return .none
+    }
+  }
+}
+
+private struct LateReportAfterCancellationFeature: Reducer {
+  enum Action: Equatable, Sendable {
+    case start
+  }
+
+  struct State: Equatable, Sendable, DefaultInitializable {}
+
+  let started: AsyncTestSignal
+  let release: RunStartGate
+  let completed: AsyncTestSignal
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    .run { _, context in
+      started.signal()
+      await release.wait()
+      await context.reportError(SequenceTestError(message: "cancelled-boom"))
+      completed.signal()
     }
   }
 }

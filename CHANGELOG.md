@@ -72,6 +72,12 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   exhaustive mode, one optional skipped-assertion warning in warning mode, or
   remains silent in `.off`; it never waits for effects or reduces actions and
   does not duplicate a completed `finish()` result.
+- `TestStore` now surfaces non-cancellation errors from both
+  `EffectTask.run(sequence:)` overloads as one hard failure per run. The
+  diagnostic preserves the public action assertion that created the effect,
+  even through debounce, throttle, cancellation, animation, or composition;
+  cancellation errors remain successful termination and exhaustivity cannot
+  suppress runtime failures.
 - Cancelled sequential effects now close their finish activity even when
   cancellation happens between concatenated children, so `finish()` no longer
   waits for a sequence that has already terminated.
@@ -128,6 +134,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   active framework-owned effects now records a terminal-verification failure.
   End ordinary tests with `finish()`; lifecycle tests that intentionally
   release active work must opt out explicitly.
+- Tests that previously allowed an `AsyncSequence` consumed by
+  `EffectTask.run` to throw a non-cancellation error now fail instead of
+  completing silently. Handle expected errors inside the effect or model them
+  as actions; setting `exhaustivity = .off` does not suppress runtime failures.
 - `Store.scope(state:action:)` now includes defaulted `fileID`, `line`, and
   `column` parameters so the runtime can preserve call-site identity. Ordinary
   two-argument calls remain source-compatible, but code that stores

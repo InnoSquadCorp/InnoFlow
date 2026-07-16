@@ -20,6 +20,22 @@ package struct EffectAnimation: Sendable, CustomStringConvertible {
   }
 }
 
+/// User-facing assertion origin carried by testing effect contexts.
+///
+/// Production stores leave this `nil`. `TestStore` records the public action
+/// assertion that created an effect so delayed and composed runs can report an
+/// asynchronous failure at the initiating call site instead of whichever test
+/// interaction happened most recently.
+package struct EffectOrigin: Sendable {
+  package let file: StaticString
+  package let line: UInt
+
+  package init(file: StaticString, line: UInt) {
+    self.file = file
+    self.line = line
+  }
+}
+
 /// Shared context passed through effect interpretation in both `Store` and `TestStore`.
 ///
 /// Extracted to eliminate duplication between production and testing runtimes.
@@ -28,6 +44,7 @@ package struct EffectExecutionContext: Sendable {
   package let animation: EffectAnimation?
   /// Store/TestStore sequence number for cancellation boundary tracking.
   package let sequence: UInt64?
+  package let origin: EffectOrigin?
 
   package var cancellationID: AnyEffectID? {
     cancellationIDs.last
@@ -39,6 +56,22 @@ package struct EffectExecutionContext: Sendable {
     animation: EffectAnimation? = nil,
     sequence: UInt64? = nil
   ) {
+    self.init(
+      cancellationID: cancellationID,
+      cancellationIDs: cancellationIDs,
+      animation: animation,
+      sequence: sequence,
+      origin: nil
+    )
+  }
+
+  package init(
+    cancellationID: AnyEffectID? = nil,
+    cancellationIDs: [AnyEffectID]? = nil,
+    animation: EffectAnimation? = nil,
+    sequence: UInt64? = nil,
+    origin: EffectOrigin?
+  ) {
     if let cancellationIDs {
       self.cancellationIDs = cancellationIDs
     } else if let cancellationID {
@@ -48,6 +81,7 @@ package struct EffectExecutionContext: Sendable {
     }
     self.animation = animation
     self.sequence = sequence
+    self.origin = origin
   }
 
   package static func withCancellation(
@@ -57,7 +91,8 @@ package struct EffectExecutionContext: Sendable {
     .init(
       cancellationIDs: (existing?.cancellationIDs ?? []) + [id],
       animation: existing?.animation,
-      sequence: existing?.sequence
+      sequence: existing?.sequence,
+      origin: existing?.origin
     )
   }
 
@@ -68,7 +103,8 @@ package struct EffectExecutionContext: Sendable {
     .init(
       cancellationIDs: existing?.cancellationIDs ?? [],
       animation: animation,
-      sequence: existing?.sequence
+      sequence: existing?.sequence,
+      origin: existing?.origin
     )
   }
 }

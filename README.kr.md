@@ -15,7 +15,7 @@ InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단
 - `PhaseMap`은 phase-heavy feature의 canonical runtime phase-transition layer입니다.
 - `PhaseTransitionGraph`는 generic automata runtime이 아니라 opt-in validation layer입니다.
 - binding은 `@BindableField`와 projected key path를 통해 명시적으로 연결합니다.
-- `TestStore.exhaustivity`는 기본값이 `.on`이며, 모든 상태 전환과 effect action을 빠짐없이 검증합니다. 테스트는 `finish()`로 끝내며, 미검증 작업을 남긴 deinit은 정책에 따라 실패, 경고 또는 무음으로 처리됩니다.
+- `TestStore.exhaustivity`는 기본값이 `.on`이며, 모든 상태 전환과 effect action을 빠짐없이 검증합니다. 테스트는 `finish()`로 끝내며, 미검증 작업을 남긴 deinit은 정책에 따라 실패, 경고 또는 무음으로 처리됩니다. `EffectTask.run`에서 빠져나온 취소 이외의 오류는 이 정책과 무관하게 원래 action assertion 위치에서 한 번 실패합니다.
 - 앱 라우팅, transport, 세션 라이프사이클, 생성 시점 의존성 그래프는 앱 경계 바깥에서 소유합니다.
 
 경계 문서:
