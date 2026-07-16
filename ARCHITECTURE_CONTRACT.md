@@ -51,6 +51,13 @@ This document captures the stable framework guarantees that should not drift wit
   idle. `assertNoBufferedActions()` is an immediate intermediate checkpoint.
   The ambiguous `assertNoMoreActions()` API is deprecated in 5.x and planned
   for removal in 6.0.
+- Deinitialization is a synchronous terminal safety net, not a second drain.
+  If valid buffered actions or framework-owned run, composite, debounce, or
+  throttle activity remains, `.on` records one failure,
+  `.off(showSkippedAssertions: true)` records one warning, and `.off` remains
+  silent. The snapshot is taken before remaining work is cancelled; stale
+  actions are ignored, actions are never reduced, and a prior `finish()` result
+  is not diagnosed again unless new work begins or arrives afterward.
 
 ## Projection lifecycle contract
 

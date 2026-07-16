@@ -236,6 +236,7 @@ struct TestStoreCoreTests {
         initialState: .init(),
         clock: clock
       )
+      store?.exhaustivity = .off
       weakStore = store
       await store?.send(.trigger(1))
       try #require(
@@ -276,6 +277,7 @@ struct TestStoreCoreTests {
         initialState: .init(),
         clock: clock
       )
+      store?.exhaustivity = .off
       weakStore = store
       await store?.send(.trigger(1))
       try #require(
@@ -316,6 +318,7 @@ struct TestStoreCoreTests {
         initialState: .init(),
         clock: clock
       )
+      store?.exhaustivity = .off
       weakStore = store
       await store?.send(.start)
       try #require(
@@ -356,6 +359,7 @@ struct TestStoreCoreTests {
         initialState: .init(),
         clock: clock
       )
+      store?.exhaustivity = .off
       weakStore = store
       await store?.send(.start)
       try #require(
@@ -393,6 +397,7 @@ struct TestStoreCoreTests {
       initialState: .init(),
       clock: clock
     )
+    store?.exhaustivity = .off
     weak var weakStore: TestStore<AwaitedRunReleaseFeature>?
     weakStore = store
 
@@ -449,6 +454,7 @@ struct TestStoreCoreTests {
       initialState: .init(),
       clock: clock
     )
+    store?.exhaustivity = .off
     weak var weakStore: TestStore<PostFireDelayedReleaseFeature>?
     weakStore = store
 

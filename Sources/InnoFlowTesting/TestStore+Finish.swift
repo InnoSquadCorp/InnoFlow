@@ -126,6 +126,18 @@ package enum TestStoreFinishResult: Equatable, Sendable {
   case cancelled
 }
 
+package struct TestStoreTerminalVerificationDiagnostic {
+  package enum Severity {
+    case failure
+    case warning
+  }
+
+  package let severity: Severity
+  package let message: String
+  package let file: StaticString
+  package let line: UInt
+}
+
 extension TestStore {
   /// Waits for all in-flight effects to finish and asserts that every emitted
   /// action has been received.
@@ -141,6 +153,14 @@ extension TestStore {
   /// On failure, cancellation is requested for all remaining framework-owned
   /// effects and their subsequent action emissions are suppressed. An effect
   /// that ignores cooperative cancellation may still continue its own work.
+  ///
+  /// This is the canonical terminal assertion. As a safety net, deinitializing
+  /// a store with valid buffered actions or active framework-owned effects
+  /// reports one failure in exhaustive mode, one warning when skipped
+  /// assertions are enabled, or remains silent in `.off`. The deinitializer
+  /// does not wait or reduce actions, and an idle store does not fail merely
+  /// because `finish()` was omitted. A completed or failed `finish()` is not
+  /// reported again unless new work begins or arrives afterward.
   ///
   /// - Parameters:
   ///   - timeout: The total wall-clock deadline. Pass `nil` to use the timeout
@@ -200,6 +220,7 @@ extension TestStore {
     file: StaticString = #file,
     line: UInt = #line
   ) async -> TestStoreFinishResult {
+    let terminalRevision = beginTerminalVerification(file: file, line: line)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
     var didDrainAction = false
@@ -207,6 +228,7 @@ extension TestStore {
     while true {
       if Task.isCancelled {
         cancelRemainingEffectsForFinish()
+        markTerminalVerificationHandled(terminalRevision)
         return .cancelled
       }
 
@@ -214,6 +236,7 @@ extension TestStore {
         let actions = await takeAllBufferedActionDescriptions()
         if actions.isEmpty == false {
           cancelRemainingEffectsForFinish()
+          markTerminalVerificationHandled(terminalRevision)
           return .unhandledActions(actions)
         }
       } else if let action = await popBufferedAction() {
@@ -223,6 +246,7 @@ extension TestStore {
         if didDrainAction, wallClock.now >= deadline {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
+          markTerminalVerificationHandled(terminalRevision)
           return .timedOut(snapshot)
         }
         reportSkippedAction(
@@ -238,11 +262,13 @@ extension TestStore {
 
       let snapshot = finishActivity.snapshot
       if snapshot.activeCount == 0 {
+        markTerminalVerificationHandled(terminalRevision)
         return .success
       }
 
       if wallClock.now >= deadline {
         cancelRemainingEffectsForFinish()
+        markTerminalVerificationHandled(terminalRevision)
         return .timedOut(snapshot)
       }
 
@@ -264,5 +290,124 @@ extension TestStore {
   private func cancelRemainingEffectsForFinish() {
     let sequence = markCancelledAll()
     cancelAllEffectsSynchronously(upTo: sequence)
+  }
+
+  package func noteTestInteraction(
+    file: StaticString,
+    line: UInt
+  ) {
+    terminalVerificationRevision &+= 1
+    terminalVerificationSource = (file, line)
+  }
+
+  package func noteUnverifiedWorkAfterTerminalVerification() {
+    guard
+      lastHandledTerminalVerificationRevision == terminalVerificationRevision
+    else { return }
+    terminalVerificationRevision &+= 1
+  }
+
+  @discardableResult
+  package func beginFinishActivity(
+    _ kind: TestStoreFinishActivity.Kind,
+    token: UUID = UUID(),
+    context: EffectExecutionContext?
+  ) -> UUID {
+    if shouldProceed(context: context) {
+      noteUnverifiedWorkAfterTerminalVerification()
+    }
+    return finishActivity.begin(kind, token: token)
+  }
+
+  private func beginTerminalVerification(
+    file: StaticString,
+    line: UInt
+  ) -> UInt64 {
+    terminalVerificationSource = (file, line)
+    return terminalVerificationRevision
+  }
+
+  private func markTerminalVerificationHandled(_ revision: UInt64) {
+    guard
+      lastHandledTerminalVerificationRevision.map({ $0 >= revision }) != true
+    else { return }
+    lastHandledTerminalVerificationRevision = revision
+  }
+
+  package func makeTerminalVerificationDiagnostic()
+    -> TestStoreTerminalVerificationDiagnostic?
+  {
+    guard
+      lastHandledTerminalVerificationRevision != terminalVerificationRevision
+    else { return nil }
+
+    var actionCount = 0
+    var actionDescriptions: [String] = []
+    queue.forEachBuffered { queuedAction in
+      guard shouldProceed(context: queuedAction.context) else { return }
+      actionCount += 1
+      if actionDescriptions.count < 20 {
+        actionDescriptions.append(String(describing: queuedAction.action))
+      }
+    }
+
+    let activity = finishActivity.snapshot
+    guard actionCount > 0 || activity.activeCount > 0 else { return nil }
+
+    let severity: TestStoreTerminalVerificationDiagnostic.Severity
+    let header: String
+    let actionLabel: String
+    let activityLabel: String
+    let guidance: String
+    switch exhaustivity {
+    case .on:
+      severity = .failure
+      header = "TestStore was deinitialized with unverified work."
+      actionLabel = "Unhandled effect actions"
+      activityLabel = "Active framework-owned effects"
+      guidance =
+        "Call `await store.finish()` before the store leaves scope. In exhaustive mode, receive every effect-emitted action first. Advance `ManualTestClock` or cancel intentionally long-running effects before finishing."
+
+    case .off(let showSkippedAssertions):
+      guard showSkippedAssertions else { return nil }
+      severity = .warning
+      header = "TestStore skipped terminal verification while deinitializing."
+      actionLabel = "Skipped effect actions"
+      activityLabel = "Active framework-owned effects cancelled during deinitialization"
+      guidance =
+        "The remaining actions were not reduced. Call `await store.finish()` to drain non-exhaustive actions and effects before the store leaves scope."
+    }
+
+    var sections: [String] = [header]
+    if actionCount > 0 {
+      var actionLines = actionDescriptions.map { "- \($0)" }
+      let omittedCount = actionCount - actionDescriptions.count
+      if omittedCount > 0 {
+        actionLines.append("- ... \(omittedCount) more action(s)")
+      }
+      sections.append(
+        "\(actionLabel) (\(actionCount)):\n\(actionLines.joined(separator: "\n"))"
+      )
+    }
+    if activity.activeCount > 0 {
+      sections.append(
+        """
+        \(activityLabel):
+        - run: \(activity.runCount)
+        - composite: \(activity.compositeCount)
+        - debounce: \(activity.debounceCount)
+        - throttle: \(activity.throttleCount)
+        """
+      )
+    }
+    sections.append(guidance)
+
+    let source = terminalVerificationSource ?? (#file, #line)
+    return TestStoreTerminalVerificationDiagnostic(
+      severity: severity,
+      message: sections.joined(separator: "\n\n"),
+      file: source.file,
+      line: source.line
+    )
   }
 }

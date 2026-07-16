@@ -67,6 +67,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - Non-exhaustive `finish()` now reduces buffered, late, and follow-up actions
   until the harness becomes idle. Exhaustive `finish()` continues to fail on
   every unreceived action under the same total deadline.
+- `TestStore` deinitialization now snapshots valid buffered actions and active
+  framework-owned effects before cancellation. It reports one failure in
+  exhaustive mode, one optional skipped-assertion warning in warning mode, or
+  remains silent in `.off`; it never waits for effects or reduces actions and
+  does not duplicate a completed `finish()` result.
 - Cancelled sequential effects now close their finish activity even when
   cancellation happens between concatenated children, so `finish()` no longer
   waits for a sequence that has already terminated.
@@ -119,6 +124,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   state assertion after a mutation, asserted only part of a transition, or
   left effect actions unreceived must become exhaustive or explicitly opt into
   `.off`. In `.on`, an omitted assertion closure asserts no state change.
+- An exhaustive `TestStore` that leaves scope with valid buffered actions or
+  active framework-owned effects now records a terminal-verification failure.
+  End ordinary tests with `finish()`; lifecycle tests that intentionally
+  release active work must opt out explicitly.
 - `Store.scope(state:action:)` now includes defaulted `fileID`, `line`, and
   `column` parameters so the runtime can preserve call-site identity. Ordinary
   two-argument calls remain source-compatible, but code that stores

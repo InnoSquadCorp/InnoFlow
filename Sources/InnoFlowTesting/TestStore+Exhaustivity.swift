@@ -9,6 +9,7 @@ extension TestStore {
     file: StaticString,
     line: UInt
   ) async {
+    noteTestInteraction(file: file, line: line)
     let deadline = wallClock.now.advanced(by: effectTimeout)
     var skippedActionCount = 0
     var skippedActionDescriptions: [String] = []

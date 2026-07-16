@@ -11,6 +11,13 @@ import Foundation
 /// Timeout behavior is controlled with structured-concurrency races,
 /// avoiding arbitrary polling sleeps. Follow-up actions are observed using the
 /// same queue-based vocabulary as `Store`.
+///
+/// Call `finish()` at the terminal test boundary. If a store instead leaves
+/// scope with valid buffered actions or active framework-owned effects, its
+/// synchronous deinitializer snapshots that work, cancels it, and then reports
+/// one diagnostic according to ``exhaustivity``. That safety net does not wait
+/// for effects or reduce buffered actions. A completed or failed `finish()` is
+/// not reported again unless new work begins or arrives later.
 @MainActor
 public final class TestStore<R: Reducer> where R.State: Equatable {
 
@@ -28,6 +35,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   // MARK: - Properties
 
   public package(set) var state: R.State
+  /// Controls state, effect-action, and omitted-terminal-work diagnostics.
   public var exhaustivity: Exhaustivity = .on
 
   package let reducer: R
@@ -43,6 +51,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package var skippedAssertionReporter: (String, StaticString, UInt) -> Void = {
     testStoreAssertionWarning($0, file: $1, line: $2)
   }
+  package var terminalVerificationRevision: UInt64 = 0
+  package var lastHandledTerminalVerificationRevision: UInt64?
+  package var terminalVerificationSource: (file: StaticString, line: UInt)?
 
   package var runningTasks: [UUID: TrackedEffectTask] = [:]
   package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]
@@ -98,6 +109,11 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   // Tracked in docs/SWIFT_TOOLCHAIN_TRACKING.md.
   @_optimize(none)
   isolated deinit {
+    let diagnostic = makeTerminalVerificationDiagnostic()
+    let failureReporter = assertionFailureReporter
+    let warningReporter = skippedAssertionReporter
+
+    _ = markCancelledAll()
     for trackedTask in runningTasks.values {
       trackedTask.task.cancel()
     }
@@ -105,6 +121,14 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
       trackedTask.task?.cancel()
     }
     throttleState.clearAll()
+
+    guard let diagnostic else { return }
+    switch diagnostic.severity {
+    case .failure:
+      failureReporter(diagnostic.message, diagnostic.file, diagnostic.line)
+    case .warning:
+      warningReporter(diagnostic.message, diagnostic.file, diagnostic.line)
+    }
   }
 
   // MARK: - Sequence Boundaries

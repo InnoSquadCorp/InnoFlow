@@ -714,6 +714,15 @@ to the same parent queue and effect lifecycle. Use
 checkpoint; `assertNoMoreActions()` is deprecated because it is neither a
 complete terminal assertion nor an immediate checkpoint.
 
+If a `TestStore` leaves scope with valid buffered actions or active
+framework-owned effects, deinitialization provides a synchronous safety net.
+It records one failure in `.on`, one non-failing warning in
+`.off(showSkippedAssertions: true)`, and remains silent in `.off`. The safety
+net cancels remaining work but neither waits for effects nor reduces buffered
+actions, and it does not report an idle store merely because `finish()` was
+omitted. A completed or failed `finish()` is not reported again during
+deinitialization unless new work begins or arrives afterward.
+
 For migration or intentionally partial tests, opt out explicitly:
 
 ```swift
@@ -722,8 +731,9 @@ store.exhaustivity = .off(showSkippedAssertions: true)
 
 In `.off` mode, assertion closures start from the actual post-reducer state and
 therefore describe only the fields being checked. Unexpected effect actions
-are still reduced, and `showSkippedAssertions: true` reports non-failing
-warnings for skipped state or action assertions.
+are reduced by `send`, `receive`, and `finish`, and
+`showSkippedAssertions: true` reports non-failing warnings for skipped state,
+action, or terminal assertions. Deinitialization itself never reduces actions.
 
 Each receive assertion can override the harness timeout. Case-path and
 predicate overloads also support actions that are not `Equatable`. In `.on`

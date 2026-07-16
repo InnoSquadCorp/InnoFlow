@@ -174,7 +174,8 @@ extension InnoFlowMacro {
         )
       }
       return .init(
-        declarations: ["""
+        declarations: [
+          """
           \(accessPrefix)static let \(memberName) = CasePath<Self, \(childActionType)>(
             embed: { childAction in
               .\(caseName)(childAction)
@@ -184,7 +185,8 @@ extension InnoFlowMacro {
               return childAction
             }
           )
-          """]
+          """
+        ]
       )
     }
 
@@ -255,7 +257,8 @@ extension InnoFlowMacro {
         )
       }
       return .init(
-        declarations: ["""
+        declarations: [
+          """
           \(accessPrefix)static let \(memberName) = CollectionActionPath<Self, \(idType), \(childActionType)>(
             embed: { id, action in
               .\(caseName)(id: id, action: action)
@@ -265,7 +268,8 @@ extension InnoFlowMacro {
               return (id, childAction)
             }
           )
-          """]
+          """
+        ]
       )
     }
 

@@ -27,6 +27,7 @@ extension TestStore {
     line: UInt,
     matching matcher: (R.Action) -> TestStoreActionMatch<Value>
   ) async -> TestStoreReceiveResult<R.Action, Value> {
+    noteTestInteraction(file: file, line: line)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
     var didSkipMismatch = false

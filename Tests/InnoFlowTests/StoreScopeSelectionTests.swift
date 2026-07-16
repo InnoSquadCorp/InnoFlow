@@ -86,6 +86,7 @@ struct StoreScopeSelectionTests {
       $0.output = "from-bundle"
       $0.log = ["loaded from-bundle"]
     }
+    await store.finish()
   }
 
   @Test("Store.preview creates preview stores with explicit and default state")

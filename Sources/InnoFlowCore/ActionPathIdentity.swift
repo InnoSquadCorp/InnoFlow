@@ -47,7 +47,7 @@ package final class ActionPathIdentity: Hashable, Sendable {
     switch (lhs.generatedKey, rhs.generatedKey) {
     case (.none, .none):
       return lhs === rhs
-    case let (.some(lhsKey), .some(rhsKey)):
+    case (.some(let lhsKey), .some(let rhsKey)):
       return lhsKey == rhsKey
     case (.none, .some), (.some, .none):
       return false

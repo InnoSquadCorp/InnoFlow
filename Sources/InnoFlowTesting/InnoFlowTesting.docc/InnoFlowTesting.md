@@ -13,6 +13,14 @@ verify that no effect actions remain. Use `assertNoBufferedActions()` only for
 an intermediate queue checkpoint. ``ScopedTestStore`` applies the same contract
 while asserting against the complete root state.
 
+If a store leaves scope with valid buffered actions or active framework-owned
+effects, its synchronous deinitializer provides a final safety net: exhaustive
+mode records one failure, `.off(showSkippedAssertions: true)` records one
+warning, and `.off` remains silent. Deinitialization cancels remaining work but
+does not wait for effects or reduce actions, so it is not a substitute for
+`finish()`. A completed or failed `finish()` is not reported again unless new
+work begins or arrives afterward.
+
 For time-sensitive effects, inject ``ManualTestClock`` and advance it explicitly.
 ``EffectTimingRecorder`` captures instrumentation events for repeatable baseline
 comparisons.

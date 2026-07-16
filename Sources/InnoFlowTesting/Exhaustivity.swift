@@ -9,10 +9,12 @@ public enum Exhaustivity: Equatable, Sendable {
   case on
 
   /// Allows partial state assertions and automatically reduces unexpected
-  /// effect-emitted actions.
+  /// effect-emitted actions during `send`, `receive`, and `finish`.
   ///
   /// Set `showSkippedAssertions` to `true` to record non-failing warnings for
-  /// state transitions and actions checked in non-exhaustive mode.
+  /// state transitions, actions checked in non-exhaustive mode, and valid work
+  /// still present when a `TestStore` is deinitialized. Deinitialization never
+  /// reduces buffered actions; use `finish()` for terminal draining.
   case off(showSkippedAssertions: Bool)
 
   /// Non-exhaustive testing without skipped-assertion warnings.

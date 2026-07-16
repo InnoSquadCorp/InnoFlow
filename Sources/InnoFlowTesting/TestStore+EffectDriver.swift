@@ -67,6 +67,13 @@ package final class ActionQueue<Action: Sendable> {
     waiters.count
   }
 
+  func forEachBuffered(_ body: (QueuedAction) -> Void) {
+    guard headIndex < buffer.count else { return }
+    for index in headIndex..<buffer.count {
+      body(buffer[index])
+    }
+  }
+
   // Internal diagnostics hook for verifying forwarded wait budgets without
   // coupling tests to scheduler-dependent wall-clock completion thresholds.
   var waitTimeoutObserver: ((Duration) -> Void)?
@@ -353,7 +360,7 @@ extension TestStore {
     context: EffectExecutionContext?
   ) -> Task<Void, Never> {
     let token = UUID()
-    finishActivity.begin(.run, token: token)
+    beginFinishActivity(.run, token: token, context: context)
     let startGate = TestStoreRunStartGate()
     let endpoint = makeRunEndpoint()
     let runBridge = TestStoreRunBridge(
@@ -541,6 +548,7 @@ extension TestStore: EffectDriver {
     // deliveries) must move the assertion to before the action that would
     // have raced ahead.
     guard shouldProceed(context: context) else { return }
+    noteUnverifiedWorkAfterTerminalVerification()
     queue.enqueue(action, context: context)
     finishActivity.noteProgress()
   }
@@ -604,7 +612,7 @@ extension TestStore: EffectDriver {
     guard let generation = beginDebounce(scope) else { return nil }
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
     let activityToken = UUID()
-    finishActivity.begin(.debounce, token: activityToken)
+    beginFinishActivity(.debounce, token: activityToken, context: context)
     let endpoint = makeRunEndpoint()
 
     let task = Task { [weak self] in
@@ -660,7 +668,11 @@ extension TestStore: EffectDriver {
     let generation = throttleState.nextGeneration(for: id)
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
     let activityToken = UUID()
-    finishActivity.begin(.throttle, token: activityToken)
+    beginFinishActivity(
+      .throttle,
+      token: activityToken,
+      context: schedulingContext
+    )
     let endpoint = makeRunEndpoint()
     let task = Task { [weak self] in
       let pending: ThrottleStateMap<R.Action>.PendingTrailing?
@@ -733,7 +745,7 @@ extension TestStore: EffectDriver {
     } else {
       for child in children {
         let token = UUID()
-        finishActivity.begin(.composite, token: token)
+        beginFinishActivity(.composite, token: token, context: context)
         let task = Task { @MainActor [weak self] in
           defer {
             self?.finishTrackedRunTask(token: token)
@@ -766,7 +778,7 @@ extension TestStore: EffectDriver {
       }
     } else {
       let token = UUID()
-      finishActivity.begin(.composite, token: token)
+      beginFinishActivity(.composite, token: token, context: context)
       let startGate = TestStoreRunStartGate()
       let endpoint = makeRunEndpoint()
       let task = Task { @MainActor in

@@ -41,6 +41,11 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 - Tests that assumed a mismatched effect action was discarded are affected.
   The action is now reduced exactly once before exhaustive mode reports the
   mismatch; non-exhaustive mode continues searching under one total deadline.
+- Tests that let an exhaustive `TestStore` leave scope with valid buffered
+  actions or active framework-owned effects are affected. Deinitialization now
+  snapshots that work, cancels it, and then records one terminal-verification
+  failure from the captured snapshot. Idle stores and stores whose `finish()`
+  already completed or reported a failure are unaffected.
 - Call sites using `assertNoMoreActions()` are affected by a deprecation
   warning. Its legacy behavior remains available during the 5.x line and is
   planned for removal in 6.0.
@@ -86,6 +91,13 @@ In `.off` mode, expected-state closures start from the actual post-reducer
 state, unexpected effect actions are reduced automatically, and
 `showSkippedAssertions: true` emits non-failing warnings. `finish()` drains
 buffered, late, and follow-up actions until the harness is idle.
+
+Do not rely on deinitialization to drain a test. It does not wait for effects
+or reduce buffered actions. In `.on`, omitted terminal work records one
+failure; `.off(showSkippedAssertions: true)` records one warning; `.off`
+cancels silently. Tests that intentionally exercise `TestStore` release with
+active work can opt out explicitly, but ordinary tests should receive or
+cancel expected work and still end with `finish()`.
 
 Scoped stores forward the parent exhaustivity policy. Because exhaustive child
 assertions compare the complete root state, send through the parent
