@@ -709,8 +709,9 @@ for all framework-owned effects and fails when any emitted action was not
 received. With `.off`, it reduces buffered, late, and follow-up actions until
 the harness is idle. Its timeout uses wall time and never advances a
 `ManualTestClock`, so advance manual time before finishing when a debounce or
-trailing throttle is expected to fire. A scoped test store delegates `finish()`
-to the same parent queue and effect lifecycle. Use
+active throttle window (including leading-only) remains, or cancel that work
+before finishing. A scoped test store delegates `finish()` to the same parent
+queue and effect lifecycle. Use
 `assertNoBufferedActions()` only as an intermediate, immediate queue
 checkpoint; `assertNoMoreActions()` is deprecated because it is neither a
 complete terminal assertion nor an immediate checkpoint.

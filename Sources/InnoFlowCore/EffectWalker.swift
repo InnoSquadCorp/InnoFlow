@@ -317,28 +317,28 @@ package struct EffectWalker<D: EffectDriver> {
     guard driver.throttleState.setScope(delayedScope) else { return nil }
     driver.throttleState.setWindowEnd(now.advanced(by: interval), for: id)
 
-    var trailingTask: Task<Void, Never>?
-    if trailing {
-      if !leading {
-        driver.throttleState.storePending(
-          nested,
-          context: throttleContext,
-          requiresAwaitedCompletion: awaited,
-          for: id
-        )
-      }
-      trailingTask = driver.scheduleTrailingDrain(
-        for: id,
-        interval: interval,
-        schedulingContext: throttleContext,
-        awaited: awaited,
-        recurse: recurse
+    if trailing && !leading {
+      driver.throttleState.storePending(
+        nested,
+        context: throttleContext,
+        requiresAwaitedCompletion: awaited,
+        for: id
       )
     }
+    // The drain expires window ownership even when no trailing value exists.
+    // Leading-only callers never await that bookkeeping task; a later awaited
+    // trailing request promotes recursion through the pending state instead.
+    let throttleDrain = driver.scheduleTrailingDrain(
+      for: id,
+      interval: interval,
+      schedulingContext: throttleContext,
+      awaited: trailing && awaited,
+      recurse: recurse
+    )
 
     return .init(
       runsLeadingEffect: leading,
-      trailingTaskToAwait: awaited ? trailingTask : nil
+      trailingTaskToAwait: trailing && awaited ? throttleDrain : nil
     )
   }
 

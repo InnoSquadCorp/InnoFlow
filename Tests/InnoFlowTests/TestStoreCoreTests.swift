@@ -733,7 +733,13 @@ struct TestStoreCoreTests {
     )
 
     #expect(await store.popBufferedAction() == .reset)
-    #expect(await clock.sleeperCount == 0)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
+    let originalSleepRegistrationCount = await clock.sleepRegistrationCount
+    let originalActivityToken = try #require(store.throttleActivityTokenByID[id])
     let originalDeadline = try #require(store.throttleState.windowEnd(for: id))
 
     await clock.advance(by: .milliseconds(30))
@@ -756,15 +762,19 @@ struct TestStoreCoreTests {
 
     do {
       try #require(
-        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
-          await clock.sleeperCount == 1
+        await waitUntil(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+          store.throttleState.scope(for: id)?.sequence == trailingSequence
+            && store.throttleState.pending(for: id)?.context?.sequence == trailingSequence
         }
       )
 
+      #expect(await clock.sleeperCount == 1)
       #expect(store.throttleState.windowEnd(for: id) == originalDeadline)
       #expect(store.throttleState.scope(for: id)?.sequence == trailingSequence)
       #expect(store.throttleState.pending(for: id)?.context?.sequence == trailingSequence)
       #expect(store.throttleState.pending(for: id)?.requiresAwaitedCompletion == true)
+      #expect(store.throttleActivityTokenByID[id] == originalActivityToken)
+      #expect(await clock.sleepRegistrationCount == originalSleepRegistrationCount)
 
       await clock.advance(by: .milliseconds(49))
 
@@ -799,6 +809,52 @@ struct TestStoreCoreTests {
     #expect(store.throttleState.trailingTask(for: id) == nil)
     #expect(store.throttleActivityTokenByID[id] == nil)
     #expect(store.throttleState.latestAdmissionSequence(for: id) == nil)
+  }
+
+  @Test("TestStore expires leading-only throttle state at the window deadline")
+  func testStoreExpiresLeadingOnlyThrottleState() async {
+    let id = AnyEffectID(StaticEffectID("teststore-leading-only-expiry"))
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: clock
+    )
+
+    await store.walker.walk(
+      EffectTask<CounterFeature.Action>.send(.increment)
+        .throttle(id, for: .seconds(60), leading: true, trailing: false),
+      context: .init(sequence: store.nextSequence()),
+      awaited: true
+    )
+
+    await store.receive(.increment) {
+      $0.count = 1
+    }
+    #expect(store.throttleState.scope(for: id) != nil)
+    #expect(store.throttleState.windowEnd(for: id) != nil)
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
+
+    await clock.advance(by: .seconds(60))
+    #expect(
+      await waitUntil(timeout: .seconds(1), pollInterval: .milliseconds(1)) {
+        store.finishActivity.snapshot.activeCount == 0
+      }
+    )
+    #expect(store.throttleState.scope(for: id) == nil)
+    #expect(store.throttleState.windowEnd(for: id) == nil)
+    #expect(store.throttleState.trailingTask(for: id) == nil)
+    #expect(store.throttleState.generation(for: id) == nil)
+    #expect(store.throttleState.pending(for: id) == nil)
+    #expect(store.throttleState.latestAdmissionSequence(for: id) == nil)
+    #expect(store.throttleActivityTokenByID[id] == nil)
+    #expect(store.runningTasks.isEmpty)
+    #expect(await clock.sleeperCount == 0)
+    await store.finish()
   }
 
   @Test("TestStore active trailing throttle keeps awaited completion after replacement")

@@ -337,6 +337,41 @@ struct TestStoreFinishTests {
     #expect(store.finishActivity.snapshot.activeCount == 0)
   }
 
+  @Test("finish tracks a leading-only throttle window without advancing manual time")
+  func finishTracksLeadingOnlyThrottleWindow() async throws {
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: FinishFeature(gate: RunStartGate()),
+      clock: clock
+    )
+
+    await store.send(.leading)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(1), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
+    let manualNow = await clock.now
+    let throttleID = AnyEffectID(StaticEffectID("finish-leading-throttle"))
+    let throttleTask = try #require(store.throttleState.trailingTask(for: throttleID))
+
+    guard
+      case .timedOut(let snapshot) =
+        await store.finishResult(timeout: .milliseconds(20))
+    else {
+      Issue.record("Expected finish to time out on the active leading-only throttle window")
+      return
+    }
+
+    #expect(snapshot.throttleCount == 1)
+    _ = await throttleTask.result
+    #expect(await clock.now == manualNow)
+    #expect(await clock.sleeperCount == 0)
+    #expect(store.throttleState.scope(for: throttleID) == nil)
+    #expect(store.throttleActivityTokenByID[throttleID] == nil)
+    #expect(store.finishActivity.snapshot.activeCount == 0)
+  }
+
   @Test("finish activity spans debounce post-fire recursion")
   func finishActivitySpansDebounceRecursion() async throws {
     let store = TestStore(reducer: FinishFeature(gate: RunStartGate()))
@@ -509,6 +544,7 @@ private struct FinishFeature: Reducer {
     case emitAfterGate(Int)
     case emitImmediately(Int)
     case debounce
+    case leading
     case trailing
     case response(Int)
     case loop
@@ -541,6 +577,10 @@ private struct FinishFeature: Reducer {
     case .debounce:
       return .send(.response(1))
         .debounce("finish-debounce", for: .seconds(60))
+
+    case .leading:
+      return .none
+        .throttle("finish-leading-throttle", for: .seconds(60))
 
     case .trailing:
       return .send(.response(1))

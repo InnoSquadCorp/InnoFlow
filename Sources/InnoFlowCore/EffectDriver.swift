@@ -298,8 +298,10 @@ package protocol EffectDriver<Action>: AnyObject {
   /// Shared throttle bookkeeping for the driver.
   var throttleState: ThrottleStateMap<Action> { get }
 
-  /// Schedules the trailing drain task for the throttle id.
+  /// Schedules the generation-scoped drain task for the throttle id.
   ///
+  /// Every window gets a drain so leading-only state expires at its deadline;
+  /// the task recurses only when a trailing effect is pending.
   /// `awaited` records whether the call that opened the window needs the
   /// trailing window to complete. Later pending replacements can only promote
   /// that requirement through `PendingTrailing.requiresAwaitedCompletion`.

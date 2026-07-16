@@ -38,7 +38,9 @@ the READMEs until 5.0.0 is tagged.
    and late trailing-enable cases, while keeping the original throttle window
    deadline. Reused TestStore drains adopt the latest pending sequence and
    cancellation IDs, so stale ID/global cancellation cannot discard newer
-   trailing work and post-fire recursion remains visible to `finish()`.
+   trailing work and post-fire recursion remains visible to `finish()`. Every
+   window, including leading-only windows, now owns a generation-scoped drain
+   so per-ID state expires at the deadline without delaying leading delivery.
 7. Adds public `Exhaustivity`. `TestStore.exhaustivity` defaults to `.on`, so
    every state transition and effect action must be asserted. `.off` supports
    partial state assertions and automatically reduces unexpected actions;
@@ -91,6 +93,8 @@ with the retest steps and the gate that warns on Swift 6.4+.
   a thrown non-cancellation sequence error can no longer complete silently.
 - Scoped exhaustive assertions compare the complete root state, even when the
   action is sent through a child projection.
+- Active leading-only throttle windows are now framework-owned TestStore
+  activity until their deadline or cancellation.
 
 ### What you may need to update
 
@@ -111,6 +115,8 @@ with the retest steps and the gate that warns on Swift 6.4+.
   cancelled.
 - Replace terminal `assertNoMoreActions()` calls with `finish()` and
   intermediate uses with `assertNoBufferedActions()`.
+- In manual-clock tests, advance through every active leading-only throttle
+  deadline or cancel the window before calling terminal `finish()`.
 
 ## 4.0.0 Release
 

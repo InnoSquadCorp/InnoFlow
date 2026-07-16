@@ -62,6 +62,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   unawaited events replace the pending effect inside the active window.
 - Store and TestStore active throttle windows now start a trailing drain when a
   later call enables trailing delivery, while preserving the original deadline.
+- Every throttle window now owns a generation-scoped drain through its original
+  deadline, so leading-only scope/window state expires without another call.
+  TestStore treats that active window as framework-owned finish activity; tests
+  using `ManualTestClock` must advance through the deadline or cancel it before
+  terminal `finish()`.
 - TestStore debounce now preserves the caller's awaited mode instead of always
   recursing as awaited work.
 - `TestStore` now defaults to exhaustive state and effect-action assertions.

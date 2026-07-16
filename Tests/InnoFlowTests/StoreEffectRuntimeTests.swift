@@ -1454,6 +1454,48 @@ struct StoreEffectRuntimeTests {
     #expect(store.emitted == [2])
   }
 
+  @Test("Store expires dynamic leading-only throttle state at the window deadline")
+  func storeExpiresDynamicLeadingOnlyThrottleState() async {
+    let timingIDs = (0..<16).map { _ in AnyEffectID(EffectID(UUID())) }
+    let clock = ManualTestClock()
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+
+    for (offset, timingID) in timingIDs.enumerated() {
+      await store.walkEffect(
+        EffectTask<CounterFeature.Action>.send(.increment)
+          .throttle(timingID, for: .seconds(60), leading: true, trailing: false),
+        context: .init(sequence: UInt64(offset + 1)),
+        awaited: true
+      )
+    }
+
+    #expect(store.count == timingIDs.count)
+    #expect(timingIDs.allSatisfy { store.throttleState.scope(for: $0) != nil })
+    #expect(timingIDs.allSatisfy { store.throttleState.windowEnd(for: $0) != nil })
+    #expect(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == timingIDs.count
+      }
+    )
+
+    await clock.advance(by: .seconds(60))
+    #expect(
+      await waitUntil(timeout: .seconds(1), pollInterval: .milliseconds(1)) {
+        timingIDs.allSatisfy { store.throttleState.scope(for: $0) == nil }
+      }
+    )
+    #expect(timingIDs.allSatisfy { store.throttleState.windowEnd(for: $0) == nil })
+    #expect(timingIDs.allSatisfy { store.throttleState.trailingTask(for: $0) == nil })
+    #expect(timingIDs.allSatisfy { store.throttleState.generation(for: $0) == nil })
+    #expect(timingIDs.allSatisfy { store.throttleState.pending(for: $0) == nil })
+    #expect(timingIDs.allSatisfy { store.throttleState.latestAdmissionSequence(for: $0) == nil })
+    #expect(await clock.sleeperCount == 0)
+  }
+
   @Test("Store activates trailing work within a leading-only throttle window")
   func storeActivatesTrailingWorkWithinLeadingOnlyThrottleWindow() async throws {
     let timingID = AnyEffectID(StaticEffectID("store-late-trailing-activation"))
@@ -1477,7 +1519,12 @@ struct StoreEffectRuntimeTests {
       )
 
       #expect(store.count == 1)
-      #expect(await clock.sleeperCount == 0)
+      try #require(
+        await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+          await clock.sleeperCount == 1
+        }
+      )
+      let originalSleepRegistrationCount = await clock.sleepRegistrationCount
       let originalDeadline = try #require(store.throttleState.windowEnd(for: timingID))
       #expect(store.throttleState.scope(for: timingID)?.sequence == 1)
 
@@ -1500,6 +1547,7 @@ struct StoreEffectRuntimeTests {
       #expect(store.throttleState.windowEnd(for: timingID) == originalDeadline)
       #expect(store.throttleState.scope(for: timingID)?.sequence == 2)
       #expect(store.throttleState.pending(for: timingID)?.context?.sequence == 2)
+      #expect(await clock.sleepRegistrationCount == originalSleepRegistrationCount)
 
       await clock.advance(by: .milliseconds(49))
 

@@ -157,6 +157,7 @@ children, and derived `SelectedStore` projections.
 - `EffectContext` is the canonical effect helper surface. Prefer `context.sleep(for:)` over raw `Task.sleep(...)` inside `.run`.
 - Cancellation is cooperative. Runtime teardown continues as best-effort async cleanup.
 - `EffectTask.concatenate` rechecks both task cancellation and the effect-sequence boundary before every child, including inside nested concatenations. Once cancellation is accepted, no remaining child starts.
+- Every throttle window owns one generation-scoped drain through its original deadline, including leading-only windows with no pending value. This bounds per-ID scope/window state, lets a later trailing request reuse the same deadline, and makes the active window visible to TestStore terminal verification without delaying leading-only effect ordering.
 - A reused trailing-throttle drain adopts the latest pending effect sequence and cancellation-ID ownership. Store and TestStore therefore apply stale ID/global cancellation to the same active throttle scope, while TestStore keeps one finish activity through post-fire recursion.
 - The runtime is designed to be deadlock-resistant and avoids coupling reducer semantics to middleware-style interception.
 

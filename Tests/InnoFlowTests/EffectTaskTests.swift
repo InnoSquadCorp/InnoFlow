@@ -103,7 +103,7 @@ struct EffectTaskTests {
   }
 
   @Test("EffectTask.throttle uses leading-only semantics")
-  func effectThrottleLeadingOnly() async {
+  func effectThrottleLeadingOnly() async throws {
     let clock = ManualTestClock()
     let store = TestStore(reducer: ThrottleFeature(), initialState: .init(), clock: clock)
 
@@ -114,12 +114,22 @@ struct EffectTaskTests {
     await store.send(.trigger(2))
     await store.assertNoBufferedActions()
 
-    await Task.yield()
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
     await clock.advance(by: .milliseconds(160))
     await store.send(.trigger(3))
     await store.receive(._emitted(3)) {
       $0.emitted = [1, 3]
     }
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
+    await clock.advance(by: .milliseconds(80))
     await store.finish()
   }
 
