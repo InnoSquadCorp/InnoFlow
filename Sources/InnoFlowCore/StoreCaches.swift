@@ -158,6 +158,12 @@ package final class CollectionScopeCacheBucket {
   package init(signature: CollectionScopeCacheSignature) {
     self.signature = signature
   }
+
+  package func removeStore(_ store: AnyObject, for id: AnyHashable) {
+    guard let cachedStore = storesByID[id], cachedStore === store else { return }
+    storesByID.removeValue(forKey: id)
+    offsetsByID.removeValue(forKey: id)
+  }
 }
 
 /// CollectionScopeCache pins one active projection signature to each
@@ -168,6 +174,7 @@ package final class CollectionScopeCacheBucket {
 /// - a matching signature reuses the complete row family
 /// - changing the child types or action-path identity replaces it
 /// - `storesByID` and `offsetsByID` are pruned to currently live collection ids
+/// - a row deactivation evicts its matching cache entry during the same parent refresh
 @MainActor
 package final class CollectionScopeCache {
   private var buckets: [AnyKeyPath: CollectionScopeCacheBucket] = [:]

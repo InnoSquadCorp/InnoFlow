@@ -123,7 +123,9 @@ expose the same tiered read contract:
   identity reuse the ID-keyed rows across source locations. A signature change
   replaces the complete cached family; existing external row handles keep
   their original action transform, while the parent never pins multiple path
-  families for one collection.
+  families for one collection. When an ID leaves the source collection, the
+  parent refresh immediately evicts that inactive row and its cached offset;
+  releasing the final external handle therefore needs no later scope pass.
 - Programming errors that are **not** lifecycle races still trap — in
   particular, constructing a `ScopedStore` whose state resolver returns `nil`
   at init time, and reading `ScopedStore.id` when the stable identifier type

@@ -184,6 +184,9 @@ extension Store {
         stableID: elementID,
         failureKind: .collectionEntryRemoved,
         observerRegistration: collectionProjectionRegistration(collection: collection),
+        onDeactivation: { [weak bucket] store in
+          bucket?.removeStore(store, for: elementID)
+        },
         actionTransform: { childAction in
           action(scopedElementID, childAction)
         }
@@ -319,6 +322,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package let observerRegistry = ProjectionObserverRegistry<ChildState>()
   @ObservationIgnored package let selectionCache = SelectionCache()
   @ObservationIgnored package var isActive = true
+  @ObservationIgnored private var onDeactivation: (@MainActor (AnyObject) -> Void)?
   @ObservationIgnored package nonisolated(unsafe) let stableID: AnyHashable?
   @ObservationIgnored private nonisolated let stableIDDebugDescription: String?
 
@@ -402,6 +406,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     stableID: AnyHashable? = nil,
     failureKind: ScopedStoreFailureKind = .parentReleased,
     observerRegistration: ProjectionObserverRegistration<ParentReducer.State> = .alwaysRefresh,
+    onDeactivation: (@MainActor (AnyObject) -> Void)? = nil,
     actionTransform: @escaping @Sendable (ChildAction) -> ParentReducer.Action
   ) {
     guard let initialState = stateResolver(parent.state) else {
@@ -420,6 +425,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     self.stableID = stableID
     self.stableIDDebugDescription = stableID.map(String.init(describing:))
     self.failureKind = failureKind
+    self.onDeactivation = onDeactivation
     self.actionTransform = actionTransform
     parent.registerProjectionObserver(self, registration: observerRegistration)
   }
@@ -457,6 +463,9 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
       // parent dispatch — that gap was previously unbounded when the parent
       // went quiescent after the deactivation.
       isActive = false
+      let onDeactivation = onDeactivation
+      self.onDeactivation = nil
+      onDeactivation?(self)
       observerRegistry.refreshAll()
       observerRegistry.pruneAllObservers()
       return true

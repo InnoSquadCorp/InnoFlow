@@ -202,6 +202,26 @@ struct CollectionScopeCacheTests {
     #expect(weakRow == nil)
   }
 
+  @Test("Removing a row releases its cached store without another scope pass")
+  func removalReleasesCachedRowWithoutRescoping() {
+    let store = Store(reducer: CollectionScopeCacheFeature(), initialState: .init())
+    weak var weakRow: RowStore?
+
+    do {
+      let rows = store.scope(
+        collection: \.rows,
+        action: CollectionScopeCacheFeature.Action.primaryActionPath
+      )
+      weakRow = rows[0]
+    }
+
+    #expect(weakRow != nil)
+
+    store.send(.removeRow(id: 0))
+
+    #expect(weakRow == nil)
+  }
+
   @Test("A stored collection action path shares its row family across call sites")
   func storedPathSharesFamilyAcrossCallsites() {
     let store = Store(reducer: CollectionScopeCacheFeature(), initialState: .init())

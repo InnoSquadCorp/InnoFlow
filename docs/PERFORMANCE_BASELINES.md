@@ -80,7 +80,10 @@ Macro-generated stored static paths keep the steady-state cache hot;
 generic/extension computed paths use a stable generated identity per
 specialized root action type and private per-member marker, so repeated access
 also keeps the active row family hot. Explicitly reconstructed paths remain
-intentional signature changes.
+intentional signature changes. When an ID disappears, its row and offset leave
+the active cache during the same parent refresh. Once external row handles are
+gone, an off-screen or otherwise quiescent view does not need to scope again to
+release removed-row state.
 
 Within the active family, a row resolves in O(1) when its cached offset still
 contains the same ID. If the ID moved, the resolver scans once by ID and updates

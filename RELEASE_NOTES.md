@@ -21,7 +21,9 @@ the READMEs until 5.0.0 is tagged.
    single-state scopes reuse a live projection only when source location,
    child types, state key path, and action-path identity match. Collection
    scopes retain one active row family per collection key path and replace the
-   family when its child types or action-path identity changes.
+   family when its child types or action-path identity changes. Removed IDs
+   evict their inactive row and cached offset during the same parent refresh,
+   without requiring another collection-scope call.
 4. Unifies projection lifecycle reads around optional, cached view-facing,
    and strict `requireAlive()` paths. `ScopedStore.debugDescription` no longer
    crosses the main-actor boundary for state or liveness reads.

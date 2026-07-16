@@ -28,7 +28,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   signature replaces the whole family instead of silently retaining an
   outdated action transform. Previously returned row handles keep their
   original routing, and the parent retains at most one active family per
-  collection key path.
+  collection key path. A row whose ID leaves the collection is now evicted
+  during the same parent refresh. After the final external row handle is
+  released, its state and selection cache can then deallocate without waiting
+  for another `scope(collection:action:)` call.
 - Macro-generated computed `CasePath` and `CollectionActionPath` accessors now
   recreate a stable identity from the specialized root action type and a
   private per-member marker. Generic and extension features therefore reuse
