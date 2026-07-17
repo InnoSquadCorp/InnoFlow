@@ -40,6 +40,11 @@ Boundary references:
 For stable framework guarantees that should not drift with scorecards or line counts, see
 [`ARCHITECTURE_CONTRACT.md`](./ARCHITECTURE_CONTRACT.md).
 
+Project stewardship is documented in [`GOVERNANCE.md`](GOVERNANCE.md).
+Before opening an issue or pull request, see [`SUPPORT.md`](SUPPORT.md),
+[`CONTRIBUTING.md`](CONTRIBUTING.md), the
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and [`SECURITY.md`](SECURITY.md).
+
 ## Why InnoFlow over TCA?
 
 TCA remains the stronger default when a team wants a broad application

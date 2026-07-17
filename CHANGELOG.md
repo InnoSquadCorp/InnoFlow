@@ -29,6 +29,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - `TestStore`'s deterministic action queue now returns exceptional burst
   storage above an estimated 64 KiB when it becomes empty, matching the
   production queue's lossless retained-memory policy.
+- The repository now publishes explicit support and governance contracts,
+  routes usage questions and private security reports through dedicated issue
+  paths, disables unstructured blank issues, and schedules SwiftPM dependency
+  updates alongside pinned GitHub Actions updates.
 - The 5.0 development line now requires Swift 6.3 or newer. The core package,
   compile-contract clients, canonical sample package, Xcode sample targets,
   and DocC workflow all build in the same Swift 6 toolchain contract.

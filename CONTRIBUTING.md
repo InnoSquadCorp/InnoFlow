@@ -8,6 +8,8 @@ Read these files first:
 - `ARCHITECTURE_REVIEW.md`
 - `CLAUDE.md`
 - `AGENTS.md`
+- `GOVERNANCE.md`
+- `SUPPORT.md`
 - `docs/MACRO_OPERATIONS.md` when changing macros, package topology, or CI
 
 Those files define the current framework contract.
@@ -71,6 +73,9 @@ xcodebuild -jobs 1 -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodepr
 Macro and package-topology changes must also pass
 `./scripts/check-macro-operations.sh`. The full principle gate includes this
 check and the external consumer compile contract.
+
+Community-health and repository-operation changes must pass
+`./scripts/check-community-health.sh`.
 
 ## Change quality
 

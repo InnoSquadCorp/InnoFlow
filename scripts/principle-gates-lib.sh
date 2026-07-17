@@ -942,6 +942,50 @@ run_macro_operations_checks() {
   fi
 }
 
+run_community_health_checks() {
+  ensure_principle_gate_context
+
+  echo "[principle-gates] Checking open-source community health"
+  local required_file
+  for required_file in \
+      LICENSE \
+      CODE_OF_CONDUCT.md \
+      CONTRIBUTING.md \
+      SECURITY.md \
+      SUPPORT.md \
+      GOVERNANCE.md \
+      .github/ISSUE_TEMPLATE/bug_report.md \
+      .github/ISSUE_TEMPLATE/feature_request.md \
+      .github/ISSUE_TEMPLATE/question.md \
+      .github/ISSUE_TEMPLATE/config.yml \
+      .github/PULL_REQUEST_TEMPLATE.md \
+      .github/dependabot.yml; do
+    if [[ ! -f "$required_file" ]]; then
+      echo "[principle-gates] Failed: required community file $required_file is missing"
+      exit 1
+    fi
+  done
+
+  if ! ruby -e 'require "yaml"; ARGV.each { |path| YAML.load_file(path) }' \
+      .github/ISSUE_TEMPLATE/config.yml .github/dependabot.yml; then
+    echo "[principle-gates] Failed: community YAML is invalid"
+    exit 1
+  fi
+
+  search_lines 'SUPPORT\.md' README.md CONTRIBUTING.md >/dev/null
+  search_lines 'GOVERNANCE\.md' README.md CONTRIBUTING.md >/dev/null
+  search_lines 'CODE_OF_CONDUCT\.md' README.md >/dev/null
+  search_lines 'SECURITY\.md' README.md >/dev/null
+  search_lines 'security/advisories/new' SECURITY.md SUPPORT.md .github/ISSUE_TEMPLATE/config.yml >/dev/null
+  search_lines 'initial acknowledgment within 7 calendar days' SECURITY.md >/dev/null
+  search_lines '^blank_issues_enabled:[[:space:]]*false$' .github/ISSUE_TEMPLATE/config.yml >/dev/null
+  search_lines '^name:[[:space:]]*Usage question$' .github/ISSUE_TEMPLATE/question.md >/dev/null
+  search_lines '^labels:[[:space:]]*question$' .github/ISSUE_TEMPLATE/question.md >/dev/null
+  search_lines 'package-ecosystem:[[:space:]]*github-actions' .github/dependabot.yml >/dev/null
+  search_lines 'package-ecosystem:[[:space:]]*swift' .github/dependabot.yml >/dev/null
+  search_lines '@Ethan-IS' GOVERNANCE.md >/dev/null
+}
+
 run_workflow_security_checks() {
   ensure_principle_gate_context
 
@@ -1099,6 +1143,7 @@ run_authoring_checks() {
   run_authoring_surface_checks "$@"
   run_authoring_policy_checks "$@"
   run_macro_operations_checks "$@"
+  run_community_health_checks "$@"
 }
 
 run_sample_contract_checks_impl() {
@@ -1117,6 +1162,7 @@ run_principle_gates_impl() {
   run_doc_contract_checks "$@"
   run_authoring_policy_checks "$@"
   run_macro_operations_checks "$@"
+  run_community_health_checks "$@"
   run_release_build_checks "$@"
   run_sample_runtime_contract_checks "$@"
   echo "[principle-gates] All checks passed"
