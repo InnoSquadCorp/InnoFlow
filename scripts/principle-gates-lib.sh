@@ -815,6 +815,12 @@ run_authoring_policy_checks() {
     exit 1
   fi
 
+  echo "[principle-gates] Checking unsafe isolation escapes"
+  if search_lines 'nonisolated\(unsafe\)|@preconcurrency' Sources; then
+    echo "[principle-gates] Failed: unsafe or compatibility isolation escape found in Sources"
+    exit 1
+  fi
+
   echo "[principle-gates] Checking macro maintainability split"
   local macro_entry="Sources/InnoFlowMacros/InnoFlowMacro.swift"
   if search_lines "@BindableField|diagnoseMissingBindableFieldSetters|BindableFieldDiagnostic" "$macro_entry"; then

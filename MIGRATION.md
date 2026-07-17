@@ -32,6 +32,9 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
   it through `scoped.requireAlive` are affected. The new real
   `ScopedStore.requireAlive()` method takes precedence over dynamic-member
   lookup, so that expression now resolves to a function value.
+- Consumers that read `ScopedStore.id` from a non-MainActor context are
+  affected. Its `Identifiable` conformance is now MainActor-isolated so the
+  underlying type-erased identifier never crosses executors unsafely.
 - Tests that relied on partial `TestStore` state assertions are affected.
   `TestStore.exhaustivity` now defaults to `.on`, and an omitted `send` or
   `receive` assertion closure means that the reducer must not change state.
@@ -183,6 +186,11 @@ failure in every build, replace `selected.someMember` with
 `scoped.requireAlive()`. Its existing `state` and dynamic-member reads retain
 the view-facing cached fallback, while `optionalState` remains the
 release-tolerant absence path.
+
+Read collection-scoped `ScopedStore.id` values on the MainActor. SwiftUI view
+bodies already satisfy this contract. Non-UI async code should obtain the ID
+inside `await MainActor.run { scoped.id }` and pass the resulting domain ID,
+not the scoped store itself, across executors.
 
 If child state already has a property named `requireAlive`, make that lookup
 explicit. Use `scoped.state.requireAlive` only in a SwiftUI view body that needs

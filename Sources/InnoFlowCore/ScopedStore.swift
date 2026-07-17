@@ -323,7 +323,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package let selectionCache = SelectionCache()
   @ObservationIgnored package var isActive = true
   @ObservationIgnored private var onDeactivation: (@MainActor (AnyObject) -> Void)?
-  @ObservationIgnored package nonisolated(unsafe) let stableID: AnyHashable?
+  @ObservationIgnored package let stableID: AnyHashable?
   @ObservationIgnored private nonisolated let stableIDDebugDescription: String?
 
   /// The current child state, falling back to the last cached snapshot
@@ -527,8 +527,8 @@ extension ScopedStore: CustomDebugStringConvertible {
   }
 }
 
-extension ScopedStore: Identifiable where ChildState: Identifiable {
-  public nonisolated var id: ChildState.ID {
+extension ScopedStore: @MainActor Identifiable where ChildState: Identifiable {
+  public var id: ChildState.ID {
     guard let id = stableID as? ChildState.ID else {
       preconditionFailure(
         scopedStoreFailureMessage(

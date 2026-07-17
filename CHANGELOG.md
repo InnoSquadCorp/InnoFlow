@@ -23,6 +23,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   effect lifecycle bookkeeping, and the `EffectDriver` conformance into bounded
   source files. The authoring gate prevents those responsibilities from
   collapsing back into the previous monolithic driver file.
+- `ScopedStore`'s `Identifiable` conformance and `id` access are now explicitly
+  MainActor-isolated. This removes the final production `nonisolated(unsafe)`
+  escape instead of carrying a non-Sendable `AnyHashable` across executors.
 - The 5.0 development line now requires Swift 6.3 or newer. The core package,
   compile-contract clients, canonical sample package, Xcode sample targets,
   and DocC workflow all build in the same Swift 6 toolchain contract.

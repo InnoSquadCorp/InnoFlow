@@ -26,7 +26,9 @@ the READMEs until 5.0.0 is tagged.
    without requiring another collection-scope call.
 4. Unifies projection lifecycle reads around optional, cached view-facing,
    and strict `requireAlive()` paths. `ScopedStore.debugDescription` no longer
-   crosses the main-actor boundary for state or liveness reads.
+   crosses the main-actor boundary for state or liveness reads. Its
+   `Identifiable` conformance and `id` access are MainActor-isolated, removing
+   the previous unsafe type-erased identity escape.
 5. Makes run, merge, concatenate, debounce, and throttle cancellation
    sequence-specific in both `Store` and `TestStore`. Delayed cancellation
    from older work no longer terminates a newer effect registered under the
@@ -108,6 +110,9 @@ with the retest steps and the gate that warns on Swift 6.4+.
 - Use `optionalState` / `optionalValue` for release-tolerant non-UI reads and
   `requireAlive()` when a dead projection is a programming error. Resolve child
   properties named `requireAlive` through an explicit state access path.
+- Read `ScopedStore.id` on the MainActor. SwiftUI view bodies already do this;
+  non-UI async work can capture the domain ID with `await MainActor.run` before
+  crossing executors.
 - Add complete state assertions to every mutating `send` and `receive`, receive
   every effect action, and end tests with `finish()`. For intentionally partial
   tests, set `store.exhaustivity = .off` (or enable skipped-assertion warnings).

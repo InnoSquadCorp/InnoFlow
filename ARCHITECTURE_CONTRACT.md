@@ -129,7 +129,10 @@ expose the same tiered read contract:
 - Programming errors that are **not** lifecycle races still trap — in
   particular, constructing a `ScopedStore` whose state resolver returns `nil`
   at init time, and reading `ScopedStore.id` when the stable identifier type
-  does not match the child state's `Identifiable.ID`.
+  does not match the child state's `Identifiable.ID`. `ScopedStore` and its
+  `Identifiable` conformance are MainActor-isolated; read collection projection
+  IDs on that actor rather than moving their type-erased storage across
+  executors.
 
 **Recommended for new code:** use `optionalState` / `optionalValue` or
 `isAlive` for release-tolerant non-UI handling. Reserve `ScopedStore.state` and
