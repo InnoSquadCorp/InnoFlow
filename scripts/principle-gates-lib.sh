@@ -827,6 +827,36 @@ run_authoring_policy_checks() {
     echo "[principle-gates] Failed: $macro_entry must stay under 300 lines (found $macro_entry_loc)"
     exit 1
   fi
+
+  echo "[principle-gates] Checking TestStore effect-driver responsibility split"
+  local test_store_driver="Sources/InnoFlowTesting/TestStore+EffectDriver.swift"
+  local test_store_support_file
+  for test_store_support_file in \
+      "Sources/InnoFlowTesting/TestStore+EffectLifecycle.swift" \
+      "Sources/InnoFlowTesting/TestStoreActionQueue.swift" \
+      "Sources/InnoFlowTesting/TestStoreRunSupport.swift"; do
+    if [[ ! -f "$test_store_support_file" ]]; then
+      echo "[principle-gates] Failed: $test_store_support_file is missing"
+      exit 1
+    fi
+  done
+  if search_lines 'class ActionQueue|class TestStoreRunEndpoint|actor TestStoreRunBridge|func startRunTask' "$test_store_driver"; then
+    echo "[principle-gates] Failed: TestStore support responsibilities leaked back into $test_store_driver"
+    exit 1
+  fi
+  local test_store_file
+  local test_store_loc
+  for test_store_file in \
+      "$test_store_driver" \
+      "Sources/InnoFlowTesting/TestStore+EffectLifecycle.swift" \
+      "Sources/InnoFlowTesting/TestStoreActionQueue.swift" \
+      "Sources/InnoFlowTesting/TestStoreRunSupport.swift"; do
+    test_store_loc="$(wc -l < "$test_store_file" | tr -d ' ')"
+    if [[ "$test_store_loc" -gt 360 ]]; then
+      echo "[principle-gates] Failed: $test_store_file must stay under 360 lines (found $test_store_loc)"
+      exit 1
+    fi
+  done
 }
 
 run_macro_operations_checks() {

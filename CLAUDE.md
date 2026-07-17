@@ -317,7 +317,11 @@ InnoFlow/
 │   └── InnoFlowTesting/
 │       ├── TestStore.swift
 │       ├── TestStore+Public.swift
+│       ├── TestStore+EffectDriver.swift      # EffectDriver conformance only
+│       ├── TestStore+EffectLifecycle.swift   # task and delayed-effect ownership
 │       ├── TestStore+Finish.swift
+│       ├── TestStoreActionQueue.swift        # deterministic test action delivery
+│       ├── TestStoreRunSupport.swift         # run endpoint, bridge, and start gate
 │       ├── ScopedTestStore.swift
 │       └── ManualTestClock.swift
 └── Examples/InnoFlowSampleApp/

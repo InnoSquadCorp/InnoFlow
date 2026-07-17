@@ -19,6 +19,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   sandbox policy, cache keys, and the intentional `InnoFlowCore` recovery
   boundary. CI, release gates, compile-contract tests, and principle gates now
   verify that recovery path instead of leaving it as prose.
+- `InnoFlowTesting` now separates deterministic action delivery, run support,
+  effect lifecycle bookkeeping, and the `EffectDriver` conformance into bounded
+  source files. The authoring gate prevents those responsibilities from
+  collapsing back into the previous monolithic driver file.
 - The 5.0 development line now requires Swift 6.3 or newer. The core package,
   compile-contract clients, canonical sample package, Xcode sample targets,
   and DocC workflow all build in the same Swift 6 toolchain contract.
