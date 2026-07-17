@@ -2,19 +2,17 @@
 
 This document defines the minimum release quality bar for InnoFlow.
 
-Current stable public release target: `4.0.0`
+Current stable public release target: `5.0.0`
 
-The `main` branch is the 5.0 development line. Keep installation snippets and
-tag-enforced release metadata on 4.0.0 until the 5.0.0 release is deliberately
-staged and tagged.
+The `main` branch contains the staged 5.0.0 release contract. Installation
+snippets and tag-enforced release metadata must remain aligned with the exact
+stable tag.
 
-## Stable 4.0.0 and 5.0 development readiness
+## Stable 5.0.0 release readiness
 
-The published 4.0.0 release tag is exactly `4.0.0`; do not create or document a
-`v4.0.0` tag. Local validation proves that the stable surface remains
-internally consistent while 5.0 work continues on `main`. A future release is
-publish-ready only after its exact tag triggers a successful GitHub Actions
-`Release Gate`.
+The 5.0.0 release tag is exactly `5.0.0`; do not create or document a `v5.0.0`
+tag. A release is publish-ready only after its exact tag triggers a successful
+GitHub Actions `Release Gate`.
 
 For the current development line, and again before creating the next release
 tag, run and confirm:
@@ -33,11 +31,11 @@ To audit the currently published stable tag locally, release-tag enforcement
 must also pass:
 
 ```bash
-INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=4.0.0 scripts/check-release-sync.sh
+INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=5.0.0 scripts/check-release-sync.sh
 ```
 
-That command intentionally requires the actual local tag name to be `4.0.0`.
-It must not normalize or accept `v4.0.0`.
+That command intentionally requires the actual local tag name to be `5.0.0`.
+It must not normalize or accept `v5.0.0`.
 
 ## Release Checklist
 

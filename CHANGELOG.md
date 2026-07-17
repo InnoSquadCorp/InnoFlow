@@ -7,6 +7,8 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-07-17
+
 ### Changed
 
 - `StoreActionQueue` now compacts consumed prefixes during long drains and
@@ -33,7 +35,7 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   routes usage questions and private security reports through dedicated issue
   paths, disables unstructured blank issues, and schedules SwiftPM dependency
   updates alongside pinned GitHub Actions updates.
-- The 5.0 development line now requires Swift 6.3 or newer. The core package,
+- InnoFlow 5.0.0 requires Swift 6.3 or newer. The core package,
   compile-contract clients, canonical sample package, Xcode sample targets,
   and DocC workflow all build in the same Swift 6 toolchain contract.
 - `@InnoFlow` now propagates `public` and `package` access to its synthesized

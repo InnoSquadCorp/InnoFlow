@@ -1,13 +1,12 @@
 # InnoFlow Release Notes
 
-## 5.0.0 (in development)
+## 5.0.0 Release
 
-The 5.0 development line makes testing and store projections stricter by
+InnoFlow 5.0.0 makes testing and store projections stricter by
 default. `TestStore` now verifies complete state transitions and every
 effect-emitted action, while live single-state and collection scopes have
 explicit identity and lifecycle contracts. The package requires Swift 6.3 or
-newer; 4.0.0 remains the latest stable release and the installation target in
-the READMEs until 5.0.0 is tagged.
+newer, and the READMEs install the stable 5.0.0 release.
 
 ### Changed
 

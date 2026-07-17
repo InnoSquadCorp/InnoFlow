@@ -2,11 +2,11 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
-## 5.0.0 (in development)
+## 5.0.0
 
 ### Who is affected
 
-- Consumers building the 5.0 development line with a Swift toolchain older
+- Consumers upgrading to 5.0.0 with a Swift toolchain older
   than 6.3 are affected. All package targets now compile in Swift 6 language
   mode under the Swift 6.3 toolchain contract.
 - Ordinary `store.scope(state:action:)` call sites are source-compatible and

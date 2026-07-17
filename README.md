@@ -6,7 +6,7 @@ English | [한국어](./README.kr.md) | [日本語](./README.jp.md) | [简体中
 
 InnoFlow is a SwiftUI-first unidirectional architecture framework for business and domain state transitions.
 
-## InnoFlow 5.0.0 development direction
+## InnoFlow 5.0.0
 
 The framework now treats the following as source-of-truth principles:
 
@@ -30,7 +30,7 @@ Boundary references:
 - [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bridges dependencies, instrumentation, and cross-framework boundaries for non-trivial features
 - [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
 - [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
-- [`MIGRATION.md`](MIGRATION.md) for current 5.0 development changes and prior release migrations
+- [`MIGRATION.md`](MIGRATION.md) for 5.0.0 changes and prior release migrations
 - [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md) for `.sink`, `.osLog`, `.signpost`, and `.combined` examples
 - [`docs/PERFORMANCE_BASELINES.md`](docs/PERFORMANCE_BASELINES.md) for maintainer baseline policy
 - [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for TCA, ReactorKit, ReSwift, and SwiftRex positioning
@@ -60,16 +60,15 @@ longer comparison against TCA, ReactorKit, ReSwift, and SwiftRex.
 
 ## Installation
 
-The 5.0 development line requires a Swift 6.3 or newer toolchain and compiles
-all package targets in Swift 6 language mode. The canonical sample and DocC
-workflow use the same toolchain contract. Until 5.0.0 is tagged, the package
-dependency below continues to point at the latest stable release, 4.0.0.
+InnoFlow 5.0.0 requires a Swift 6.3 or newer toolchain and compiles all package
+targets in Swift 6 language mode. The canonical sample and DocC workflow use
+the same toolchain contract.
 
 ### Swift Package Manager
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "4.0.0")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "5.0.0")
 ]
 ```
 
