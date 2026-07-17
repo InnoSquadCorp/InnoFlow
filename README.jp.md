@@ -64,12 +64,15 @@ runtime-only の non-UI feature/domain target は `InnoFlowCore` だけに依存
 `@InnoFlow` macro を使う target は `InnoFlow` に直接依存する必要があります。
 SwiftUI app target は `InnoFlowSwiftUI` も依存に追加して、`Store.binding`,
 `ScopedStore.binding`, `Store.preview`, `EffectTask.animation(Animation?)` を使います。
+compiler-plugin trust、SwiftSyntax prebuilt fallback、CI flag、`InnoFlowCore`
+recovery path は [`Macro Operations`](./docs/MACRO_OPERATIONS.md) を参照してください。
 
 ## 主要リンク
 
 - [English README](./README.md)
 - [Architecture Contract](./ARCHITECTURE_CONTRACT.md)
 - [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
+- [Macro Operations](./docs/MACRO_OPERATIONS.md)
 - [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
 - [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md)
 - [Phase-Driven Modeling](./PHASE_DRIVEN_MODELING.md)

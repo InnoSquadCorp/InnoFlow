@@ -14,6 +14,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   without dropping or reordering actions. `StoreInstrumentation` and its
   metrics collector now expose per-drain processed counts, pending/storage
   high-water marks, retained bytes, and excess-capacity release counts.
+- Macro-first operation now has a public consumer runbook covering the exact
+  SwiftSyntax pin, compiler-plugin trust, source-built prebuilt fallback,
+  sandbox policy, cache keys, and the intentional `InnoFlowCore` recovery
+  boundary. CI, release gates, compile-contract tests, and principle gates now
+  verify that recovery path instead of leaving it as prose.
 - The 5.0 development line now requires Swift 6.3 or newer. The core package,
   compile-contract clients, canonical sample package, Xcode sample targets,
   and DocC workflow all build in the same Swift 6 toolchain contract.

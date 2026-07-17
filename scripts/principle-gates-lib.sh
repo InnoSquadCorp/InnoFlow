@@ -829,6 +829,83 @@ run_authoring_policy_checks() {
   fi
 }
 
+run_macro_operations_checks() {
+  ensure_principle_gate_context
+
+  echo "[principle-gates] Checking macro-first consumer operations"
+  local operations_doc="docs/MACRO_OPERATIONS.md"
+  local syntax_version
+
+  if [[ ! -f "$operations_doc" ]]; then
+    echo "[principle-gates] Failed: $operations_doc is missing"
+    exit 1
+  fi
+
+  syntax_version="$(
+    sed -nE 's/.*swift-syntax\.git", exact: "([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' Package.swift
+  )"
+  if [[ -z "$syntax_version" ]]; then
+    echo "[principle-gates] Failed: Package.swift must use an exact swift-syntax version"
+    exit 1
+  fi
+  if ! grep -F "$syntax_version" "$operations_doc" >/dev/null; then
+    echo "[principle-gates] Failed: $operations_doc must document swift-syntax $syntax_version"
+    exit 1
+  fi
+
+  if ! search_multiline 'name: "InnoFlowCore"[\s\S]{0,160}dependencies: \[\]' Package.swift >/dev/null; then
+    echo "[principle-gates] Failed: InnoFlowCore must remain independent of macro targets"
+    exit 1
+  fi
+  if ! search_multiline 'name: "InnoFlow"[\s\S]{0,180}"InnoFlowCore"[\s\S]{0,120}"InnoFlowMacros"' Package.swift >/dev/null; then
+    echo "[principle-gates] Failed: InnoFlow must connect the core runtime and macro target"
+    exit 1
+  fi
+
+  local required_text
+  for required_text in \
+      'swift build --disable-experimental-prebuilts --product InnoFlow' \
+      'swift test --disable-experimental-prebuilts' \
+      '-skipMacroValidation' \
+      '-skipPackagePluginValidation' \
+      '--disable-sandbox' \
+      'InnoFlowCore'; do
+    if ! grep -F -- "$required_text" "$operations_doc" >/dev/null; then
+      echo "[principle-gates] Failed: $operations_doc must document $required_text"
+      exit 1
+    fi
+  done
+
+  local readme_file
+  for readme_file in README.md README.kr.md README.jp.md README.cn.md; do
+    if ! grep -F 'docs/MACRO_OPERATIONS.md' "$readme_file" >/dev/null; then
+      echo "[principle-gates] Failed: $readme_file must link to $operations_doc"
+      exit 1
+    fi
+  done
+
+  if ! grep -F -- '--disable-experimental-prebuilts' .github/workflows/ci.yml >/dev/null; then
+    echo "[principle-gates] Failed: CI must verify the source-built SwiftSyntax fallback"
+    exit 1
+  fi
+  if ! grep -F -- '--disable-experimental-prebuilts' .github/workflows/cd.yml >/dev/null; then
+    echo "[principle-gates] Failed: the release gate must verify the source-built SwiftSyntax fallback"
+    exit 1
+  fi
+  if ! search_multiline 'func exportedMacroFeaturesWorkAcrossTargetBoundaries[\s\S]{0,16000}"--disable-experimental-prebuilts"' Tests/InnoFlowTests/CompileContractTests.swift >/dev/null; then
+    echo "[principle-gates] Failed: the external macro consumer must exercise the source-built fallback"
+    exit 1
+  fi
+  if search_lines '--disable-sandbox' .github/workflows >/dev/null; then
+    echo "[principle-gates] Failed: CI must preserve the compiler-plugin sandbox"
+    exit 1
+  fi
+  if search_lines '-skipPackagePluginValidation' .github/workflows >/dev/null; then
+    echo "[principle-gates] Failed: CI must not bypass validation for every package plugin"
+    exit 1
+  fi
+}
+
 run_workflow_security_checks() {
   ensure_principle_gate_context
 
@@ -985,6 +1062,7 @@ run_sample_runtime_contract_checks() {
 run_authoring_checks() {
   run_authoring_surface_checks "$@"
   run_authoring_policy_checks "$@"
+  run_macro_operations_checks "$@"
 }
 
 run_sample_contract_checks_impl() {
@@ -1002,6 +1080,7 @@ run_principle_gates_impl() {
   run_sample_static_contract_checks "$@"
   run_doc_contract_checks "$@"
   run_authoring_policy_checks "$@"
+  run_macro_operations_checks "$@"
   run_release_build_checks "$@"
   run_sample_runtime_contract_checks "$@"
   echo "[principle-gates] All checks passed"

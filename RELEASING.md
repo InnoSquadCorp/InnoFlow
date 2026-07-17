@@ -22,10 +22,12 @@ tag, run and confirm:
 1. Main package tests: `swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
 2. Release package tests: `swift test -c release --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
 3. Sample package tests: `swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1 -Xswiftc -warnings-as-errors`
-4. DocC generation: `Tools/generate-docc.sh` (exact `swift-docc-plugin` 1.5.0)
-5. Release sync: `scripts/check-release-sync.sh`
-6. Doc parity: `scripts/check-doc-parity.sh`
-7. Full principle gates: `scripts/principle-gates.sh`
+4. Macro source fallback: `swift build --disable-experimental-prebuilts --product InnoFlow --jobs 1 -Xswiftc -warnings-as-errors`
+5. Macro operations contract: `scripts/check-macro-operations.sh`
+6. DocC generation: `Tools/generate-docc.sh` (exact `swift-docc-plugin` 1.5.0)
+7. Release sync: `scripts/check-release-sync.sh`
+8. Doc parity: `scripts/check-doc-parity.sh`
+9. Full principle gates: `scripts/principle-gates.sh`
 
 To audit the currently published stable tag locally, release-tag enforcement
 must also pass:
@@ -56,6 +58,7 @@ Before tagging a release:
 9. Confirm the GitHub Actions `Release Gate` workflow will run from the intended tag.
 10. Confirm tag-triggered release gates run [scripts/principle-gates.sh](scripts/principle-gates.sh) with release-tag enforcement enabled.
 11. Confirm the matching `## [<tag>]` section exists in [CHANGELOG.md](CHANGELOG.md); the release workflow publishes that body automatically.
+12. Confirm the macro source-fallback workflow passes and the consumer runbook in [docs/MACRO_OPERATIONS.md](docs/MACRO_OPERATIONS.md) matches the release toolchain.
 
 ## GitHub Release Notes
 
@@ -89,6 +92,7 @@ If a release changes package-consumer behavior or authoring contracts, update th
 2. Running the macro test suite and compile-contract tests with warnings as errors.
 3. Running `swift format lint --strict --recursive Sources Tests Examples` with the Swift toolchain used by CI.
 4. Updating macro diagnostic expectations, migration notes, or release notes when the public authoring surface changes.
+5. Building the external macro consumer and `InnoFlow` product with `--disable-experimental-prebuilts`.
 
 ## Swift-DocC Plugin Upgrade Policy
 

@@ -94,6 +94,10 @@ depend on `InnoFlowSwiftUI`, which provides
 SwiftUI. `InnoFlowSwiftUI` and `InnoFlowTesting` reexport `InnoFlowCore`, but
 macro users must still import `InnoFlow` directly.
 
+For compiler-plugin trust, SwiftSyntax prebuilt fallback, sandbox policy, CI
+flags, cache keys, and the intentional `InnoFlowCore` recovery path, see
+[`docs/MACRO_OPERATIONS.md`](docs/MACRO_OPERATIONS.md).
+
 ### Known toolchain workarounds (Swift 6.3)
 
 `Store.deinit` and `TestStore.deinit` are annotated with `@_optimize(none)` to

@@ -8,6 +8,7 @@ Read these files first:
 - `ARCHITECTURE_REVIEW.md`
 - `CLAUDE.md`
 - `AGENTS.md`
+- `docs/MACRO_OPERATIONS.md` when changing macros, package topology, or CI
 
 Those files define the current framework contract.
 
@@ -66,6 +67,10 @@ swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --
 xcodebuild -jobs 1 -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 ./scripts/principle-gates.sh
 ```
+
+Macro and package-topology changes must also pass
+`./scripts/check-macro-operations.sh`. The full principle gate includes this
+check and the external consumer compile contract.
 
 ## Change quality
 

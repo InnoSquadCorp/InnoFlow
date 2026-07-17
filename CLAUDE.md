@@ -28,6 +28,12 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
 6. `BindableProperty` is a low-level storage type — never authored directly in public features.
 7. InnoFlow owns business/domain transitions only.
 
+Macro-first means `@InnoFlow` is the canonical feature-authoring path, while
+`InnoFlowCore` remains a deliberate compiler-plugin-free runtime and recovery
+boundary. Keep plugin trust, SwiftSyntax fallback, sandbox, and CI guidance in
+`docs/MACRO_OPERATIONS.md`, and enforce that contract with
+`scripts/check-macro-operations.sh`.
+
 Cross-framework ownership:
 
 - The app boundary or another navigation layer owns concrete route stacks and navigation transitions.

@@ -35,6 +35,15 @@ jobs:
             --no-parallel \
             -Xswiftc -warnings-as-errors
 
+      - name: Verify macro source fallback
+        run: |
+          set -eo pipefail
+          swift build \
+            --product InnoFlow \
+            --disable-experimental-prebuilts \
+            --jobs 1 \
+            -Xswiftc -warnings-as-errors
+
       - name: Run sample package tests
         run: |
           set -eo pipefail

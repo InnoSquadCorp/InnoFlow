@@ -53,6 +53,16 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Verify macro source fallback
+        run: |
+          set -eo pipefail
+          swift build \
+            --package-path "$GITHUB_WORKSPACE" \
+            --product InnoFlow \
+            --disable-experimental-prebuilts \
+            --jobs 1 \
+            -Xswiftc -warnings-as-errors
+
       - name: Run package tests
         run: |
           set -eo pipefail

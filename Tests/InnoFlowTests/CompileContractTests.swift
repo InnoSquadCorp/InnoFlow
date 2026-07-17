@@ -443,7 +443,9 @@ struct CompileContractTests {
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
-  @Test("Public and package InnoFlow macro features work across target boundaries")
+  @Test(
+    "Public and package InnoFlow macro features work across target boundaries with source fallback"
+  )
   func exportedMacroFeaturesWorkAcrossTargetBoundaries() throws {
     let packageRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -713,6 +715,7 @@ struct CompileContractTests {
         buildPath.path,
         "--product",
         "PublicMacroClient",
+        "--disable-experimental-prebuilts",
       ]
     )
 
