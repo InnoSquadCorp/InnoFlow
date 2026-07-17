@@ -17,6 +17,12 @@ public struct StoreInstrumentationMetricsSnapshot: Sendable, Equatable {
   public var runFailed: Int = 0
   public var actionEmitted: Int = 0
   public var actionDropped: Int = 0
+  public var actionQueueDrains: Int = 0
+  public var actionQueueActionsProcessed: Int = 0
+  public var actionQueuePendingHighWaterMark: Int = 0
+  public var actionQueueStorageHighWaterMark: Int = 0
+  public var actionQueueCapacityReleases: Int = 0
+  public var actionQueueLastRetainedByteEstimate: Int = 0
   public var effectsCancelled: Int = 0
 
   public init() {}
@@ -27,6 +33,12 @@ public struct StoreInstrumentationMetricsSnapshot: Sendable, Equatable {
     runFailed: Int = 0,
     actionEmitted: Int = 0,
     actionDropped: Int = 0,
+    actionQueueDrains: Int = 0,
+    actionQueueActionsProcessed: Int = 0,
+    actionQueuePendingHighWaterMark: Int = 0,
+    actionQueueStorageHighWaterMark: Int = 0,
+    actionQueueCapacityReleases: Int = 0,
+    actionQueueLastRetainedByteEstimate: Int = 0,
     effectsCancelled: Int = 0
   ) {
     self.runStarted = runStarted
@@ -34,6 +46,12 @@ public struct StoreInstrumentationMetricsSnapshot: Sendable, Equatable {
     self.runFailed = runFailed
     self.actionEmitted = actionEmitted
     self.actionDropped = actionDropped
+    self.actionQueueDrains = actionQueueDrains
+    self.actionQueueActionsProcessed = actionQueueActionsProcessed
+    self.actionQueuePendingHighWaterMark = actionQueuePendingHighWaterMark
+    self.actionQueueStorageHighWaterMark = actionQueueStorageHighWaterMark
+    self.actionQueueCapacityReleases = actionQueueCapacityReleases
+    self.actionQueueLastRetainedByteEstimate = actionQueueLastRetainedByteEstimate
     self.effectsCancelled = effectsCancelled
   }
 }
@@ -99,6 +117,19 @@ public final class StoreInstrumentationMetricsCollector<Action: Sendable>: Senda
           snapshot.actionEmitted += 1
         case .actionDropped:
           snapshot.actionDropped += 1
+        case .actionQueueDrained(let event):
+          snapshot.actionQueueDrains += 1
+          snapshot.actionQueueActionsProcessed += event.processedActionCount
+          snapshot.actionQueuePendingHighWaterMark = max(
+            snapshot.actionQueuePendingHighWaterMark,
+            event.pendingActionHighWaterMark
+          )
+          snapshot.actionQueueStorageHighWaterMark = max(
+            snapshot.actionQueueStorageHighWaterMark,
+            event.storageHighWaterMark
+          )
+          snapshot.actionQueueCapacityReleases += event.didReleaseExcessCapacity ? 1 : 0
+          snapshot.actionQueueLastRetainedByteEstimate = event.retainedByteEstimate
         case .effectsCancelled:
           snapshot.effectsCancelled += 1
         }

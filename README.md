@@ -529,8 +529,12 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .combined(
       metrics.increment("feature.effect.emitted", tags: ["action": "\(actionEvent.action)"])
     case .actionDropped(let actionEvent):
       metrics.increment("feature.effect.dropped", tags: ["reason": "\(actionEvent.reason)"])
+    case .actionQueueDrained(let queueEvent):
+      metrics.gauge("feature.action_queue.high_water", value: queueEvent.pendingActionHighWaterMark)
     case .effectsCancelled:
       metrics.increment("feature.effect.cancelled")
+    case .runFailed:
+      metrics.increment("feature.effect.failed")
     }
   }
 )
@@ -548,6 +552,11 @@ Store dispatch is queue-based.
 - `.run` emits actions after its async boundary, and those actions re-enter the same queue.
 - `.concatenate` preserves declared effect order.
 - `.merge` observes child completion order, not declaration order.
+- The queue never drops or collapses actions. It compacts consumed prefixes during long drains and
+  retains at most 64 KiB of reusable queue storage after a drain; larger allocations are released.
+- `StoreInstrumentation.ActionQueueEvent` reports per-drain pending/storage high-water marks and
+  whether excess retained capacity was released. Use domain-level throttle, debounce, or batching
+  when the pending high-water indicates producer back-pressure.
 
 ## Phase Validation
 

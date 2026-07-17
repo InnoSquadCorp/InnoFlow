@@ -64,11 +64,34 @@ let store = Store(
 let snap = metrics.snapshot()
 metricsBackend.gauge("innoflow.run.failed", value: snap.runFailed)
 metricsBackend.gauge("innoflow.action.dropped", value: snap.actionDropped)
+metricsBackend.gauge(
+  "innoflow.action_queue.pending_high_water",
+  value: snap.actionQueuePendingHighWaterMark
+)
+metricsBackend.gauge(
+  "innoflow.action_queue.retained_bytes",
+  value: snap.actionQueueLastRetainedByteEstimate
+)
 ```
 
 The collector is intentionally optional. If you already ship a vendor SDK
 (Datadog, Prometheus, swift-metrics) prefer the `.sink { event in ... }`
 adapter and emit counters directly into that backend.
+
+## Action Queue Pressure
+
+Every lossless queue drain emits one `ActionQueueEvent`. The pending high-water
+mark is the maximum number of actions waiting for reducer work at once. The
+storage high-water mark also counts consumed elements that had not yet been
+compacted from contiguous storage, so it is useful when investigating memory
+bursts. `didReleaseExcessCapacity` reports when a drain exceeded the 64 KiB
+post-drain retention budget and returned that allocation to the allocator.
+
+The budget limits only reusable storage retained between drains. In-flight
+actions are never dropped or capped because the runtime cannot infer which
+domain events are safe to collapse. If pending high-water grows unexpectedly,
+apply `EffectTask.throttle`, `EffectTask.debounce`, batching, or aggregation at
+the domain boundary that owns those semantics.
 
 ## Phase Map Violations
 

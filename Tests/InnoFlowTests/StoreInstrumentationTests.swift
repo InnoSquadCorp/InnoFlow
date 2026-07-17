@@ -238,6 +238,8 @@ struct StoreInstrumentationTests {
           probe.record("emit:\(actionEvent.action)")
         case .actionDropped:
           probe.record("dropped")
+        case .actionQueueDrained(let queueEvent):
+          probe.record("queue:\(queueEvent.processedActionCount)")
         case .effectsCancelled:
           probe.record("cancelled")
         }
@@ -249,7 +251,8 @@ struct StoreInstrumentationTests {
       probe.events.last == "run-finished"
     }
 
-    #expect(probe.events.first == "run-started")
+    #expect(probe.events.contains("run-started"))
+    #expect(probe.events.contains("queue:1"))
     #expect(probe.events.contains("emit:_loaded(\"Hello, InnoFlow\")"))
     #expect(probe.events.last == "run-finished")
   }

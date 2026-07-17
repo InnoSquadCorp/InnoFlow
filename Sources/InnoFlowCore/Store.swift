@@ -145,7 +145,18 @@ public final class Store<R: Reducer> {
     guard actionQueue.beginDrain() else { return }
 
     defer {
-      actionQueue.finishDrain()
+      let snapshot = actionQueue.finishDrain()
+      instrumentation.didDrainActionQueue(
+        .init(
+          processedActionCount: snapshot.processedActionCount,
+          pendingActionHighWaterMark: snapshot.pendingActionHighWaterMark,
+          storageHighWaterMark: snapshot.storageHighWaterMark,
+          retainedCapacity: snapshot.retainedCapacity,
+          retainedByteEstimate: snapshot.retainedByteEstimate,
+          retentionBudgetBytes: storeActionQueueRetainedStorageBudget,
+          didReleaseExcessCapacity: snapshot.didReleaseExcessCapacity
+        )
+      )
     }
 
     while let queuedAction = actionQueue.next() {

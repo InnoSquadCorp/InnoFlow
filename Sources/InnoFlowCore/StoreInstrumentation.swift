@@ -48,6 +48,7 @@ public enum StoreInstrumentationEvent<Action: Sendable>: Sendable {
   case runFailed(StoreInstrumentation<Action>.RunFailedEvent)
   case actionEmitted(StoreInstrumentation<Action>.ActionEvent)
   case actionDropped(StoreInstrumentation<Action>.ActionDropEvent)
+  case actionQueueDrained(StoreInstrumentation<Action>.ActionQueueEvent)
   case effectsCancelled(StoreInstrumentation<Action>.CancellationEvent)
 }
 
@@ -193,11 +194,45 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     }
   }
 
+  /// A lossless action-queue drain completed.
+  ///
+  /// `pendingActionHighWaterMark` measures reducer work waiting at once, while
+  /// `storageHighWaterMark` includes already-processed elements that had not
+  /// yet been compacted out of the queue's contiguous storage.
+  public struct ActionQueueEvent: Sendable, Equatable {
+    public let processedActionCount: Int
+    public let pendingActionHighWaterMark: Int
+    public let storageHighWaterMark: Int
+    public let retainedCapacity: Int
+    public let retainedByteEstimate: Int
+    public let retentionBudgetBytes: Int
+    public let didReleaseExcessCapacity: Bool
+
+    public init(
+      processedActionCount: Int,
+      pendingActionHighWaterMark: Int,
+      storageHighWaterMark: Int,
+      retainedCapacity: Int,
+      retainedByteEstimate: Int,
+      retentionBudgetBytes: Int,
+      didReleaseExcessCapacity: Bool
+    ) {
+      self.processedActionCount = processedActionCount
+      self.pendingActionHighWaterMark = pendingActionHighWaterMark
+      self.storageHighWaterMark = storageHighWaterMark
+      self.retainedCapacity = retainedCapacity
+      self.retainedByteEstimate = retainedByteEstimate
+      self.retentionBudgetBytes = retentionBudgetBytes
+      self.didReleaseExcessCapacity = didReleaseExcessCapacity
+    }
+  }
+
   public var didStartRun: @Sendable (RunEvent) -> Void
   public var didFinishRun: @Sendable (RunEvent) -> Void
   public var didFailRun: @Sendable (RunFailedEvent) -> Void
   public var didEmitAction: @Sendable (ActionEvent) -> Void
   public var didDropAction: @Sendable (ActionDropEvent) -> Void
+  public var didDrainActionQueue: @Sendable (ActionQueueEvent) -> Void
   public var didCancelEffects: @Sendable (CancellationEvent) -> Void
 
   public init(
@@ -206,6 +241,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     didFailRun: @escaping @Sendable (RunFailedEvent) -> Void = { _ in },
     didEmitAction: @escaping @Sendable (ActionEvent) -> Void = { _ in },
     didDropAction: @escaping @Sendable (ActionDropEvent) -> Void = { _ in },
+    didDrainActionQueue: @escaping @Sendable (ActionQueueEvent) -> Void = { _ in },
     didCancelEffects: @escaping @Sendable (CancellationEvent) -> Void = { _ in }
   ) {
     self.didStartRun = didStartRun
@@ -213,6 +249,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     self.didFailRun = didFailRun
     self.didEmitAction = didEmitAction
     self.didDropAction = didDropAction
+    self.didDrainActionQueue = didDrainActionQueue
     self.didCancelEffects = didCancelEffects
   }
 
@@ -229,6 +266,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       didFailRun: { receive(.runFailed($0)) },
       didEmitAction: { receive(.actionEmitted($0)) },
       didDropAction: { receive(.actionDropped($0)) },
+      didDrainActionQueue: { receive(.actionQueueDrained($0)) },
       didCancelEffects: { receive(.effectsCancelled($0)) }
     )
   }
@@ -266,6 +304,11 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       didDropAction: { event in
         for instrumentation in instrumentations {
           instrumentation.didDropAction(event)
+        }
+      },
+      didDrainActionQueue: { event in
+        for instrumentation in instrumentations {
+          instrumentation.didDrainActionQueue(event)
         }
       },
       didCancelEffects: { event in
@@ -355,6 +398,13 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
           "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
         )
       },
+      didDrainActionQueue: { event in
+        signposter.emitEvent(
+          name,
+          id: .exclusive,
+          "queue-drain processed=\(event.processedActionCount) pendingHighWater=\(event.pendingActionHighWaterMark) storageHighWater=\(event.storageHighWaterMark) retainedBytes=\(event.retainedByteEstimate) releasedExcess=\(event.didReleaseExcessCapacity)"
+        )
+      },
       didCancelEffects: { event in
         signposter.emitEvent(
           name,
@@ -403,6 +453,11 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
           includeActions ? dropEvent.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
         logger.debug(
           "InnoFlow dropped action=\(renderedAction, privacy: .public) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(String(describing: dropEvent.cancellationID), privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
+        )
+
+      case .actionQueueDrained(let queueEvent):
+        logger.debug(
+          "InnoFlow action queue drained processed=\(queueEvent.processedActionCount, privacy: .public) pendingHighWater=\(queueEvent.pendingActionHighWaterMark, privacy: .public) storageHighWater=\(queueEvent.storageHighWaterMark, privacy: .public) retainedBytes=\(queueEvent.retainedByteEstimate, privacy: .public) releasedExcess=\(queueEvent.didReleaseExcessCapacity, privacy: .public)"
         )
 
       case .effectsCancelled(let cancellationEvent):

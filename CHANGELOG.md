@@ -9,6 +9,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed
 
+- `StoreActionQueue` now compacts consumed prefixes during long drains and
+  retains at most an estimated 64 KiB of reusable storage after a drain,
+  without dropping or reordering actions. `StoreInstrumentation` and its
+  metrics collector now expose per-drain processed counts, pending/storage
+  high-water marks, retained bytes, and excess-capacity release counts.
 - The 5.0 development line now requires Swift 6.3 or newer. The core package,
   compile-contract clients, canonical sample package, Xcode sample targets,
   and DocC workflow all build in the same Swift 6 toolchain contract.

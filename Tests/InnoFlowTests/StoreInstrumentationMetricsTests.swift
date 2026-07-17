@@ -86,6 +86,13 @@ struct StoreInstrumentationMetricsTests {
     #expect(snap.runFinished >= 1)
     #expect(snap.runFailed == 0)
     #expect(snap.actionEmitted >= 1)
+    #expect(snap.actionQueueDrains >= 2)
+    #expect(snap.actionQueueActionsProcessed >= 2)
+    #expect(snap.actionQueuePendingHighWaterMark >= 1)
+    #expect(snap.actionQueueStorageHighWaterMark >= 1)
+    #expect(
+      snap.actionQueueLastRetainedByteEstimate <= storeActionQueueRetainedStorageBudget
+    )
   }
 
   @Test("Collector counts runFailed when an effect surfaces a non-cancellation error")
@@ -157,5 +164,42 @@ struct StoreInstrumentationMetricsTests {
 
     #expect(metrics.snapshot().runFinished >= 1)
     #expect(probe.events.contains("finished"))
+  }
+
+  @Test("Collector keeps queue maxima, totals, releases, and the latest retained bytes")
+  func collectsActionQueueDrainMetrics() {
+    let metrics = StoreInstrumentationMetricsCollector<MetricsFeature.Action>()
+    let instrumentation = metrics.instrumentation()
+
+    instrumentation.didDrainActionQueue(
+      .init(
+        processedActionCount: 20,
+        pendingActionHighWaterMark: 8,
+        storageHighWaterMark: 20,
+        retainedCapacity: 32,
+        retainedByteEstimate: 512,
+        retentionBudgetBytes: 64 * 1024,
+        didReleaseExcessCapacity: false
+      )
+    )
+    instrumentation.didDrainActionQueue(
+      .init(
+        processedActionCount: 100,
+        pendingActionHighWaterMark: 64,
+        storageHighWaterMark: 100,
+        retainedCapacity: 0,
+        retainedByteEstimate: 0,
+        retentionBudgetBytes: 64 * 1024,
+        didReleaseExcessCapacity: true
+      )
+    )
+
+    let snapshot = metrics.snapshot()
+    #expect(snapshot.actionQueueDrains == 2)
+    #expect(snapshot.actionQueueActionsProcessed == 120)
+    #expect(snapshot.actionQueuePendingHighWaterMark == 64)
+    #expect(snapshot.actionQueueStorageHighWaterMark == 100)
+    #expect(snapshot.actionQueueCapacityReleases == 1)
+    #expect(snapshot.actionQueueLastRetainedByteEstimate == 0)
   }
 }
