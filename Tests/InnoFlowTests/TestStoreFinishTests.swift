@@ -377,6 +377,11 @@ struct TestStoreFinishTests {
     let store = TestStore(reducer: FinishFeature(gate: RunStartGate()))
     let id = AnyEffectID(StaticEffectID("finish-post-fire-debounce"))
     let sequence = store.nextSequence()
+    let context = store.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
     let recursionStarted = AsyncTestSignal()
     let releaseRecursion = RunStartGate()
 
@@ -385,8 +390,12 @@ struct TestStoreFinishTests {
         .none,
         id: id,
         interval: .zero,
-        context: .init(cancellationID: id, sequence: sequence),
-        scope: .init(ownerID: id, sequence: sequence),
+        context: context,
+        scope: .init(
+          ownerID: id,
+          sequence: sequence,
+          cancellationContext: context
+        ),
         nestedAwaited: false
       ) { _, _, _ in
         recursionStarted.signal()
@@ -412,7 +421,11 @@ struct TestStoreFinishTests {
     let store = TestStore(reducer: FinishFeature(gate: RunStartGate()))
     let id = AnyEffectID(StaticEffectID("finish-post-fire-throttle"))
     let sequence = store.nextSequence()
-    let context = EffectExecutionContext(cancellationID: id, sequence: sequence)
+    let context = store.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
     let recursionStarted = AsyncTestSignal()
     let releaseRecursion = RunStartGate()
 
@@ -445,6 +458,11 @@ struct TestStoreFinishTests {
     let store = TestStore(reducer: FinishFeature(gate: RunStartGate()))
     let id = AnyEffectID(StaticEffectID("finish-cancel-post-fire-debounce"))
     let sequence = store.nextSequence()
+    let context = store.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
     let recursionStarted = AsyncTestSignal()
 
     let task = try #require(
@@ -452,8 +470,12 @@ struct TestStoreFinishTests {
         .none,
         id: id,
         interval: .zero,
-        context: .init(cancellationID: id, sequence: sequence),
-        scope: .init(ownerID: id, sequence: sequence),
+        context: context,
+        scope: .init(
+          ownerID: id,
+          sequence: sequence,
+          cancellationContext: context
+        ),
         nestedAwaited: false
       ) { _, _, _ in
         recursionStarted.signal()
@@ -482,7 +504,11 @@ struct TestStoreFinishTests {
     let store = TestStore(reducer: FinishFeature(gate: RunStartGate()))
     let id = AnyEffectID(StaticEffectID("finish-cancel-post-fire-throttle"))
     let sequence = store.nextSequence()
-    let context = EffectExecutionContext(cancellationID: id, sequence: sequence)
+    let context = store.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
     let recursionStarted = AsyncTestSignal()
 
     store.throttleState.storePending(.none, context: context, for: id)

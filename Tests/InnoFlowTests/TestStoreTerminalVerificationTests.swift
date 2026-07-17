@@ -102,7 +102,7 @@ struct TestStoreTerminalVerificationTests {
       let sequence = store.nextSequence()
       store.queue.enqueue(
         .response,
-        context: .init(sequence: sequence)
+        context: store.makeEffectContext(sequence: sequence)
       )
       _ = store.markCancelledAll(upTo: sequence)
     }
@@ -145,7 +145,7 @@ struct TestStoreTerminalVerificationTests {
 
     if let store {
       let staleSequence = store.nextSequence()
-      let staleContext = EffectExecutionContext(sequence: staleSequence)
+      let staleContext = store.makeEffectContext(sequence: staleSequence)
       _ = store.finishActivity.begin(.run)
       await store.finish(timeout: .zero)
       #expect(failures.count == 1)

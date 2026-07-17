@@ -74,6 +74,60 @@ struct StoreEffectRuntimeTests {
     #expect(store.completed.isEmpty)
   }
 
+  @Test("Store releases completed dynamic cancellation boundaries")
+  func storeReleasesCompletedDynamicCancellationBoundaries() async {
+    let store = Store(reducer: CounterFeature(), initialState: .init())
+
+    for _ in 0..<64 {
+      store.send(.increment)
+      await store.cancelEffects(identifiedBy: EffectID(UUID()))
+    }
+
+    #expect(store.count == 64)
+    #expect(store.effectBridge.retainedCancellationIDCount == 0)
+    #expect(
+      store.effectBridge.cancellationScopeMetrics
+        == .init(
+          liveScopes: 0,
+          liveInterpreters: 0,
+          retainedPotentialIDs: 0,
+          pendingCancellationIDs: 0,
+          liveExactTokens: 0
+        )
+    )
+    #expect(await store.effectBridge.runtime.activeCancellationIDCount() == 0)
+  }
+
+  @Test("Store releases settled dynamic debounce ownership")
+  func storeReleasesSettledDynamicDebounceOwnership() async {
+    let store = Store(reducer: CounterFeature(), initialState: .init())
+    var context: EffectExecutionContext?
+
+    for _ in 0..<128 {
+      let id = AnyEffectID(EffectID(UUID()))
+      let effect = EffectTask<CounterFeature.Action>.none.debounce(id, for: .zero)
+      let sequence = store.effectBridge.nextSequence()
+      context = store.effectBridge.makeEffectContext(
+        sequence: sequence,
+        potentialCancellationIDs: effect.potentialCancellationIDs
+      )
+      await store.walkEffect(effect, context: context, awaited: true)
+      context = nil
+    }
+
+    #expect(
+      store.effectBridge.cancellationScopeMetrics
+        == .init(
+          liveScopes: 0,
+          liveInterpreters: 0,
+          retainedPotentialIDs: 0,
+          pendingCancellationIDs: 0,
+          liveExactTokens: 0
+        )
+    )
+    #expect(await store.effectBridge.runtime.activeCancellationIDCount() == 0)
+  }
+
   @Test("Store cancelAllEffects cancels pending effects")
   func storeCancelAllEffects() async {
     let store = Store(reducer: CancellableFeature(), initialState: .init())
@@ -184,16 +238,89 @@ struct StoreEffectRuntimeTests {
       .send(.increment)
     )
     .cancellable(outerID)
+    let context = store.effectBridge.makeEffectContext(
+      sequence: sequence,
+      potentialCancellationIDs: effect.potentialCancellationIDs
+    )
 
     await store.walkEffect(
       effect,
-      context: .init(sequence: sequence),
+      context: context,
       awaited: true
     )
 
-    #expect(store.effectBridge.shouldStart(sequence: sequence, cancellationID: outerID) == false)
-    #expect(store.effectBridge.shouldStart(sequence: sequence, cancellationID: victimID))
+    #expect(context.cancellationScope?.isCancelled(id: outerID) == true)
+    #expect(context.cancellationScope?.isCancelled(id: victimID) == false)
     #expect(store.count == 0)
+  }
+
+  @Test("Store blocks a future cancellable sibling discovered after suspension")
+  func storeBlocksFutureCancellableSibling() async throws {
+    let futureID = AnyEffectID(StaticEffectID("future-concatenate-sibling"))
+    let firstStarted = AsyncTestSignal()
+    let releaseFirst = RunStartGate()
+    let secondProbe = RunStartGateRaceProbe()
+    let store = Store(reducer: CounterFeature(), initialState: .init())
+    let effect = EffectTask<CounterFeature.Action>.concatenate(
+      .run { _, _ in
+        firstStarted.signal()
+        await releaseFirst.wait()
+      },
+      .run { _, _ in
+        await secondProbe.markStarted()
+      }
+      .cancellable(futureID)
+    )
+    let sequence = store.effectBridge.nextSequence()
+    let context = store.effectBridge.makeEffectContext(
+      sequence: sequence,
+      potentialCancellationIDs: effect.potentialCancellationIDs
+    )
+    let walkTask = Task { @MainActor in
+      await store.walkEffect(effect, context: context, awaited: true)
+    }
+
+    try #require(await firstStarted.wait())
+    await store.cancelEffects(id: futureID, context: context)
+    await releaseFirst.open()
+    _ = await walkTask.result
+
+    #expect(await secondProbe.started == 0)
+  }
+
+  @Test("Store blocks an inner cancellable ID discovered after debounce")
+  func storeBlocksFutureDebouncedCancellationID() async throws {
+    let clock = ManualTestClock()
+    let timingID = AnyEffectID(StaticEffectID("future-debounce-timer"))
+    let futureID = AnyEffectID(StaticEffectID("future-debounce-inner"))
+    let probe = RunStartGateRaceProbe()
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      clock: .manual(clock)
+    )
+    let effect = EffectTask<CounterFeature.Action>.run { _, _ in
+      await probe.markStarted()
+    }
+    .cancellable(futureID)
+    .debounce(timingID, for: .seconds(1))
+    let sequence = store.effectBridge.nextSequence()
+    let context = store.effectBridge.makeEffectContext(
+      sequence: sequence,
+      potentialCancellationIDs: effect.potentialCancellationIDs
+    )
+
+    await store.walkEffect(effect, context: context, awaited: false)
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(1)) {
+        await clock.sleeperCount == 1
+      }
+    )
+    await store.cancelEffects(id: futureID, context: context)
+    await clock.advance(by: .seconds(1))
+    await drainAsyncWork()
+
+    #expect(await probe.started == 0)
   }
 
   @Test("Store stops an awaited concatenate after task cancellation")
@@ -201,7 +328,16 @@ struct StoreEffectRuntimeTests {
     let victimID = AnyEffectID(StaticEffectID("task-cancelled-concatenate-victim"))
     let firstChildStarted = AsyncTestSignal()
     let releaseFirstChild = RunStartGate()
-    let store = Store(reducer: CounterFeature(), initialState: .init())
+    let cancellationProbe = InstrumentationProbe()
+    let store = Store(
+      reducer: CounterFeature(),
+      initialState: .init(),
+      instrumentation: .init(
+        didCancelEffects: { event in
+          cancellationProbe.record(event.id?.description ?? "all")
+        }
+      )
+    )
     let sequence = store.effectBridge.nextSequence()
     let effect = EffectTask<CounterFeature.Action>.concatenate(
       .run { _, _ in
@@ -210,10 +346,14 @@ struct StoreEffectRuntimeTests {
       },
       .cancel(victimID)
     )
+    let context = store.effectBridge.makeEffectContext(
+      sequence: sequence,
+      potentialCancellationIDs: effect.potentialCancellationIDs
+    )
     let walk = Task { @MainActor in
       await store.walkEffect(
         effect,
-        context: .init(sequence: sequence),
+        context: context,
         awaited: true
       )
     }
@@ -230,7 +370,7 @@ struct StoreEffectRuntimeTests {
       throw error
     }
 
-    #expect(store.effectBridge.shouldStart(sequence: sequence, cancellationID: victimID))
+    #expect(cancellationProbe.events.isEmpty)
   }
 
   @Test("Store stale cancellation preserves a newer run sequence")
@@ -319,7 +459,11 @@ struct StoreEffectRuntimeTests {
     let id = AnyEffectID(StaticEffectID("sequence-bounded-merge"))
     let staleSequence = store.effectBridge.nextSequence()
     let newerSequence = store.effectBridge.nextSequence()
-    let newerContext = EffectExecutionContext(cancellationID: id, sequence: newerSequence)
+    let newerContext = store.effectBridge.makeEffectContext(
+      sequence: newerSequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
     let childReady = AsyncTestSignal()
     let releaseChild = RunStartGate()
     let childFinished = AsyncTestSignal()
@@ -338,7 +482,14 @@ struct StoreEffectRuntimeTests {
 
     do {
       try #require(await childReady.wait())
-      await store.cancelEffects(id: id, context: .init(sequence: staleSequence))
+      await store.cancelEffects(
+        id: id,
+        context: store.effectBridge.makeEffectContext(
+          sequence: staleSequence,
+          cancellationIDs: [id],
+          potentialCancellationIDs: [id]
+        )
+      )
       await releaseChild.open()
       try #require(await childFinished.wait())
     } catch {
@@ -357,8 +508,16 @@ struct StoreEffectRuntimeTests {
     let id = AnyEffectID(StaticEffectID("sequence-bounded-in-flight-composite"))
     let olderSequence = store.effectBridge.nextSequence()
     let currentSequence = store.effectBridge.nextSequence()
-    let olderContext = EffectExecutionContext(cancellationID: id, sequence: olderSequence)
-    let currentContext = EffectExecutionContext(cancellationID: id, sequence: currentSequence)
+    let olderContext = store.effectBridge.makeEffectContext(
+      sequence: olderSequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
+    let currentContext = store.effectBridge.makeEffectContext(
+      sequence: currentSequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
     let olderReady = AsyncTestSignal()
     let releaseOlder = RunStartGate()
     let olderFinished = AsyncTestSignal()
@@ -435,7 +594,7 @@ struct StoreEffectRuntimeTests {
     let staleWalk = Task { @MainActor in
       await store.walkEffect(
         staleEffect,
-        context: .init(sequence: 1),
+        context: .unmanaged(sequence: 1),
         awaited: true
       )
     }
@@ -449,7 +608,7 @@ struct StoreEffectRuntimeTests {
       .throttle(timingID, for: .seconds(60), leading: false, trailing: true)
       await store.walkEffect(
         newerEffect,
-        context: .init(sequence: 2),
+        context: .unmanaged(sequence: 2),
         awaited: true
       )
       try #require(await newerFinished.wait())
@@ -492,7 +651,11 @@ struct StoreEffectRuntimeTests {
     do {
       await store.walkEffect(
         delayedEffect,
-        context: .init(cancellationID: firstOuterID, sequence: 1),
+        context: store.effectBridge.makeEffectContext(
+          sequence: 1,
+          cancellationIDs: [firstOuterID],
+          potentialCancellationIDs: [firstOuterID, timingID]
+        ),
         awaited: false
       )
       try #require(await sleepProbe.started.wait())
@@ -501,7 +664,11 @@ struct StoreEffectRuntimeTests {
         .throttle(timingID, for: .seconds(60), leading: true, trailing: false)
       await store.walkEffect(
         suppressedEffect,
-        context: .init(cancellationID: suppressedOuterID, sequence: 2),
+        context: store.effectBridge.makeEffectContext(
+          sequence: 2,
+          cancellationIDs: [suppressedOuterID],
+          potentialCancellationIDs: [suppressedOuterID, timingID]
+        ),
         awaited: true
       )
 
@@ -509,7 +676,14 @@ struct StoreEffectRuntimeTests {
       #expect(store.throttleState.scope(for: timingID)?.contains(suppressedOuterID) == false)
       #expect(store.throttleState.latestAdmissionSequence(for: timingID) == nil)
 
-      await store.cancelEffects(id: firstOuterID, context: .init(sequence: 1))
+      await store.cancelEffects(
+        id: firstOuterID,
+        context: store.effectBridge.makeEffectContext(
+          sequence: 1,
+          cancellationIDs: [firstOuterID],
+          potentialCancellationIDs: [firstOuterID]
+        )
+      )
       try #require(await sleepProbe.cancelled.wait())
     } catch {
       await sleepProbe.release()
@@ -559,7 +733,7 @@ struct StoreEffectRuntimeTests {
     let walk = Task { @MainActor in
       await store.walkEffect(
         effect,
-        context: .init(sequence: sequence),
+        context: .unmanaged(sequence: sequence),
         awaited: true
       )
     }
@@ -621,7 +795,7 @@ struct StoreEffectRuntimeTests {
     let walk = Task { @MainActor in
       await store.walkEffect(
         effect,
-        context: .init(sequence: sequence),
+        context: .unmanaged(sequence: sequence),
         awaited: true
       )
     }
@@ -656,8 +830,8 @@ struct StoreEffectRuntimeTests {
   @Test("Trailing drain uses latest context and keeps awaited requirement across replacement")
   func trailingDrainKeepsAwaitedRequirementAcrossReplacement() async throws {
     let timingID = AnyEffectID(StaticEffectID("monotonic-awaited-trailing-throttle"))
-    let schedulingContext = EffectExecutionContext(cancellationID: timingID, sequence: 1)
-    let replacementContext = EffectExecutionContext(cancellationID: timingID, sequence: 2)
+    let schedulingContext = EffectExecutionContext.unmanaged(sequence: 1)
+    let replacementContext = EffectExecutionContext.unmanaged(sequence: 2)
     let sleepProbe = CancellationAwareSleepProbe()
     let didRecurse = AsyncTestSignal()
     let awaitedProbe = InstrumentationProbe()
@@ -740,8 +914,16 @@ struct StoreEffectRuntimeTests {
       )
     )
     let sequence = store.effectBridge.nextSequence()
-    let context = EffectExecutionContext(cancellationID: timingID, sequence: sequence)
-    let scope = DelayedEffectScope(ownerID: timingID, sequence: sequence)
+    let context = store.effectBridge.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [timingID],
+      potentialCancellationIDs: [timingID]
+    )
+    let scope = DelayedEffectScope(
+      ownerID: timingID,
+      sequence: sequence,
+      cancellationContext: context
+    )
     let recurseProbe = InstrumentationProbe()
 
     let task = await store.scheduleDebounce(
@@ -797,7 +979,7 @@ struct StoreEffectRuntimeTests {
     let walk = Task { @MainActor in
       await store.walkEffect(
         effect,
-        context: .init(sequence: 1),
+        context: .unmanaged(sequence: 1),
         awaited: true
       )
     }
@@ -806,7 +988,7 @@ struct StoreEffectRuntimeTests {
       try #require(await sleepStarted.wait())
       await store.walkEffect(
         effect,
-        context: .init(sequence: 2),
+        context: .unmanaged(sequence: 2),
         awaited: false
       )
       #expect(store.throttleState.scope(for: timingID)?.sequence == 2)
@@ -1468,7 +1650,7 @@ struct StoreEffectRuntimeTests {
       await store.walkEffect(
         EffectTask<CounterFeature.Action>.send(.increment)
           .throttle(timingID, for: .seconds(60), leading: true, trailing: false),
-        context: .init(sequence: UInt64(offset + 1)),
+        context: .unmanaged(sequence: UInt64(offset + 1)),
         awaited: true
       )
     }
@@ -1514,7 +1696,7 @@ struct StoreEffectRuntimeTests {
     do {
       await store.walkEffect(
         leadingEffect,
-        context: .init(sequence: 1),
+        context: .unmanaged(sequence: 1),
         awaited: true
       )
 
@@ -1531,7 +1713,7 @@ struct StoreEffectRuntimeTests {
       await clock.advance(by: .milliseconds(30))
       await store.walkEffect(
         trailingEffect,
-        context: .init(sequence: 2),
+        context: .unmanaged(sequence: 2),
         awaited: false
       )
       try #require(
@@ -2291,11 +2473,16 @@ struct StoreEffectRuntimeTests {
   @Test("Store startRun honors cancellation boundaries before user operation")
   func storeStartRunHonorsCancellationBoundariesBeforeUserOperation() async {
     let id = AnyEffectID(StaticEffectID("store-start-gate-race"))
-    let context = EffectExecutionContext(cancellationID: id, sequence: 1)
     let probe = RunStartGateRaceProbe()
     let store = Store(
       reducer: CounterFeature(),
       initialState: .init()
+    )
+    let sequence = store.effectBridge.nextSequence()
+    let context = store.effectBridge.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
     )
 
     await store.cancelEffects(id: id, context: context)

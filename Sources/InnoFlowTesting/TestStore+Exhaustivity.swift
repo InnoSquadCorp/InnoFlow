@@ -104,7 +104,7 @@ extension TestStore {
     let effect = reducer.reduce(into: &state, action: action)
     await walker.walk(
       effect,
-      context: nextEffectContext(file: file, line: line),
+      context: nextEffectContext(for: effect, file: file, line: line),
       awaited: false
     )
   }

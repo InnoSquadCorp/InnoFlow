@@ -24,6 +24,7 @@ extension Store: EffectDriver {
       token: token,
       ids: context?.cancellationIDs ?? [],
       sequence: context?.sequence ?? 0,
+      context: context,
       task: task
     )
     Task {
@@ -55,6 +56,7 @@ extension Store: EffectDriver {
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never> {
+    let context = context?.frozenForExecution()
     let sequence = context?.sequence ?? 0
     let token = UUID()
     let gate = RunStartGate()
@@ -216,6 +218,7 @@ extension Store: EffectDriver {
       token: token,
       ids: context?.cancellationIDs ?? [],
       sequence: sequence,
+      context: context,
       task: task,
       gate: gate
     )
@@ -304,6 +307,7 @@ extension Store: EffectDriver {
         EffectTask<R.Action>, EffectExecutionContext?, Bool
       ) async -> Void
   ) -> Task<Void, Never> {
+    let schedulingContext = schedulingContext.frozenForExecution()
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
 

@@ -262,9 +262,14 @@ struct TestStoreReceiveTests {
   func expiredDeadlinePreservesValidActionAfterStaleBuffer() async {
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let cancellationID = AnyEffectID(StaticEffectID("receive-buffered-deadline"))
-    let staleContext = EffectExecutionContext(cancellationID: cancellationID, sequence: 1)
+    let sequence = store.nextSequence()
+    let staleContext = store.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [cancellationID],
+      potentialCancellationIDs: [cancellationID]
+    )
     store.deliverAction(.ignored, context: staleContext)
-    _ = store.markCancelled(id: cancellationID, upTo: 1)
+    _ = store.markCancelled(id: cancellationID, upTo: sequence)
     store.deliverAction(.value(21), context: nil)
 
     let timedOut = await store.receiveResult(timeout: .zero) { action in
@@ -288,7 +293,12 @@ struct TestStoreReceiveTests {
   func invalidatedActionsDoNotResetReceiveDeadline() async {
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let cancellationID = AnyEffectID(StaticEffectID("receive-total-deadline"))
-    let staleContext = EffectExecutionContext(cancellationID: cancellationID, sequence: 1)
+    let sequence = store.nextSequence()
+    let staleContext = store.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [cancellationID],
+      potentialCancellationIDs: [cancellationID]
+    )
     let totalTimeout = Duration.seconds(5)
     let minimumConsumedBudget = Duration.milliseconds(50)
     var observedTimeouts: [Duration] = []
@@ -314,7 +324,7 @@ struct TestStoreReceiveTests {
 
     try? await Task.sleep(for: .milliseconds(100))
     store.deliverAction(.ignored, context: staleContext)
-    _ = store.markCancelled(id: cancellationID, upTo: 1)
+    _ = store.markCancelled(id: cancellationID, upTo: sequence)
 
     let didInstallSecondWaiter = await waitUntil {
       observedTimeouts.count == 2 && store.queue.pendingWaiterCount == 1

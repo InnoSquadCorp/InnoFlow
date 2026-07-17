@@ -13,19 +13,26 @@ package struct DelayedEffectScope: Sendable {
   package let ownerID: AnyEffectID
   package let inheritedCancellationIDs: [AnyEffectID]
   package let sequence: UInt64
+  package let cancellationContext: EffectExecutionContext?
 
   package init(
     ownerID: AnyEffectID,
     inheritedCancellationIDs: [AnyEffectID] = [],
-    sequence: UInt64? = nil
+    sequence: UInt64? = nil,
+    cancellationContext: EffectExecutionContext? = nil
   ) {
     self.ownerID = ownerID
     self.inheritedCancellationIDs = inheritedCancellationIDs
     self.sequence = sequence ?? 0
+    self.cancellationContext = cancellationContext?.frozenForExecution()
   }
 
   package func contains(_ id: AnyEffectID) -> Bool {
     ownerID == id || inheritedCancellationIDs.contains(id)
+  }
+
+  package var shouldProceed: Bool {
+    cancellationContext?.shouldProceed ?? true
   }
 }
 

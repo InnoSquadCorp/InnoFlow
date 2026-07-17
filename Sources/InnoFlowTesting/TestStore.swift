@@ -27,7 +27,11 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   package struct TrackedEffectTask {
     package let task: Task<Void, Never>
-    package let sequence: UInt64
+    package let context: EffectExecutionContext?
+
+    package var sequence: UInt64 {
+      context?.sequence ?? 0
+    }
   }
 
   package struct TrackedDebounceTask {
@@ -142,22 +146,44 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     effectBoundaries.nextSequence()
   }
 
+  package var retainedCancellationIDCount: Int {
+    effectBoundaries.retainedCancellationIDCount
+  }
+
+  package var cancellationScopeMetrics: EffectCancellationScopeMetrics {
+    .init(
+      liveScopes: effectBoundaries.liveScopeCount,
+      liveInterpreters: effectBoundaries.liveInterpreterCount,
+      retainedPotentialIDs: effectBoundaries.retainedPotentialIDCount,
+      pendingCancellationIDs: effectBoundaries.retainedCancellationIDCount,
+      liveExactTokens: effectBoundaries.liveExactTokenCount
+    )
+  }
+
   package func nextEffectContext(
+    for effect: EffectTask<R.Action>,
     file: StaticString,
     line: UInt
   ) -> EffectExecutionContext {
-    .init(
-      sequence: nextSequence(),
+    effectBoundaries.nextContext(
+      potentialCancellationIDs: effect.potentialCancellationIDs,
       origin: .init(file: file, line: line)
     )
   }
 
-  package func shouldStart(sequence: UInt64, cancellationID: AnyEffectID?) -> Bool {
-    effectBoundaries.shouldStart(sequence: sequence, cancellationID: cancellationID)
-  }
-
-  package func shouldStart(sequence: UInt64, cancellationIDs: [AnyEffectID]) -> Bool {
-    effectBoundaries.shouldStart(sequence: sequence, cancellationIDs: cancellationIDs)
+  package func makeEffectContext(
+    sequence: UInt64,
+    cancellationIDs: [AnyEffectID] = [],
+    potentialCancellationIDs: Set<AnyEffectID> = [],
+    file: StaticString = #file,
+    line: UInt = #line
+  ) -> EffectExecutionContext {
+    effectBoundaries.makeContext(
+      sequence: sequence,
+      cancellationIDs: cancellationIDs,
+      potentialCancellationIDs: potentialCancellationIDs,
+      origin: .init(file: file, line: line)
+    )
   }
 
   @discardableResult

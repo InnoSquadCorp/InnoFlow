@@ -79,7 +79,10 @@ package final class ActionQueue<Action: Sendable> {
   var waitTimeoutObserver: ((Duration) -> Void)?
 
   func enqueue(_ action: Action, context: EffectExecutionContext?) {
-    let queuedAction = QueuedAction(action: action, context: context)
+    let queuedAction = QueuedAction(
+      action: action,
+      context: context?.frozenForExecution()
+    )
     while !waiters.isEmpty {
       let head = waiters.removeFirst()
       head.timeoutTask?.cancel()
@@ -286,7 +289,7 @@ extension TestStore {
   ) {
     runningTasks[token] = .init(
       task: task,
-      sequence: context?.sequence ?? 0
+      context: context
     )
     for id in Set(context?.cancellationIDs ?? []) {
       taskIDsByEffectID[id, default: []].insert(token)
@@ -301,7 +304,7 @@ extension TestStore {
     removeTaskIDIndexes(token: token)
     runningTasks[token] = .init(
       task: trackedTask.task,
-      sequence: context?.sequence ?? 0
+      context: context?.frozenForExecution()
     )
     for id in Set(context?.cancellationIDs ?? []) {
       taskIDsByEffectID[id, default: []].insert(token)
@@ -395,6 +398,7 @@ extension TestStore {
     operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) -> Task<Void, Never> {
+    let context = context?.frozenForExecution()
     let token = UUID()
     beginFinishActivity(.run, token: token, context: context)
     let startGate = TestStoreRunStartGate()
@@ -500,12 +504,12 @@ extension TestStore {
     cancelDebounceTasks { scope in
       scope.contains(id)
         && (scope.sequence <= sequence
-          || shouldStart(sequence: scope.sequence, cancellationID: id) == false)
+          || scope.shouldProceed == false)
     }
     throttleState.clearStates { scope in
       scope.contains(id)
         && (scope.sequence <= sequence
-          || shouldStart(sequence: scope.sequence, cancellationID: id) == false)
+          || scope.shouldProceed == false)
     }
     guard let tokens = taskIDsByEffectID[id] else { return }
 
@@ -515,8 +519,8 @@ extension TestStore {
         continue
       }
       let isPastBoundary =
-        trackedTask.sequence <= sequence
-        || shouldStart(sequence: trackedTask.sequence, cancellationID: id) == false
+        (trackedTask.context?.sequence ?? 0) <= sequence
+        || trackedTask.context?.isCancelled(id: id) == true
       guard isPastBoundary else { continue }
       trackedTask.task.cancel()
       removeTrackedTask(token: token)
@@ -526,8 +530,8 @@ extension TestStore {
   package func cancelAllEffectsSynchronously(upTo sequence: UInt64) {
     let tokens = runningTasks.compactMap { token, trackedTask in
       let isPastBoundary =
-        trackedTask.sequence <= sequence
-        || shouldStart(sequence: trackedTask.sequence, cancellationIDs: []) == false
+        (trackedTask.context?.sequence ?? 0) <= sequence
+        || trackedTask.context?.shouldProceed == false
       return isPastBoundary ? token : nil
     }
     for token in tokens {
@@ -536,11 +540,11 @@ extension TestStore {
     }
     cancelDebounceTasks { scope in
       scope.sequence <= sequence
-        || shouldStart(sequence: scope.sequence, cancellationIDs: []) == false
+        || scope.shouldProceed == false
     }
     throttleState.clearStates { scope in
       scope.sequence <= sequence
-        || shouldStart(sequence: scope.sequence, cancellationIDs: []) == false
+        || scope.shouldProceed == false
     }
   }
 
@@ -650,8 +654,7 @@ extension TestStore: EffectDriver {
   }
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
-    guard let sequence = context?.sequence else { return true }
-    return shouldStart(sequence: sequence, cancellationIDs: context?.cancellationIDs ?? [])
+    context?.shouldProceed ?? true
   }
 
   @discardableResult
@@ -727,6 +730,7 @@ extension TestStore: EffectDriver {
         EffectTask<R.Action>, EffectExecutionContext?, Bool
       ) async -> Void
   ) -> Task<Void, Never> {
+    let schedulingContext = schedulingContext.frozenForExecution()
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous

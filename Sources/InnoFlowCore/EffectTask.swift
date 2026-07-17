@@ -245,6 +245,35 @@ public struct EffectTask<Action: Sendable>: Sendable {
 
   package let operation: Operation
 
+  /// Cancellation identifiers that this concrete effect tree may still introduce.
+  ///
+  /// The runtime uses this finite set to retain pre-registration cancellation
+  /// state only for IDs the active interpreter can actually discover.
+  package var potentialCancellationIDs: Set<AnyEffectID> {
+    switch operation {
+    case .none, .send, .run, .cancel, .diagnosticDrop:
+      return []
+
+    case .merge(let effects), .concatenate(let effects):
+      return effects.reduce(into: []) { ids, effect in
+        ids.formUnion(effect.potentialCancellationIDs)
+      }
+
+    case .cancellable(let effect, let id, _),
+      .debounce(let effect, let id, _):
+      return effect.potentialCancellationIDs.union([id])
+
+    case .throttle(let effect, let id, _, _, _):
+      return effect.potentialCancellationIDs.union([id])
+
+    case .animation(let effect, _):
+      return effect.potentialCancellationIDs
+
+    case .lazyMap(let lazyMapped):
+      return lazyMapped.materialize().potentialCancellationIDs
+    }
+  }
+
   /// No effect.
   public static var none: Self {
     .init(operation: .none)

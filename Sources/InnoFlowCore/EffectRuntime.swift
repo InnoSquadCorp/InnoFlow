@@ -31,8 +31,7 @@ package actor RunStartGate {
 @MainActor
 package final class EffectCancellationBoundaries {
   private var lastIssuedSequence: UInt64 = 0
-  private var cancelledUpToAll: UInt64 = 0
-  private var cancelledUpToByID: [AnyEffectID: UInt64] = [:]
+  private let scopes = EffectCancellationScopeRegistry()
 
   package init() {}
 
@@ -40,33 +39,76 @@ package final class EffectCancellationBoundaries {
     lastIssuedSequence
   }
 
+  package var retainedCancellationIDCount: Int {
+    scopes.retainedCancellationIDCount
+  }
+
+  package var liveScopeCount: Int {
+    scopes.liveScopeCount
+  }
+
+  package var liveInterpreterCount: Int {
+    scopes.liveInterpreterCount
+  }
+
+  package var retainedPotentialIDCount: Int {
+    scopes.retainedPotentialIDCount
+  }
+
+  package var liveExactTokenCount: Int {
+    scopes.liveExactTokenCount
+  }
+
   package func nextSequence() -> UInt64 {
     lastIssuedSequence &+= 1
     return lastIssuedSequence
   }
 
-  package func shouldStart(sequence: UInt64, cancellationID: AnyEffectID?) -> Bool {
-    shouldStart(sequence: sequence, cancellationIDs: cancellationID.map { [$0] } ?? [])
+  package func makeContext(
+    sequence: UInt64,
+    cancellationIDs: [AnyEffectID] = [],
+    potentialCancellationIDs: Set<AnyEffectID> = [],
+    animation: EffectAnimation? = nil,
+    origin: EffectOrigin? = nil
+  ) -> EffectExecutionContext {
+    let ownedScope = scopes.makeScopeAndInterpreterLease(
+      sequence: sequence,
+      potentialCancellationIDs: potentialCancellationIDs.union(cancellationIDs)
+    )
+    var context = EffectExecutionContext.managedRoot(
+      cancellationScope: ownedScope.scope,
+      interpreterLease: ownedScope.lease,
+      animation: animation,
+      sequence: sequence,
+      origin: origin
+    )
+    for id in cancellationIDs {
+      context = .withCancellation(id, on: context)
+    }
+    return context
   }
 
-  package func shouldStart(sequence: UInt64, cancellationIDs: [AnyEffectID]) -> Bool {
-    if sequence <= cancelledUpToAll {
-      return false
-    }
-    return cancellationIDs.allSatisfy { id in
-      sequence > (cancelledUpToByID[id] ?? 0)
-    }
+  package func nextContext(
+    potentialCancellationIDs: Set<AnyEffectID> = [],
+    animation: EffectAnimation? = nil,
+    origin: EffectOrigin? = nil
+  ) -> EffectExecutionContext {
+    makeContext(
+      sequence: nextSequence(),
+      potentialCancellationIDs: potentialCancellationIDs,
+      animation: animation,
+      origin: origin
+    )
   }
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
-    guard let sequence = context?.sequence else { return true }
-    return shouldStart(sequence: sequence, cancellationIDs: context?.cancellationIDs ?? [])
+    context?.shouldProceed ?? true
   }
 
   @discardableResult
   package func markCancelled(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
     let sequence = sequence ?? lastIssuedSequence
-    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, sequence)
+    scopes.cancel(id: id, upTo: sequence)
     return sequence
   }
 
@@ -74,15 +116,14 @@ package final class EffectCancellationBoundaries {
   package func markCancelledInFlight(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
     let sequence = sequence ?? lastIssuedSequence
     let previousSequence = sequence == 0 ? 0 : sequence - 1
-    cancelledUpToByID[id] = max(cancelledUpToByID[id] ?? 0, previousSequence)
+    scopes.cancel(id: id, upTo: previousSequence)
     return previousSequence
   }
 
   @discardableResult
   package func markCancelledAll(upTo sequence: UInt64? = nil) -> UInt64 {
     let sequence = sequence ?? lastIssuedSequence
-    cancelledUpToAll = max(cancelledUpToAll, sequence)
-    cancelledUpToByID.removeAll(keepingCapacity: true)
+    scopes.cancelAll(upTo: sequence)
     return sequence
   }
 }
@@ -92,11 +133,12 @@ package final class EffectCancellationBoundaries {
 /// Invariants:
 /// - every prepared token must be either attached to a task or finished/removed
 /// - `tokensByID`, `idsByToken`, and `tasks` must stay symmetric for live tokens
-/// - cancellation boundaries are monotonic and never move backward
+/// - cancellation admission comes from the run's frozen sequence scope/tokens
 package actor EffectRuntime<Action: Sendable> {
   private struct TrackedRun {
     let task: Task<Void, Never>
     let sequence: UInt64
+    let context: EffectExecutionContext?
   }
 
   package struct MetricsSnapshot: Sendable, Equatable {
@@ -112,8 +154,6 @@ package actor EffectRuntime<Action: Sendable> {
   private var tokensByID: [AnyEffectID: Set<UUID>] = [:]
   private var idsByToken: [UUID: Set<AnyEffectID>] = [:]
   private var cancelledTokensAwaitingFinish: Set<UUID> = []
-  private var cancelledUpToAll: UInt64 = 0
-  private var cancelledUpToByID: [AnyEffectID: UInt64] = [:]
   private var preparedRuns: UInt64 = 0
   private var attachedRuns: UInt64 = 0
   private var finishedRuns: UInt64 = 0
@@ -124,6 +164,7 @@ package actor EffectRuntime<Action: Sendable> {
     token: UUID,
     id: AnyEffectID?,
     sequence: UInt64,
+    context: EffectExecutionContext? = nil,
     task: Task<Void, Never>,
     gate: RunStartGate
   ) async {
@@ -131,6 +172,7 @@ package actor EffectRuntime<Action: Sendable> {
       token: token,
       ids: id.map { [$0] } ?? [],
       sequence: sequence,
+      context: context,
       task: task,
       gate: gate
     )
@@ -140,13 +182,14 @@ package actor EffectRuntime<Action: Sendable> {
     token: UUID,
     ids: [AnyEffectID],
     sequence: UInt64,
+    context: EffectExecutionContext? = nil,
     task: Task<Void, Never>,
     gate: RunStartGate
   ) async {
     preparedRuns &+= 1
     attachedRuns &+= 1
     activeTokens.insert(token)
-    tasks[token] = .init(task: task, sequence: sequence)
+    tasks[token] = .init(task: task, sequence: sequence, context: context)
     let uniqueIDs = Set(ids)
     if uniqueIDs.isEmpty == false {
       idsByToken[token] = uniqueIDs
@@ -172,30 +215,23 @@ package actor EffectRuntime<Action: Sendable> {
 
   package func cancel(id: AnyEffectID, upTo sequence: UInt64) {
     cancellationCount &+= 1
-    let boundary = max(cancelledUpToByID[id] ?? 0, sequence)
-    cancelledUpToByID[id] = boundary
-    cancelTrackedTasks(for: id, upTo: boundary)
+    cancelTrackedTasks(for: id, upTo: sequence)
   }
 
   package func cancelInFlight(id: AnyEffectID, upTo sequence: UInt64) {
     cancellationCount &+= 1
-    let boundary = max(cancelledUpToByID[id] ?? 0, sequence)
-    cancelledUpToByID[id] = boundary
-    cancelTrackedTasks(for: id, upTo: boundary)
+    cancelTrackedTasks(for: id, upTo: sequence)
   }
 
   package func cancelAll(upTo sequence: UInt64) {
     cancellationCount &+= 1
-    let boundary = max(cancelledUpToAll, sequence)
-    cancelledUpToAll = boundary
-    cancelledUpToByID.removeAll(keepingCapacity: true)
     let snapshot = Array(activeTokens)
     for token in snapshot {
       guard let trackedRun = tasks[token] else {
         cancelTrackedTask(token)
         continue
       }
-      if trackedRun.sequence <= boundary {
+      if trackedRun.sequence <= sequence || trackedRun.context?.shouldProceed == false {
         cancelTrackedTask(token)
       }
     }
@@ -248,13 +284,8 @@ package actor EffectRuntime<Action: Sendable> {
     sequence: UInt64
   ) -> EffectEmissionDecision {
     guard activeTokens.contains(token) else { return .drop(.inactiveToken) }
-    if sequence <= cancelledUpToAll {
+    if tasks[token]?.context?.shouldProceed == false {
       return .drop(.cancellationBoundary)
-    }
-    for id in ids {
-      if sequence <= (cancelledUpToByID[id] ?? 0) {
-        return .drop(.cancellationBoundary)
-      }
     }
     let registeredIDs = idsByToken[token] ?? []
     if Set(ids).isSubset(of: registeredIDs) == false {
@@ -297,6 +328,10 @@ package actor EffectRuntime<Action: Sendable> {
     )
   }
 
+  package func activeCancellationIDCount() -> Int {
+    tokensByID.count
+  }
+
   private func removeToken(_ token: UUID) {
     activeTokens.remove(token)
     _ = tasks.removeValue(forKey: token)
@@ -321,7 +356,7 @@ package actor EffectRuntime<Action: Sendable> {
         cancelTrackedTask(token)
         continue
       }
-      if trackedRun.sequence <= sequence {
+      if trackedRun.sequence <= sequence || trackedRun.context?.isCancelled(id: id) == true {
         cancelTrackedTask(token)
       }
     }

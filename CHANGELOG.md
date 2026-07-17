@@ -48,6 +48,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - Store and TestStore run cancellation now applies only through the requesting
   effect sequence. A delayed cancellation from an older sequence no longer
   terminates a newer run registered under the same cancellation ID.
+- Store and TestStore cancellation bookkeeping now releases dynamic IDs with
+  their effect sequence instead of retaining Store-lifetime tombstones. Active
+  interpreters retain pending cancellation only for IDs their concrete effect
+  tree may still discover, while running work keeps exact weakly registered
+  tokens for late-emission suppression.
 - Store merge and concatenate wrapper cancellation now follows the same effect
   sequence boundary. Stale ID or global cancellation keeps newer composite
   tasks and their cancellation indexes alive.

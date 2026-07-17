@@ -41,6 +41,9 @@ package struct EffectOrigin: Sendable {
 /// Extracted to eliminate duplication between production and testing runtimes.
 package struct EffectExecutionContext: Sendable {
   package let cancellationIDs: [AnyEffectID]
+  package let cancellationScope: EffectCancellationScope?
+  private let cancellationTokens: [EffectCancellationToken]
+  private let interpreterLease: EffectInterpreterLease?
   package let animation: EffectAnimation?
   /// Store/TestStore sequence number for cancellation boundary tracking.
   package let sequence: UInt64?
@@ -50,24 +53,12 @@ package struct EffectExecutionContext: Sendable {
     cancellationIDs.last
   }
 
-  package init(
+  private init(
     cancellationID: AnyEffectID? = nil,
     cancellationIDs: [AnyEffectID]? = nil,
-    animation: EffectAnimation? = nil,
-    sequence: UInt64? = nil
-  ) {
-    self.init(
-      cancellationID: cancellationID,
-      cancellationIDs: cancellationIDs,
-      animation: animation,
-      sequence: sequence,
-      origin: nil
-    )
-  }
-
-  package init(
-    cancellationID: AnyEffectID? = nil,
-    cancellationIDs: [AnyEffectID]? = nil,
+    cancellationScope: EffectCancellationScope? = nil,
+    cancellationTokens: [EffectCancellationToken] = [],
+    interpreterLease: EffectInterpreterLease? = nil,
     animation: EffectAnimation? = nil,
     sequence: UInt64? = nil,
     origin: EffectOrigin?
@@ -79,17 +70,60 @@ package struct EffectExecutionContext: Sendable {
     } else {
       self.cancellationIDs = []
     }
+    self.cancellationScope = cancellationScope
+    self.cancellationTokens = cancellationTokens
+    self.interpreterLease = interpreterLease
     self.animation = animation
     self.sequence = sequence
     self.origin = origin
+  }
+
+  package static func managedRoot(
+    cancellationScope: EffectCancellationScope,
+    interpreterLease: EffectInterpreterLease,
+    animation: EffectAnimation? = nil,
+    sequence: UInt64,
+    origin: EffectOrigin? = nil
+  ) -> Self {
+    .init(
+      cancellationScope: cancellationScope,
+      cancellationTokens: [],
+      interpreterLease: interpreterLease,
+      animation: animation,
+      sequence: sequence,
+      origin: origin
+    )
+  }
+
+  /// Numeric-only context for immediate instrumentation and isolated driver tests.
+  ///
+  /// This context has no cancellation ownership and must never be used to model
+  /// cancellable work. Store/TestStore execution uses `managedRoot` factories.
+  package static func unmanaged(
+    animation: EffectAnimation? = nil,
+    sequence: UInt64? = nil
+  ) -> Self {
+    .init(
+      animation: animation,
+      sequence: sequence,
+      origin: nil
+    )
   }
 
   package static func withCancellation(
     _ id: AnyEffectID,
     on existing: Self?
   ) -> Self {
-    .init(
+    precondition(
+      existing?.cancellationScope == nil || existing?.interpreterLease != nil,
+      "A frozen effect execution context cannot resume structural interpretation"
+    )
+    let token = existing?.cancellationScope?.token(for: id)
+    return .init(
       cancellationIDs: (existing?.cancellationIDs ?? []) + [id],
+      cancellationScope: existing?.cancellationScope,
+      cancellationTokens: (existing?.cancellationTokens ?? []) + (token.map { [$0] } ?? []),
+      interpreterLease: existing?.interpreterLease,
       animation: existing?.animation,
       sequence: existing?.sequence,
       origin: existing?.origin
@@ -102,10 +136,38 @@ package struct EffectExecutionContext: Sendable {
   ) -> Self {
     .init(
       cancellationIDs: existing?.cancellationIDs ?? [],
+      cancellationScope: existing?.cancellationScope,
+      cancellationTokens: existing?.cancellationTokens ?? [],
+      interpreterLease: existing?.interpreterLease,
       animation: animation,
       sequence: existing?.sequence,
       origin: existing?.origin
     )
+  }
+
+  package var shouldProceed: Bool {
+    guard cancellationScope?.isGloballyCancelled != true else { return false }
+    return cancellationTokens.allSatisfy { $0.isCancelled == false }
+  }
+
+  /// Returns a terminal execution context that cannot discover new IDs.
+  ///
+  /// Runs and queued actions retain their exact cancellation tokens and global
+  /// sequence scope, but intentionally release structural interpreter ownership.
+  package func frozenForExecution() -> Self {
+    .init(
+      cancellationIDs: cancellationIDs,
+      cancellationScope: cancellationScope,
+      cancellationTokens: cancellationTokens,
+      interpreterLease: nil,
+      animation: animation,
+      sequence: sequence,
+      origin: origin
+    )
+  }
+
+  package func isCancelled(id: AnyEffectID) -> Bool {
+    cancellationScope?.isCancelled(id: id) == true
   }
 }
 

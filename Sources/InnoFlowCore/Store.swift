@@ -111,11 +111,16 @@ public final class Store<R: Reducer> {
       return
 
     case .send(let action):
-      recordEmission(action, context: .init(sequence: sequence))
+      recordEmission(action, context: .unmanaged(sequence: sequence))
       enqueue(action, animation: nil)
 
     default:
-      let context = EffectExecutionContext(sequence: sequence)
+      // The scope and interpreter lease are registered synchronously before
+      // the root Task can race with store-level cancellation.
+      let context = effectBridge.makeEffectContext(
+        sequence: sequence,
+        potentialCancellationIDs: effect.potentialCancellationIDs
+      )
       Task { [weak self] in
         guard let self else { return }
         await self.walkEffect(effect, context: context, awaited: false)

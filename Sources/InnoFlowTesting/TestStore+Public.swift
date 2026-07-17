@@ -40,7 +40,7 @@ extension TestStore {
 
     await walker.walk(
       effect,
-      context: nextEffectContext(file: file, line: line),
+      context: nextEffectContext(for: effect, file: file, line: line),
       awaited: false
     )
   }
@@ -291,7 +291,7 @@ extension TestStore {
 
     await walker.walk(
       effect,
-      context: nextEffectContext(file: file, line: line),
+      context: nextEffectContext(for: effect, file: file, line: line),
       awaited: false
     )
   }
@@ -503,7 +503,7 @@ extension TestStore {
   ) async {
     await walker.walk(
       effect,
-      context: nextEffectContext(file: file, line: line),
+      context: nextEffectContext(for: effect, file: file, line: line),
       awaited: false
     )
   }

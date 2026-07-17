@@ -48,6 +48,7 @@ package struct EffectWalker<D: EffectDriver> {
       }
 
     case .merge(let children):
+      guard shouldProceed(context: context) else { return }
       if awaited {
         await withTaskGroup(of: Void.self) { group in
           for child in children {
@@ -68,6 +69,7 @@ package struct EffectWalker<D: EffectDriver> {
       }
 
     case .concatenate(let children):
+      guard shouldProceed(context: context) else { return }
       if awaited {
         for child in children {
           guard shouldProceed(context: context) else { return }
@@ -84,10 +86,12 @@ package struct EffectWalker<D: EffectDriver> {
       }
 
     case .cancel(let id):
+      guard shouldProceed(context: context) else { return }
       guard let driver else { return }
       await driver.cancelEffects(id: id, context: context)
 
     case .cancellable(let nested, let id, let cancelInFlight):
+      guard shouldProceed(context: context) else { return }
       if cancelInFlight {
         await cancelInFlightEffects(id: id, context: context)
       }
@@ -98,6 +102,7 @@ package struct EffectWalker<D: EffectDriver> {
       )
 
     case .debounce(let nested, let id, let interval):
+      guard shouldProceed(context: context) else { return }
       let task = await prepareDebounce(
         nested: nested,
         id: id,
@@ -110,6 +115,7 @@ package struct EffectWalker<D: EffectDriver> {
       }
 
     case .throttle(let nested, let id, let interval, let leading, let trailing):
+      guard shouldProceed(context: context) else { return }
       await walkThrottle(
         nested: nested,
         id: id,
@@ -187,16 +193,19 @@ package struct EffectWalker<D: EffectDriver> {
   ) async -> Task<Void, Never>? {
     guard let driver else { return nil }
 
+    let delayedContext = EffectExecutionContext.withCancellation(id, on: context)
+
     let delayedScope = DelayedEffectScope(
       ownerID: id,
       inheritedCancellationIDs: context?.cancellationIDs ?? [],
-      sequence: context?.sequence
+      sequence: context?.sequence,
+      cancellationContext: delayedContext
     )
     return await driver.scheduleDebounce(
       nested,
       id: id,
       interval: interval,
-      context: .withCancellation(id, on: context),
+      context: delayedContext,
       scope: delayedScope,
       nestedAwaited: nestedAwaited,
       recurse: recurse
@@ -262,7 +271,8 @@ package struct EffectWalker<D: EffectDriver> {
     let delayedScope = DelayedEffectScope(
       ownerID: id,
       inheritedCancellationIDs: context?.cancellationIDs ?? [],
-      sequence: context?.sequence
+      sequence: context?.sequence,
+      cancellationContext: throttleContext
     )
     guard driver.throttleState.beginAdmission(delayedScope) else { return nil }
     defer {

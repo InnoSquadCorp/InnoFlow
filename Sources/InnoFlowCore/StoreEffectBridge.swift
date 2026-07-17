@@ -4,18 +4,17 @@
 
 import Foundation
 
-/// StoreEffectBridge keeps store-local cancellation boundaries and shared timing state.
+/// StoreEffectBridge keeps store-local cancellation scopes and shared timing state.
 ///
 /// Concurrency: every mutating and reading method on this type is `@MainActor`-isolated
-/// (see the class attribute below). Read-modify-write sequences such as
-/// `cancelledUpToByID[id] = max(existing, new)` are therefore atomic with respect to all
-/// other accesses on the bridge — Swift's actor isolation provides the mutual exclusion,
-/// so no CAS, lock, or atomic primitive is needed. Callers do not need to add
-/// synchronization when invoking these methods from MainActor-bound contexts.
+/// (see the class attribute below). Scope creation and cancellation acceptance are
+/// therefore ordered with effect issuance. Each scope owns thread-safe exact-ID tokens
+/// so detached run emissions can recheck cancellation off the main actor.
 ///
 /// Invariants:
 /// - issued sequences are strictly increasing
-/// - `cancelledUpTo*` values are monotonic and gate future emissions
+/// - only live scopes and exact-ID tokens retain cancellation state
+/// - an active interpreter retains pending cancellation only for IDs its tree may discover
 /// - delayed debounce/throttle state must be cleared whenever the owning Store shuts down
 @MainActor
 package final class StoreEffectBridge<Action: Sendable> {
@@ -28,6 +27,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   private struct TrackedCompositeTask {
     let task: Task<Void, Never>
     let sequence: UInt64
+    let context: EffectExecutionContext?
   }
 
   package let runtime = EffectRuntime<Action>()
@@ -46,12 +46,38 @@ package final class StoreEffectBridge<Action: Sendable> {
     boundaries.currentSequence
   }
 
+  package var retainedCancellationIDCount: Int {
+    boundaries.retainedCancellationIDCount
+  }
+
+  package var cancellationScopeMetrics: EffectCancellationScopeMetrics {
+    .init(
+      liveScopes: boundaries.liveScopeCount,
+      liveInterpreters: boundaries.liveInterpreterCount,
+      retainedPotentialIDs: boundaries.retainedPotentialIDCount,
+      pendingCancellationIDs: boundaries.retainedCancellationIDCount,
+      liveExactTokens: boundaries.liveExactTokenCount
+    )
+  }
+
   package func nextSequence() -> UInt64 {
     boundaries.nextSequence()
   }
 
-  package func shouldStart(sequence: UInt64, cancellationID: AnyEffectID?) -> Bool {
-    boundaries.shouldStart(sequence: sequence, cancellationID: cancellationID)
+  package func makeEffectContext(
+    sequence: UInt64,
+    cancellationIDs: [AnyEffectID] = [],
+    potentialCancellationIDs: Set<AnyEffectID> = [],
+    animation: EffectAnimation? = nil,
+    origin: EffectOrigin? = nil
+  ) -> EffectExecutionContext {
+    boundaries.makeContext(
+      sequence: sequence,
+      cancellationIDs: cancellationIDs,
+      potentialCancellationIDs: potentialCancellationIDs,
+      animation: animation,
+      origin: origin
+    )
   }
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
@@ -71,8 +97,8 @@ package final class StoreEffectBridge<Action: Sendable> {
   ///   - sequence: the sequence to keep alive (defaults to the most recent issued
   ///     sequence). Sequences strictly less than this become cancelled.
   /// - Returns: the computed in-flight boundary for this call, i.e.
-  ///   `sequence - 1` (saturating at `0`). The stored `cancelledUpToByID[id]`
-  ///   boundary remains monotonic as `max(existingBoundary, returnedBoundary)`.
+  ///   `sequence - 1` (saturating at `0`). Live scopes at or below that boundary
+  ///   receive the cancellation; the current sequence remains eligible.
   ///
   /// Concurrency: this read-modify-write is atomic by virtue of the class-level
   /// `@MainActor` isolation. Callers do not need additional synchronization.
@@ -155,12 +181,14 @@ package final class StoreEffectBridge<Action: Sendable> {
     token: UUID,
     id: AnyEffectID?,
     sequence: UInt64,
+    context: EffectExecutionContext? = nil,
     task: Task<Void, Never>
   ) {
     registerCompositeTask(
       token: token,
       ids: id.map { [$0] } ?? [],
       sequence: sequence,
+      context: context,
       task: task
     )
   }
@@ -169,9 +197,14 @@ package final class StoreEffectBridge<Action: Sendable> {
     token: UUID,
     ids: [AnyEffectID],
     sequence: UInt64,
+    context: EffectExecutionContext? = nil,
     task: Task<Void, Never>
   ) {
-    compositeTasksByToken[token] = .init(task: task, sequence: sequence)
+    compositeTasksByToken[token] = .init(
+      task: task,
+      sequence: sequence,
+      context: context
+    )
     let uniqueIDs = Set(ids)
     if uniqueIDs.isEmpty == false {
       compositeIDsByToken[token] = uniqueIDs
@@ -205,7 +238,7 @@ package final class StoreEffectBridge<Action: Sendable> {
       }
       guard
         tracked.sequence <= sequence
-          || boundaries.shouldStart(sequence: tracked.sequence, cancellationID: id) == false
+          || tracked.context?.isCancelled(id: id) == true
       else {
         continue
       }
@@ -218,7 +251,7 @@ package final class StoreEffectBridge<Action: Sendable> {
     for (token, tracked) in Array(compositeTasksByToken) {
       guard
         tracked.sequence <= sequence
-          || boundaries.shouldStart(sequence: tracked.sequence, cancellationID: nil) == false
+          || tracked.context?.shouldProceed == false
       else {
         continue
       }
@@ -237,19 +270,19 @@ package final class StoreEffectBridge<Action: Sendable> {
   }
 
   private func cancelDelayedState(id: AnyEffectID, upTo sequence: UInt64) {
-    let shouldCancel: (DelayedEffectScope) -> Bool = { [boundaries] scope in
+    let shouldCancel: (DelayedEffectScope) -> Bool = { scope in
       guard scope.contains(id) else { return false }
       return scope.sequence <= sequence
-        || boundaries.shouldStart(sequence: scope.sequence, cancellationID: id) == false
+        || scope.shouldProceed == false
     }
     clearDebounceStates(where: shouldCancel)
     throttleState.clearStates(where: shouldCancel)
   }
 
   private func cancelAllDelayedState(upTo sequence: UInt64) {
-    let shouldCancel: (DelayedEffectScope) -> Bool = { [boundaries] scope in
+    let shouldCancel: (DelayedEffectScope) -> Bool = { scope in
       scope.sequence <= sequence
-        || boundaries.shouldStart(sequence: scope.sequence, cancellationID: nil) == false
+        || scope.shouldProceed == false
     }
     clearDebounceStates(where: shouldCancel)
     throttleState.clearStates(where: shouldCancel)
@@ -281,10 +314,10 @@ package final class StoreEffectBridge<Action: Sendable> {
   /// boundary used for instrumentation and tests.
   @discardableResult
   package func shutdown() -> UInt64 {
+    let sequence = boundaries.markCancelledAll()
     cancelAllCompositeTasks()
     clearAllDelayedState()
     let runtime = self.runtime
-    let sequence = self.currentSequence
     Task {
       await runtime.cancelAll(upTo: sequence)
     }

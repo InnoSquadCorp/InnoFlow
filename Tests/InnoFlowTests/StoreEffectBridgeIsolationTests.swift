@@ -22,12 +22,22 @@ struct StoreEffectBridgeIsolationTests {
 
     let s1 = bridge.nextSequence()
     let s2 = bridge.nextSequence()
+    let firstContext = bridge.makeEffectContext(
+      sequence: s1,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
+    let currentContext = bridge.makeEffectContext(
+      sequence: s2,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
 
     let boundary = bridge.markCancelledInFlight(id: id, upTo: s2)
 
     #expect(boundary == s2 - 1)
-    #expect(bridge.shouldStart(sequence: s1, cancellationID: id) == false)
-    #expect(bridge.shouldStart(sequence: s2, cancellationID: id) == true)
+    #expect(bridge.shouldProceed(context: firstContext) == false)
+    #expect(bridge.shouldProceed(context: currentContext) == true)
   }
 
   @Test("markCancelledInFlight is monotonic — earlier calls cannot lower the boundary")
@@ -35,22 +45,38 @@ struct StoreEffectBridgeIsolationTests {
     let bridge = StoreEffectBridge<Int>()
     let id = AnyEffectID(StaticEffectID("isolation.monotonic"))
 
-    _ = bridge.nextSequence()
+    let s1 = bridge.nextSequence()
     let s2 = bridge.nextSequence()
     let s3 = bridge.nextSequence()
+    let firstContext = bridge.makeEffectContext(
+      sequence: s1,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
+    let secondContext = bridge.makeEffectContext(
+      sequence: s2,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
+    let thirdContext = bridge.makeEffectContext(
+      sequence: s3,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
 
     _ = bridge.markCancelledInFlight(id: id, upTo: s3)
     let lowered = bridge.markCancelledInFlight(id: id, upTo: s2)
 
-    // The second call returns upTo - 1 (= s2 - 1), but the stored boundary
-    // was already set to s3 - 1 by the first call and is not lowered,
-    // so s2 (<= s3 - 1) remains cancelled.
+    // The second call returns upTo - 1 (= s2 - 1), but cancellation already
+    // accepted by the first and second live scopes is irreversible. An older
+    // request cannot revive either scope.
     #expect(lowered == s2 - 1)
-    #expect(bridge.shouldStart(sequence: s2, cancellationID: id) == false)
-    #expect(bridge.shouldStart(sequence: s3, cancellationID: id) == true)
+    #expect(bridge.shouldProceed(context: firstContext) == false)
+    #expect(bridge.shouldProceed(context: secondContext) == false)
+    #expect(bridge.shouldProceed(context: thirdContext) == true)
   }
 
-  @Test("markCancelledInFlight saturates at zero when no sequences have been issued")
+  @Test("markCancelledInFlight at zero does not retain a phantom boundary")
   func markCancelledInFlightSaturatesAtZero() {
     let bridge = StoreEffectBridge<Int>()
     let id = AnyEffectID(StaticEffectID("isolation.saturate"))
@@ -58,9 +84,7 @@ struct StoreEffectBridgeIsolationTests {
     let boundary = bridge.markCancelledInFlight(id: id, upTo: 0)
 
     #expect(boundary == 0)
-    // sequence 0 is never issued by `nextSequence`, but if a caller probes it
-    // the bridge should still report it as cancelled because boundary == 0.
-    #expect(bridge.shouldStart(sequence: 0, cancellationID: id) == false)
+    #expect(bridge.retainedCancellationIDCount == 0)
   }
 
   @Test("markCancelled and markCancelledInFlight maintain independent semantics")
@@ -70,19 +94,29 @@ struct StoreEffectBridgeIsolationTests {
 
     let s1 = bridge.nextSequence()
     let s2 = bridge.nextSequence()
+    let firstContext = bridge.makeEffectContext(
+      sequence: s1,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
+    let secondContext = bridge.makeEffectContext(
+      sequence: s2,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
 
     // markCancelled cancels through `s2` inclusive.
     let inclusive = bridge.markCancelled(id: id, upTo: s2)
     #expect(inclusive == s2)
-    #expect(bridge.shouldStart(sequence: s1, cancellationID: id) == false)
-    #expect(bridge.shouldStart(sequence: s2, cancellationID: id) == false)
+    #expect(bridge.shouldProceed(context: firstContext) == false)
+    #expect(bridge.shouldProceed(context: secondContext) == false)
 
-    // markCancelledInFlight on a fresh bridge would have left s2 alive; here
-    // the inclusive boundary is already higher, so the lower boundary is
-    // dropped on the floor — verifying monotonicity across both variants.
+    // markCancelledInFlight on a fresh bridge would have left s2 alive. Here
+    // the earlier inclusive cancellation has already reached s2, and the
+    // later in-flight request cannot revive it.
     let inFlight = bridge.markCancelledInFlight(id: id, upTo: s2)
     #expect(inFlight == s2 - 1)
-    #expect(bridge.shouldStart(sequence: s2, cancellationID: id) == false)
+    #expect(bridge.shouldProceed(context: secondContext) == false)
   }
 
   @Test("nested cancellation contexts honor every active boundary")
@@ -91,7 +125,11 @@ struct StoreEffectBridgeIsolationTests {
     let outer = AnyEffectID(StaticEffectID("isolation.outer"))
     let inner = AnyEffectID(StaticEffectID("isolation.inner"))
     let sequence = bridge.nextSequence()
-    let context = EffectExecutionContext(cancellationIDs: [outer, inner], sequence: sequence)
+    let context = bridge.makeEffectContext(
+      sequence: sequence,
+      cancellationIDs: [outer, inner],
+      potentialCancellationIDs: [outer, inner]
+    )
 
     bridge.markCancelled(id: outer, upTo: sequence)
 
@@ -105,6 +143,16 @@ struct StoreEffectBridgeIsolationTests {
     let staleSequence = bridge.nextSequence()
     let effectiveSequence = bridge.nextSequence()
     let newerSequence = bridge.nextSequence()
+    let effectiveContext = bridge.makeEffectContext(
+      sequence: effectiveSequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
+    let newerContext = bridge.makeEffectContext(
+      sequence: newerSequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
     let effectiveToken = UUID()
     let newerToken = UUID()
     let hold = RunStartGate()
@@ -119,12 +167,14 @@ struct StoreEffectBridgeIsolationTests {
       token: effectiveToken,
       id: id,
       sequence: effectiveSequence,
+      context: effectiveContext,
       task: effectiveTask
     )
     bridge.registerCompositeTask(
       token: newerToken,
       id: id,
       sequence: newerSequence,
+      context: newerContext,
       task: newerTask
     )
 
@@ -152,6 +202,8 @@ struct StoreEffectBridgeIsolationTests {
     let staleSequence = bridge.nextSequence()
     let effectiveSequence = bridge.nextSequence()
     let newerSequence = bridge.nextSequence()
+    let effectiveContext = bridge.makeEffectContext(sequence: effectiveSequence)
+    let newerContext = bridge.makeEffectContext(sequence: newerSequence)
     let effectiveToken = UUID()
     let newerToken = UUID()
     let hold = RunStartGate()
@@ -166,12 +218,14 @@ struct StoreEffectBridgeIsolationTests {
       token: effectiveToken,
       id: id,
       sequence: effectiveSequence,
+      context: effectiveContext,
       task: effectiveTask
     )
     bridge.registerCompositeTask(
       token: newerToken,
       id: id,
       sequence: newerSequence,
+      context: newerContext,
       task: newerTask
     )
 
@@ -201,18 +255,30 @@ struct StoreEffectBridgeIsolationTests {
     let staleSequence = bridge.nextSequence()
     let effectiveSequence = bridge.nextSequence()
     let newerSequence = bridge.nextSequence()
+    let effectiveContext = bridge.makeEffectContext(
+      sequence: effectiveSequence,
+      cancellationIDs: [outerID, effectiveID],
+      potentialCancellationIDs: [outerID, effectiveID]
+    )
+    let newerContext = bridge.makeEffectContext(
+      sequence: newerSequence,
+      cancellationIDs: [outerID, newerID],
+      potentialCancellationIDs: [outerID, newerID]
+    )
     let hold = RunStartGate()
     let effectiveTask = Task<Void, Never> { await hold.wait() }
     let newerTask = Task<Void, Never> { await hold.wait() }
     let effectiveScope = DelayedEffectScope(
       ownerID: effectiveID,
       inheritedCancellationIDs: [outerID],
-      sequence: effectiveSequence
+      sequence: effectiveSequence,
+      cancellationContext: effectiveContext
     )
     let newerScope = DelayedEffectScope(
       ownerID: newerID,
       inheritedCancellationIDs: [outerID],
-      sequence: newerSequence
+      sequence: newerSequence,
+      cancellationContext: newerContext
     )
 
     let effectiveGeneration = try #require(bridge.beginDebounce(effectiveScope))
@@ -308,6 +374,8 @@ struct StoreEffectBridgeIsolationTests {
     let staleSequence = bridge.nextSequence()
     let effectiveSequence = bridge.nextSequence()
     let newerSequence = bridge.nextSequence()
+    let effectiveContext = bridge.makeEffectContext(sequence: effectiveSequence)
+    let newerContext = bridge.makeEffectContext(sequence: newerSequence)
     let hold = RunStartGate()
     let effectiveThrottleTask = Task<Void, Never> { await hold.wait() }
     let newerThrottleTask = Task<Void, Never> { await hold.wait() }
@@ -315,11 +383,13 @@ struct StoreEffectBridgeIsolationTests {
     let newerDebounceTask = Task<Void, Never> { await hold.wait() }
     let effectiveThrottleScope = DelayedEffectScope(
       ownerID: effectiveThrottleID,
-      sequence: effectiveSequence
+      sequence: effectiveSequence,
+      cancellationContext: effectiveContext
     )
     let newerThrottleScope = DelayedEffectScope(
       ownerID: newerThrottleID,
-      sequence: newerSequence
+      sequence: newerSequence,
+      cancellationContext: newerContext
     )
 
     #expect(bridge.throttleState.beginAdmission(effectiveThrottleScope))
@@ -340,7 +410,11 @@ struct StoreEffectBridgeIsolationTests {
 
     let effectiveDebounceGeneration = try #require(
       bridge.beginDebounce(
-        .init(ownerID: effectiveDebounceID, sequence: effectiveSequence)
+        .init(
+          ownerID: effectiveDebounceID,
+          sequence: effectiveSequence,
+          cancellationContext: effectiveContext
+        )
       ))
     #expect(
       bridge.setDebounceDelayTask(
@@ -351,7 +425,11 @@ struct StoreEffectBridgeIsolationTests {
 
     let newerDebounceGeneration = try #require(
       bridge.beginDebounce(
-        .init(ownerID: newerDebounceID, sequence: newerSequence)
+        .init(
+          ownerID: newerDebounceID,
+          sequence: newerSequence,
+          cancellationContext: newerContext
+        )
       ))
     #expect(
       bridge.setDebounceDelayTask(

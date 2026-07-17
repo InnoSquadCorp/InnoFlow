@@ -34,6 +34,9 @@ the READMEs until 5.0.0 is tagged.
    accounting without hanging `finish()`. Nested concatenations recheck the
    cancellation boundary before every child, so accepted cancellation cannot
    start later child effects or contaminate unrelated cancellation IDs.
+   Cancellation state is scoped to live effect sequences and exact running
+   work, so request-scoped or UUID identifiers no longer accumulate as
+   Store-lifetime history after their work completes.
 6. Preserves awaited ordering through trailing throttles, including replacement
    and late trailing-enable cases, while keeping the original throttle window
    deadline. Reused TestStore drains adopt the latest pending sequence and
