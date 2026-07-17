@@ -92,6 +92,24 @@ struct TestStoreCoreTests {
     #expect(received?.action == 7)
   }
 
+  @Test("ActionQueue releases exceptional burst storage without changing FIFO order")
+  func actionQueueReleasesExceptionalBurstStorage() {
+    let queue = ActionQueue<Int>()
+    let expected = Array(0..<10_000)
+
+    for value in expected {
+      queue.enqueue(value, context: nil)
+    }
+
+    var received: [Int] = []
+    while let queuedAction = queue.popBuffered() {
+      received.append(queuedAction.action)
+    }
+
+    #expect(received == expected)
+    #expect(queue.retainedByteEstimate <= testStoreActionQueueRetainedStorageBudget)
+  }
+
   @Test("ActionQueue waiter keeps exact cancellation ownership until filtering")
   func actionQueueWaiterKeepsCancellationOwnership() async throws {
     let store = TestStore(reducer: CounterFeature(), initialState: .init())

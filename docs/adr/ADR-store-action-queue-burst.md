@@ -87,6 +87,9 @@ retained capacity/bytes, and the capacity-release decision.
 
 - `StoreActionQueue` clears on every `finishDrain()` call and cannot retain an
   exceptional allocation above the byte budget across cycles.
+- `InnoFlowTesting.ActionQueue` mirrors the same 64 KiB estimated retained
+  storage budget when its buffer becomes empty, so burst-heavy tests do not
+  pin exceptional allocations for the lifetime of a `TestStore`.
 - The queue still has no in-flight hard cap. It never drops, reorders, or
   collapses an action.
 - High-volume domains (real-time price feeds, sensor fan-out, bulk imports) must opt into back-pressure explicitly:

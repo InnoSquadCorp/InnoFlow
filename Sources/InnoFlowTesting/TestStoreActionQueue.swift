@@ -6,6 +6,8 @@ import Foundation
 import InnoFlowCore
 import os
 
+package let testStoreActionQueueRetainedStorageBudget = 64 * 1024
+
 private final class ActionQueueWaiterResolution: Sendable {
   private enum State: Equatable {
     case pending
@@ -65,6 +67,10 @@ package final class ActionQueue<Action: Sendable> {
 
   package var pendingWaiterCount: Int {
     waiters.count
+  }
+
+  package var retainedByteEstimate: Int {
+    estimatedBytes(forCapacity: buffer.capacity)
   }
 
   func forEachBuffered(_ body: (QueuedAction) -> Void) {
@@ -157,11 +163,22 @@ package final class ActionQueue<Action: Sendable> {
   private func compactBufferIfNeeded() {
     guard headIndex > 0 else { return }
     if headIndex == buffer.count {
-      buffer.removeAll(keepingCapacity: true)
+      if retainedByteEstimate > testStoreActionQueueRetainedStorageBudget {
+        buffer = []
+      } else {
+        buffer.removeAll(keepingCapacity: true)
+      }
       headIndex = 0
     } else if headIndex >= 64, headIndex * 2 >= buffer.count {
       buffer.removeFirst(headIndex)
       headIndex = 0
     }
+  }
+
+  private func estimatedBytes(forCapacity capacity: Int) -> Int {
+    let result = capacity.multipliedReportingOverflow(
+      by: MemoryLayout<QueuedAction>.stride
+    )
+    return result.overflow ? .max : result.partialValue
   }
 }
