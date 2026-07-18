@@ -70,20 +70,25 @@ where Element: Sendable {
   }
 
   /// O(1). The number of elements currently stored.
+  @inlinable
   public var count: Int { elements.count }
 
   /// O(1). `true` when the array contains no elements.
+  @inlinable
   public var isEmpty: Bool { elements.isEmpty }
 
   /// The contiguous backing storage in insertion order.
+  @inlinable
   public var values: [Element] { elements }
 
   /// The list of element identities in insertion order. Useful for
   /// diffing or driving SwiftUI `ForEach` selection state without
   /// touching the elements themselves.
+  @inlinable
   public var ids: [ID] { elements.map(idForElement) }
 
   /// O(1). The element with the given id, or `nil` if no such element exists.
+  @inlinable
   public subscript(id id: ID) -> Element? {
     get {
       guard let position = index[id] else { return nil }
@@ -121,12 +126,14 @@ where Element: Sendable {
   }
 
   /// O(1). Whether the array contains an element with the given id.
+  @inlinable
   public func contains(id: ID) -> Bool {
     index[id] != nil
   }
 
   /// Appends `element`. Duplicate ids are rejected (asserts in debug).
   @discardableResult
+  @inlinable
   public mutating func append(_ element: Element) -> Bool {
     let key = idForElement(element)
     guard index[key] == nil else {
@@ -140,6 +147,7 @@ where Element: Sendable {
 
   /// Inserts `element` at `position`. Duplicate ids are rejected.
   @discardableResult
+  @inlinable
   public mutating func insert(_ element: Element, at position: Int) -> Bool {
     precondition(
       (elements.startIndex...elements.endIndex).contains(position),
@@ -157,6 +165,7 @@ where Element: Sendable {
 
   /// Inserts `element` immediately before the element identified by `id`.
   @discardableResult
+  @inlinable
   public mutating func insert(_ element: Element, before id: ID) -> Bool {
     guard let position = index[id] else { return false }
     return insert(element, at: position)
@@ -164,6 +173,7 @@ where Element: Sendable {
 
   /// Inserts `element` immediately after the element identified by `id`.
   @discardableResult
+  @inlinable
   public mutating func insert(_ element: Element, after id: ID) -> Bool {
     guard let position = index[id] else { return false }
     return insert(element, at: position + 1)
@@ -171,6 +181,7 @@ where Element: Sendable {
 
   /// Removes and returns the element identified by `id`, or `nil` if absent.
   @discardableResult
+  @inlinable
   public mutating func remove(id: ID) -> Element? {
     guard let position = index.removeValue(forKey: id) else { return nil }
     let removed = elements.remove(at: position)
@@ -189,6 +200,7 @@ where Element: Sendable {
 
   /// Removes every element. Capacity is preserved so reuse during a hot
   /// reducer drain does not reallocate.
+  @inlinable
   public mutating func removeAll(keepingCapacity: Bool = false) {
     elements.removeAll(keepingCapacity: keepingCapacity)
     index.removeAll(keepingCapacity: keepingCapacity)
@@ -197,6 +209,7 @@ where Element: Sendable {
   /// Replaces the element with the same id, or appends it when no match exists.
   /// Returns `true` when an in-place update occurred.
   @discardableResult
+  @inlinable
   public mutating func updateOrAppend(_ element: Element) -> Bool {
     let key = idForElement(element)
     if let position = index[key] {
@@ -224,19 +237,23 @@ where Element: Sendable {
 extension IdentifiedArray: RandomAccessCollection {
   public typealias Index = Int
 
+  @inlinable
   public var startIndex: Int { elements.startIndex }
+  @inlinable
   public var endIndex: Int { elements.endIndex }
 
   /// Positional read access. Mutation must go through `subscript(id:)` (or
   /// the id-keyed mutating methods) so the cached `id → index` map stays
   /// consistent — replacing an element by position would let the caller
   /// swap in a new id and silently break the O(1) lookup invariant.
+  @inlinable
   public subscript(position: Int) -> Element {
     elements[position]
   }
 }
 
 extension IdentifiedArray: Equatable where Element: Equatable {
+  @inlinable
   public static func == (
     lhs: IdentifiedArray<ID, Element>,
     rhs: IdentifiedArray<ID, Element>
@@ -246,6 +263,7 @@ extension IdentifiedArray: Equatable where Element: Equatable {
 }
 
 extension IdentifiedArray: Hashable where Element: Hashable {
+  @inlinable
   public func hash(into hasher: inout Hasher) {
     hasher.combine(elements)
   }

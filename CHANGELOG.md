@@ -9,6 +9,15 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed
 
+- The per-action dispatch entry points of the composition primitives
+  (`Reduce`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`,
+  `ForEachIdentifiedReducer`) and the O(1) `IdentifiedArray` accessors are
+  now `@inlinable`, so feature modules that import `InnoFlowCore` get
+  cross-module specialization on the reducer hot path instead of paying an
+  unspecialized generic call per composition node per action.
+  `EffectTask.isNone` is now `public` (previously `package`) because the
+  inlined `Reduce.reduce` body needs it to skip `.none` children.
+
 - `swift-syntax` is now constrained to the single toolchain line
   `"603.0.0"..<"604.0.0"` instead of an exact pin, so consumer graphs that
   carry other macro packages can resolve a shared 603.x patch. Maintainer

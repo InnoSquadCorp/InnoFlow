@@ -280,7 +280,11 @@ public struct EffectTask<Action: Sendable>: Sendable {
   }
 
   /// Returns `true` when this effect has no work to perform.
-  package var isNone: Bool {
+  ///
+  /// Public (rather than `package`) because inlinable hot paths such as
+  /// `Reduce.reduce(into:action:)` need it to skip `.none` children without
+  /// exposing the underlying `Operation` storage.
+  public var isNone: Bool {
     if case .none = operation { return true }
     return false
   }

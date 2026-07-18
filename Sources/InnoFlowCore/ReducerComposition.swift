@@ -31,6 +31,7 @@ public struct Reduce<State: Sendable, Action: Sendable>: Reducer {
     self.storage = .composed(children)
   }
 
+  @inlinable
   public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     switch storage {
     case .closure(let body):
@@ -41,7 +42,7 @@ public struct Reduce<State: Sendable, Action: Sendable>: Reducer {
       effects.reserveCapacity(children.count)
       for child in children {
         let effect = child.reduce(into: &state, action: action)
-        if case .none = effect.operation { continue }
+        if effect.isNone { continue }
         effects.append(effect)
       }
       return .merge(effects)
@@ -189,10 +190,10 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   public typealias State = ParentState
   public typealias Action = ParentAction
 
-  private let state: WritableKeyPath<ParentState, Child.State>
-  private let extractAction: @Sendable (ParentAction) -> Child.Action?
-  private let embedAction: @Sendable (Child.Action) -> ParentAction
-  private let reducer: Child
+  @usableFromInline let state: WritableKeyPath<ParentState, Child.State>
+  @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
+  @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
+  @usableFromInline let reducer: Child
 
   private init(
     state: WritableKeyPath<ParentState, Child.State>,
@@ -219,6 +220,7 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
     )
   }
 
+  @inlinable
   public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
     ParentAction
   > {
@@ -256,11 +258,11 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   public typealias State = ParentState
   public typealias Action = ParentAction
 
-  private let state: WritableKeyPath<ParentState, Child.State?>
-  private let extractAction: @Sendable (ParentAction) -> Child.Action?
-  private let embedAction: @Sendable (Child.Action) -> ParentAction
-  private let reducer: Child
-  private let onMissing: OnMissingPolicy
+  @usableFromInline let state: WritableKeyPath<ParentState, Child.State?>
+  @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
+  @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
+  @usableFromInline let reducer: Child
+  @usableFromInline let onMissing: OnMissingPolicy
 
   private init(
     state: WritableKeyPath<ParentState, Child.State?>,
@@ -291,6 +293,7 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
     )
   }
 
+  @inlinable
   public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
     ParentAction
   > {
@@ -298,20 +301,30 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
       return .none
     }
     guard var childState = state[keyPath: self.state] else {
-      switch onMissing {
-      case .ignore:
-        return .none
-      case .assertOnly:
-        assertionFailure("IfLet received a child action while child state was nil.")
-        return .reportDrop(action, reason: .missingChildState)
-      case .crash:
-        preconditionFailure("IfLet received a child action while child state was nil.")
-      }
+      return missingChildStateEffect(for: action)
     }
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
     state[keyPath: self.state] = childState
     return childEffect.map(embedAction)
+  }
+
+  /// Cold path for a child action arriving while child state is `nil`.
+  ///
+  /// Kept out of the inlinable `reduce` body because `.reportDrop` is a
+  /// `package`-level instrumentation hook that inlined client code cannot
+  /// reference directly.
+  @usableFromInline
+  func missingChildStateEffect(for action: ParentAction) -> EffectTask<ParentAction> {
+    switch onMissing {
+    case .ignore:
+      return .none
+    case .assertOnly:
+      assertionFailure("IfLet received a child action while child state was nil.")
+      return .reportDrop(action, reason: .missingChildState)
+    case .crash:
+      preconditionFailure("IfLet received a child action while child state was nil.")
+    }
   }
 }
 
@@ -320,11 +333,11 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
   public typealias State = ParentState
   public typealias Action = ParentAction
 
-  private let state: CasePath<ParentState, Child.State>
-  private let extractAction: @Sendable (ParentAction) -> Child.Action?
-  private let embedAction: @Sendable (Child.Action) -> ParentAction
-  private let reducer: Child
-  private let onMissing: OnMissingPolicy
+  @usableFromInline let state: CasePath<ParentState, Child.State>
+  @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
+  @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
+  @usableFromInline let reducer: Child
+  @usableFromInline let onMissing: OnMissingPolicy
 
   private init(
     state: CasePath<ParentState, Child.State>,
@@ -355,6 +368,7 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
     )
   }
 
+  @inlinable
   public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
     ParentAction
   > {
@@ -362,22 +376,33 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
       return .none
     }
     guard var childState = self.state.extract(state) else {
-      switch onMissing {
-      case .ignore:
-        return .none
-      case .assertOnly:
-        assertionFailure(
-          "IfCaseLet received a child action while parent state was in a different case.")
-        return .reportDrop(action, reason: .missingChildState)
-      case .crash:
-        preconditionFailure(
-          "IfCaseLet received a child action while parent state was in a different case.")
-      }
+      return missingChildCaseEffect(for: action)
     }
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
     state = self.state.embed(childState)
     return childEffect.map(embedAction)
+  }
+
+  /// Cold path for a child action arriving while parent state is in a
+  /// different case.
+  ///
+  /// Kept out of the inlinable `reduce` body because `.reportDrop` is a
+  /// `package`-level instrumentation hook that inlined client code cannot
+  /// reference directly.
+  @usableFromInline
+  func missingChildCaseEffect(for action: ParentAction) -> EffectTask<ParentAction> {
+    switch onMissing {
+    case .ignore:
+      return .none
+    case .assertOnly:
+      assertionFailure(
+        "IfCaseLet received a child action while parent state was in a different case.")
+      return .reportDrop(action, reason: .missingChildState)
+    case .crash:
+      preconditionFailure(
+        "IfCaseLet received a child action while parent state was in a different case.")
+    }
   }
 }
 
@@ -397,9 +422,10 @@ where
   public typealias State = ParentState
   public typealias Action = ParentAction
 
-  private let state: WritableKeyPath<ParentState, CollectionState>
-  private let action: CollectionActionPath<ParentAction, CollectionState.Element.ID, Child.Action>
-  private let reducer: Child
+  @usableFromInline let state: WritableKeyPath<ParentState, CollectionState>
+  @usableFromInline let action:
+    CollectionActionPath<ParentAction, CollectionState.Element.ID, Child.Action>
+  @usableFromInline let reducer: Child
 
   public init(
     state: WritableKeyPath<ParentState, CollectionState>,
@@ -411,6 +437,7 @@ where
     self.reducer = reducer
   }
 
+  @inlinable
   public func reduce(into state: inout ParentState, action parentAction: ParentAction)
     -> EffectTask<ParentAction>
   {
@@ -460,9 +487,9 @@ where
   public typealias State = ParentState
   public typealias Action = ParentAction
 
-  private let state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>
-  private let action: CollectionActionPath<ParentAction, ElementID, Child.Action>
-  private let reducer: Child
+  @usableFromInline let state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>
+  @usableFromInline let action: CollectionActionPath<ParentAction, ElementID, Child.Action>
+  @usableFromInline let reducer: Child
 
   /// Creates an identified collection reducer for the parent `state` key path.
   ///
@@ -479,6 +506,7 @@ where
     self.reducer = reducer
   }
 
+  @inlinable
   public func reduce(into state: inout ParentState, action parentAction: ParentAction)
     -> EffectTask<ParentAction>
   {
