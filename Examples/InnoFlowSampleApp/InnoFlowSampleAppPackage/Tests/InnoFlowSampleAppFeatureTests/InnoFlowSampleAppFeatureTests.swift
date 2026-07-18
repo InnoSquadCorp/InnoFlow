@@ -33,27 +33,6 @@ struct InnoFlowSampleAppFeatureTests {
     Issue.record("Expected authVersion to reach \(target) before timing out")
   }
 
-  @MainActor
-  private func waitForSleeperRegistration(
-    _ clock: ManualTestClock,
-    minimumCount: Int = 1,
-    timeout: Duration = .seconds(1)
-  ) async -> Bool {
-    let wallClock = ContinuousClock()
-    let deadline = wallClock.now.advanced(by: timeout)
-
-    while wallClock.now < deadline {
-      if await clock.sleeperCount >= minimumCount {
-        return true
-      }
-      await Task.yield()
-      try? await Task.sleep(for: .milliseconds(5))
-    }
-
-    Issue.record("Timed out waiting for sleeper registration to reach \(minimumCount)")
-    return false
-  }
-
   @Test("Basics demo records queued follow-up increment")
   @MainActor
   func basicsQueuedFollowUp() async {
@@ -728,7 +707,7 @@ struct InnoFlowSampleAppFeatureTests {
 
   @Test("Offline-first stale save failure keeps the latest local edit")
   @MainActor
-  func offlineFirstStaleSaveFailureKeepsLatestEdit() async {
+  func offlineFirstStaleSaveFailureKeepsLatestEdit() async throws {
     let clock = ManualTestClock()
     let repository = MockDraftRepository(
       failureMode: .alwaysReject,
@@ -753,7 +732,7 @@ struct InnoFlowSampleAppFeatureTests {
       $0.errorMessage = nil
       $0.log = ["edit: 'Broken edit'", "save attempt: 'Broken edit'"]
     }
-    guard await waitForSleeperRegistration(clock) else { return }
+    try await clock.waitForSleepers(atLeast: 1)
 
     await store.send(.titleChanged("Newer local edit")) {
       $0.draft.title = "Newer local edit"
@@ -791,7 +770,7 @@ struct InnoFlowSampleAppFeatureTests {
 
   @Test("Realtime stream emits ticks when the clock advances")
   @MainActor
-  func realtimeStreamAdvancesClock() async {
+  func realtimeStreamAdvancesClock() async throws {
     let clock = ManualTestClock()
     let store = TestStore(
       reducer: RealtimeStreamFeature(tickInterval: .milliseconds(100)),
@@ -802,14 +781,14 @@ struct InnoFlowSampleAppFeatureTests {
       $0.isSubscribed = true
     }
 
-    guard await waitForSleeperRegistration(clock) else { return }
+    try await clock.waitForSleepers(atLeast: 1)
 
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(1)) {
       $0.ticks = [1]
     }
 
-    guard await waitForSleeperRegistration(clock) else { return }
+    try await clock.waitForSleepers(atLeast: 1)
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(2)) {
       $0.ticks = [1, 2]
@@ -845,7 +824,7 @@ struct InnoFlowSampleAppFeatureTests {
 
   @Test("Realtime stream subscribe restarts the loop without duplicating tick emitters")
   @MainActor
-  func realtimeStreamSubscribeRestartsLoop() async {
+  func realtimeStreamSubscribeRestartsLoop() async throws {
     let clock = ManualTestClock()
     let store = TestStore(
       reducer: RealtimeStreamFeature(tickInterval: .milliseconds(100)),
@@ -855,21 +834,22 @@ struct InnoFlowSampleAppFeatureTests {
     await store.send(.subscribe) {
       $0.isSubscribed = true
     }
-    guard await waitForSleeperRegistration(clock) else { return }
+    try await clock.waitForSleepers(atLeast: 1)
 
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(1)) {
       $0.ticks = [1]
     }
 
+    // Restarting a cancellable sleep can keep `sleeperCount` at 1 across the
+    // cancel + re-register boundary, so a sleeper-count wait cannot prove the
+    // replacement loop is ready. The cumulative registration count can:
+    // capture it before the restart and wait for the next registration.
+    let registrationsBeforeRestart = await clock.sleepRegistrationCount
     await store.send(.subscribe) {
       $0.isSubscribed = true
     }
-    // Restarting a cancellable sleep can keep `sleeperCount` at 1 across the
-    // cancel + re-register boundary, so polling that count is not enough to
-    // prove the replacement loop is ready. Give the cooperative executor a
-    // real wall-clock slice to process the restart before advancing.
-    try? await Task.sleep(for: .milliseconds(100))
+    try await clock.waitForSleepRegistrations(toReach: registrationsBeforeRestart + 1)
 
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(1)) {

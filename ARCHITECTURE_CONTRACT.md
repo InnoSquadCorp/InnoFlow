@@ -186,10 +186,16 @@ actor hops still need turns.
 A bounded poll like `for _ in 0..<200 { if condition { break }; await Task.yield() }`
 is the idiomatic pattern and is used throughout `InnoFlowTests`.
 
-`ManualTestClock` exposes `sleeperCount` for a related purpose: when a test
-needs to confirm that a `.run` body or a `.debounce`/`.throttle` wrapper has
-reached its `try await clock.sleep(...)` registration before the clock is
-advanced, polling `await clock.sleeperCount == N` is the safe marker.
+`ManualTestClock` goes further for the clock-advance case: when a test needs
+to confirm that a `.run` body or a `.debounce`/`.throttle` wrapper has reached
+its `try await clock.sleep(...)` registration before the clock is advanced,
+use the deterministic waits — `waitForSleepers(atLeast:)` /
+`advance(by:onceSleepersReach:)`, or `waitForSleepRegistrations(toReach:)`
+when a restart replaces a pending sleeper without changing `sleeperCount`.
+They suspend on the registration event itself, so neither a poll interval nor
+a yield count is involved. `sleeperCount` remains available as an observable
+condition for bounded polls in scenarios the deterministic waits do not
+cover.
 
 ## Instrumentation
 

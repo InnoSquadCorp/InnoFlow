@@ -263,8 +263,7 @@ await store.send(.subscribe) {
   $0.isSubscribed = true
 }
 
-while await clock.sleeperCount < 1 { await Task.yield() }
-await clock.advance(by: .milliseconds(100))
+try await clock.advance(by: .milliseconds(100), onceSleepersReach: 1)
 
 await store.receive(._tick(1)) {
   $0.ticks = [1]
@@ -275,8 +274,12 @@ await store.send(.unsubscribe) {
 await store.finish()
 ```
 
-`ManualTestClock.sleeperCount` is the right signal to wait on before
-`advance(by:)` — polling it avoids fragile `await Task.yield()` counts. See
+`advance(by:onceSleepersReach:)` suspends on the sleep registration event
+itself, so no yield-count or wall-clock polling is involved. When a restart
+replaces a pending sleeper without changing `sleeperCount` (latest-wins
+debounce/throttle shapes), capture `sleepRegistrationCount` before the
+trigger and wait with
+`waitForSleepRegistrations(toReach: previous + 1)` instead. See
 [`RealtimeStreamDemo`](../Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources/InnoFlowSampleAppFeature/RealtimeStreamDemo.swift)
 tests.
 
