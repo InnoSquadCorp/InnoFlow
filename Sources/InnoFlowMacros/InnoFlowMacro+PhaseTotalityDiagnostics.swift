@@ -32,6 +32,16 @@ extension InnoFlowMacro {
   /// `phaseMap` declaration. Catches the typo / forgotten-rule class of
   /// errors at macro-expansion time instead of leaving them for opt-in
   /// `validationReport(...)` calls in tests.
+  ///
+  /// Scope (deliberate, syntax-only — see `docs/MACRO_OPERATIONS.md`):
+  /// the pass runs only when the phase enum is literally named `Phase` and a
+  /// static `phaseMap` variable exists on the feature, and it collects
+  /// references only from direct `From(...)` / `On(to:)` / `On(targets:)`
+  /// calls. DSL wrapped in helper functions, aliased phase enums, or
+  /// dynamically built rules are invisible to it and are silently skipped —
+  /// the diagnostic is warning-grade and fails safe toward not reporting.
+  /// Runtime coverage for those shapes belongs to
+  /// `PhaseMap.validationReport(...)` in tests.
   static func diagnosePhaseTotalityIfNeeded(
     in declaration: StructDeclSyntax,
     context: some MacroExpansionContext

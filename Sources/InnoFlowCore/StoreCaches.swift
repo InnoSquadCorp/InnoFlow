@@ -219,6 +219,17 @@ package final class SelectionCacheEntry {
 /// Invariants:
 /// - one call site/signature must map to one selection value type per owner instance
 /// - cached selections stay alive for the lifetime of the owning store/projection
+///
+/// Entries are retained strongly, unlike `SingleScopeCache`'s weak entries.
+/// This is deliberate: `select` is designed to be callable inside a SwiftUI
+/// `body` without the caller storing the result, and a weak entry would be
+/// recreated (new allocation + observer re-registration) on every body pass.
+/// Growth stays bounded because the key is a static call site
+/// (fileID:line:column) plus its dependency key-path signature — code has
+/// finitely many `select` call sites. The one shape that can grow past that
+/// bound is passing *dynamically constructed* key paths (e.g.
+/// `appending(path:)` in a loop) through one call site; don't do that — build
+/// a `ScopedStore` per element with `scope(collection:id:action:)` instead.
 @MainActor
 package final class SelectionCache {
   private var entries: [SelectionCacheKey: SelectionCacheEntry] = [:]

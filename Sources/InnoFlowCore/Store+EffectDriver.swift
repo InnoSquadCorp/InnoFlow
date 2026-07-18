@@ -3,6 +3,16 @@ import Foundation
 extension Store: EffectDriver {
   package typealias Action = R.Action
 
+  /// Starts the orchestration task that owns a non-awaited merge or
+  /// concatenate subtree.
+  ///
+  /// Priority semantics are deliberate: the orchestration `Task` carries no
+  /// explicit priority, so it inherits the enqueuing MainActor context
+  /// (typically user-initiated). It only awaits child completion — the
+  /// actual work runs in the child `.run` tasks, which apply their declared
+  /// `priority:` in `startRun`. Deriving a wrapper priority from the child
+  /// tree would add a per-composite tree walk for no observable scheduling
+  /// difference.
   @discardableResult
   private func startCompositeTask(
     context: EffectExecutionContext?,
