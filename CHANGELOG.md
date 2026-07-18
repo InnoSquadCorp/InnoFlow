@@ -23,6 +23,16 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   topologies can pass the entry phase explicitly through the new
   `PhaseMap.derivedGraph(root:)`.
 
+### CI
+
+- `actions/checkout` is now pinned to one SHA (v6.0.3) across every
+  workflow; ci.yml and docs.yml had silently stayed on v6.0.2 while cd.yml
+  moved ahead. The pin gate now also requires a human-readable release-tag
+  comment next to each SHA and rejects the same action pinned to different
+  SHAs in different workflows. Documentation builds now also run for pull
+  requests targeting `develop`, so DocC regressions surface before the
+  release branch.
+
 ### Tests
 
 - The composition primitives gained dedicated behavioral coverage
