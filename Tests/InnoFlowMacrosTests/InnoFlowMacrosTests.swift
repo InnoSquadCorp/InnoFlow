@@ -118,6 +118,55 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow accepts a module-qualified Reducer constraint")
+  func moduleQualifiedReducerConstraintIsAccepted() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct ModuleQualifiedFeature {
+            struct State: Sendable { var count = 0 }
+            enum Action: Sendable { case increment }
+
+            var body: some InnoFlow.Reducer<State, Action> {
+                Reduce { state, action in
+                    switch action {
+                    case .increment:
+                        state.count += 1
+                        return .none
+                    }
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct ModuleQualifiedFeature {
+              struct State: Sendable { var count = 0 }
+              enum Action: Sendable { case increment }
+
+              var body: some InnoFlow.Reducer<State, Action> {
+                  Reduce { state, action in
+                      switch action {
+                      case .increment:
+                          state.count += 1
+                          return .none
+                      }
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension ModuleQualifiedFeature: Reducer {}
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow rejects non-Self qualification in the body signature")
   func foreignQualifiedBodySignatureIsRejected() throws {
     #if canImport(InnoFlowMacros)

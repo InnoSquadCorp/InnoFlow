@@ -53,10 +53,12 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 ### Fixed
 
 - `@InnoFlow` now accepts the Self-qualified body signature
-  `var body: some Reducer<Self.State, Self.Action>`. Both spellings resolve
-  to the same nested declarations, so the qualified form was being rejected
-  incorrectly. Qualification through any other base type is still refused,
-  and the diagnostic now names both accepted spellings.
+  `var body: some Reducer<Self.State, Self.Action>` and the
+  module-qualified constraint spellings `InnoFlow.Reducer` /
+  `InnoFlowCore.Reducer`. All of these resolve to the same declarations, so
+  the qualified forms were being rejected incorrectly. Qualification
+  through any other base type is still refused, and the diagnostics name
+  the accepted spellings.
 
 ### Changed
 

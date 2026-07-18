@@ -33,18 +33,33 @@ extension InnoFlowMacro {
       return issues
     }
 
-    guard let identifierType = someOrAny.constraint.as(IdentifierTypeSyntax.self) else {
+    // `Reducer` may be spelled bare or module-qualified — it lives in
+    // InnoFlowCore and is reexported by InnoFlow, so both qualifications are
+    // legitimate authoring.
+    let constraintName: String
+    let genericArgumentClause: GenericArgumentClauseSyntax?
+    if let identifierType = someOrAny.constraint.as(IdentifierTypeSyntax.self) {
+      constraintName = identifierType.name.text
+      genericArgumentClause = identifierType.genericArgumentClause
+    } else if let memberType = someOrAny.constraint.as(MemberTypeSyntax.self),
+      let base = memberType.baseType.as(IdentifierTypeSyntax.self),
+      base.name.text == "InnoFlow" || base.name.text == "InnoFlowCore",
+      base.genericArgumentClause == nil
+    {
+      constraintName = memberType.name.text
+      genericArgumentClause = memberType.genericArgumentClause
+    } else {
       issues.append(
         "`body` constraint `\(someOrAny.constraint.trimmedDescription)` is not a recognized type")
       return issues
     }
 
-    guard identifierType.name.text == "Reducer" else {
-      issues.append("`body` type must constrain to `Reducer`, found `\(identifierType.name.text)`")
+    guard constraintName == "Reducer" else {
+      issues.append("`body` type must constrain to `Reducer`, found `\(constraintName)`")
       return issues
     }
 
-    guard let genericArgs = identifierType.genericArgumentClause else {
+    guard let genericArgs = genericArgumentClause else {
       issues.append("`body` type must specify `Reducer<State, Action>`")
       return issues
     }
