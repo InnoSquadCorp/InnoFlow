@@ -2051,6 +2051,46 @@ struct TestStoreCoreTests {
     #expect(graph.successors(from: .failed) == [.idle, .loaded])
   }
 
+  @Test("PhaseMap derivedGraph infers the root for an acyclic topology")
+  func phaseMapDerivedGraphInfersRootWhenUnambiguous() {
+    let acyclicMap = PhaseMap<
+      PhaseMapHarness.State, PhaseMapHarness.Action, PhaseMapHarness.State.Phase
+    >(\.phase) {
+      From(.idle) {
+        On(.load, to: .loading)
+      }
+      From(.loading) {
+        On(PhaseMapHarness.loadedCasePath, to: .loaded)
+        On(PhaseMapHarness.failedCasePath, to: .failed)
+      }
+    }
+
+    // `.idle` is the only source phase that never appears as a target, so
+    // the root-inferring overload must validate without an explicit root.
+    let report = acyclicMap.derivedGraph.validationReport(
+      allPhases: [.idle, .loading],
+      terminalPhases: [.loaded, .failed]
+    )
+    #expect(report.issues.isEmpty)
+    #expect(report.unreachable.isEmpty)
+  }
+
+  @Test("PhaseMap derivedGraph(root:) supplies the root for cyclic topologies")
+  func phaseMapDerivedGraphExplicitRootForCyclicTopology() {
+    let allPhases: Set<PhaseMapHarness.State.Phase> = [.idle, .loading, .loaded, .failed]
+
+    // The harness map cycles back into `.idle` (failed → idle) and
+    // `.loading` (loaded → loading), so no unambiguous entry phase exists
+    // and the root-inferring overload reports `.missingRoot`.
+    let inferred = PhaseMapHarness.phaseMap.derivedGraph.validationReport(allPhases: allPhases)
+    #expect(inferred.issues == [.missingRoot])
+
+    let rooted = PhaseMapHarness.phaseMap.derivedGraph(root: .idle)
+    let report = rooted.validationReport(allPhases: allPhases)
+    #expect(report.issues.isEmpty)
+    #expect(report.unreachable.isEmpty)
+  }
+
   @Test("PhaseMap opt-in validation reports clean coverage when expected triggers are declared")
   func phaseMapValidationReportCoveredTriggers() {
     let report = PhaseMapHarness.phaseMap.validationReport(

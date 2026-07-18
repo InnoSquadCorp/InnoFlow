@@ -187,7 +187,13 @@ extension PhaseTransitionGraph {
     return .init(adjacency, suggestedRoot: phases.first)
   }
 
-  /// Validates a graph using the root inferred by `linear(_:)`.
+  /// Validates a graph using its suggested root.
+  ///
+  /// A suggested root exists when the graph came from `linear(_:)`, from
+  /// `PhaseMap.derivedGraph` with an unambiguous entry phase, or from
+  /// `PhaseMap.derivedGraph(root:)`. Graphs built directly from transitions
+  /// or adjacency have no suggested root and report `.missingRoot`; use the
+  /// `validate(allPhases:root:terminalPhases:)` overload for those.
   public func validate(
     allPhases: Set<Phase>,
     terminalPhases: Set<Phase> = []
@@ -195,7 +201,10 @@ extension PhaseTransitionGraph {
     validationReport(allPhases: allPhases, terminalPhases: terminalPhases).issues
   }
 
-  /// Returns a detailed validation report using the root inferred by `linear(_:)`.
+  /// Returns a detailed validation report using the graph's suggested root.
+  ///
+  /// See `validate(allPhases:terminalPhases:)` for which construction paths
+  /// carry a suggested root; without one this reports `.missingRoot`.
   public func validationReport(
     allPhases: Set<Phase>,
     terminalPhases: Set<Phase> = []
@@ -220,8 +229,17 @@ extension PhaseTransitionGraph {
 }
 
 extension PhaseTransitionGraph {
-  fileprivate init(_ adjacency: [Phase: Set<Phase>], suggestedRoot: Phase?) {
+  internal init(_ adjacency: [Phase: Set<Phase>], suggestedRoot: Phase?) {
     self.adjacency = adjacency
     self.suggestedRoot = suggestedRoot
+  }
+
+  /// Returns a copy of this graph whose suggested root is `root`.
+  ///
+  /// Used by `PhaseMap.derivedGraph(root:)` so cyclic graphs (where no
+  /// unambiguous entry phase can be inferred from in-degrees) can still
+  /// feed the root-inferring `validate` / `validationReport` overloads.
+  internal func withSuggestedRoot(_ root: Phase) -> Self {
+    .init(adjacency, suggestedRoot: root)
   }
 }

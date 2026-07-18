@@ -111,20 +111,51 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
     self.cachedDerivedGraph = Self.makeDerivedGraph(from: declaredRules)
   }
 
+  /// The transition topology declared by this map's rules.
+  ///
+  /// When exactly one declared source phase never appears as a transition
+  /// target, that phase is carried as the graph's suggested root, so the
+  /// root-inferring `validate` / `validationReport` overloads work directly.
+  /// Cyclic maps (for example a `failed → idle` reset edge) have no
+  /// unambiguous entry phase; pass the entry explicitly through
+  /// `derivedGraph(root:)` for those.
   public var derivedGraph: PhaseTransitionGraph<Phase> {
     cachedDerivedGraph
+  }
+
+  /// The transition topology declared by this map's rules, with `root` as
+  /// the suggested root for the root-inferring validation overloads.
+  ///
+  /// Use this when the map's topology is cyclic and the entry phase cannot
+  /// be inferred from in-degrees alone.
+  public func derivedGraph(root: Phase) -> PhaseTransitionGraph<Phase> {
+    cachedDerivedGraph.withSuggestedRoot(root)
   }
 
   private static func makeDerivedGraph(
     from rules: [PhaseRule<State, Action, Phase>]
   ) -> PhaseTransitionGraph<Phase> {
     var adjacency: [Phase: Set<Phase>] = [:]
+    var seenSources: Set<Phase> = []
+    var sourceOrder: [Phase] = []
     for rule in rules {
+      if seenSources.insert(rule.sourcePhase).inserted {
+        sourceOrder.append(rule.sourcePhase)
+      }
       for transition in rule.transitions {
         adjacency[rule.sourcePhase, default: []].formUnion(transition.declaredTargets)
       }
     }
-    return .init(adjacency)
+
+    // A single source phase that never appears as a target is an
+    // unambiguous entry point; carry it so root-inferring validation works
+    // without an explicit root. Anything else (cycles back into every
+    // source, or several independent entry phases) stays nil rather than
+    // guessing.
+    let allTargets = adjacency.values.reduce(into: Set<Phase>()) { $0.formUnion($1) }
+    let rootCandidates = sourceOrder.filter { !allTargets.contains($0) }
+    let suggestedRoot = rootCandidates.count == 1 ? rootCandidates.first : nil
+    return .init(adjacency, suggestedRoot: suggestedRoot)
   }
 
   /// Returns a lightweight report describing which explicitly expected phase triggers

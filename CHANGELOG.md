@@ -7,6 +7,15 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+
+- `PhaseMap.derivedGraph` now carries a suggested root when exactly one
+  declared source phase never appears as a transition target, so the
+  root-inferring `validate` / `validationReport` overloads work directly on
+  acyclic topologies instead of always reporting `.missingRoot`. Cyclic
+  topologies can pass the entry phase explicitly through the new
+  `PhaseMap.derivedGraph(root:)`.
+
 ### Fixed
 
 - `@InnoFlow` now accepts the Self-qualified body signature
