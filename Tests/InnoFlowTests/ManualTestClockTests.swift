@@ -64,16 +64,24 @@ struct ManualTestClockTests {
     }
     try await clock.waitForSleepRegistrations(toReach: 1)
 
-    // A second sleeper raises the registration count even while the first
-    // is still suspended.
+    // Latest-wins replacement: cancel the pending sleeper, then register a
+    // new one. sleeperCount returns to its previous level while the
+    // registration count keeps growing — the shape waitForSleepers(atLeast:)
+    // cannot observe and this API exists for.
+    first.cancel()
+    await #expect(throws: CancellationError.self) {
+      try await first.value
+    }
+    #expect(await clock.sleeperCount == 0)
+
     let second = Task {
       try await clock.sleep(for: .milliseconds(100))
     }
     try await clock.waitForSleepRegistrations(toReach: 2)
     #expect(await clock.sleepRegistrationCount == 2)
+    #expect(await clock.sleeperCount == 1)
 
     await clock.advance(by: .milliseconds(100))
-    try await first.value
     try await second.value
   }
 
