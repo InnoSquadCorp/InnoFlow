@@ -2,7 +2,7 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
-## Unreleased
+## 5.1.0
 
 - `PhaseMapExpectedTrigger.predicate(_:sampleAction:)` is deprecated. Use the
   identical `PhaseMapExpectedTrigger("label", sampleAction:)` initializer —

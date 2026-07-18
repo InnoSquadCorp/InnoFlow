@@ -1,5 +1,54 @@
 # InnoFlow Release Notes
 
+## 5.1.0 Release
+
+InnoFlow 5.1.0 is a consumer-friendliness and hot-path release on the 5.x
+contract. The swift-syntax dependency is now a single-toolchain-line range
+instead of an exact pin, so InnoFlow resolves next to other macro packages;
+the reducer composition dispatch path and `IdentifiedArray` accessors are
+inlinable across module boundaries; and `ManualTestClock` gains deterministic
+sleeper waits that replace yield-count and wall-clock polling in
+time-sensitive tests. `@InnoFlow` now accepts Self- and module-qualified
+signature spellings, and `PhaseMap.derivedGraph` carries a suggested root for
+acyclic topologies.
+
+### Changed
+
+1. `swift-syntax` is constrained to `"603.0.0"..<"604.0.0"` (was
+   `exact: "603.0.1"`); maintainer reproducibility stays on
+   `Package.resolved`.
+2. Composition primitives (`Reduce`, `Scope`, `IfLet`, `IfCaseLet`,
+   `ForEachReducer`, `ForEachIdentifiedReducer`) and O(1) `IdentifiedArray`
+   accessors are `@inlinable`; `EffectTask.isNone` is public.
+3. `EffectTask.potentialCancellationIDs` is computed once at construction;
+   `IdentifiedArray.remove(ids:)` is a single O(n + k) pass.
+
+### Added
+
+1. `ManualTestClock.waitForSleepers(atLeast:)`,
+   `waitForSleepRegistrations(toReach:)`, and
+   `advance(by:onceSleepersReach:)`; `sleepRegistrationCount` is public.
+2. `PhaseMap.derivedGraph` root inference for acyclic topologies and the
+   explicit `derivedGraph(root:)`.
+
+### Deprecated
+
+1. `PhaseMapExpectedTrigger.predicate(_:sampleAction:)` — use the identical
+   `init(_:sampleAction:)`; the compiler fix-it applies the rename.
+
+### Fixed
+
+1. `@InnoFlow` accepts `some Reducer<Self.State, Self.Action>` and the
+   module-qualified `InnoFlow.Reducer` / `InnoFlowCore.Reducer` constraint
+   spellings.
+2. `ManualTestClock` publishes a sleep registration only after the sleeper
+   actually parks, closing a narrow cancellation window that could wake
+   deterministic waiters early.
+
+See [`MIGRATION.md`](MIGRATION.md) for the 5.1.0 migration notes and
+[`CHANGELOG.md`](CHANGELOG.md) for the complete list including CI, test, and
+documentation changes.
+
 ## 5.0.0 Release
 
 InnoFlow 5.0.0 makes testing and store projections stricter by

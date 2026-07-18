@@ -2,16 +2,16 @@
 
 This document defines the minimum release quality bar for InnoFlow.
 
-Current stable public release: `5.0.0` (tagged and published on GitHub
-Releases, 2026-07-17)
+Current stable public release: `5.1.0` (tagged and published on GitHub
+Releases, 2026-07-18)
 
-The `main` branch carries the released 5.0.0 contract plus unreleased
+The `main` branch carries the released 5.1.0 contract plus unreleased
 follow-up work tracked in `CHANGELOG.md`. Installation snippets and
 tag-enforced release metadata must remain aligned with the exact stable tag.
 
 ## Stable release readiness
 
-The 5.0.0 release tag is exactly `5.0.0`; do not create or document a `v5.0.0`
+The 5.1.0 release tag is exactly `5.1.0`; do not create or document a `v5.1.0`
 tag. A release is publish-ready only after its exact tag triggers a successful
 GitHub Actions `Release Gate`.
 
@@ -32,11 +32,11 @@ To audit the currently published stable tag locally, release-tag enforcement
 must also pass:
 
 ```bash
-INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=5.0.0 scripts/check-release-sync.sh
+INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=5.1.0 scripts/check-release-sync.sh
 ```
 
-That command intentionally requires the actual local tag name to be `5.0.0`.
-It must not normalize or accept `v5.0.0`.
+That command intentionally requires the actual local tag name to be `5.1.0`.
+It must not normalize or accept `v5.1.0`.
 
 ## Release Checklist
 

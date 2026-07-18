@@ -7,6 +7,8 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-07-18
+
 ### Added
 
 - `ManualTestClock` gained deterministic wait primitives:
@@ -42,6 +44,18 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   id-routing through `ForEachReducer`/`ForEachIdentifiedReducer`. These
   semantics were previously pinned only indirectly through feature
   fixtures and env-gated perf benchmarks.
+
+### Documentation
+
+- The consumer guides, canonical sample tests, and
+  `ARCHITECTURE_CONTRACT.md` now teach the deterministic `ManualTestClock`
+  waits instead of `sleeperCount` polling with yield counts or wall-clock
+  sleeps; the sample's hand-rolled polling helper is removed.
+- `RELEASING.md` reflects the published 5.0.0 state, binding documentation
+  names `binding(_:to:)` as the canonical spelling across all READMEs, and
+  deliberate runtime/diagnostic boundaries (SelectionCache retention,
+  composite task priority, phase-totality scope) are recorded next to the
+  code they describe.
 
 ### Deprecated
 

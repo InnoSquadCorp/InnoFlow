@@ -6,7 +6,7 @@
 
 InnoFlow は、ビジネス/ドメイン状態遷移に集中した SwiftUI ファーストの一方向アーキテクチャフレームワークです。
 
-`main` と下記のインストール例は、正式な 5.0.0 公開契約を説明します。
+`main` と下記のインストール例は、正式な 5.1.0 公開契約を説明します。
 
 ## 基本方針
 
@@ -39,7 +39,7 @@ optional product の `InnoFlowSwiftUI` に置きます。
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "5.0.0")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "5.1.0")
 ]
 ```
 
