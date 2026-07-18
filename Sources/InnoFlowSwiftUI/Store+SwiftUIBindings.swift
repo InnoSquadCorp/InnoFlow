@@ -6,11 +6,11 @@
 public import SwiftUI
 
 extension Store {
-  /// Creates a SwiftUI `Binding` for properties marked with `@BindableField`.
+  /// Compatibility spelling of the canonical ``binding(_:to:)``.
   ///
-  /// Pass the projected key path of the bindable field, for example `\.$step`.
-  /// The explicit `send:` label is preferred for new code, but existing
-  /// trailing-closure calls continue to resolve to this overload.
+  /// The two labels are semantically identical; prefer `to:` in new code.
+  /// Existing `send:` and unlabeled trailing-closure call sites continue to
+  /// resolve here without deprecation.
   @_disfavoredOverload
   public func binding<Value>(
     _ keyPath: KeyPath<R.State, BindableProperty<Value>>,
@@ -22,14 +22,16 @@ extension Store {
     )
   }
 
-  /// Alias for ``binding(_:send:)`` that reads more naturally when passing an
-  /// enum case constructor as the action builder, for example
+  /// Creates a SwiftUI `Binding` for properties marked with `@BindableField`.
+  ///
+  /// This is the canonical binding spelling. Pass the projected key path of
+  /// the bindable field and the action constructor that carries the new
+  /// value back into the reducer, for example
   /// `store.binding(\.$step, to: Feature.Action.setStep)`.
   ///
-  /// The `send:` overload continues to work without deprecation — the two
-  /// spellings are semantically identical and both call into the same
-  /// underlying `Binding` constructor. Calls must continue to use an explicit
-  /// `to:` label when selecting this alias.
+  /// The `send:` overload and the unlabeled trailing-closure form are
+  /// compatibility spellings — semantically identical, kept without
+  /// deprecation. Prefer `to:` in new code.
   @_disfavoredOverload
   public func binding<Value>(
     _ keyPath: KeyPath<R.State, BindableProperty<Value>>,
@@ -38,7 +40,8 @@ extension Store {
     binding(keyPath, send: action)
   }
 
-  /// Compatibility spelling for existing trailing-closure call sites such as
+  /// Compatibility spelling of the canonical ``binding(_:to:)`` for existing
+  /// trailing-closure call sites such as
   /// `store.binding(\.$step) { Feature.Action.setStep($0) }`.
   public func binding<Value>(
     _ keyPath: KeyPath<R.State, BindableProperty<Value>>,
@@ -49,9 +52,11 @@ extension Store {
 }
 
 extension ScopedStore {
-  /// Creates a SwiftUI `Binding` for projected bindable child fields such as `\.$step`.
-  /// The explicit `send:` label is preferred for new code, but existing
-  /// trailing-closure calls continue to resolve to this overload.
+  /// Compatibility spelling of the canonical ``binding(_:to:)``.
+  ///
+  /// The two labels are semantically identical; prefer `to:` in new code.
+  /// Existing `send:` and unlabeled trailing-closure call sites continue to
+  /// resolve here without deprecation.
   @_disfavoredOverload
   public func binding<Value>(
     _ keyPath: KeyPath<ChildState, BindableProperty<Value>>,
@@ -63,11 +68,13 @@ extension ScopedStore {
     )
   }
 
-  /// Alias for ``binding(_:send:)`` that reads more naturally when passing an
-  /// enum case constructor as the action builder, for example
+  /// Creates a SwiftUI `Binding` for projected bindable child fields.
+  ///
+  /// This is the canonical binding spelling for scoped stores, for example
   /// `rowStore.binding(\.$isFavorite, to: RowFeature.Action.setIsFavorite)`.
-  /// Calls must continue to use an explicit `to:` label when selecting this
-  /// alias.
+  /// The `send:` overload and the unlabeled trailing-closure form are
+  /// compatibility spellings — semantically identical, kept without
+  /// deprecation. Prefer `to:` in new code.
   @_disfavoredOverload
   public func binding<Value>(
     _ keyPath: KeyPath<ChildState, BindableProperty<Value>>,
@@ -76,7 +83,8 @@ extension ScopedStore {
     binding(keyPath, send: action)
   }
 
-  /// Compatibility spelling for existing trailing-closure call sites such as
+  /// Compatibility spelling of the canonical ``binding(_:to:)`` for existing
+  /// trailing-closure call sites such as
   /// `rowStore.binding(\.$isFavorite) { RowFeature.Action.setIsFavorite($0) }`.
   public func binding<Value>(
     _ keyPath: KeyPath<ChildState, BindableProperty<Value>>,
