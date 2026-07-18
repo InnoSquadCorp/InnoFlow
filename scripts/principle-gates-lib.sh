@@ -870,22 +870,40 @@ run_macro_operations_checks() {
 
   echo "[principle-gates] Checking macro-first consumer operations"
   local operations_doc="docs/MACRO_OPERATIONS.md"
-  local syntax_version
+  local syntax_range
 
   if [[ ! -f "$operations_doc" ]]; then
     echo "[principle-gates] Failed: $operations_doc is missing"
     exit 1
   fi
 
-  syntax_version="$(
-    sed -nE 's/.*swift-syntax\.git", exact: "([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' Package.swift
+  # The manifest must constrain swift-syntax to exactly one toolchain line
+  # ("NNN.0.0"..<"NNN+1.0.0"). An exact pin causes version-solving conflicts
+  # in consumer graphs that carry other macro packages; an open range risks
+  # macro diagnostic drift across toolchain majors.
+  syntax_range="$(
+    sed -nE 's/.*swift-syntax\.git", "([0-9]+)\.0\.0"\.\.<"([0-9]+)\.0\.0".*/\1:\2/p' Package.swift
   )"
-  if [[ -z "$syntax_version" ]]; then
-    echo "[principle-gates] Failed: Package.swift must use an exact swift-syntax version"
+  if [[ -z "$syntax_range" ]]; then
+    echo "[principle-gates] Failed: Package.swift must constrain swift-syntax to a single toolchain line (\"NNN.0.0\"..<\"NNN+1.0.0\")"
     exit 1
   fi
-  if ! grep -F "$syntax_version" "$operations_doc" >/dev/null; then
-    echo "[principle-gates] Failed: $operations_doc must document swift-syntax $syntax_version"
+  local syntax_line_lower="${syntax_range%%:*}"
+  local syntax_line_upper="${syntax_range##*:}"
+  if [[ "$syntax_line_upper" -ne $((syntax_line_lower + 1)) ]]; then
+    echo "[principle-gates] Failed: swift-syntax range must span exactly one toolchain line (found ${syntax_line_lower}.0.0 ..< ${syntax_line_upper}.0.0)"
+    exit 1
+  fi
+  local resolved_syntax_version
+  resolved_syntax_version="$(
+    sed -nE '/"identity" : "swift-syntax"/,/"version"/ s/.*"version" : "([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' Package.resolved | head -1
+  )"
+  if [[ "${resolved_syntax_version%%.*}" != "$syntax_line_lower" ]]; then
+    echo "[principle-gates] Failed: Package.resolved swift-syntax (${resolved_syntax_version:-missing}) must stay on the ${syntax_line_lower} toolchain line"
+    exit 1
+  fi
+  if ! grep -F "\"${syntax_line_lower}.0.0\"..<\"${syntax_line_upper}.0.0\"" "$operations_doc" >/dev/null; then
+    echo "[principle-gates] Failed: $operations_doc must document the swift-syntax range \"${syntax_line_lower}.0.0\"..<\"${syntax_line_upper}.0.0\""
     exit 1
   fi
 

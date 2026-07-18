@@ -7,6 +7,16 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Changed
+
+- `swift-syntax` is now constrained to the single toolchain line
+  `"603.0.0"..<"604.0.0"` instead of an exact pin, so consumer graphs that
+  carry other macro packages can resolve a shared 603.x patch. Maintainer
+  reproducibility stays on `Package.resolved`, which keeps recording the
+  verified 603.0.1; resolved-patch upgrades follow the release-hardening
+  checklist in `RELEASING.md` because macro expansion snapshots track the
+  SwiftSyntax test-support rendering.
+
 ## [5.0.0] - 2026-07-17
 
 ### Changed

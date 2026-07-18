@@ -44,7 +44,12 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-syntax.git", exact: "603.0.1"),
+        // Constrained to a single SwiftSyntax toolchain line so macro
+        // expansion and diagnostics cannot drift across toolchain majors,
+        // while still letting consumer graphs share a newer 603.x patch
+        // with other macro packages. Maintainer reproducibility comes from
+        // Package.resolved, not the manifest (docs/MACRO_OPERATIONS.md).
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", "603.0.0"..<"604.0.0"),
     ],
     targets: [
         // MARK: - Core Library

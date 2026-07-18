@@ -16,10 +16,14 @@ that deliberately hand-author `Reducer` conformances.
 - Runtime-only targets may depend on `InnoFlowCore`; that product does not
   expose macro declarations or compile SwiftSyntax products.
 
-The 5.0 development line requires Swift 6.3. `swift-syntax` is pinned exactly
-to 603.0.1 so expansion and diagnostic output cannot drift under a compatible
-version range. Upgrade the toolchain and SwiftSyntax pin together through the
-policy in [`RELEASING.md`](../RELEASING.md).
+The 5.0 development line requires Swift 6.3. `swift-syntax` is constrained to
+the single toolchain line `"603.0.0"..<"604.0.0"` so expansion and diagnostic
+output cannot drift across toolchain majors, while consumer graphs that carry
+other macro packages can still resolve a shared 603.x patch. Maintainer and CI
+reproducibility comes from `Package.resolved`, which records the exact
+SwiftSyntax version every gate runs against. Upgrade the toolchain and the
+SwiftSyntax line together through the policy in
+[`RELEASING.md`](../RELEASING.md).
 
 ## What Macro-First Guarantees
 

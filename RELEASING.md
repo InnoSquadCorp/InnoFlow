@@ -84,7 +84,7 @@ If a release changes package-consumer behavior or authoring contracts, update th
 
 ## SwiftSyntax Upgrade Policy
 
-`swift-syntax` is pinned with an exact version because InnoFlow ships compiler macros and macro diagnostics can drift across SwiftSyntax releases. Upgrade it only in an intentional release-hardening change that includes:
+`swift-syntax` is constrained to a single toolchain line (for example `"603.0.0"..<"604.0.0"`) because InnoFlow ships compiler macros and macro diagnostics can drift across SwiftSyntax toolchain majors. The manifest range keeps consumer dependency graphs solvable next to other macro packages; the exact version maintainers and CI build against is recorded in `Package.resolved`. Move to a new toolchain line, or bump the resolved patch, only in an intentional release-hardening change that includes:
 
 1. Updating `Package.swift` and `Package.resolved` together.
 2. Running the macro test suite and compile-contract tests with warnings as errors.
