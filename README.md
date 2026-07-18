@@ -189,7 +189,7 @@ struct CounterView: View {
 }
 ```
 
-`binding(_:to:)` is an argument-label alias for `binding(_:send:)`. Both spellings stay supported. New code should spell `send:` or `to:` explicitly, and existing trailing-closure calls such as `store.binding(\.$step) { .setStep($0) }` continue to resolve to `send:` for source compatibility.
+`binding(_:to:)` is the canonical spelling. `binding(_:send:)` and existing trailing-closure calls such as `store.binding(\.$step) { .setStep($0) }` are semantically identical compatibility spellings that stay supported without deprecation; prefer `to:` in new code.
 
 ## Composition Surface
 

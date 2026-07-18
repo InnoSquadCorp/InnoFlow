@@ -129,7 +129,7 @@ Stepper(
 )
 ```
 
-`binding(_:to:)`는 `binding(_:send:)`의 argument-label alias입니다. 두 overload가 모두 있는 상태에서는 label을 생략하지 않는 것이 기준입니다.
+`binding(_:to:)`가 정본(canonical) 표기입니다. `binding(_:send:)`와 trailing-closure 표기는 의미가 동일한 호환용 표기로 deprecation 없이 유지되며, 새 코드에서는 `to:`를 사용하세요.
 
 ## 합성 표면
 

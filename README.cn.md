@@ -128,7 +128,7 @@ Stepper(
 )
 ```
 
-`binding(_:to:)` 是 `binding(_:send:)` 的参数标签别名。既然两个 overload 都存在，就不要省略 label。
+`binding(_:to:)` 是规范（canonical）写法。`binding(_:send:)` 与 trailing-closure 写法是语义完全相同的兼容写法，保留且不会弃用；新代码请使用 `to:`。
 
 ## 组合表面
 
