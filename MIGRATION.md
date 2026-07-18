@@ -2,6 +2,20 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
+## Unreleased
+
+- `PhaseMapExpectedTrigger.predicate(_:sampleAction:)` is deprecated. Use the
+  identical `PhaseMapExpectedTrigger("label", sampleAction:)` initializer —
+  the compiler fix-it applies the rename. The factory never took a predicate
+  closure; coverage has always been decided by running the sample action
+  through the declared transitions.
+- Tests that polled `ManualTestClock.sleeperCount` (or inserted
+  `Task.yield()` / wall-clock sleeps) before `advance(by:)` can migrate to
+  the deterministic waits: `advance(by:onceSleepersReach:)`,
+  `waitForSleepers(atLeast:)`, and `waitForSleepRegistrations(toReach:)` for
+  latest-wins restarts. The polling pattern keeps working but is no longer
+  the recommended idiom.
+
 ## 5.0.0
 
 ### Who is affected
