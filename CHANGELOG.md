@@ -23,6 +23,16 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   topologies can pass the entry phase explicitly through the new
   `PhaseMap.derivedGraph(root:)`.
 
+### Tests
+
+- The composition primitives gained dedicated behavioral coverage
+  (`ReducerCompositionTests`): declaration-order cumulative mutation,
+  builder branch/optional semantics, effect merging and lifting through
+  `Scope`, the `IfLet`/`IfCaseLet` missing-child `.ignore` policy, and
+  id-routing through `ForEachReducer`/`ForEachIdentifiedReducer`. These
+  semantics were previously pinned only indirectly through feature
+  fixtures and env-gated perf benchmarks.
+
 ### Deprecated
 
 - `PhaseMapExpectedTrigger.predicate(_:sampleAction:)` is deprecated in
