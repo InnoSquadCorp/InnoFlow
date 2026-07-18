@@ -69,6 +69,100 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
+  @Test("@InnoFlow accepts a Self-qualified body signature")
+  func selfQualifiedBodySignatureIsAccepted() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct QualifiedFeature {
+            struct State: Sendable { var count = 0 }
+            enum Action: Sendable { case increment }
+
+            var body: some Reducer<Self.State, Self.Action> {
+                Reduce { state, action in
+                    switch action {
+                    case .increment:
+                        state.count += 1
+                        return .none
+                    }
+                }
+            }
+        }
+        """,
+        expandedSource: """
+          struct QualifiedFeature {
+              struct State: Sendable { var count = 0 }
+              enum Action: Sendable { case increment }
+
+              var body: some Reducer<Self.State, Self.Action> {
+                  Reduce { state, action in
+                      switch action {
+                      case .increment:
+                          state.count += 1
+                          return .none
+                      }
+                  }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
+              }
+          }
+          extension QualifiedFeature: Reducer {}
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("@InnoFlow rejects non-Self qualification in the body signature")
+  func foreignQualifiedBodySignatureIsRejected() throws {
+    #if canImport(InnoFlowMacros)
+      assertMacroExpansion(
+        """
+        @InnoFlow
+        struct WrongFeature {
+            struct State: Sendable {}
+            enum Action: Sendable { case noop }
+
+            var body: some Reducer<Other.State, Other.Action> {
+                Reduce { state, action in .none }
+            }
+        }
+        """,
+        expandedSource: """
+          struct WrongFeature {
+              struct State: Sendable {}
+              enum Action: Sendable { case noop }
+
+              var body: some Reducer<Other.State, Other.Action> {
+                  Reduce { state, action in .none }
+              }
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message: """
+              Invalid body signature for @InnoFlow.
+              Expected:
+              var body: some Reducer<State, Action>
+              Detected issues: first generic parameter must be `State` (or `Self.State`), found `Other.State`; second generic parameter must be `Action` (or `Self.Action`), found `Other.Action`.
+              Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
+              """,
+            line: 1,
+            column: 1
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow preserves public access on synthesized members")
   func publicFeatureSynthesizesPublicMembers() throws {
     #if canImport(InnoFlowMacros)
@@ -1457,7 +1551,7 @@ struct InnoFlowMacrosTests {
               Invalid body signature for @InnoFlow.
               Expected:
               var body: some Reducer<State, Action>
-              Detected issues: first generic parameter must be `State`, found `Int`; second generic parameter must be `Action`, found `String`.
+              Detected issues: first generic parameter must be `State` (or `Self.State`), found `Int`; second generic parameter must be `Action` (or `Self.Action`), found `String`.
               Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
             line: 1,
@@ -1502,7 +1596,7 @@ struct InnoFlowMacrosTests {
               Invalid body signature for @InnoFlow.
               Expected:
               var body: some Reducer<State, Action>
-              Detected issues: first generic parameter must be `State`, found `State<Int>`; second generic parameter must be `Action`, found `Action<String>`.
+              Detected issues: first generic parameter must be `State` (or `Self.State`), found `State<Int>`; second generic parameter must be `Action` (or `Self.Action`), found `Action<String>`.
               Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
             line: 1,

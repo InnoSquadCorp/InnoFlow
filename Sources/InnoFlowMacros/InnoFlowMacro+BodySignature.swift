@@ -56,22 +56,16 @@ extension InnoFlowMacro {
       return issues
     }
 
-    if let first = args[0].argument.as(IdentifierTypeSyntax.self) {
-      if first.name.text != "State" || first.genericArgumentClause != nil {
-        issues.append(
-          "first generic parameter must be `State`, found `\(first.trimmedDescription)`")
-      }
-    } else {
-      issues.append("first generic parameter must be `State`")
+    if !isNestedTypeReference(args[0].argument, named: "State") {
+      issues.append(
+        "first generic parameter must be `State` (or `Self.State`), found `\(args[0].argument.trimmedDescription)`"
+      )
     }
 
-    if let second = args[1].argument.as(IdentifierTypeSyntax.self) {
-      if second.name.text != "Action" || second.genericArgumentClause != nil {
-        issues.append(
-          "second generic parameter must be `Action`, found `\(second.trimmedDescription)`")
-      }
-    } else {
-      issues.append("second generic parameter must be `Action`")
+    if !isNestedTypeReference(args[1].argument, named: "Action") {
+      issues.append(
+        "second generic parameter must be `Action` (or `Self.Action`), found `\(args[1].argument.trimmedDescription)`"
+      )
     }
 
     guard let accessorBlock = binding.accessorBlock else {
@@ -92,5 +86,28 @@ extension InnoFlowMacro {
       }
       return issues
     }
+  }
+
+  /// Returns `true` when `argument` spells a reference to the nested type
+  /// `named` — either the bare identifier (`State`) or the explicitly
+  /// qualified `Self.State`. Both resolve to the same nested declaration, so
+  /// rejecting the qualified spelling would refuse legitimate authoring.
+  private static func isNestedTypeReference(
+    _ argument: some SyntaxProtocol,
+    named expected: String
+  ) -> Bool {
+    if let identifier = argument.as(IdentifierTypeSyntax.self) {
+      return identifier.name.text == expected && identifier.genericArgumentClause == nil
+    }
+    if let member = argument.as(MemberTypeSyntax.self),
+      member.name.text == expected,
+      member.genericArgumentClause == nil,
+      let base = member.baseType.as(IdentifierTypeSyntax.self),
+      base.name.text == "Self",
+      base.genericArgumentClause == nil
+    {
+      return true
+    }
+    return false
   }
 }

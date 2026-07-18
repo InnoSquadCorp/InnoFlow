@@ -7,6 +7,14 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- `@InnoFlow` now accepts the Self-qualified body signature
+  `var body: some Reducer<Self.State, Self.Action>`. Both spellings resolve
+  to the same nested declarations, so the qualified form was being rejected
+  incorrectly. Qualification through any other base type is still refused,
+  and the diagnostic now names both accepted spellings.
+
 ### Changed
 
 - `IdentifiedArray.remove(ids:)` now removes the batch in a single filter
