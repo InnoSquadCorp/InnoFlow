@@ -253,16 +253,9 @@ where
       if awaitSleepRegistrationAfterTrigger {
         let previousRegistrationCount = await clock.sleepRegistrationCount
         store.send(trigger(value))
-        let didRegister = await waitUntilAsync(
-          timeout: .seconds(2),
-          pollInterval: .milliseconds(1)
-        ) {
-          await clock.sleepRegistrationCount > previousRegistrationCount
-        }
-        try #require(
-          didRegister,
-          "Timed out waiting for the trigger's manual-clock sleep registration"
-        )
+        // Deterministic: resumes on the registration event itself instead of
+        // polling with a wall-clock timeout.
+        try await clock.waitForSleepRegistrations(toReach: previousRegistrationCount + 1)
       } else {
         store.send(trigger(value))
         await settleTimingScenarioWork()

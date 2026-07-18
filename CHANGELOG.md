@@ -9,6 +9,13 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- `ManualTestClock` gained deterministic wait primitives:
+  `waitForSleepers(atLeast:)`, `waitForSleepRegistrations(toReach:)`, and the
+  gated `advance(by:onceSleepersReach:)`. They suspend on the sleep
+  registration event itself, replacing the yield-count and wall-clock
+  polling that time-sensitive tests previously needed before advancing the
+  clock. `sleepRegistrationCount` is now public to support the
+  registration-count wait.
 - `PhaseMap.derivedGraph` now carries a suggested root when exactly one
   declared source phase never appears as a transition target, so the
   root-inferring `validate` / `validationReport` overloads work directly on
