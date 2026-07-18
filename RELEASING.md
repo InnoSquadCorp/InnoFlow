@@ -2,13 +2,14 @@
 
 This document defines the minimum release quality bar for InnoFlow.
 
-Current stable public release target: `5.0.0`
+Current stable public release: `5.0.0` (tagged and published on GitHub
+Releases, 2026-07-17)
 
-The `main` branch contains the staged 5.0.0 release contract. Installation
-snippets and tag-enforced release metadata must remain aligned with the exact
-stable tag.
+The `main` branch carries the released 5.0.0 contract plus unreleased
+follow-up work tracked in `CHANGELOG.md`. Installation snippets and
+tag-enforced release metadata must remain aligned with the exact stable tag.
 
-## Stable 5.0.0 release readiness
+## Stable release readiness
 
 The 5.0.0 release tag is exactly `5.0.0`; do not create or document a `v5.0.0`
 tag. A release is publish-ready only after its exact tag triggers a successful

@@ -132,8 +132,8 @@ require_pattern \
 
 require_pattern \
   RELEASING.md \
-  "Current stable public release target: \`${escaped_version}\`" \
-  "release target ${version}"
+  "Current stable public release: \`${escaped_version}\`" \
+  "current stable release ${version}"
 
 require_pattern \
   ARCHITECTURE_CONTRACT.md \
