@@ -158,7 +158,17 @@ public actor ManualTestClock {
 
         if Task.isCancelled, let request = sleepers.removeValue(forKey: sleeperID) {
           request.continuation.resume(throwing: CancellationError())
+          return
         }
+
+        // Count the registration and wake waiters only after the inline
+        // cancellation check confirms the sleeper actually parked. This
+        // whole closure runs synchronously on the actor, so outside
+        // observers never see the transient registration of a sleeper that
+        // was cancelled before it ever suspended — otherwise
+        // waitForSleepers(atLeast:) could wake for a sleeper that is
+        // already gone by the time the waiter advances the clock.
+        commitSleepRegistration()
       }
     } onCancel: {
       Task {
@@ -184,6 +194,9 @@ public actor ManualTestClock {
     }
   }
 
+  /// Inserts the sleep request without publishing it. `sleep` calls
+  /// `commitSleepRegistration()` after its inline cancellation check so
+  /// counters and waiters only ever observe sleepers that actually parked.
   private func registerSleep(
     id: UUID,
     deadline: Instant,
@@ -197,9 +210,12 @@ public actor ManualTestClock {
       insertionOrder: insertionOrder,
       continuation: continuation
     )
+    return true
+  }
+
+  private func commitSleepRegistration() {
     successfulSleepRegistrationCount += 1
     resumeSatisfiedSleeperWaiters()
-    return true
   }
 
   private func cancelSleep(id: UUID) {
