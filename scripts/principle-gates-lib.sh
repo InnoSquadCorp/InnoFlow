@@ -1174,6 +1174,16 @@ run_sample_contract_checks() {
 }
 
 run_principle_gates_impl() {
+  # --static skips the build/test gates (release builds, debug + release
+  # test runs, sample runtime contracts) and keeps only the fast static
+  # analysis. Intended for local pre-commit iteration; CI and release
+  # preparation must run the full suite.
+  local gate_mode="full"
+  if [[ "${1:-}" == "--static" ]]; then
+    gate_mode="static"
+    shift
+  fi
+
   run_workflow_security_checks "$@"
   run_authoring_surface_checks "$@"
   run_sample_static_contract_checks "$@"
@@ -1181,6 +1191,12 @@ run_principle_gates_impl() {
   run_authoring_policy_checks "$@"
   run_macro_operations_checks "$@"
   run_community_health_checks "$@"
+
+  if [[ "$gate_mode" == "static" ]]; then
+    echo "[principle-gates] Static checks passed (skipped release-build and sample-runtime gates; run without --static before pushing a release)"
+    return 0
+  fi
+
   run_release_build_checks "$@"
   run_sample_runtime_contract_checks "$@"
   echo "[principle-gates] All checks passed"

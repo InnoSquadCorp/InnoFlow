@@ -333,7 +333,8 @@ InnoFlow/
 swift test --package-path .
 swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1
 xcodebuild -jobs 1 -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
-./scripts/principle-gates.sh
+./scripts/principle-gates.sh            # full suite: static gates + release builds + test runs
+./scripts/principle-gates.sh --static   # fast local iteration: static gates only
 ```
 
 ## Contribution rule
