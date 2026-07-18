@@ -9,6 +9,12 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed
 
+- `IdentifiedArray.remove(ids:)` now removes the batch in a single filter
+  pass with one index rebuild (O(n + k)) instead of paying an O(n) element
+  shift plus an O(n) index rebuild per removed id (O(n·k)). Semantics are
+  unchanged: missing ids are skipped, duplicates are tolerated, and
+  insertion order is preserved.
+
 - The per-action dispatch entry points of the composition primitives
   (`Reduce`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`,
   `ForEachIdentifiedReducer`) and the O(1) `IdentifiedArray` accessors are

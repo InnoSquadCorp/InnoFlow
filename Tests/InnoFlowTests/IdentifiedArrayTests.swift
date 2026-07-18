@@ -172,4 +172,53 @@ struct IdentifiedArrayTests {
     array.remove(ids: [1, 99, 3])
     #expect(array.ids == [2])
   }
+
+  @Test("remove(ids:) tolerates duplicate ids and keeps the index consistent")
+  func removeIdsBatchDuplicatesAndIndexConsistency() {
+    var array = IdentifiedArrayOf<Row>(uniqueElements: [
+      Row(id: 1, title: "a"),
+      Row(id: 2, title: "b"),
+      Row(id: 3, title: "c"),
+      Row(id: 4, title: "d"),
+      Row(id: 5, title: "e"),
+    ])
+    array.remove(ids: [2, 4, 2, 4, 99])
+
+    #expect(array.ids == [1, 3, 5])
+    #expect(array[id: 1]?.title == "a")
+    #expect(array[id: 3]?.title == "c")
+    #expect(array[id: 5]?.title == "e")
+    #expect(array[id: 2] == nil)
+    #expect(array[id: 4] == nil)
+
+    // Downstream positions shifted by the batch removal must remain
+    // addressable through the id → index map.
+    array.insert(Row(id: 6, title: "f"), after: 3)
+    #expect(array.ids == [1, 3, 6, 5])
+    #expect(array[id: 6]?.title == "f")
+  }
+
+  @Test("remove(ids:) removing every element leaves an empty, reusable array")
+  func removeIdsBatchAll() {
+    var array = IdentifiedArrayOf<Row>(uniqueElements: [
+      Row(id: 1, title: "a"),
+      Row(id: 2, title: "b"),
+    ])
+    array.remove(ids: [2, 1])
+    #expect(array.isEmpty)
+
+    let appended = array.append(Row(id: 1, title: "again"))
+    #expect(appended)
+    #expect(array.ids == [1])
+  }
+
+  @Test("remove(ids:) with no matching ids is a no-op")
+  func removeIdsBatchNoMatches() {
+    var array = IdentifiedArrayOf<Row>(uniqueElements: [
+      Row(id: 1, title: "a"),
+      Row(id: 2, title: "b"),
+    ])
+    array.remove(ids: [98, 99])
+    #expect(array.ids == [1, 2])
+  }
 }

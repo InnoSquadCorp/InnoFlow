@@ -192,10 +192,26 @@ where Element: Sendable {
   /// Removes every element identified by an id in `ids`. Missing ids are
   /// silently skipped — the operation is treated as "ensure these ids are
   /// gone" rather than a strict batch delete.
+  ///
+  /// The batch runs as a single filter pass followed by one index rebuild,
+  /// so removing k elements costs O(n + k) instead of the O(n·k) that k
+  /// repeated single-id removals (each an O(n) `Array.remove(at:)` plus an
+  /// O(n) index rebuild) would pay.
+  @inlinable
   public mutating func remove<S: Sequence>(ids: S) where S.Element == ID {
+    var pendingRemovals: Set<ID> = []
+    var lowestRemovedPosition = elements.count
     for id in ids {
-      _ = remove(id: id)
+      guard let position = index[id], pendingRemovals.insert(id).inserted else { continue }
+      lowestRemovedPosition = Swift.min(lowestRemovedPosition, position)
     }
+    guard !pendingRemovals.isEmpty else { return }
+
+    for id in pendingRemovals {
+      index.removeValue(forKey: id)
+    }
+    elements.removeAll { pendingRemovals.contains(idForElement($0)) }
+    rebuildIndex(from: lowestRemovedPosition)
   }
 
   /// Removes every element. Capacity is preserved so reuse during a hot
