@@ -37,6 +37,46 @@ struct EffectTaskTests {
     #expect(AnyEffectID(first) != AnyEffectID(dynamic))
   }
 
+  @Test("potentialCancellationIDs collects every id in a composed tree")
+  func potentialCancellationIDsComposedTree() {
+    let outer = AnyEffectID(StaticEffectID("ids.outer"))
+    let debounced = AnyEffectID(StaticEffectID("ids.debounced"))
+    let throttled = AnyEffectID(StaticEffectID("ids.throttled"))
+
+    let effect: EffectTask<Int> = EffectTask.merge(
+      EffectTask.run { _ in }.cancellable("ids.outer"),
+      EffectTask.concatenate(
+        EffectTask.run { _ in }.debounce("ids.debounced", for: .milliseconds(1)),
+        EffectTask.run { _ in }.throttle("ids.throttled", for: .milliseconds(1))
+      )
+    )
+
+    #expect(effect.potentialCancellationIDs == [outer, debounced, throttled])
+    #expect(EffectTask<Int>.send(1).potentialCancellationIDs.isEmpty)
+  }
+
+  @Test("potentialCancellationIDs materializes lazy subtrees on access")
+  func potentialCancellationIDsLazySubtree() {
+    let lazyID = AnyEffectID(StaticEffectID("ids.lazy"))
+    let lazy = EffectTask<Int>(
+      operation: .lazyMap(
+        .init {
+          EffectTask.run { _ in }.cancellable("ids.lazy")
+        })
+    )
+
+    #expect(lazy.potentialCancellationIDs == [lazyID])
+
+    // A composed tree containing the lazy node must surface the same ids
+    // through the access-time walk.
+    let composed = EffectTask<Int>.merge(
+      lazy,
+      EffectTask.run { _ in }.cancellable("ids.outer")
+    )
+    let outer = AnyEffectID(StaticEffectID("ids.outer"))
+    #expect(composed.potentialCancellationIDs == [lazyID, outer])
+  }
+
   @Test("EffectTask.none does not emit follow-up actions")
   func effectNone() async {
     let store = TestStore(reducer: CounterFeature(), initialState: .init())

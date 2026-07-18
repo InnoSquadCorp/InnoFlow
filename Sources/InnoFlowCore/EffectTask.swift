@@ -245,11 +245,66 @@ public struct EffectTask<Action: Sendable>: Sendable {
 
   package let operation: Operation
 
+  /// Cancellation IDs precomputed at construction, or `nil` when the subtree
+  /// contains a `.lazyMap` node — materializing those at construction would
+  /// defeat the laziness they exist for, so lazy subtrees fall back to the
+  /// recursive walk on access.
+  private let cachedPotentialCancellationIDs: Set<AnyEffectID>?
+
+  package init(operation: Operation) {
+    self.operation = operation
+    self.cachedPotentialCancellationIDs = Self.eagerPotentialCancellationIDs(of: operation)
+  }
+
   /// Cancellation identifiers that this concrete effect tree may still introduce.
   ///
   /// The runtime uses this finite set to retain pre-registration cancellation
-  /// state only for IDs the active interpreter can actually discover.
+  /// state only for IDs the active interpreter can actually discover. The set
+  /// is computed once at construction (children carry their own cached sets,
+  /// so composing N effects costs O(N), not a fresh tree walk); only subtrees
+  /// containing `.lazyMap` recompute on access.
   package var potentialCancellationIDs: Set<AnyEffectID> {
+    cachedPotentialCancellationIDs ?? Self.walkPotentialCancellationIDs(of: operation)
+  }
+
+  /// Construction-time variant: returns `nil` as soon as a `.lazyMap` node is
+  /// involved so laziness is preserved.
+  private static func eagerPotentialCancellationIDs(
+    of operation: Operation
+  ) -> Set<AnyEffectID>? {
+    switch operation {
+    case .none, .send, .run, .cancel, .diagnosticDrop:
+      return []
+
+    case .merge(let effects), .concatenate(let effects):
+      var ids: Set<AnyEffectID> = []
+      for effect in effects {
+        guard let childIDs = effect.cachedPotentialCancellationIDs else { return nil }
+        ids.formUnion(childIDs)
+      }
+      return ids
+
+    case .cancellable(let effect, let id, _),
+      .debounce(let effect, let id, _):
+      guard let childIDs = effect.cachedPotentialCancellationIDs else { return nil }
+      return childIDs.union([id])
+
+    case .throttle(let effect, let id, _, _, _):
+      guard let childIDs = effect.cachedPotentialCancellationIDs else { return nil }
+      return childIDs.union([id])
+
+    case .animation(let effect, _):
+      return effect.cachedPotentialCancellationIDs
+
+    case .lazyMap:
+      return nil
+    }
+  }
+
+  /// Access-time fallback for lazy subtrees; materializes `.lazyMap` nodes.
+  private static func walkPotentialCancellationIDs(
+    of operation: Operation
+  ) -> Set<AnyEffectID> {
     switch operation {
     case .none, .send, .run, .cancel, .diagnosticDrop:
       return []

@@ -60,6 +60,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed
 
+- `EffectTask.potentialCancellationIDs` is now computed once at effect
+  construction (children carry their own cached sets, so composition costs
+  O(children)) instead of re-walking the whole effect tree with fresh `Set`
+  allocations on every execution. Subtrees containing a `.lazyMap` node
+  keep the access-time walk so laziness is preserved.
 - `IdentifiedArray.remove(ids:)` now removes the batch in a single filter
   pass with one index rebuild (O(n + k)) instead of paying an O(n) element
   shift plus an O(n) index rebuild per removed id (O(n·k)). Semantics are
