@@ -254,6 +254,12 @@ extension PhaseMapExpectedTrigger {
     .init(label, sampleAction: path.embed(payload))
   }
 
+  /// Deprecated spelling of the labeled-sample initializer.
+  ///
+  /// The name suggested a closure-based matcher, but the factory never took
+  /// a predicate — coverage is always decided by running `sampleAction`
+  /// through the declared transitions, exactly like `init(_:sampleAction:)`.
+  @available(*, deprecated, renamed: "init(_:sampleAction:)")
   public static func predicate(
     _ label: String,
     sampleAction: Action

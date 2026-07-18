@@ -16,6 +16,13 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   topologies can pass the entry phase explicitly through the new
   `PhaseMap.derivedGraph(root:)`.
 
+### Deprecated
+
+- `PhaseMapExpectedTrigger.predicate(_:sampleAction:)` is deprecated in
+  favor of the identical `init(_:sampleAction:)`. The factory never took a
+  predicate closure; coverage has always been decided by running the sample
+  action through the declared transitions.
+
 ### Fixed
 
 - `@InnoFlow` now accepts the Self-qualified body signature
