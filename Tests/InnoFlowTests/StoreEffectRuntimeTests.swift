@@ -1444,8 +1444,9 @@ struct StoreEffectRuntimeTests {
 
   @Test("Empty CombineReducers behaves like .none")
   func emptyCombineReducers() {
-    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action>
-    {
+    let reducer = CombineReducers<
+      BuilderCompositionFeature.State, BuilderCompositionFeature.Action, Never
+    > {
     }
     var state = BuilderCompositionFeature.State()
 
@@ -1508,8 +1509,9 @@ struct StoreEffectRuntimeTests {
 
   @Test("Builder preserves declaration order across mixed if/for/if-else/straight-line blocks")
   func combineReducersMixedBuilderBlock() {
-    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action>
-    {
+    let reducer = CombineReducers<
+      BuilderCompositionFeature.State, BuilderCompositionFeature.Action, Never
+    > {
       BuilderCompositionFeature.append("a")
       if true {
         BuilderCompositionFeature.append("b")
@@ -1536,8 +1538,9 @@ struct StoreEffectRuntimeTests {
 
   @Test("Builder compiles and preserves order for N=32 straight-line block")
   func combineReducersN32StressPreservesOrder() {
-    let reducer = CombineReducers<BuilderCompositionFeature.State, BuilderCompositionFeature.Action>
-    {
+    let reducer = CombineReducers<
+      BuilderCompositionFeature.State, BuilderCompositionFeature.Action, Never
+    > {
       BuilderCompositionFeature.append("01")
       BuilderCompositionFeature.append("02")
       BuilderCompositionFeature.append("03")

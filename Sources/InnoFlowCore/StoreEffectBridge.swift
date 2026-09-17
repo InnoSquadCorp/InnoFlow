@@ -17,7 +17,7 @@ import Foundation
 /// - an active interpreter retains pending cancellation only for IDs its tree may discover
 /// - delayed debounce/throttle state must be cleared whenever the owning Store shuts down
 @MainActor
-package final class StoreEffectBridge<Action: Sendable> {
+package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
   private struct DebounceState {
     let scope: DelayedEffectScope
     let generation: UInt64
@@ -31,7 +31,8 @@ package final class StoreEffectBridge<Action: Sendable> {
   }
 
   package let runtime = EffectRuntime<Action>()
-  package let throttleState = ThrottleStateMap<Action>()
+  package let throttleState = ThrottleStateMap<Action, Output>()
+  package let runScheduler = EffectRunScheduler()
   private let boundaries = EffectCancellationBoundaries()
 
   private var debounceStateByID: [AnyEffectID: DebounceState] = [:]
@@ -69,14 +70,16 @@ package final class StoreEffectBridge<Action: Sendable> {
     cancellationIDs: [AnyEffectID] = [],
     potentialCancellationIDs: Set<AnyEffectID> = [],
     animation: EffectAnimation? = nil,
-    origin: EffectOrigin? = nil
+    origin: EffectOrigin? = nil,
+    flowTaskTracker: FlowTaskTracker? = nil
   ) -> EffectExecutionContext {
     boundaries.makeContext(
       sequence: sequence,
       cancellationIDs: cancellationIDs,
       potentialCancellationIDs: potentialCancellationIDs,
       animation: animation,
-      origin: origin
+      origin: origin,
+      flowTaskTracker: flowTaskTracker
     )
   }
 
@@ -288,19 +291,90 @@ package final class StoreEffectBridge<Action: Sendable> {
     throttleState.clearStates(where: shouldCancel)
   }
 
+  package func cancellationTargetDispatchIDs(
+    id: AnyEffectID,
+    upTo sequence: UInt64
+  ) async -> Set<DispatchID> {
+    var dispatchIDs = runScheduler.cancellationTargetDispatchIDs(id: id, upTo: sequence)
+
+    if let tokens = compositeTokensByID[id] {
+      for token in tokens {
+        guard let tracked = compositeTasksByToken[token] else { continue }
+        guard
+          tracked.sequence <= sequence
+            || tracked.context?.isCancelled(id: id) == true
+        else { continue }
+        if let dispatchID = tracked.context?.dispatchID {
+          dispatchIDs.insert(dispatchID)
+        }
+      }
+    }
+
+    for state in debounceStateByID.values {
+      let scope = state.scope
+      guard scope.contains(id) else { continue }
+      guard scope.sequence <= sequence || scope.shouldProceed == false else { continue }
+      if let dispatchID = scope.cancellationContext?.dispatchID {
+        dispatchIDs.insert(dispatchID)
+      }
+    }
+    dispatchIDs.formUnion(
+      throttleState.cancellationTargetDispatchIDs { scope in
+        scope.contains(id)
+          && (scope.sequence <= sequence || scope.shouldProceed == false)
+      }
+    )
+    dispatchIDs.formUnion(
+      await runtime.cancellationTargetDispatchIDs(id: id, upTo: sequence)
+    )
+    return dispatchIDs
+  }
+
+  package func cancellationTargetDispatchIDs(upTo sequence: UInt64) async -> Set<DispatchID> {
+    var dispatchIDs = runScheduler.cancellationTargetDispatchIDs(upTo: sequence)
+
+    for tracked in compositeTasksByToken.values {
+      guard
+        tracked.sequence <= sequence
+          || tracked.context?.shouldProceed == false
+      else { continue }
+      if let dispatchID = tracked.context?.dispatchID {
+        dispatchIDs.insert(dispatchID)
+      }
+    }
+
+    for state in debounceStateByID.values {
+      let scope = state.scope
+      guard scope.sequence <= sequence || scope.shouldProceed == false else { continue }
+      if let dispatchID = scope.cancellationContext?.dispatchID {
+        dispatchIDs.insert(dispatchID)
+      }
+    }
+    dispatchIDs.formUnion(
+      throttleState.cancellationTargetDispatchIDs { scope in
+        scope.sequence <= sequence || scope.shouldProceed == false
+      }
+    )
+    dispatchIDs.formUnion(await runtime.cancellationTargetDispatchIDs(upTo: sequence))
+    return dispatchIDs
+  }
+
   package func cancelEffects(id: AnyEffectID, upTo sequence: UInt64) async {
+    runScheduler.cancel(id: id, upTo: sequence)
     cancelCompositeTasks(id: id, upTo: sequence)
     cancelDelayedState(id: id, upTo: sequence)
     await runtime.cancel(id: id, upTo: sequence)
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, upTo sequence: UInt64) async {
+    runScheduler.cancel(id: id, upTo: sequence)
     cancelCompositeTasks(id: id, upTo: sequence)
     cancelDelayedState(id: id, upTo: sequence)
     await runtime.cancelInFlight(id: id, upTo: sequence)
   }
 
   package func cancelAllEffects(upTo sequence: UInt64) async {
+    runScheduler.cancelAll(upTo: sequence)
     cancelAllCompositeTasks(upTo: sequence)
     cancelAllDelayedState(upTo: sequence)
     await runtime.cancelAll(upTo: sequence)
@@ -315,6 +389,7 @@ package final class StoreEffectBridge<Action: Sendable> {
   @discardableResult
   package func shutdown() -> UInt64 {
     let sequence = boundaries.markCancelledAll()
+    runScheduler.cancelAll()
     cancelAllCompositeTasks()
     clearAllDelayedState()
     let runtime = self.runtime

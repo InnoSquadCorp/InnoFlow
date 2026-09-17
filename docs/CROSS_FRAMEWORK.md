@@ -59,7 +59,7 @@ struct CheckoutFeature {
     case _submissionFinished
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .checkoutTapped:
@@ -157,7 +157,7 @@ struct ChatFeature {
     case _transportEvent(ChatTransportEvent)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .connectTapped:

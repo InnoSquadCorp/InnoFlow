@@ -243,33 +243,33 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     )
   }
 
+  @MainActor
   private func clearedTextField(
     _ element: XCUIElement,
     describedAs description: String
   ) -> UICondition {
     UICondition(
       element: element,
-      predicate: NSPredicate { object, _ in
-        guard let element = object as? XCUIElement, element.exists else { return false }
-        guard let rawValue = element.value else { return true }
-        guard let value = rawValue as? String else { return false }
-        return value.isEmpty || value == element.placeholderValue
-      },
+      predicate: NSPredicate(
+        format: "exists == true AND (value == '' OR value == placeholderValue)"
+      ),
       description: description
     )
   }
 
+  @MainActor
   private func switchMatches(
     _ element: XCUIElement,
     isOn: Bool,
     describedAs description: String
   ) -> UICondition {
-    UICondition(
+    let acceptedValues: [Any] =
+      isOn
+      ? [true, NSNumber(value: 1), "1", "true", "on", "yes"]
+      : [false, NSNumber(value: 0), "0", "false", "off", "no"]
+    return UICondition(
       element: element,
-      predicate: NSPredicate { object, _ in
-        guard let element = object as? XCUIElement else { return false }
-        return Self.switchState(of: element) == isOn
-      },
+      predicate: NSPredicate(format: "exists == true AND value IN %@", acceptedValues),
       description: description
     )
   }
@@ -347,6 +347,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     XCTFail("Expected \(targetState.description)", file: file, line: line)
   }
 
+  @MainActor
   private static func switchState(of element: XCUIElement) -> Bool? {
     switch element.value {
     case let value as Bool:

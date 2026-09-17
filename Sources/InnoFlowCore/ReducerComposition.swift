@@ -10,35 +10,35 @@ import Foundation
 /// directly. `ReducerBuilder` chains additionally produce a composed form
 /// that holds a flat array of children, so an N-reducer block evaluates as
 /// a single iteration rather than N nested closures.
-public struct Reduce<State: Sendable, Action: Sendable>: Reducer {
+public struct Reduce<State: Sendable, Action: Sendable, Output: Sendable>: Reducer {
   @usableFromInline
   enum Storage {
-    case closure((inout State, Action) -> EffectTask<Action>)
-    case composed([Reduce<State, Action>])
+    case closure((inout State, Action) -> ReducerEffect<Action, Output>)
+    case composed([Reduce<State, Action, Output>])
   }
 
   @usableFromInline
   let storage: Storage
 
   public init(
-    _ reducer: @escaping (inout State, Action) -> EffectTask<Action>
+    _ reducer: @escaping (inout State, Action) -> ReducerEffect<Action, Output>
   ) {
     self.storage = .closure(reducer)
   }
 
   @usableFromInline
-  init(composed children: [Reduce<State, Action>]) {
+  init(composed children: [Reduce<State, Action, Output>]) {
     self.storage = .composed(children)
   }
 
   @inlinable
-  public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+  public func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
     switch storage {
     case .closure(let body):
       return body(&state, action)
 
     case .composed(let children):
-      var effects: [EffectTask<Action>] = []
+      var effects: [ReducerEffect<Action, Output>] = []
       effects.reserveCapacity(children.count)
       for child in children {
         let effect = child.reduce(into: &state, action: action)
@@ -55,16 +55,17 @@ public struct Reduce<State: Sendable, Action: Sendable>: Reducer {
 /// The builder preserves reducer semantics while keeping its intermediate
 /// implementation wrappers out of the public API.
 @resultBuilder
-public enum ReducerBuilder<State: Sendable, Action: Sendable> {
+public enum ReducerBuilder<State: Sendable, Action: Sendable, Output: Sendable> {
   @inlinable
-  public static func buildBlock() -> Reduce<State, Action> {
+  public static func buildBlock() -> Reduce<State, Action, Output> {
     Reduce { _, _ in .none }
   }
 
   @inlinable
   public static func buildExpression<R: Reducer>(
     _ reducer: R
-  ) -> Reduce<State, Action> where R.State == State, R.Action == Action {
+  ) -> Reduce<State, Action, Output>
+  where R.State == State, R.Action == Action, R.Output == Output {
     Reduce { state, action in
       reducer.reduce(into: &state, action: action)
     }
@@ -72,8 +73,8 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
 
   @inlinable
   public static func buildPartialBlock(
-    first component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
+    first component: Reduce<State, Action, Output>
+  ) -> Reduce<State, Action, Output> {
     component
   }
 
@@ -90,9 +91,9 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   /// matters.
   @inlinable
   public static func buildPartialBlock(
-    accumulated: Reduce<State, Action>,
-    next component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
+    accumulated: Reduce<State, Action, Output>,
+    next component: Reduce<State, Action, Output>
+  ) -> Reduce<State, Action, Output> {
     switch (accumulated.storage, component.storage) {
     case (.composed(var lhs), .composed(let rhs)):
       lhs.append(contentsOf: rhs)
@@ -103,7 +104,7 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
       return Reduce(composed: lhs)
 
     case (_, .composed(let rhs)):
-      var combined: [Reduce<State, Action>] = [accumulated]
+      var combined: [Reduce<State, Action, Output>] = [accumulated]
       combined.append(contentsOf: rhs)
       return Reduce(composed: combined)
 
@@ -114,8 +115,8 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
 
   @inlinable
   public static func buildOptional(
-    _ component: Reduce<State, Action>?
-  ) -> Reduce<State, Action> {
+    _ component: Reduce<State, Action, Output>?
+  ) -> Reduce<State, Action, Output> {
     Reduce { state, action in
       component?.reduce(into: &state, action: action) ?? .none
     }
@@ -123,8 +124,8 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
 
   @inlinable
   public static func buildEither(
-    first component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
+    first component: Reduce<State, Action, Output>
+  ) -> Reduce<State, Action, Output> {
     Reduce { state, action in
       component.reduce(into: &state, action: action)
     }
@@ -132,8 +133,8 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
 
   @inlinable
   public static func buildEither(
-    second component: Reduce<State, Action>
-  ) -> Reduce<State, Action> {
+    second component: Reduce<State, Action, Output>
+  ) -> Reduce<State, Action, Output> {
     Reduce { state, action in
       component.reduce(into: &state, action: action)
     }
@@ -141,11 +142,11 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
 
   @inlinable
   public static func buildArray(
-    _ components: [Reduce<State, Action>]
-  ) -> Reduce<State, Action> {
+    _ components: [Reduce<State, Action, Output>]
+  ) -> Reduce<State, Action, Output> {
     Reduce { state, action in
       guard !components.isEmpty else { return .none }
-      var effects: [EffectTask<Action>] = []
+      var effects: [ReducerEffect<Action, Output>] = []
       effects.reserveCapacity(components.count)
       for component in components {
         effects.append(component.reduce(into: &state, action: action))
@@ -157,7 +158,8 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
   @inlinable
   public static func buildLimitedAvailability<R: Reducer>(
     _ component: R
-  ) -> Reduce<State, Action> where R.State == State, R.Action == Action {
+  ) -> Reduce<State, Action, Output>
+  where R.State == State, R.Action == Action, R.Output == Output {
     Reduce { state, action in
       component.reduce(into: &state, action: action)
     }
@@ -165,14 +167,14 @@ public enum ReducerBuilder<State: Sendable, Action: Sendable> {
 }
 
 /// Runs multiple reducers in declaration order and merges their effects.
-public struct CombineReducers<State: Sendable, Action: Sendable>: Reducer {
-  @usableFromInline let reduceContent: (inout State, Action) -> EffectTask<Action>
+public struct CombineReducers<State: Sendable, Action: Sendable, Output: Sendable>: Reducer {
+  @usableFromInline let reduceContent: (inout State, Action) -> ReducerEffect<Action, Output>
 
   @inlinable
   public init<Content: Reducer>(
-    @ReducerBuilder<State, Action> _ content: () -> Content
+    @ReducerBuilder<State, Action, Output> _ content: () -> Content
   )
-  where Content.State == State, Content.Action == Action {
+  where Content.State == State, Content.Action == Action, Content.Output == Output {
     let builtContent = content()
     self.reduceContent = { state, action in
       builtContent.reduce(into: &state, action: action)
@@ -180,7 +182,7 @@ public struct CombineReducers<State: Sendable, Action: Sendable>: Reducer {
   }
 
   @inlinable
-  public func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+  public func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
     reduceContent(&state, action)
   }
 }
@@ -189,6 +191,7 @@ public struct CombineReducers<State: Sendable, Action: Sendable>: Reducer {
 public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reducer>: Reducer {
   public typealias State = ParentState
   public typealias Action = ParentAction
+  public typealias Output = Child.Output
 
   @usableFromInline let state: WritableKeyPath<ParentState, Child.State>
   @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
@@ -221,8 +224,8 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   }
 
   @inlinable
-  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
-    ParentAction
+  public func reduce(into state: inout ParentState, action: ParentAction) -> ReducerEffect<
+    ParentAction, Output
   > {
     guard let childAction = extractAction(action) else {
       return .none
@@ -257,6 +260,7 @@ public enum OnMissingPolicy: Sendable {
 public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reducer>: Reducer {
   public typealias State = ParentState
   public typealias Action = ParentAction
+  public typealias Output = Child.Output
 
   @usableFromInline let state: WritableKeyPath<ParentState, Child.State?>
   @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
@@ -294,8 +298,8 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   }
 
   @inlinable
-  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
-    ParentAction
+  public func reduce(into state: inout ParentState, action: ParentAction) -> ReducerEffect<
+    ParentAction, Output
   > {
     guard let childAction = extractAction(action) else {
       return .none
@@ -315,7 +319,7 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   /// `package`-level instrumentation hook that inlined client code cannot
   /// reference directly.
   @usableFromInline
-  func missingChildStateEffect(for action: ParentAction) -> EffectTask<ParentAction> {
+  func missingChildStateEffect(for action: ParentAction) -> ReducerEffect<ParentAction, Output> {
     switch onMissing {
     case .ignore:
       return .none
@@ -332,6 +336,7 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
 public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Reducer>: Reducer {
   public typealias State = ParentState
   public typealias Action = ParentAction
+  public typealias Output = Child.Output
 
   @usableFromInline let state: CasePath<ParentState, Child.State>
   @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
@@ -369,8 +374,8 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
   }
 
   @inlinable
-  public func reduce(into state: inout ParentState, action: ParentAction) -> EffectTask<
-    ParentAction
+  public func reduce(into state: inout ParentState, action: ParentAction) -> ReducerEffect<
+    ParentAction, Output
   > {
     guard let childAction = extractAction(action) else {
       return .none
@@ -391,7 +396,7 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
   /// `package`-level instrumentation hook that inlined client code cannot
   /// reference directly.
   @usableFromInline
-  func missingChildCaseEffect(for action: ParentAction) -> EffectTask<ParentAction> {
+  func missingChildCaseEffect(for action: ParentAction) -> ReducerEffect<ParentAction, Output> {
     switch onMissing {
     case .ignore:
       return .none
@@ -421,6 +426,7 @@ where
 {
   public typealias State = ParentState
   public typealias Action = ParentAction
+  public typealias Output = Child.Output
 
   @usableFromInline let state: WritableKeyPath<ParentState, CollectionState>
   @usableFromInline let action:
@@ -439,7 +445,7 @@ where
 
   @inlinable
   public func reduce(into state: inout ParentState, action parentAction: ParentAction)
-    -> EffectTask<ParentAction>
+    -> ReducerEffect<ParentAction, Output>
   {
     guard let (id, childAction) = action.extract(parentAction) else {
       return .none
@@ -486,6 +492,7 @@ where
 {
   public typealias State = ParentState
   public typealias Action = ParentAction
+  public typealias Output = Child.Output
 
   @usableFromInline let state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>
   @usableFromInline let action: CollectionActionPath<ParentAction, ElementID, Child.Action>
@@ -508,7 +515,7 @@ where
 
   @inlinable
   public func reduce(into state: inout ParentState, action parentAction: ParentAction)
-    -> EffectTask<ParentAction>
+    -> ReducerEffect<ParentAction, Output>
   {
     guard let (id, childAction) = action.extract(parentAction) else {
       return .none

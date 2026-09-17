@@ -17,7 +17,7 @@ struct TestStoreEffectAlgebraTests {
   @Test("ThrottleStateMap.clearState cancels trailing task and clears pending state")
   @MainActor
   func throttleStateMapClearState() {
-    let map = ThrottleStateMap<CounterFeature.Action>()
+    let map = ThrottleStateMap<CounterFeature.Action, Never>()
     let id = AnyEffectID(StaticEffectID("throttle-clear-state"))
     let task = Task<Void, Never> {
       try? await Task.sleep(for: .seconds(5))
@@ -43,7 +43,7 @@ struct TestStoreEffectAlgebraTests {
   @Test("ThrottleStateMap.finishState clears current state without cancelling current task")
   @MainActor
   func throttleStateMapFinishState() {
-    let map = ThrottleStateMap<CounterFeature.Action>()
+    let map = ThrottleStateMap<CounterFeature.Action, Never>()
     let id = AnyEffectID(StaticEffectID("throttle-finish-state"))
     let task = Task<Void, Never> {
       try? await Task.sleep(for: .seconds(5))
@@ -73,7 +73,7 @@ struct TestStoreEffectAlgebraTests {
   @Test("ThrottleStateMap.clearAll cancels all trailing tasks and clears stored state")
   @MainActor
   func throttleStateMapClearAll() {
-    let map = ThrottleStateMap<CounterFeature.Action>()
+    let map = ThrottleStateMap<CounterFeature.Action, Never>()
     let firstID = AnyEffectID(StaticEffectID("throttle-clear-all-1"))
     let secondID = AnyEffectID(StaticEffectID("throttle-clear-all-2"))
     let firstTask = Task<Void, Never> {
@@ -105,7 +105,7 @@ struct TestStoreEffectAlgebraTests {
 
   @Test("ThrottleStateMap rejects stale active scopes without retaining finished IDs")
   func throttleStateMapHonorsSequenceOwnership() {
-    let map = ThrottleStateMap<CounterFeature.Action>()
+    let map = ThrottleStateMap<CounterFeature.Action, Never>()
     let id = AnyEffectID(StaticEffectID("throttle-sequence-ownership"))
     let firstOuterID = AnyEffectID(StaticEffectID("throttle-sequence-first-outer"))
     let latestOuterID = AnyEffectID(StaticEffectID("throttle-sequence-latest-outer"))
@@ -303,7 +303,7 @@ struct TestStoreEffectAlgebraTests {
 
   @Test("CombineReducers empty builder acts as the identity reducer")
   func combineReducersEmptyIdentity() {
-    let reducer = CombineReducers<CounterFeature.State, CounterFeature.Action> {}
+    let reducer = CombineReducers<CounterFeature.State, CounterFeature.Action, Never> {}
     var state = CounterFeature.State(count: 41)
     let effect = reducer.reduce(into: &state, action: .increment)
 
@@ -313,18 +313,18 @@ struct TestStoreEffectAlgebraTests {
 
   @Test("CombineReducers respects identity reducers on both sides")
   func combineReducersIdentityLaw() {
-    let identity = Reduce<CounterFeature.State, CounterFeature.Action> { _, _ in .none }
-    let increment = Reduce<CounterFeature.State, CounterFeature.Action> { state, action in
+    let identity = Reduce<CounterFeature.State, CounterFeature.Action, Never> { _, _ in .none }
+    let increment = Reduce<CounterFeature.State, CounterFeature.Action, Never> { state, action in
       guard action == .increment else { return .none }
       state.count += 1
       return .none
     }
 
-    let left = CombineReducers<CounterFeature.State, CounterFeature.Action> {
+    let left = CombineReducers<CounterFeature.State, CounterFeature.Action, Never> {
       identity
       increment
     }
-    let right = CombineReducers<CounterFeature.State, CounterFeature.Action> {
+    let right = CombineReducers<CounterFeature.State, CounterFeature.Action, Never> {
       increment
       identity
     }
@@ -349,30 +349,30 @@ struct TestStoreEffectAlgebraTests {
       case run
     }
 
-    let first = Reduce<TraceState, TraceAction> { state, action in
+    let first = Reduce<TraceState, TraceAction, Never> { state, action in
       guard case .run = action else { return .none }
       state.trace.append("first")
       return .none
     }
-    let second = Reduce<TraceState, TraceAction> { state, action in
+    let second = Reduce<TraceState, TraceAction, Never> { state, action in
       guard case .run = action else { return .none }
       state.trace.append("second")
       return .none
     }
-    let third = Reduce<TraceState, TraceAction> { state, action in
+    let third = Reduce<TraceState, TraceAction, Never> { state, action in
       guard case .run = action else { return .none }
       state.trace.append("third")
       return .none
     }
 
-    let left = CombineReducers<TraceState, TraceAction> {
+    let left = CombineReducers<TraceState, TraceAction, Never> {
       first
       CombineReducers {
         second
         third
       }
     }
-    let right = CombineReducers<TraceState, TraceAction> {
+    let right = CombineReducers<TraceState, TraceAction, Never> {
       CombineReducers {
         first
         second

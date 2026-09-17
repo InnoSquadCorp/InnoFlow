@@ -33,6 +33,23 @@ private struct DescriptionCountingAction: Sendable, CustomStringConvertible {
   }
 }
 
+private struct DescriptionCountingID: Hashable, Sendable, CustomStringConvertible {
+  let counter: DescriptionCounter
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.counter === rhs.counter
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(ObjectIdentifier(counter))
+  }
+
+  var description: String {
+    counter.increment()
+    return "sensitive-cancellation-id"
+  }
+}
+
 @MainActor
 private final class CallbackProjectionObserver: ProjectionObserver {
   private let onRefresh: @MainActor () -> Bool
@@ -238,6 +255,8 @@ struct StoreInstrumentationTests {
           probe.record("emit:\(actionEvent.action)")
         case .actionDropped:
           probe.record("dropped")
+        case .outputDelivered:
+          probe.record("output-delivered")
         case .actionQueueDrained(let queueEvent):
           probe.record("queue:\(queueEvent.processedActionCount)")
         case .effectsCancelled:
@@ -326,15 +345,16 @@ struct StoreInstrumentationTests {
     let logger = Logger(subsystem: "InnoFlowTests", category: "storeInstrumentation")
     let instrumentation = StoreInstrumentation<DescriptionCountingAction>.osLog(logger: logger)
     let action = DescriptionCountingAction(counter: counter)
+    let cancellationID = AnyEffectID(EffectID(DescriptionCountingID(counter: counter)))
 
     instrumentation.didEmitAction(
-      .init(action: action, cancellationID: Optional<AnyEffectID>.none, sequence: 1)
+      .init(action: action, cancellationID: cancellationID, sequence: 1)
     )
     instrumentation.didDropAction(
       .init(
         action: action,
         reason: .cancellationBoundary,
-        cancellationID: Optional<AnyEffectID>.none,
+        cancellationID: cancellationID,
         sequence: 2
       )
     )
@@ -350,20 +370,36 @@ struct StoreInstrumentationTests {
       signposter: signposter
     )
     let action = DescriptionCountingAction(counter: counter)
+    let cancellationID = AnyEffectID(EffectID(DescriptionCountingID(counter: counter)))
 
     instrumentation.didEmitAction(
-      .init(action: action, cancellationID: Optional<AnyEffectID>.none, sequence: 1)
+      .init(action: action, cancellationID: cancellationID, sequence: 1)
     )
     instrumentation.didDropAction(
       .init(
         action: action,
         reason: .cancellationBoundary,
-        cancellationID: Optional<AnyEffectID>.none,
+        cancellationID: cancellationID,
         sequence: 2
       )
     )
 
     #expect(counter.count == 0)
+  }
+
+  @Test("StoreInstrumentation.osLog explicitly includes cancellation ID descriptions")
+  func osLogIncludeCancellationIDsEvaluatesDescription() {
+    let counter = DescriptionCounter()
+    let logger = Logger(subsystem: "InnoFlowTests", category: "storeInstrumentation")
+    let instrumentation = StoreInstrumentation<DescriptionCountingAction>.osLog(
+      logger: logger,
+      includeCancellationIDs: true
+    )
+    let cancellationID = AnyEffectID(EffectID(DescriptionCountingID(counter: counter)))
+
+    instrumentation.didCancelEffects(.init(id: cancellationID, sequence: 1))
+
+    #expect(counter.count == 1)
   }
 
   @Test("StoreInstrumentation.signpost supports redacted and explicit error payload paths")

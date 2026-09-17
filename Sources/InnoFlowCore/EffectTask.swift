@@ -193,16 +193,20 @@ public struct EffectContext: Sendable {
   }
 }
 
-/// A unified effect model for asynchronous work in InnoFlow.
-public struct EffectTask<Action: Sendable>: Sendable {
+/// A unified, output-typed effect model for asynchronous work in InnoFlow.
+///
+/// Most features use the ``EffectTask`` compatibility spelling, whose output
+/// is `Never`. Reducers that emit coordinator events use this full type so the
+/// output remains checked through composition and store delivery.
+public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   package struct LazyMappedEffect: Sendable {
-    private let materializeEffect: @Sendable () -> EffectTask<Action>
+    private let materializeEffect: @Sendable () -> ReducerEffect<Action, Output>
 
-    package init(_ materializeEffect: @escaping @Sendable () -> EffectTask<Action>) {
+    package init(_ materializeEffect: @escaping @Sendable () -> ReducerEffect<Action, Output>) {
       self.materializeEffect = materializeEffect
     }
 
-    package func materialize() -> EffectTask<Action> {
+    package func materialize() -> ReducerEffect<Action, Output> {
       materializeEffect()
     }
   }
@@ -210,30 +214,38 @@ public struct EffectTask<Action: Sendable>: Sendable {
   package indirect enum Operation: Sendable {
     case none
     case send(Action)
+    case output(Output)
     case run(
       priority: TaskPriority?, operation: @Sendable (Send<Action>, EffectContext) async -> Void)
-    case merge([EffectTask<Action>])
-    case concatenate([EffectTask<Action>])
+    case scheduledRun(
+      id: AnyEffectID,
+      policy: EffectExecutionPolicy,
+      priority: TaskPriority?,
+      onAdmission: (@Sendable (EffectAdmission) -> Action)?,
+      operation: @Sendable (Send<Action>, EffectContext) async -> Void
+    )
+    case merge([ReducerEffect<Action, Output>])
+    case concatenate([ReducerEffect<Action, Output>])
     case cancel(AnyEffectID)
     case cancellable(
-      effect: EffectTask<Action>,
+      effect: ReducerEffect<Action, Output>,
       id: AnyEffectID,
       cancelInFlight: Bool
     )
     case debounce(
-      effect: EffectTask<Action>,
+      effect: ReducerEffect<Action, Output>,
       id: AnyEffectID,
       interval: Duration
     )
     case throttle(
-      effect: EffectTask<Action>,
+      effect: ReducerEffect<Action, Output>,
       id: AnyEffectID,
       interval: Duration,
       leading: Bool,
       trailing: Bool
     )
     case animation(
-      effect: EffectTask<Action>,
+      effect: ReducerEffect<Action, Output>,
       animation: EffectAnimation
     )
     case lazyMap(LazyMappedEffect)
@@ -273,8 +285,11 @@ public struct EffectTask<Action: Sendable>: Sendable {
     of operation: Operation
   ) -> Set<AnyEffectID>? {
     switch operation {
-    case .none, .send, .run, .cancel, .diagnosticDrop:
+    case .none, .send, .output, .run, .cancel, .diagnosticDrop:
       return []
+
+    case .scheduledRun(let id, _, _, _, _):
+      return [id]
 
     case .merge(let effects), .concatenate(let effects):
       var ids: Set<AnyEffectID> = []
@@ -306,8 +321,11 @@ public struct EffectTask<Action: Sendable>: Sendable {
     of operation: Operation
   ) -> Set<AnyEffectID> {
     switch operation {
-    case .none, .send, .run, .cancel, .diagnosticDrop:
+    case .none, .send, .output, .run, .cancel, .diagnosticDrop:
       return []
+
+    case .scheduledRun(let id, _, _, _, _):
+      return [id]
 
     case .merge(let effects), .concatenate(let effects):
       return effects.reduce(into: []) { ids, effect in
@@ -349,6 +367,11 @@ public struct EffectTask<Action: Sendable>: Sendable {
     .init(operation: .send(action))
   }
 
+  /// Builds the internal output node used by reducer-typed `Self.output(...)`.
+  package static func output(_ output: Output) -> Self {
+    .init(operation: .output(output))
+  }
+
   /// Runs asynchronous work that can emit actions.
   public static func run(
     priority: TaskPriority? = nil,
@@ -365,6 +388,105 @@ public struct EffectTask<Action: Sendable>: Sendable {
     _ operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void
   ) -> Self {
     .init(operation: .run(priority: priority, operation: operation))
+  }
+
+  /// Schedules one asynchronous run in a Store-local execution lane.
+  ///
+  /// Unlike ``concatenate(_:)-([])``, this policy applies across independent
+  /// dispatches that use the same typed effect ID. Cancellation remains
+  /// cooperative; only `serial` waits for physical operation completion before
+  /// starting its successor.
+  public static func run<ID: Hashable & Sendable>(
+    id: EffectID<ID>,
+    policy: EffectExecutionPolicy,
+    priority: TaskPriority? = nil,
+    _ operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void
+  ) -> Self {
+    scheduledRun(
+      id: AnyEffectID(id),
+      policy: policy,
+      priority: priority,
+      onAdmission: nil,
+      operation: operation
+    )
+  }
+
+  /// Schedules one asynchronous run and maps admission changes back to actions.
+  ///
+  /// A queued request first emits `.queued` and emits `.started` when it later
+  /// acquires the lane. A rejected request never executes `operation`.
+  public static func run<ID: Hashable & Sendable>(
+    id: EffectID<ID>,
+    policy: EffectExecutionPolicy,
+    priority: TaskPriority? = nil,
+    onAdmission: @escaping @Sendable (EffectAdmission) -> Action,
+    _ operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void
+  ) -> Self {
+    scheduledRun(
+      id: AnyEffectID(id),
+      policy: policy,
+      priority: priority,
+      onAdmission: onAdmission,
+      operation: operation
+    )
+  }
+
+  private static func scheduledRun(
+    id: AnyEffectID,
+    policy: EffectExecutionPolicy,
+    priority: TaskPriority?,
+    onAdmission: (@Sendable (EffectAdmission) -> Action)?,
+    operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void
+  ) -> Self {
+    return .init(
+      operation: .scheduledRun(
+        id: id,
+        policy: policy,
+        priority: priority,
+        onAdmission: onAdmission,
+        operation: operation
+      )
+    )
+  }
+
+  /// Performs one throwing async operation and maps its terminal result to an action.
+  ///
+  /// Cancellation is terminal and silent: neither `success` nor `failure` is
+  /// invoked after cancellation has been accepted by the host store.
+  public static func perform<Success: Sendable>(
+    priority: TaskPriority? = nil,
+    operation: @escaping @Sendable (EffectContext) async throws -> Success,
+    success: @escaping @Sendable (Success) -> Action,
+    failure: @escaping @Sendable (any Error) -> Action
+  ) -> Self {
+    .run(priority: priority) { send, context in
+      do {
+        try await context.checkCancellation()
+        let value = try await operation(context)
+        try await context.checkCancellation()
+        await send(success(value))
+      } catch is CancellationError {
+        return
+      } catch {
+        guard await context.isCancellationRequested() == false else { return }
+        await send(failure(error))
+      }
+    }
+  }
+
+  /// Convenience overload for operations that do not need ``EffectContext``.
+  public static func perform<Success: Sendable>(
+    priority: TaskPriority? = nil,
+    operation: @escaping @Sendable () async throws -> Success,
+    success: @escaping @Sendable (Success) -> Action,
+    failure: @escaping @Sendable (any Error) -> Action
+  ) -> Self {
+    perform(
+      priority: priority,
+      operation: { _ in try await operation() },
+      success: success,
+      failure: failure
+    )
   }
 
   /// Runs an async sequence and emits each element as an action.
@@ -550,13 +672,16 @@ public struct EffectTask<Action: Sendable>: Sendable {
   /// Transforms this effect into another action space while preserving effect semantics.
   public func map<NewAction: Sendable>(
     _ transform: @escaping @Sendable (Action) -> NewAction
-  ) -> EffectTask<NewAction> {
+  ) -> ReducerEffect<NewAction, Output> {
     switch operation {
     case .none:
       return .none
 
     case .send(let action):
       return .send(transform(action))
+
+    case .output(let output):
+      return .init(operation: .output(output))
 
     case .cancel(let id):
       return .cancel(id)
@@ -567,7 +692,7 @@ public struct EffectTask<Action: Sendable>: Sendable {
     case .diagnosticDrop(let action, let reason):
       return .reportDrop(transform(action), reason: reason)
 
-    case .run, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation:
+    case .run, .scheduledRun, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation:
       // Flatten the 1-stage map fast path: rather than wrapping the source in
       // a `.lazyMap` (one closure allocation now + one indirect materialize
       // on each walk), rewrite the operation tree eagerly. The work is
@@ -579,9 +704,74 @@ public struct EffectTask<Action: Sendable>: Sendable {
     }
   }
 
+  /// Maps this effect's declared reducer output into a parent output type.
+  ///
+  /// Use ``Reducer/mapOutput(_:)`` at a feature boundary so child output
+  /// ownership stays explicit while action cancellation semantics are kept.
+  package func mapOutput<NewOutput: Sendable>(
+    _ transform: @escaping @Sendable (Output) -> NewOutput
+  ) -> ReducerEffect<Action, NewOutput> {
+    switch operation {
+    case .none:
+      return .none
+
+    case .send(let action):
+      return .send(action)
+
+    case .run(let priority, let operation):
+      return .run(priority: priority, operation)
+
+    case .scheduledRun(let id, let policy, let priority, let onAdmission, let operation):
+      return .init(
+        operation: .scheduledRun(
+          id: id,
+          policy: policy,
+          priority: priority,
+          onAdmission: onAdmission,
+          operation: operation
+        )
+      )
+
+    case .cancel(let id):
+      return .cancel(id)
+
+    case .diagnosticDrop(let action, let reason):
+      return .reportDrop(action, reason: reason)
+
+    case .output(let output):
+      return .output(transform(output))
+
+    case .merge(let effects):
+      return .merge(effects.map { $0.mapOutput(transform) })
+
+    case .concatenate(let effects):
+      return .concatenate(effects.map { $0.mapOutput(transform) })
+
+    case .cancellable(let effect, let id, let cancelInFlight):
+      return effect.mapOutput(transform).cancellable(id, cancelInFlight: cancelInFlight)
+
+    case .debounce(let effect, let id, let interval):
+      return effect.mapOutput(transform).debounce(id, for: interval)
+
+    case .throttle(let effect, let id, let interval, let leading, let trailing):
+      return effect.mapOutput(transform).throttle(
+        id,
+        for: interval,
+        leading: leading,
+        trailing: trailing
+      )
+
+    case .animation(let effect, let animation):
+      return effect.mapOutput(transform).applyingAnimation(animation)
+
+    case .lazyMap(let lazyMapped):
+      return lazyMapped.materialize().mapOutput(transform)
+    }
+  }
+
   private func eagerMap<NewAction: Sendable>(
     _ transform: @escaping @Sendable (Action) -> NewAction
-  ) -> EffectTask<NewAction> {
+  ) -> ReducerEffect<NewAction, Output> {
     var current = self
     while case .lazyMap(let lazyMapped) = current.operation {
       current = lazyMapped.materialize()
@@ -594,6 +784,9 @@ public struct EffectTask<Action: Sendable>: Sendable {
     case .send(let action):
       return .send(transform(action))
 
+    case .output(let output):
+      return .init(operation: .output(output))
+
     case .run(let priority, let operation):
       return .run(priority: priority) { send, context in
         let mappedSend = Send<Action> { action in
@@ -601,6 +794,30 @@ public struct EffectTask<Action: Sendable>: Sendable {
         }
         await operation(mappedSend, context)
       }
+
+    case .scheduledRun(let id, let policy, let priority, let onAdmission, let operation):
+      let mappedAdmission: (@Sendable (EffectAdmission) -> NewAction)?
+      if let onAdmission {
+        mappedAdmission = { admission in
+          transform(onAdmission(admission))
+        }
+      } else {
+        mappedAdmission = nil
+      }
+      return .init(
+        operation: .scheduledRun(
+          id: id,
+          policy: policy,
+          priority: priority,
+          onAdmission: mappedAdmission,
+          operation: { send, context in
+            let mappedSend = Send<Action> { action in
+              await send(transform(action))
+            }
+            await operation(mappedSend, context)
+          }
+        )
+      )
 
     case .merge(let effects):
       return .merge(effects.map { $0.eagerMap(transform) })
@@ -637,3 +854,6 @@ public struct EffectTask<Action: Sendable>: Sendable {
     }
   }
 }
+
+/// The source-compatible spelling for reducers that do not emit outputs.
+public typealias EffectTask<Action: Sendable> = ReducerEffect<Action, Never>

@@ -1,0 +1,118 @@
+{
+  "schema": "inno-flow-release-evidence-policy-v3",
+  "stageOrder": ["local-preflight", "pre-publication", "post-publication"],
+  "profiles": {
+    "static": {
+      "evidenceKind": "automated",
+      "resultFormat": "command-exit",
+      "artifactContent": "allow-empty"
+    },
+    "command": {
+      "evidenceKind": "automated",
+      "resultFormat": "command-exit",
+      "artifactContent": "non-empty"
+    },
+    "swift-tests": {
+      "evidenceKind": "automated",
+      "resultFormat": "swift-test-output",
+      "artifactContent": "non-empty",
+      "minimumTestCount": 1
+    },
+    "tests": {
+      "evidenceKind": "automated",
+      "resultFormat": "xcresult-summary",
+      "artifactContent": "non-empty",
+      "requiresRawArtifact": true,
+      "minimumTestCount": 1,
+      "allowsExpectedFailures": false,
+      "allowsRuntimeWarnings": false
+    },
+    "manual": {
+      "evidenceKind": "manual-attestation",
+      "resultFormat": "manual-observation",
+      "artifactContent": "non-empty"
+    }
+  },
+  "checks": [
+    {"id":"static-format","stage":"local-preflight","requirement":"required","profile":"static","allowedCommand":"swift format lint --strict --recursive Sources Tests Examples","component":"innoflow","commandContract":{"executable":"swift","exactArguments":["format","lint","--strict","--recursive","Sources","Tests","Examples"]}},
+    {"id":"static-innoflow-diff","stage":"local-preflight","requirement":"required","profile":"static","allowedCommand":"git diff --check","component":"innoflow","commandContract":{"executable":"git","exactArguments":["diff","--check"]}},
+    {"id":"static-mulbyul-diff","stage":"local-preflight","requirement":"required","profile":"static","allowedCommand":"git diff --check","component":"mulbyul","commandContract":{"executable":"git","exactArguments":["diff","--check"]}},
+    {"id":"static-principle","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"scripts/principle-gates.sh --static","component":"innoflow","commandContract":{"executable":"scripts/principle-gates.sh","exactArguments":["--static"]}},
+    {"id":"coverage","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"scripts/run-coverage.sh","component":"innoflow","commandContract":{"executable":"scripts/run-coverage.sh","exactArguments":[]}},
+    {"id":"full-principle","stage":"local-preflight","requirement":"required","profile":"swift-tests","allowedCommand":"scripts/principle-gates.sh","component":"innoflow","commandContract":{"executable":"scripts/principle-gates.sh","exactArguments":[]},"minimumTestCount":1559,"maximumTestCount":1559,"expectedTestRunCount":5,"expectedResultSuites":["Dispatch diagnostics","Effect run admission","FlowScope lifetime","Output case paths","Compile Contract Tests","EffectTimingBaselineGate"]},
+    {"id":"tsan-focused","stage":"local-preflight","requirement":"required","profile":"swift-tests","allowedCommand":"swift test --sanitize=thread","component":"innoflow","commandContract":{"executable":"swift","requiredArguments":["test"],"exclusiveOptionValues":{"--sanitize":"thread","--filter":"EffectRunSchedulerTests|FlowScopeTests|DispatchDiagnosticsTests|OutputCasePathTests"},"forbiddenArgumentPrefixes":["--skip"]},"minimumTestCount":53,"maximumTestCount":53,"expectedTestRunCount":1,"expectedResultSuites":["Dispatch diagnostics","Effect run admission","FlowScope lifetime","Output case paths"]},
+    {"id":"asan-focused","stage":"local-preflight","requirement":"required","profile":"swift-tests","allowedCommand":"swift test --sanitize=address","component":"innoflow","commandContract":{"executable":"swift","requiredArguments":["test"],"exclusiveOptionValues":{"--sanitize":"address","--filter":"EffectRunSchedulerTests|FlowScopeTests|DispatchDiagnosticsTests|OutputCasePathTests"},"forbiddenArgumentPrefixes":["--skip"]},"minimumTestCount":53,"maximumTestCount":53,"expectedTestRunCount":1,"expectedResultSuites":["Dispatch diagnostics","Effect run admission","FlowScope lifetime","Output case paths"]},
+    {"id":"external-macro-consumer","stage":"local-preflight","requirement":"required","profile":"swift-tests","allowedCommand":"swift test CompileContractTests","component":"innoflow","commandContract":{"executable":"swift","requiredArguments":["test"],"exclusiveOptionValues":{"--filter":"CompileContractTests"},"forbiddenArgumentPrefixes":["--skip"]},"minimumTestCount":1,"maximumTestCount":1,"expectedTestRunCount":1,"expectedResultSuites":["Compile Contract Tests"]},
+    {"id":"catalyst-macro-consumer","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"scripts/check-catalyst-macro-consumer.sh","component":"innoflow","commandContract":{"executable":"scripts/check-catalyst-macro-consumer.sh","exactArguments":[]}},
+    {"id":"swift-6.3-toolchain","stage":"local-preflight","requirement":"required","profile":"swift-tests","allowedCommand":"scripts/run-swift-toolchain-evidence.sh --expected-prefix 6.3 swift test","component":"innoflow","commandContract":{"executable":"scripts/run-swift-toolchain-evidence.sh","exactArguments":["--expected-prefix","6.3","--","swift","test"]},"minimumTestCount":779,"maximumTestCount":779,"expectedTestRunCount":2,"expectedResultSuites":["Dispatch diagnostics","Effect run admission","FlowScope lifetime","Output case paths","Compile Contract Tests"],"environment":{"swift":"6.3"}},
+    {"id":"swift-6.4-toolchain","stage":"local-preflight","requirement":"required","profile":"swift-tests","allowedCommand":"scripts/run-swift-toolchain-evidence.sh --expected-prefix 6.4 swift test","component":"innoflow","commandContract":{"executable":"scripts/run-swift-toolchain-evidence.sh","exactArguments":["--expected-prefix","6.4","--","swift","test"]},"minimumTestCount":779,"maximumTestCount":779,"expectedTestRunCount":2,"expectedResultSuites":["Dispatch diagnostics","Effect run admission","FlowScope lifetime","Output case paths","Compile Contract Tests"],"environment":{"swift":"6.4"}},
+    {"id":"sdk-macos","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"xcodebuild InnoFlow-Package generic/platform=macOS build","component":"innoflow","commandContract":{"executable":"xcodebuild","requiredArguments":["-scheme","InnoFlow-Package","CODE_SIGNING_ALLOWED=NO","CODE_SIGNING_REQUIRED=NO","build"],"exclusiveOptionValues":{"-destination":"generic/platform=macOS"},"forbiddenArgumentPrefixes":["-skip"]},"environment":{"platform":"macOS"}},
+    {"id":"sdk-ios","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"xcodebuild InnoFlow-Package generic/platform=iOS build","component":"innoflow","commandContract":{"executable":"xcodebuild","requiredArguments":["-scheme","InnoFlow-Package","CODE_SIGNING_ALLOWED=NO","CODE_SIGNING_REQUIRED=NO","build"],"exclusiveOptionValues":{"-destination":"generic/platform=iOS"},"forbiddenArgumentPrefixes":["-skip"]},"environment":{"platform":"iOS"}},
+    {"id":"sdk-tvos","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"xcodebuild InnoFlow-Package generic/platform=tvOS build","component":"innoflow","commandContract":{"executable":"xcodebuild","requiredArguments":["-scheme","InnoFlow-Package","CODE_SIGNING_ALLOWED=NO","CODE_SIGNING_REQUIRED=NO","build"],"exclusiveOptionValues":{"-destination":"generic/platform=tvOS"},"forbiddenArgumentPrefixes":["-skip"]},"environment":{"platform":"tvOS"}},
+    {"id":"sdk-watchos","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"xcodebuild InnoFlow-Package generic/platform=watchOS build","component":"innoflow","commandContract":{"executable":"xcodebuild","requiredArguments":["-scheme","InnoFlow-Package","CODE_SIGNING_ALLOWED=NO","CODE_SIGNING_REQUIRED=NO","build"],"exclusiveOptionValues":{"-destination":"generic/platform=watchOS"},"forbiddenArgumentPrefixes":["-skip"]},"environment":{"platform":"watchOS"}},
+    {"id":"sdk-visionos","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"xcodebuild InnoFlow-Package generic/platform=visionOS build","component":"innoflow","commandContract":{"executable":"xcodebuild","requiredArguments":["-scheme","InnoFlow-Package","CODE_SIGNING_ALLOWED=NO","CODE_SIGNING_REQUIRED=NO","build"],"exclusiveOptionValues":{"-destination":"generic/platform=visionOS"},"forbiddenArgumentPrefixes":["-skip"]},"environment":{"platform":"visionOS"}},
+    {"id":"runtime-ios-18.5","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"scripts/run-focused-platform-runtime-tests.sh","component":"innoflow","commandContract":{"executable":"scripts/run-focused-platform-runtime-tests.sh","requiredArguments":["--destination","--derived-data","--result-bundle"]},"expectedTestIdentifiers":["DispatchDiagnosticsTests/","EffectRunSchedulerTests/","FlowScopeTests/","OutputCasePathTests/"],"environment":{"platform":"iOS Simulator","os":"18.5"}},
+    {"id":"runtime-ios-27.0","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"scripts/run-focused-platform-runtime-tests.sh","component":"innoflow","commandContract":{"executable":"scripts/run-focused-platform-runtime-tests.sh","requiredArguments":["--destination","--derived-data","--result-bundle"]},"expectedTestIdentifiers":["DispatchDiagnosticsTests/","EffectRunSchedulerTests/","FlowScopeTests/","OutputCasePathTests/"],"environment":{"platform":"iOS Simulator","os":"27.0"}},
+    {"id":"runtime-tvos-18.5","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"scripts/run-focused-platform-runtime-tests.sh","component":"innoflow","commandContract":{"executable":"scripts/run-focused-platform-runtime-tests.sh","requiredArguments":["--destination","--derived-data","--result-bundle"]},"expectedTestIdentifiers":["DispatchDiagnosticsTests/","EffectRunSchedulerTests/","FlowScopeTests/","OutputCasePathTests/"],"environment":{"platform":"tvOS Simulator","os":"18.5"}},
+    {"id":"runtime-tvos-27.0","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"scripts/run-focused-platform-runtime-tests.sh","component":"innoflow","commandContract":{"executable":"scripts/run-focused-platform-runtime-tests.sh","requiredArguments":["--destination","--derived-data","--result-bundle"]},"expectedTestIdentifiers":["DispatchDiagnosticsTests/","EffectRunSchedulerTests/","FlowScopeTests/","OutputCasePathTests/"],"environment":{"platform":"tvOS Simulator","os":"27.0"}},
+    {"id":"runtime-watchos-11.5","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"scripts/run-focused-platform-runtime-tests.sh","component":"innoflow","commandContract":{"executable":"scripts/run-focused-platform-runtime-tests.sh","requiredArguments":["--destination","--derived-data","--result-bundle"]},"expectedTestIdentifiers":["DispatchDiagnosticsTests/","EffectRunSchedulerTests/","FlowScopeTests/","OutputCasePathTests/"],"environment":{"platform":"watchOS Simulator","os":"11.5"}},
+    {"id":"runtime-watchos-27.0","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"scripts/run-focused-platform-runtime-tests.sh","component":"innoflow","commandContract":{"executable":"scripts/run-focused-platform-runtime-tests.sh","requiredArguments":["--destination","--derived-data","--result-bundle"]},"expectedTestIdentifiers":["DispatchDiagnosticsTests/","EffectRunSchedulerTests/","FlowScopeTests/","OutputCasePathTests/"],"environment":{"platform":"watchOS Simulator","os":"27.0"}},
+    {"id":"runtime-visionos-2.5","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"scripts/run-focused-platform-runtime-tests.sh","component":"innoflow","commandContract":{"executable":"scripts/run-focused-platform-runtime-tests.sh","requiredArguments":["--destination","--derived-data","--result-bundle"]},"expectedTestIdentifiers":["DispatchDiagnosticsTests/","EffectRunSchedulerTests/","FlowScopeTests/","OutputCasePathTests/"],"environment":{"platform":"visionOS Simulator","os":"2.5"}},
+    {"id":"runtime-visionos-27.0","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"scripts/run-focused-platform-runtime-tests.sh","component":"innoflow","commandContract":{"executable":"scripts/run-focused-platform-runtime-tests.sh","requiredArguments":["--destination","--derived-data","--result-bundle"]},"expectedTestIdentifiers":["DispatchDiagnosticsTests/","EffectRunSchedulerTests/","FlowScopeTests/","OutputCasePathTests/"],"environment":{"platform":"visionOS Simulator","os":"27.0"}},
+    {"id":"mulbyul-feature-ios","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["TrainingRecordsFeatureTests/","TrainingRecordsCurrentExperienceTests/","TrainingRecordsSceneTests/","TrainingRecordsFeatureContainerTests/","TrainingRecordCurrentDetailParityTests/","TrainingRecordsLocalizationTests/"],"environment":{"consumer":"Mulbyul","platform":"iOS Simulator"}},
+    {"id":"mulbyul-feature-macos","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["TrainingRecordsFeatureTests/","TrainingRecordsSceneTests/","TrainingRecordsFeatureContainerTests/","TrainingRecordsLocalizationTests/"],"environment":{"consumer":"Mulbyul","platform":"macOS"}},
+    {"id":"mulbyul-navigation-iphone","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_sessionRowOpensCompactDetailAndHidesRootTabBar","test_initialLoadFailureRetriesThroughTheRealRecordsOwner","test_deleteFromCompactDetailReturnsToRecordsRoot","test_editHoldFromSetSheetSavesAndReturnsToViewer","test_saveFailurePreservesDraftAndRetryPersistsIt","test_deleteFailurePreservesRecordAndRetryDeletesItExactlyOnce"],"environment":{"consumer":"Mulbyul","device":"iPhone"}},
+    {"id":"mulbyul-navigation-ipad","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_emptySplitKeepsNativeSidebarToggle","test_initialLoadFailureRetriesThroughTheRealRecordsOwner","test_editHoldFromSetSheetSavesAndReturnsToViewer","test_splitSelectionDiscardsUnchangedEditWithoutPrompt","test_splitSelectionKeepsChangedDraftAndRestoresItWhenReopened"],"environment":{"consumer":"Mulbyul","device":"iPad"}},
+    {"id":"mulbyul-navigation-macos","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_initialLoadFailureRetriesThroughTheRealRecordsOwner","test_recordSelectionAndKeyboardMovementOpenRealDetails","test_editModeSupportsKeyboardSaveWithoutLeavingTheDetail","test_saveFailurePreservesDraftAndRetryPersistsIt"],"environment":{"consumer":"Mulbyul","device":"Mac"}},
+    {"id":"mulbyul-recovery-iphone","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_initialLoadFailureRetriesThroughTheRealRecordsOwner","test_saveFailurePreservesDraftAndRetryPersistsIt","test_deleteFailurePreservesRecordAndRetryDeletesItExactlyOnce"],"environment":{"consumer":"Mulbyul","device":"iPhone","scenario":"recovery"}},
+    {"id":"mulbyul-recovery-ipad","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_initialLoadFailureRetriesThroughTheRealRecordsOwner","test_splitSelectionKeepsChangedDraftAndRestoresItWhenReopened"],"environment":{"consumer":"Mulbyul","device":"iPad","scenario":"recovery"}},
+    {"id":"mulbyul-recovery-macos","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_initialLoadFailureRetriesThroughTheRealRecordsOwner","test_saveFailurePreservesDraftAndRetryPersistsIt"],"environment":{"consumer":"Mulbyul","device":"Mac","scenario":"recovery"}},
+    {"id":"mulbyul-records-reduce-motion-iphone","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_primarySurfaces_darkMaximumDynamicTypeReduceMotion"],"environment":{"consumer":"Mulbyul","device":"iPhone","scenario":"records-reduce-motion"}},
+    {"id":"mulbyul-records-reduce-motion-ipad","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_primarySurfaces_darkMaximumDynamicTypeReduceMotion"],"environment":{"consumer":"Mulbyul","device":"iPad","scenario":"records-reduce-motion"}},
+    {"id":"mulbyul-rtl-long-content-iphone","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_primarySurfaces_arabicRTLLongContent"],"environment":{"consumer":"Mulbyul","device":"iPhone","scenario":"rtl-long-content"}},
+    {"id":"mulbyul-rtl-long-content-ipad","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"mulbyul","commandContract":{"executable":"xcodebuild","requiredArguments":["test"],"forbiddenArgumentPrefixes":["-skip"]},"expectedTestIdentifiers":["test_primarySurfaces_arabicRTLLongContent"],"environment":{"consumer":"Mulbyul","device":"iPad","scenario":"rtl-long-content"}},
+    {"id":"actual-voiceover-navigation-iphone","stage":"local-preflight","requirement":"required","profile":"manual","environment":{"consumer":"Mulbyul","assistiveTechnology":"VoiceOver","device":"iPhone"}},
+    {"id":"actual-voiceover-navigation-ipad","stage":"local-preflight","requirement":"required","profile":"manual","environment":{"consumer":"Mulbyul","assistiveTechnology":"VoiceOver","device":"iPad"}},
+    {"id":"actual-voiceover-navigation-macos","stage":"local-preflight","requirement":"required","profile":"manual","environment":{"consumer":"Mulbyul","assistiveTechnology":"VoiceOver","device":"Mac"}},
+    {"id":"mulbyul-narrow-window-macos","stage":"local-preflight","requirement":"required","profile":"manual","environment":{"consumer":"Mulbyul","device":"Mac","scenario":"narrow-window"}},
+    {"id":"remote-ci","stage":"pre-publication","requirement":"required","profile":"command","allowedCommand":"scripts/verify-github-evidence-run.sh","component":"innoflow","commandContract":{"executable":"scripts/verify-github-evidence-run.sh","exactArguments":[]},"trustedProducerRequired":true},
+    {"id":"tag-api-baseline","stage":"pre-publication","requirement":"required","profile":"command","allowedCommand":"scripts/check-release-sync.sh","component":"innoflow","commandContract":{"executable":"scripts/check-release-sync.sh","exactArguments":[]},"trustedProducerRequired":true},
+    {"id":"release-approval","stage":"pre-publication","requirement":"required","profile":"manual","trustedProducerRequired":true},
+    {"id":"public-package-install","stage":"post-publication","requirement":"required","profile":"command","allowedCommand":"swift package resolve","component":"innoflow","commandContract":{"executable":"swift","requiredArguments":["package","resolve"]},"trustedProducerRequired":true}
+  ],
+  "matrices": [
+    {
+      "idTemplate": "mulbyul-a11y-{device}-{theme}-{contentSize}-{language}",
+      "stage": "local-preflight",
+      "requirement": "required",
+      "profile": "tests",
+      "allowedCommand": "Apple/Scripts/run_ios_accessibility_audits.sh --test-method",
+      "component": "mulbyul",
+      "commandContract": {"executable":"Apple/Scripts/run_ios_accessibility_audits.sh","requiredArguments":["--simulator-id","--derived-data-path","--results-path","--test-method","--result-bundle-path"],"forbiddenArguments":["--records-only"]},
+      "minimumTestCount": 1,
+      "maximumTestCount": 1,
+      "environment": {"consumer":"Mulbyul","scenario":"records-accessibility"},
+      "testIdentifierAxes": ["theme", "contentSize", "language"],
+      "testIdentifierMap": {
+        "light-default-ko": "test_recordReleaseTargets_defaultLightKorean",
+        "light-default-en": "test_recordReleaseTargets_lightDefaultEnglish",
+        "light-default-ar": "test_recordReleaseTargets_lightDefaultArabic",
+        "light-max-ko": "test_recordReleaseTargets_lightMaximumDynamicTypeKorean",
+        "light-max-en": "test_recordReleaseTargets_lightMaximumDynamicTypeEnglish",
+        "light-max-ar": "test_recordReleaseTargets_arabicRTLLongContent",
+        "dark-default-ko": "test_recordReleaseTargets_darkDefaultKorean",
+        "dark-default-en": "test_recordReleaseTargets_defaultDarkEnglish",
+        "dark-default-ar": "test_recordReleaseTargets_darkDefaultArabic",
+        "dark-max-ko": "test_recordReleaseTargets_darkMaximumDynamicTypeKorean",
+        "dark-max-en": "test_recordReleaseTargets_darkMaximumDynamicTypeEnglish",
+        "dark-max-ar": "test_recordReleaseTargets_darkMaximumDynamicTypeArabic"
+      },
+      "axes": {
+        "device": ["iphone", "ipad"],
+        "theme": ["light", "dark"],
+        "contentSize": ["default", "max"],
+        "language": ["ko", "en", "ar"]
+      }
+    }
+  ]
+}

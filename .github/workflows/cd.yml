@@ -3,13 +3,110 @@ name: Release Gate
 on:
   push:
     tags:
-      - '*.*.*'
+      - '[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
+    inputs:
+      evidence_run_id:
+        description: "Run ID containing the immutable evidence bundle for this exact tag SHA"
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  release-coverage:
+    name: Release Coverage Gate
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/coverage.yml
+
+  release-sanitizers:
+    name: Release Package Tests (${{ matrix.sanitizer }} sanitizer)
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [thread, address]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Run package tests with ${{ matrix.sanitizer }} sanitizer
+        run: |
+          set -eo pipefail
+          swift test \
+            --jobs 1 \
+            --no-parallel \
+            --sanitize="${{ matrix.sanitizer }}" \
+            -Xswiftc -warnings-as-errors
+
+  release-platform-builds:
+    name: Release Package Build (${{ matrix.platform }})
+    runs-on: macos-26
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macOS, iOS, tvOS, watchOS, visionOS]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build package for ${{ matrix.platform }}
+        run: |
+          set -eo pipefail
+          xcodebuild \
+            -jobs 1 \
+            -scheme InnoFlow-Package \
+            -destination "generic/platform=${{ matrix.platform }}" \
+            CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          build
+
+  release-runtime-tests:
+    name: Release Focused Runtime Tests (${{ matrix.platform }})
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [iOS, tvOS, watchOS, visionOS]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Run focused scheduler, scope, diagnostics, and Output tests
+        run: |
+          set -eo pipefail
+          "$GITHUB_WORKSPACE/scripts/run-focused-platform-runtime-matrix.sh" \
+            --platform "${{ matrix.platform }}"
+
   release-gate:
     runs-on: macos-26
     timeout-minutes: 240
@@ -52,13 +149,20 @@ jobs:
             --jobs 1 \
             -Xswiftc -warnings-as-errors
 
-      - name: Run principle gates
+      - name: Run static principle gates
         run: |
           set -eo pipefail
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
             export INNOFLOW_REQUIRE_RELEASE_TAG=1
+            export INNOFLOW_TRIGGER_TAG="${GITHUB_REF_NAME}"
           fi
-          "$GITHUB_WORKSPACE/scripts/principle-gates.sh"
+          "$GITHUB_WORKSPACE/scripts/principle-gates.sh" --static
+
+      - name: Verify gate negative controls
+        run: "$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"
+
+      - name: Run release configuration checks
+        run: "$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"
 
       - name: Generate DocC
         run: |
@@ -78,10 +182,131 @@ jobs:
           path: |
             .build/docc/innoflow-docc.tar.gz
 
+  release-evidence:
+    if: startsWith(github.ref, 'refs/tags/') && always()
+    needs: [release-gate, release-platform-builds, release-runtime-tests, release-sanitizers, release-coverage]
+    runs-on: macos-26
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout exact release candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: release-components/InnoFlow
+
+      - name: Reject incomplete prerequisite jobs
+        working-directory: release-components/InnoFlow
+        env:
+          RELEASE_GATE_RESULT: ${{ needs.release-gate.result }}
+          RELEASE_PLATFORM_BUILDS_RESULT: ${{ needs.release-platform-builds.result }}
+          RELEASE_RUNTIME_TESTS_RESULT: ${{ needs.release-runtime-tests.result }}
+          RELEASE_SANITIZERS_RESULT: ${{ needs.release-sanitizers.result }}
+          RELEASE_COVERAGE_RESULT: ${{ needs.release-coverage.result }}
+        run: |
+          set -euo pipefail
+          scripts/verify-release-prerequisites.sh \
+            "$RELEASE_GATE_RESULT" \
+            "$RELEASE_PLATFORM_BUILDS_RESULT" \
+            "$RELEASE_RUNTIME_TESTS_RESULT" \
+            "$RELEASE_SANITIZERS_RESULT" \
+            "$RELEASE_COVERAGE_RESULT"
+
+      - name: Download candidate-bound release evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$EVIDENCE_RUN_ID" ]]; then
+            echo "A prior evidence run ID is required; tag pushes cannot publish by themselves."
+            exit 1
+          fi
+          evidence_root="$RUNNER_TEMP/innoflow-release-evidence-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          [[ ! -e "$evidence_root" && ! -L "$evidence_root" ]]
+          gh run download "$EVIDENCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "innoflow-release-evidence-$GITHUB_SHA" \
+            --dir "$evidence_root"
+          echo "EVIDENCE_ROOT=$evidence_root" >>"$GITHUB_ENV"
+
+      - name: Resolve exact Mulbyul candidate
+        id: candidate
+        working-directory: release-components/InnoFlow
+        run: |
+          set -euo pipefail
+          mulbyul_sha="$(ruby -rjson -e 'snapshot=JSON.parse(File.read(ARGV.fetch(0))); puts snapshot.fetch("components").find { |item| item.fetch("label") == "mulbyul" }.fetch("headRevision")' "$EVIDENCE_ROOT/candidate.json")"
+          [[ "$mulbyul_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "mulbyul-sha=$mulbyul_sha" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout exact Mulbyul candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          repository: InnoSquad/Mulbyul
+          ref: ${{ steps.candidate.outputs.mulbyul-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.MULBYUL_READ_TOKEN }}
+          path: release-components/Mulbyul
+
+      - name: Verify complete pre-publication evidence
+        working-directory: release-components/InnoFlow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+        run: |
+          set -euo pipefail
+          trusted_context="$RUNNER_TEMP/trusted-producer-context-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.json"
+          scripts/write-github-evidence-provenance.sh \
+            --run-id "$EVIDENCE_RUN_ID" \
+            --artifact-name "innoflow-release-evidence-$GITHUB_SHA" \
+            --output "$trusted_context"
+          candidate_hash="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV.fetch(0))).fetch("aggregateDigest")' "$EVIDENCE_ROOT/candidate.json")"
+          scripts/verify-candidate-component.sh \
+            --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+            --label innoflow \
+            --repository "$GITHUB_WORKSPACE/release-components/InnoFlow" \
+            --policy docs/contracts/release-evidence-policy.json
+          scripts/verify-candidate-component.sh \
+            --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+            --label mulbyul \
+            --repository "$GITHUB_WORKSPACE/release-components/Mulbyul" \
+            --policy docs/contracts/release-evidence-policy.json
+          producer_json="$(jq -c . "$trusted_context")"
+          toolchain="$(gh --version | head -n 1)"
+          INNOFLOW_TRUSTED_PRODUCER_CONTEXT="$trusted_context" \
+            scripts/record-release-evidence.sh \
+              --check-id remote-ci \
+              --candidate-hash "$candidate_hash" \
+              --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+              --repository "innoflow=$GITHUB_WORKSPACE/release-components/InnoFlow" \
+              --repository "mulbyul=$GITHUB_WORKSPACE/release-components/Mulbyul" \
+              --component-label innoflow \
+              --evidence-root "$EVIDENCE_ROOT" \
+              --manifest manifest.tsv \
+              --attempt-index attempts.tsv \
+              --artifact prepublication/remote-ci.log \
+              --receipt prepublication/remote-ci.receipt.json \
+              --toolchain "$toolchain" \
+              --producer-json "$producer_json" \
+              -- scripts/verify-github-evidence-run.sh
+          scripts/verify-release-evidence.sh \
+            --candidate-hash "$candidate_hash" \
+            --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+            --evidence-root "$EVIDENCE_ROOT" \
+            --manifest "$EVIDENCE_ROOT/manifest.tsv" \
+            --attempt-index attempts.tsv \
+            --policy docs/contracts/release-evidence-policy.json \
+            --trusted-producer-context "$trusted_context" \
+            --stage pre-publication
+
   publish-release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: release-gate
+    needs: [release-evidence]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
 

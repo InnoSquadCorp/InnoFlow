@@ -106,7 +106,7 @@ struct OfflineFirstFeature {
     )
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .titleChanged(let newTitle):

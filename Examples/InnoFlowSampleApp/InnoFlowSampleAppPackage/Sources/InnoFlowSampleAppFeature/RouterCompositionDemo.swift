@@ -13,7 +13,6 @@ struct RouterLoginFeature {
     @BindableField var username = "demo@innosquad.com"
     var isSubmitting = false
     var isAuthenticated = false
-    var authVersion = 0
     var log: [String] = []
   }
 
@@ -24,7 +23,11 @@ struct RouterLoginFeature {
     case _loginSucceeded
   }
 
-  var body: some Reducer<State, Action> {
+  enum Output: Equatable, Sendable {
+    case authenticated
+  }
+
+  var body: some Reducer<State, Action, Output> {
     Reduce { state, action in
       switch action {
       case .setUsername(let username):
@@ -53,9 +56,8 @@ struct RouterLoginFeature {
       case ._loginSucceeded:
         state.isSubmitting = false
         state.isAuthenticated = true
-        state.authVersion += 1
         state.log.append("login succeeded")
-        return .none
+        return Self.output(.authenticated)
 
       case .logout:
         state.isSubmitting = false
@@ -75,7 +77,6 @@ final class RouterCompositionCoordinator {
 
   private let protectedDetailID: String
   private(set) var pendingRoute: RouterDemoRoute?
-  private var lastHandledAuthVersion = 0
 
   init(
     pendingRoute: RouterDemoRoute? = nil,
@@ -89,7 +90,8 @@ final class RouterCompositionCoordinator {
     pendingRoute = .detail(id: protectedDetailID)
   }
 
-  func submitLogin() {
+  @discardableResult
+  func submitLogin() -> FlowTask {
     loginStore.send(.submit)
   }
 
@@ -106,22 +108,24 @@ final class RouterCompositionCoordinator {
 
   func logout() {
     pendingRoute = nil
-    lastHandledAuthVersion = 0
     loginStore.send(.logout)
     path = []
   }
 
-  func syncNavigationWithDomainState() {
-    guard loginStore.isAuthenticated else { return }
-    guard lastHandledAuthVersion != loginStore.authVersion else { return }
-    lastHandledAuthVersion = loginStore.authVersion
-
-    var nextPath: [RouterDemoRoute] = [.dashboard]
-    if let pendingRoute {
-      nextPath.append(pendingRoute)
-      self.pendingRoute = nil
+  func handle(_ output: RouterLoginFeature.Output) {
+    switch output {
+    case .authenticated:
+      // Outputs are ephemeral intents, not authorization. A buffered login
+      // result may arrive after logout, so re-check current domain state at
+      // the navigation boundary before applying it.
+      guard loginStore.isAuthenticated else { return }
+      var nextPath: [RouterDemoRoute] = [.dashboard]
+      if let pendingRoute {
+        nextPath.append(pendingRoute)
+        self.pendingRoute = nil
+      }
+      path = nextPath
     }
-    path = nextPath
   }
 }
 
@@ -144,8 +148,10 @@ struct RouterCompositionDemoView: View {
           }
         }
     }
-    .onChange(of: coordinator.loginStore.authVersion, initial: false) { _, _ in
-      coordinator.syncNavigationWithDomainState()
+    .task {
+      for await output in coordinator.loginStore.outputs() {
+        coordinator.handle(output)
+      }
     }
     .navigationTitle("App-Boundary Navigation")
   }

@@ -14,7 +14,7 @@ struct ReadinessChildFeature {
     case reset
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .markReady:
@@ -56,6 +56,7 @@ struct OrchestrationFeature {
     case _bootstrapCompleted(String)
     case startSync
     case cancelSync
+    case _syncAdmission(EffectAdmission)
     case _syncProgress(Int)
     case _syncFinished
   }
@@ -65,8 +66,9 @@ struct OrchestrationFeature {
     ("permissions", .milliseconds(90)),
     ("analytics", .milliseconds(130)),
   ]
+  private let syncLane: StaticEffectID = "sync-pipeline"
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     CombineReducers {
       Reduce { state, action in
         switch action {
@@ -112,21 +114,49 @@ struct OrchestrationFeature {
           return .none
 
         case .startSync:
-          state.isSyncing = true
-          state.syncProgress = 0
-          state.syncLog = ["sync started"]
-          return .concatenate(
-            .send(._syncProgress(10)),
-            progressTask(55, delay: .milliseconds(70)),
-            progressTask(100, delay: .milliseconds(140)),
-            .send(._syncFinished)
-          )
-          .cancellable("sync-pipeline", cancelInFlight: true)
+          return .run(
+            id: syncLane,
+            policy: .dropWhileRunning,
+            onAdmission: Action._syncAdmission
+          ) { send, context in
+            await send(._syncProgress(10))
+            do {
+              try await context.sleep(for: .milliseconds(70))
+              try await context.checkCancellation()
+              await send(._syncProgress(55))
+              try await context.sleep(for: .milliseconds(70))
+              try await context.checkCancellation()
+              await send(._syncProgress(100))
+              await send(._syncFinished)
+            } catch is CancellationError {
+              return
+            } catch {
+              debugPrint("sync pipeline unexpected error: \(error)")
+            }
+          }
 
         case .cancelSync:
           state.isSyncing = false
           state.syncLog.append("sync cancelled")
-          return .cancel("sync-pipeline")
+          return .cancel(syncLane)
+
+        case ._syncAdmission(.started):
+          state.isSyncing = true
+          state.syncProgress = 0
+          state.syncLog = ["sync started"]
+          return .none
+
+        case ._syncAdmission(.queued):
+          return .none
+
+        case ._syncAdmission(.rejected(.busy)):
+          state.syncLog.append("sync request ignored: already running")
+          return .none
+
+        case ._syncAdmission(.rejected(let reason)):
+          state.isSyncing = false
+          state.syncLog.append("sync request rejected: \(String(describing: reason))")
+          return .none
 
         case ._syncProgress(let progress):
           state.syncProgress = progress
@@ -180,20 +210,6 @@ struct OrchestrationFeature {
     }
   }
 
-  private func progressTask(_ progress: Int, delay: Duration) -> EffectTask<Action> {
-    .run { send, context in
-      do {
-        try await context.sleep(for: delay)
-        try await context.checkCancellation()
-        await send(._syncProgress(progress))
-      } catch is CancellationError {
-        return
-      } catch {
-        debugPrint("progressTask(\(progress)) unexpected error: \(error)")
-        return
-      }
-    }
-  }
 }
 
 struct OrchestrationDemoView: View {
@@ -205,8 +221,20 @@ struct OrchestrationDemoView: View {
         DemoCard(
           title: "What this demonstrates",
           summary:
-            "Parent-child orchestration, cancellation fan-out for merged work, and a long-running progress pipeline composed with `concatenate`."
+            "Parent-child orchestration, cancellation fan-out, Store-local admission policy, and lexical FlowScope ownership."
         )
+
+        Button {
+          Task { @MainActor in
+            await runScopeOwnedPair()
+          }
+        } label: {
+          Text("Run Scope-Owned Refresh + Sync")
+            .frame(minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityHint(
+          "Tracks both dispatch trees in one lexical FlowScope and waits for completion")
 
         VStack(alignment: .leading, spacing: 12) {
           Text("Parent-Child Refresh")
@@ -296,6 +324,16 @@ struct OrchestrationDemoView: View {
       .padding()
     }
     .navigationTitle("Orchestration")
+  }
+
+  @MainActor
+  private func runScopeOwnedPair() async {
+    await withFlowScope { scope in
+      let refresh = await scope.track(store.send(.refreshDashboard))
+      let sync = await scope.track(store.send(.startSync))
+      await refresh.finish()
+      await sync.finish()
+    }
   }
 }
 

@@ -6,16 +6,23 @@ English | [한국어](./README.kr.md) | [日本語](./README.jp.md) | [简体中
 
 InnoFlow is a SwiftUI-first unidirectional architecture framework for business and domain state transitions.
 
-## InnoFlow 5.1.1
+## InnoFlow 6.0.0
+
+This branch documents the local 6.0.0 release candidate. The public stable tag
+remains 5.1.1 until the final tag gate succeeds.
 
 The framework now treats the following as source-of-truth principles:
 
-- Official feature authoring is `var body: some Reducer<State, Action>`.
+- Official feature authoring declares the third reducer generic explicitly:
+  use `Never` when no app-boundary output is emitted, or the feature's typed
+  `Output` when it is.
 - `@InnoFlow` features implement `Reducer` through `body`, and the macro generates the required `reduce(into:action:)` entry point from that composition.
 - Composition happens through `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`.
 - `PhaseTransitionGraph` is an opt-in validation layer, not a generic automata runtime.
 - Binding remains explicit opt-in through `@BindableField`, and SwiftUI bindings use projected key paths such as `\.$step`.
 - The `TestStore.exhaustivity` contract defaults to `.on`, requiring complete state-transition and effect-action assertions; uncancelled runtime effect errors always fail independently of that policy.
+- Every `Store.send(_:)` returns a `FlowTask` that can finish or cancel only that dispatch's complete descendant effect tree.
+- Reducers may emit typed, ephemeral `Output` values to a live app-boundary stream without putting navigation commands in restorable state.
 - `Store` serializes effect cancellation and run-failure arbitration on the MainActor. Once cancellation wins, a late error from uncooperative work is not reclassified as `didFailRun`.
 - InnoFlow owns business/domain transitions only.
 
@@ -30,7 +37,7 @@ Boundary references:
 - [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bridges dependencies, instrumentation, and cross-framework boundaries for non-trivial features
 - [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
 - [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
-- [`MIGRATION.md`](MIGRATION.md) for 5.1.1 changes and prior release migrations
+- [`MIGRATION.md`](MIGRATION.md) for 6.0.0 changes and prior release migrations
 - [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md) for `.sink`, `.osLog`, `.signpost`, and `.combined` examples
 - [`docs/PERFORMANCE_BASELINES.md`](docs/PERFORMANCE_BASELINES.md) for maintainer baseline policy
 - [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for TCA, ReactorKit, ReSwift, and SwiftRex positioning
@@ -60,7 +67,7 @@ longer comparison against TCA, ReactorKit, ReSwift, and SwiftRex.
 
 ## Installation
 
-InnoFlow 5.1.1 requires a Swift 6.3 or newer toolchain and compiles all package
+InnoFlow 6.0.0 requires a Swift 6.3 or newer toolchain and compiles all package
 targets in Swift 6 language mode. The canonical sample and DocC workflow use
 the same toolchain contract.
 
@@ -68,7 +75,7 @@ the same toolchain contract.
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "5.1.1")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.0")
 ]
 ```
 
@@ -136,7 +143,7 @@ struct CounterFeature {
     case setStep(Int)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .increment:
@@ -193,14 +200,14 @@ struct CounterView: View {
 
 ## Composition Surface
 
-The InnoFlow 5.0 development line uses a small composition surface instead of multiple authoring styles.
+The InnoFlow 6.0 development line uses a small composition surface instead of multiple authoring styles.
 
 ### `Reduce`
 
 `Reduce` is the closure-backed primitive reducer.
 
 ```swift
-Reduce<State, Action> { state, action in
+Reduce<State, Action, Never> { state, action in
   // mutate state
   // return EffectTask<Action>
 }
@@ -211,7 +218,7 @@ Reduce<State, Action> { state, action in
 `CombineReducers` runs reducers in declaration order and merges child effects.
 
 ```swift
-var body: some Reducer<State, Action> {
+var body: some Reducer<State, Action, Never> {
   CombineReducers {
     Reduce { state, action in
       // parent logic
@@ -244,7 +251,7 @@ access preserves row identity; an explicitly reconstructed path is an intentiona
 Public scoping APIs use `CasePath` and `CollectionActionPath` exclusively. Closure-based action lifting is kept internal to the framework implementation.
 
 ```swift
-var body: some Reducer<State, Action> {
+var body: some Reducer<State, Action, Never> {
   CombineReducers {
     Reduce { state, action in
       switch action {
@@ -427,7 +434,7 @@ struct ProfileFeature {
     self.dependencies = dependencies
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .load:
@@ -475,13 +482,106 @@ This keeps reducer dependencies explicit:
 
 `Scope` relies on `EffectTask.map` to lift child effects while preserving cancellation, debounce, throttle, and animation semantics.
 
+### Dispatch lifetimes and reducer output
+
+`Store.send(_:)` and `ScopedStore.send(_:)` return a `FlowTask`. Direct UI
+sends can ignore the discardable result. Coordinators and SwiftUI `.task`
+closures can wait for, or cancel, only the complete action tree they started:
+
+```swift
+let task = store.send(.load)
+await task.finish()
+
+let search = store.send(.search(query))
+search.cancel()
+await search.finish()
+```
+
+A reducer may declare an `Output` for one-shot app-boundary intent. Subscribe
+before sending because `outputs()` is live and non-replaying; renderable or
+restorable data still belongs in `State`.
+
+```swift
+@InnoFlow
+struct DetailFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    init() {}
+  }
+
+  enum Action: Equatable, Sendable {
+    case done
+  }
+
+  enum Output: Equatable, Sendable {
+    case dismiss
+  }
+
+  var body: some Reducer<State, Action, Output> {
+    Reduce { _, action in
+      switch action {
+      case .done:
+        return Self.output(.dismiss)
+      }
+    }
+  }
+}
+
+var outputs = store.outputs().makeAsyncIterator()
+await store.send(.done).finish()
+#expect(await outputs.next() == .dismiss)
+```
+
+When a coordinator needs output from one specific dispatch, capture it
+atomically instead of filtering the store-wide broadcast. The capture is
+installed before the action is enqueued, includes synchronous root output and
+all descendant effects, and finishes with that action tree:
+
+```swift
+let task = store.send(.done, capturingOutputs: .unbounded)
+var outputs = task.outputs.makeAsyncIterator()
+
+await task.finish()
+#expect(await outputs.next() == .dismiss)
+#expect(await outputs.next() == nil)
+```
+
+`OutputFlowTask.outputs` is single-consumer. Its buffering policy is required
+at the call site because bounded loss is a domain decision. Store-wide
+`outputs()` remains the live broadcast for long-lived coordinators.
+Cancelling a task awaiting captured outputs also cancels that dispatch's effect
+tree, so a `for await` consumer in SwiftUI `.task` follows the view lifetime.
+Normal stream completion does not cancel anything; cancelling a store-wide
+broadcast subscriber does not cancel dispatches. If you exit iteration with
+`break` while retaining the capture, call `task.cancel()` explicitly to stop work.
+
+Use `mapOutput(_:)` where a child output becomes a parent output. In tests,
+consume it with `receiveOutput(_:)`; exhaustive `finish()` reports any output
+left unhandled.
+
+A child with `Output == Never` needs no artificial output or impossible mapping
+closure. Use `ChildFeature().promoteOutput(to: Output.self)` at the composition
+boundary. The same helper on `EffectTask<Action>` reuses output-free effect
+helpers inside a typed-output reducer. Promotion is unavailable for real output
+types, so it cannot silently discard child events.
+
+Outputs need only be `Sendable`, not `Equatable`. `TestStore` also supports
+`receiveOutput(where:description:timeout:)` to return a matching output and
+`receiveOutput(_:caseName:timeout:)` with a `CasePath` to extract its payload.
+All three forms enforce ordering in exhaustive mode, skip mismatches according
+to the non-exhaustive policy, and share one total wall-clock timeout. A cancelled
+receive returns without reporting a false timeout.
+
 ## Effect Model
 
-`EffectTask<Action>` remains the only effect DSL:
+`ReducerEffect<Action, Output>` is the complete effect DSL.
+`EffectTask<Action>` remains its source-friendly `Output == Never` alias for
+reducers that emit no app-boundary output:
 
 - `.none`
 - `.send(action)`
 - `.run { send, context in ... }`
+- `.perform(operation:success:failure:)`
+- reducer-typed `Self.output(value)`
 - `.run { context in asyncSequence }`
 - `.run(sequence:transform:)`
 - `.merge(...)`
@@ -500,6 +600,10 @@ common string-literal case:
 let refreshID: StaticEffectID = "refresh"
 let sessionID = EffectID(session.uuid)
 ```
+
+Built-in Console and Instruments adapters redact cancellation-ID descriptions
+by default. Opt in with `includeCancellationIDs: true` only when those values
+are safe to expose outside the process.
 
 `EffectContext` exposes the store clock inside `.run`, so time-sensitive effects can stay deterministic
 in both runtime code and tests:
@@ -559,6 +663,14 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .combined(
 If a team standardizes on one backend later, prefer an optional ecosystem package such as
 `InnoFlowMetrics` over adding vendor dependencies to the core package graph.
 For concrete adapter examples, see [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md).
+
+Every reducer output also emits a payload-free `outputDelivered` event. It
+reports live subscriber counts, `AsyncStream` enqueues/drops/terminations,
+dispatch-capture disposition, and cancellation suppression without exposing
+the output value. `StoreInstrumentationMetricsCollector` aggregates those
+signals through `outputDelivered`, `outputWithoutSubscribers`,
+`outputSubscriberDrops`, `outputDispatchCaptureDrops`, and
+`outputSuppressedByCancellation`.
 
 ### Ordering contract
 
@@ -622,7 +734,7 @@ struct ProfileFeature {
     phaseMap.derivedGraph
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .load:
@@ -646,6 +758,10 @@ Use these rules:
 - Matching transitions are evaluated against the previous phase after the base reducer finishes.
 - The first matching `On` rule wins. Returning `nil` from a guard means “consume the action, keep the current phase”.
 - `PhaseMap` remains partial by default. Unmatched phase/action pairs are legal no-ops unless a team opts into stricter validation in tests.
+- `@InnoFlow(phaseManaged: true, strictPhaseTotality: true)` makes every
+  directly declared `Phase` case appear as a static `From` source or `On`
+  target at compile time. Predicate and payload semantics still require
+  `requireComplete(...)` tests.
 - `PhaseTransitionGraph` remains a topology validation tool, not a general state-machine runtime.
 - `validatePhaseTransitions(...)` still exists for backward compatibility, but new examples should prefer `PhaseMap`.
 - Generated action path members strip one leading underscore, so `_loadedCasePath` becomes `loadedCasePath`.
@@ -657,7 +773,10 @@ Design rationale:
 - `PhaseTransitionGraph` stays focused on static topology checks such as reachability, unknown successors, and terminal validation.
 - `PhaseMap` owns runtime phase movement and conditional resolution after the reducer has finished mutating non-phase state.
 - Guard-bearing graph metadata remains intentionally out of scope.
-- `@InnoFlow(phaseManaged: true)` is a compile-time authoring convenience. Its unreferenced-case warning is name-based and does not prove reachability or predicate exhaustiveness.
+- `@InnoFlow(phaseManaged: true)` keeps the name-based unreferenced-case
+  warning. Adding `strictPhaseTotality: true` promotes that declaration check
+  to an error; neither mode claims graph reachability, arbitrary predicate, or
+  payload-domain exhaustiveness.
 
 If you need the reasoning behind those boundaries, see
 [ADR-phase-transition-guards](./docs/adr/ADR-phase-transition-guards.md),
@@ -738,8 +857,8 @@ active throttle window (including leading-only) remains, or cancel that work
 before finishing. A scoped test store delegates `finish()` to the same parent
 queue and effect lifecycle. Use
 `assertNoBufferedActions()` only as an intermediate, immediate queue
-checkpoint; `assertNoMoreActions()` is deprecated because it is neither a
-complete terminal assertion nor an immediate checkpoint.
+checkpoint. The ambiguous `assertNoMoreActions()` API was removed in 6.0.0
+after its 5.x deprecation window.
 
 An `AsyncSequence` consumed by `EffectTask.run` may terminate with
 `CancellationError` normally. Any other error from an active run is a hard
@@ -929,14 +1048,60 @@ Launch-environment direct demo mode (`INNOFLOW_SAMPLE_DEMO`) remains available f
 - Use [`docs/DEPENDENCY_PATTERNS.md`](./docs/DEPENDENCY_PATTERNS.md) when the question is
   specifically about reducer-facing `Dependencies` bundles.
 
+## 6.0 orchestration and verification
+
+Use scheduled runs when independent dispatches contend for one Store-local
+resource. Admission is ordered when the Store receives the effect, not when an
+unstructured task happens to start:
+
+```swift
+return .run(
+  id: EffectID("save"),
+  policy: .serial(maxPending: 2),
+  onAdmission: { .saveAdmission($0) }
+) { send, context in
+  // Send success or failure actions explicitly.
+}
+```
+
+`.latest` cooperatively cancels displaced work, `.dropWhileRunning` reports
+`.rejected(.busy)`, and bounded serial lanes report queue overflow. A serial
+lane advances after the current run closure physically returns. These policies
+do not provide persistence transactions, retries, rollback, or exactly-once
+delivery.
+
+Group caller-owned dispatches without introducing SwiftUI into the core:
+
+```swift
+await withFlowScope { scope in
+  let profile = await scope.track(store.send(.loadProfile))
+  let permissions = await scope.track(store.send(.loadPermissions))
+  await profile.finish()
+  await permissions.finish()
+}
+```
+
+For production diagnostics, pass an opt-in `StoreDiagnostics(capacity:)` to a
+Store and inspect bounded, payload-free snapshots keyed by `DispatchID`. For
+tests, attach post-reduction `TestStoreInvariant` values and reusable
+`TestStoreScenario` scripts. `@InnoFlow` also synthesizes supported `Output`
+case paths, including optional payloads, for root and scoped output assertions.
+
+See [MIGRATION.md](./MIGRATION.md),
+[the orchestration ADR](./docs/adr/ADR-effect-admission-and-flow-lifetime.md),
+and [the instrumentation cookbook](./docs/INSTRUMENTATION_COOKBOOK.md) for the
+complete ownership and privacy boundaries.
+
 ## Roadmap
 
 The core architecture is stable. Remaining work is conditional roadmap material, not required
 redesign.
 
-- **PhaseMap strict totality enforcement** — `PhaseMap` is intentionally partial by default and
-  unmatched actions remain legal no-ops. Stronger enforcement remains a future design decision,
-  not a current runtime contract.
+- **Dynamic PhaseMap semantic totality** — strict macro mode now proves direct
+  phase declaration coverage at compile time, while `requireComplete(...)`
+  validates explicit sample triggers. Arbitrary predicates, helper-built DSL,
+  and payload domains remain runtime semantics and are not falsely presented
+  as compiler-proven.
 - **Opaque selector memoization** — explicit key-path dependencies are covered by `select(dependingOn:)`
   for a single slice and the variadic `select(dependingOnAll:)` for two or more slices. Memoizing
   arbitrary closure selectors remains future work because general closures do not expose their read set.

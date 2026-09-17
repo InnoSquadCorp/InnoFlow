@@ -124,7 +124,7 @@ extension InnoFlowMacro {
         else {
           return false
         }
-        return function.signature.returnClause?.type.trimmedDescription == "EffectTask<Action>"
+        return true
       }
   }
 
@@ -156,16 +156,17 @@ enum MacroError: Error, CustomStringConvertible {
     case .missingAction:
       return "@InnoFlow requires a nested 'Action' type"
     case .missingBodyProperty:
-      return "@InnoFlow requires `var body: some Reducer<State, Action>`"
+      return
+        "@InnoFlow requires `var body: some Reducer<State, Action, Output>`; use `Never` when no output is emitted"
     case .explicitReduceUnsupported:
       return
-        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead"
+        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)"
     case .invalidBodySignature(let details):
       let joinedDetails = details.joined(separator: "; ")
       return """
         Invalid body signature for @InnoFlow.
         Expected:
-        var body: some Reducer<State, Action>
+        var body: some Reducer<State, Action, Output>
         Detected issues: \(joinedDetails).
         Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
         """

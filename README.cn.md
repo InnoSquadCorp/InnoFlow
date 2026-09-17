@@ -6,11 +6,12 @@
 
 InnoFlow 是一个面向业务/领域状态转换的 SwiftUI-first 单向架构框架。
 
-`main` 与下面的安装示例描述正式的 5.1.1 公开契约。
+`main` 与下面的安装示例描述本地 6.0.0 发布候选契约。在标签发布之前，公开稳定版仍为 5.1.1。
 
 ## 核心方向
 
-- 官方 feature authoring 方式是 `var body: some Reducer<State, Action>`。
+- 官方 feature authoring 会显式声明第三个 reducer generic：没有 app-boundary
+  output 时使用 `Never`，需要发出 output 时使用 feature 的 typed `Output`。
 - 对于不符合标准合成形式的 labeled/multi-payload `Action` case，应通过 canonical
   `<caseName>CasePath` 手动声明或 `@InnoFlowCasePathIgnored` 明确表达警告处理意图。
 - 组合以 `Reduce`、`CombineReducers`、`Scope`、`IfLet`、`IfCaseLet`、`ForEachReducer` 为核心。
@@ -18,6 +19,20 @@ InnoFlow 是一个面向业务/领域状态转换的 SwiftUI-first 单向架构�
 - `PhaseTransitionGraph` 不是 generic automata runtime，而是 opt-in validation layer。
 - binding 通过 `@BindableField` 和 projected key path 显式连接。
 - `TestStore.exhaustivity` 默认为 `.on`，会完整验证所有状态转换和 effect action。测试应以 `finish()` 结束；若 deinit 时仍有未验证工作，则会按策略记录失败、警告或保持静默。若执行取消尚未先被接受，`EffectTask.run` 中除取消以外的未处理错误不受该策略影响，并会在原始 action assertion 位置记录一次失败。
+- `Store.send(_:)` 返回 `FlowTask`，可只等待或取消由该次 dispatch 派生的完整 effect tree。
+- reducer 可通过 typed `Output` 发出一次性的 app-boundary command；需要恢复或渲染的值仍应放在 `State` 中。
+- 当需要关联到特定 dispatch 的 output 时，`send(_:capturingOutputs:)` 会在
+  enqueue 前建立 single-consumer `OutputFlowTask` 流，并与全局
+  `outputs()` broadcast 分离。
+- 取消等待 captured output 的 consumer Task 只会取消对应的 dispatch。
+  正常结束或取消 broadcast 订阅不会停止 effect。若保留 capture 并通过 `break`
+  提前退出，需显式调用 `cancel()` 来停止工作。
+- 无 output 的子 reducer 和 effect helper 可通过 `promoteOutput(to:)` 复用。
+  实际的 output 类型仍须使用 `mapOutput(_:)` 显式转换，不能静默丢弃事件。
+- `TestStore.receiveOutput` 也支持 predicate 和 `CasePath`，可以验证非 `Equatable` output。
+  所有形式都遵守 exhaustivity 策略和总 timeout。
+- `strictPhaseTotality: true` 会把直接声明的 `Phase` source/target 缺失变为
+  编译错误；动态 trigger 语义仍通过 `requireComplete(...)` 验证。
 - `Store` 会在 MainActor 边界上对 effect 取消与 run failure 进行排序。若取消先被接受，非协作任务随后抛出的错误不会再被归类为 `didFailRun`。
 - 路由、transport、session lifecycle、构建期依赖图由应用边界之外负责。
 
@@ -40,7 +55,7 @@ bundle 显式传入，navigation/transport 留在 app boundary，SwiftUI 专用�
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "5.1.1")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.0")
 ]
 ```
 
@@ -102,7 +117,7 @@ struct CounterFeature {
     case setStep(Int)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .increment:
@@ -171,6 +186,14 @@ Stepper(
 - 英文文档作为 canonical source of truth。
 - 中文/韩文/日文文档同时覆盖概览、quick start、sample catalog 与 boundary docs 导航。
 - 更详细的 authoring guidance 与 API 合同，优先在英文文档中更新。
+
+## 6.0 执行编排与验证
+
+当不同 dispatch 竞争同一个 Store-local resource 时，可使用 `.latest`、
+`.dropWhileRunning` 与 bounded `.serial(maxPending:)`。多个 dispatch 的生命周期
+由 `withFlowScope` 管理；生产诊断使用 opt-in、bounded、payload-free 的
+`StoreDiagnostics`。测试可使用 `TestStoreInvariant`、`TestStoreScenario` 以及
+macro 合成的 Output case path。这些能力不替代持久化 transaction、retry 或 rollback。
 
 ## 什么时候使用 `PhaseMap`
 

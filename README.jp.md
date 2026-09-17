@@ -6,11 +6,14 @@
 
 InnoFlow は、ビジネス/ドメイン状態遷移に集中した SwiftUI ファーストの一方向アーキテクチャフレームワークです。
 
-`main` と下記のインストール例は、正式な 5.1.1 公開契約を説明します。
+`main` と下記のインストール例は、ローカルの 6.0.0 リリース候補契約を説明します。
+タグが公開されるまでは、公開安定版は 5.1.1 です。
 
 ## 基本方針
 
-- 公式な feature authoring は `var body: some Reducer<State, Action>` です。
+- 公式な feature authoring では 3 つ目の reducer generic を明示します。
+  app-boundary output がなければ `Never`、送出する場合は feature の typed
+  `Output` を使用します。
 - 標準合成形ではない labeled/multi-payload の `Action` case は、canonical な
   `<caseName>CasePath` の手動宣言または `@InnoFlowCasePathIgnored` で警告の意図を明示します。
 - 合成は `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer` を中心に行います。
@@ -18,6 +21,20 @@ InnoFlow は、ビジネス/ドメイン状態遷移に集中した SwiftUI フ�
 - `PhaseTransitionGraph` は generic automata runtime ではなく、opt-in validation layer です。
 - binding は `@BindableField` と projected key path を通して明示的に接続します。
 - `TestStore.exhaustivity` のデフォルトは `.on` で、すべての状態遷移と effect action を漏れなく検証します。テストは `finish()` で終了し、未検証の作業を残した deinit はポリシーに従って失敗、警告、または無通知で処理されます。実行の cancellation が先に受理されていない場合、`EffectTask.run` から漏れた cancellation 以外のエラーは、このポリシーに関係なく元の action assertion 位置で一度失敗します。
+- `Store.send(_:)` は、その dispatch から派生した effect tree だけを完了またはキャンセルできる `FlowTask` を返します。
+- reducer は一度限りの app-boundary command を typed `Output` として送出でき、復元・描画する値は引き続き `State` に置きます。
+- 特定 dispatch の output が必要な場合、`send(_:capturingOutputs:)` は enqueue
+  前に single-consumer の `OutputFlowTask` stream を設定し、store-wide
+  `outputs()` broadcast とは分離します。
+- captured output を待つ consumer Task のキャンセルは、その dispatch だけを停止します。
+  正常終了や broadcast 購読解除は effect を停止しません。capture を保持したまま
+  `break` で抜ける場合、処理を停止するには `cancel()` を明示的に呼びます。
+- output のない子 reducer と effect helper は `promoteOutput(to:)` で再利用できます。
+  実際の output 型は引き続き `mapOutput(_:)` で明示的に変換します。
+- `TestStore.receiveOutput` は predicate と `CasePath` による非 `Equatable` output の検証も
+  サポートし、すべての形式が exhaustivity と合計 timeout を守ります。
+- `strictPhaseTotality: true` は直接宣言された `Phase` source/target の欠落を
+  compile error にし、動的 trigger semantics は `requireComplete(...)` で検証します。
 - `Store` は effect の cancellation と run failure を MainActor 境界で順序付けます。cancellation が先に受理された場合、非協調的な処理が後から投げたエラーを `didFailRun` として再分類しません。
 - ルーティング、transport、session lifecycle、構築時の依存グラフはアプリ境界の外側で所有します。
 
@@ -41,7 +58,7 @@ optional product の `InnoFlowSwiftUI` に置きます。
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "5.1.1")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.0")
 ]
 ```
 
@@ -103,7 +120,7 @@ struct CounterFeature {
     case setStep(Int)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .increment:
@@ -172,6 +189,15 @@ Stepper(
 - 英語文書を canonical source of truth として維持します。
 - 日本語/韓国語/中国語の文書は、概要、quick start、sample catalog、boundary docs への導線を含みます。
 - 詳細な authoring guidance と API 契約は、まず英語文書を更新します。
+
+## 6.0 の実行調整と検証
+
+異なる dispatch が同じ Store-local resource を使う場合は、`.latest`、
+`.dropWhileRunning`、bounded `.serial(maxPending:)` を使用します。複数 dispatch
+の lifetime は `withFlowScope` で所有し、本番診断には opt-in かつ bounded、
+payload-free な `StoreDiagnostics` を使います。テストでは `TestStoreInvariant`、
+`TestStoreScenario`、macro が合成する Output case path を利用できます。これらは
+永続化 transaction、retry、rollback の代替ではありません。
 
 ## `PhaseMap` を使うべきケース
 

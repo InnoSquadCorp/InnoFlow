@@ -111,6 +111,42 @@ struct StorePresentationTests {
         Text(verbatim: "\(child.value)")
       }
     )
+
+    #if !os(tvOS) && !os(watchOS)
+      _ = EmptyView().innoFlowPopover(
+        store: store,
+        state: \.child,
+        onDismiss: { .dismiss },
+        content: { child in
+          Text(verbatim: "\(child.value)")
+        }
+      )
+    #endif
+
+    _ = EmptyView().innoFlowAlert(
+      "Child",
+      store: store,
+      state: \.child,
+      onDismiss: { .dismiss },
+      actions: { _ in Button("OK") {} },
+      message: { child in Text(verbatim: "\(child.value)") }
+    )
+
+    _ = EmptyView().innoFlowConfirmationDialog(
+      "Child",
+      store: store,
+      state: \.child,
+      onDismiss: { .dismiss },
+      actions: { _ in Button("OK") {} },
+      message: { child in Text(verbatim: "\(child.value)") }
+    )
+  }
+
+  @Test("animation preserves typed output effects")
+  func animationPreservesTypedOutputEffects() {
+    let effect = ReducerEffect<PresentationFeature.Action, String>.output("opened")
+
+    _ = effect.animation(.default)
   }
 }
 

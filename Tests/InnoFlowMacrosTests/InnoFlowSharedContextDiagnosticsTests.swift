@@ -18,14 +18,14 @@ struct InnoFlowSharedContextDiagnosticsTests {
   @Test("Typealiased Action emits a note explaining which diagnostics are skipped")
   func typealiasActionEmitsNote() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct RowFeature {
             struct State: Sendable {}
             typealias Action = ParentFeature.ChildAction
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -35,7 +35,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
               struct State: Sendable {}
               typealias Action = ParentFeature.ChildAction
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -43,7 +43,9 @@ struct InnoFlowSharedContextDiagnosticsTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension RowFeature: Reducer {}
+
+          extension RowFeature: Reducer {
+          }
           """,
         diagnostics: [
           DiagnosticSpec(
@@ -57,6 +59,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
         macros: [
           "InnoFlow": InnoFlowMacro.self,
           "_InnoFlowActionPaths": InnoFlowActionPathsMacro.self,
+          "_InnoFlowOutputPaths": InnoFlowOutputPathsMacro.self,
         ]
       )
     #else
@@ -67,7 +70,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
   @Test("Typealiased State emits a note explaining which diagnostics are skipped")
   func typealiasStateEmitsNote() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct RowFeature {
@@ -76,7 +79,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
                 case noop
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -88,7 +91,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
                   case noop
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -96,7 +99,9 @@ struct InnoFlowSharedContextDiagnosticsTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension RowFeature: Reducer {}
+
+          extension RowFeature: Reducer {
+          }
           """,
         diagnostics: [
           DiagnosticSpec(
@@ -110,6 +115,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
         macros: [
           "InnoFlow": InnoFlowMacro.self,
           "_InnoFlowActionPaths": InnoFlowActionPathsMacro.self,
+          "_InnoFlowOutputPaths": InnoFlowOutputPathsMacro.self,
         ]
       )
     #else
@@ -120,14 +126,14 @@ struct InnoFlowSharedContextDiagnosticsTests {
   @Test("Both State and Action typealiased emits both notes")
   func bothTypealiasedEmitsBothNotes() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct RowFeature {
             typealias State = ParentFeature.ChildState
             typealias Action = ParentFeature.ChildAction
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -137,7 +143,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
               typealias State = ParentFeature.ChildState
               typealias Action = ParentFeature.ChildAction
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -145,7 +151,9 @@ struct InnoFlowSharedContextDiagnosticsTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension RowFeature: Reducer {}
+
+          extension RowFeature: Reducer {
+          }
           """,
         diagnostics: [
           DiagnosticSpec(
@@ -166,6 +174,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
         macros: [
           "InnoFlow": InnoFlowMacro.self,
           "_InnoFlowActionPaths": InnoFlowActionPathsMacro.self,
+          "_InnoFlowOutputPaths": InnoFlowOutputPathsMacro.self,
         ]
       )
     #else
@@ -176,7 +185,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
   @Test("Direct enum / struct State and Action emit no shared-context note")
   func directDeclarationsDoNotEmitNote() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct DirectFeature {
@@ -185,7 +194,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
                 case noop
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -197,7 +206,7 @@ struct InnoFlowSharedContextDiagnosticsTests {
                   case noop
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -205,12 +214,15 @@ struct InnoFlowSharedContextDiagnosticsTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension DirectFeature: Reducer {}
+
+          extension DirectFeature: Reducer {
+          }
           """,
         diagnostics: [],
         macros: [
           "InnoFlow": InnoFlowMacro.self,
           "_InnoFlowActionPaths": InnoFlowActionPathsMacro.self,
+          "_InnoFlowOutputPaths": InnoFlowOutputPathsMacro.self,
         ]
       )
     #else

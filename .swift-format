@@ -21,7 +21,8 @@
     "allowedFunctions": ["XCTAssertNoThrow"]
   },
   "orderedImports": {
-    "includeConditionalImports": false
+    "includeConditionalImports": false,
+    "shouldGroupImports": true
   },
   "prioritizeKeepingFunctionOutputTogether": false,
   "reflowMultilineStringLiterals": "never",

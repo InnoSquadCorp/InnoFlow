@@ -30,7 +30,7 @@ struct FormValidationFeature {
     case reset
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .setFullName(let value):

@@ -196,7 +196,7 @@ struct AuthenticationFlowFeature {
     .cancellable("auth-submit", cancelInFlight: true)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
     return Reduce { state, action in

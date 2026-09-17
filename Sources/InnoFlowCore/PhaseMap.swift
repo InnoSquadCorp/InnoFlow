@@ -297,6 +297,46 @@ public struct PhaseMapValidationReport<Phase: Hashable & Sendable>: Sendable, Eq
   }
 }
 
+/// A strict validation failure for an opt-in PhaseMap completeness gate.
+public struct PhaseMapValidationError<Phase: Hashable & Sendable>: Error, Sendable,
+  CustomStringConvertible
+{
+  public let report: PhaseMapValidationReport<Phase>
+
+  public init(report: PhaseMapValidationReport<Phase>) {
+    self.report = report
+  }
+
+  public var description: String {
+    let missing = report.missingTriggers.map {
+      "\(String(reflecting: $0.sourcePhase)): \($0.trigger)"
+    }
+    let duplicates = report.duplicateSourcePhases.map {
+      String(reflecting: $0)
+    }
+    return
+      (missing.map { "missing trigger \($0)" }
+      + duplicates.map { "duplicate source phase \($0)" })
+      .joined(separator: "; ")
+  }
+}
+
+extension PhaseMap {
+  /// Enforces the opt-in complete trigger contract for tests and release gates.
+  ///
+  /// Runtime PhaseMap dispatch remains partial by default. Call this from a
+  /// test when the feature intentionally declares an exhaustive transition
+  /// surface and should fail if a trigger or source-phase declaration drifts.
+  public func requireComplete(
+    expectedTriggersByPhase: [Phase: [PhaseMapExpectedTrigger<Action>]]
+  ) throws {
+    let report = validationReport(expectedTriggersByPhase: expectedTriggersByPhase)
+    guard report.isEmpty else {
+      throw PhaseMapValidationError(report: report)
+    }
+  }
+}
+
 public struct From<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>: Sendable {
   package let rule: PhaseRule<State, Action, Phase>
 
@@ -513,11 +553,12 @@ public struct AnyPhaseTransition<State: Sendable, Action: Sendable, Phase: Hasha
 private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Reducer {
   typealias State = Base.State
   typealias Action = Base.Action
+  typealias Output = Base.Output
 
   let base: Base
   let phaseMap: PhaseMap<State, Action, Phase>
 
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
     // Snapshot the entire state, not just the phase keypath. If the base
     // reducer illegally mutates the phase, it has very likely also touched
     // coupled domain fields based on that (illegal) phase transition.
@@ -629,7 +670,7 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
 extension Reducer {
   public func phaseMap<Phase: Hashable & Sendable>(
     _ map: PhaseMap<State, Action, Phase>
-  ) -> some Reducer<State, Action> {
+  ) -> some Reducer<State, Action, Output> {
     PhaseMappedReducer(base: self, phaseMap: map)
   }
 }

@@ -62,7 +62,7 @@ struct ProfileFeature {
     phaseMap.derivedGraph
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     let phaseMap: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
     return Reduce { state, action in
@@ -86,6 +86,7 @@ struct ProfileFeature {
 
 ```swift
 import InnoFlowTesting
+import Testing
 
 let store = TestStore(reducer: ProfileFeature())
 let phaseMap: PhaseMap<ProfileFeature.State, ProfileFeature.Action, ProfileFeature.State.Phase> =
@@ -108,9 +109,48 @@ let report = ProfileFeature.phaseMap.validationReport(
     ]
   ]
 )
+#expect(report.isEmpty)
 
-precondition(report.isEmpty)
+// Or fail release setup directly:
+try ProfileFeature.phaseMap.requireComplete(
+  expectedTriggersByPhase: [
+    .idle: [.action(.load)],
+    .loading: [
+      .casePath(ProfileFeature.Action.loadedCasePath, label: "loaded", sample: .fixture),
+      .casePath(ProfileFeature.Action.failedCasePath, label: "failed", sample: "boom")
+    ]
+  ]
+)
 ```
+
+The throwing helper is intended for an opt-in test or release gate. Runtime
+matching remains partial. The same topology can drive documentation without a
+second source of truth:
+
+```swift
+let mermaid = ProfileFeature.phaseGraph.mermaidDiagram()
+let graphviz = ProfileFeature.phaseGraph.dotGraph(name: "Profile loading")
+```
+
+## Compile-time declaration coverage
+
+For a macro-managed feature whose directly authored phase map must mention
+every declared phase, enable strict totality:
+
+```swift
+@InnoFlow(phaseManaged: true, strictPhaseTotality: true)
+struct ProfileFeature {
+  // State.Phase, Action, static phaseMap, and body
+}
+```
+
+The macro turns a missing direct `Phase` source or target reference into a
+compile-time error. This is intentionally syntax-level declaration coverage:
+it does not execute `On(where:)` predicates, inspect helper-built DSL
+fragments, prove dynamic `resolve` results, or compute graph reachability.
+Keep `requireComplete(...)` tests for those semantic contracts. Without the
+strict flag, phase-managed features retain the warning-grade diagnostic and
+the runtime stays partial by default.
 
 ## Design rules
 
@@ -120,7 +160,10 @@ precondition(report.isEmpty)
 - Use `PhaseTransitionGraph` as contract + validation, not as a full runtime engine.
 - Prefer `CasePath` matching in `On` when payload matters, use equatable action matching for simple
   events, and reserve `where:` for escape-hatch cases.
-- Treat `validationReport(expectedTriggersByPhase:)` as an opt-in contract check, not as a runtime requirement.
+- Treat `validationReport(expectedTriggersByPhase:)` and `requireComplete(...)`
+  as opt-in contract checks, not as runtime requirements.
+- Use `strictPhaseTotality: true` when omitted direct phase wiring should stop
+  compilation; keep semantic totality and reachability in tests.
 
 ## Anti-patterns
 

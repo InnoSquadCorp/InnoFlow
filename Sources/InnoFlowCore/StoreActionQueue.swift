@@ -9,6 +9,8 @@ package let storeActionQueueRetainedStorageBudget = 64 * 1024
 package struct StoreQueuedAction<Action> {
   package let action: Action
   package let animation: EffectAnimation?
+  package let flowTaskTracker: FlowTaskTracker?
+  package let flowTaskActivity: UUID?
 }
 
 package struct StoreActionQueueDrainSnapshot: Sendable, Equatable {
@@ -35,8 +37,19 @@ package final class StoreActionQueue<Action> {
 
   package init() {}
 
-  package func enqueue(_ action: Action, animation: EffectAnimation?) {
-    buffered.append(.init(action: action, animation: animation))
+  package func enqueue(
+    _ action: Action,
+    animation: EffectAnimation?,
+    flowTaskTracker: FlowTaskTracker? = nil
+  ) {
+    buffered.append(
+      .init(
+        action: action,
+        animation: animation,
+        flowTaskTracker: flowTaskTracker,
+        flowTaskActivity: flowTaskTracker?.beginActivity()
+      )
+    )
     pendingActionHighWaterMark = max(pendingActionHighWaterMark, buffered.count - head)
     storageHighWaterMark = max(storageHighWaterMark, buffered.count)
   }

@@ -50,7 +50,7 @@ Existing explicit phase maps still work:
 struct Feature {
   static var phaseMap: PhaseMap<State, Action, State.Phase> { ... }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in ... }
       .phaseMap(Self.phaseMap)
   }
@@ -64,7 +64,7 @@ For new phase-heavy features, prefer the macro-managed form:
 struct Feature {
   static var phaseMap: PhaseMap<State, Action, State.Phase> { ... }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in ... }
   }
 }

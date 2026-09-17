@@ -7,6 +7,154 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-09-03
+
+### Added
+
+- `Store.send(_:)` and `ScopedStore.send(_:)` now return a `FlowTask`. Its
+  `finish()` waits for the complete descendant action/effect tree, while
+  `cancel()` cancels only work descended from that dispatch.
+- `Store.send(_:capturingOutputs:)` and its scoped counterpart return an
+  `OutputFlowTask` whose single-consumer stream is installed before enqueue,
+  captures synchronous and descendant output from only that dispatch, and
+  terminates with its action tree.
+- Reducers can declare a typed, ephemeral `Output`, emit it with
+  `Self.output(_:)`, transform child outputs with `mapOutput(_:)`, and expose
+  live non-replaying streams through `Store.outputs()`. `TestStore` verifies
+  outputs with `receiveOutput(_:)` and includes them in exhaustive finishing.
+- `EffectTask.perform(operation:success:failure:)` provides structured
+  success/failure mapping with cancellation-silent terminal behavior.
+- `promoteOutput(to:)` safely reuses output-free child reducers and effect
+  helpers inside typed-output parents without impossible `Never` closures.
+- Predicate and case-path `TestStore.receiveOutput` overloads support
+  non-equatable output payloads and optional payload extraction.
+- `Reducer.onChange(of:perform:)` observes one equatable state slice after the
+  base reducer and merges a follow-up effect only when that slice changes.
+- SwiftUI presentation helpers now cover sheet, full-screen cover, navigation
+  destination, platform-supported popover, alert, and confirmation dialog from optional state.
+  `Store.presentationBinding(state:onDismiss:)` is public for custom adapters.
+- `PhaseMap.requireComplete(expectedTriggersByPhase:)` turns opt-in trigger
+  coverage into a throwing release gate. `PhaseTransitionGraph` can export
+  deterministic Mermaid and Graphviz DOT source.
+- `@InnoFlow(phaseManaged: true, strictPhaseTotality: true)` promotes missing
+  direct `Phase` source/target coverage from a warning to a compile-time error.
+- Payload-free output delivery instrumentation reports subscriber enqueue,
+  drop, termination, dispatch capture, and cancellation-suppression results;
+  the built-in metrics collector aggregates the corresponding counters.
+- CI stages a 6.x public API compatibility job that becomes mandatory against
+  the exact `6.0.0` baseline as soon as `STABLE_VERSION` is promoted.
+- Store-local scheduled runs support `.latest`, `.dropWhileRunning`, and
+  bounded `.serial(maxPending:)` admission with observable started, queued,
+  and rejected results shared by `Store` and `TestStore`.
+- `FlowScope` owns multiple dispatch handles lexically and cancels and joins
+  only its unfinished work on normal, throwing, or cancelled scope exit.
+- `DispatchID` and opt-in `StoreDiagnostics` correlate payload-free bounded
+  admission, run, action, output, cancellation, and termination metadata.
+- `TestStore` supports post-reduction invariants and reusable
+  `TestStoreScenario` scripts without changing runtime reducer semantics.
+- `@InnoFlow` synthesizes case paths for supported nested `Output` cases, and
+  scoped test stores can match root output case paths without copying queues.
+
+### Changed
+
+- Queued descendants recheck dispatch cancellation before reduction, and
+  immediate outputs respect cancellation accepted during state observation.
+- Captured-output consumer task cancellation now cancels only the associated
+  dispatch tree. Normal completion and broadcast unsubscription do not.
+- Output matching follows action matching's exhaustivity and total-deadline
+  semantics, including invalidated buffers, and cancellation no longer reports
+  a false receive timeout.
+
+- Per-dispatch effect execution now carries action-tree lifetime ownership so
+  follow-up sends, composite effects, debounce, and throttle work participate
+  in the originating `FlowTask`.
+- Reducer composition and phase wrappers preserve the reducer's declared
+  `Output` type.
+- `Reducer` now carries `Output` as a primary associated type. Feature bodies
+  spell `some Reducer<State, Action, Never>` or
+  `some Reducer<State, Action, Output>`, and output-producing manual reducers
+  return `ReducerEffect<Action, Output>`. This makes incompatible child output
+  composition a compile-time error.
+- `Store.outputs()` uses lossless unbounded buffering by default; bounded
+  policies remain explicit opt-ins for hosts that intentionally allow drops.
+
+### Removed
+
+- `TestStore.assertNoMoreActions()` and its scoped forwarding overload are
+  removed after the 5.x deprecation window. Use `finish()` at terminal
+  boundaries or `assertNoBufferedActions()` for immediate checkpoints.
+
+### Fixed
+
+- Scheduled `.latest` replacement now owns and cancels the physical run task,
+  and a request-local boundary drops late actions from an uncooperative
+  displaced operation in both `Store` and `TestStore`.
+- Concurrent `FlowScope.cancelAndFinish()` callers now all wait for the same
+  physical cleanup instead of later callers returning while work is active.
+- `StoreDiagnostics` cancellation records now target affected dispatches;
+  issuing a first `.latest` request no longer marks that request cancelled.
+- Cancelling a blocked `TestStoreScenario` step stops later steps, cancels
+  remaining test effects, and returns explicit interrupted-step metadata.
+- Action and Output CasePath synthesis accepts escaped keyword case names and
+  produces legal unescaped member names.
+- Output CasePath synthesis now distinguishes mutually exclusive architecture
+  and Swift/compiler-version branches. Application-extension availability is
+  copied to generated helpers so normal applications retain the API while
+  extension consumers still receive the compiler's availability error.
+- Cancellation-boundary diagnostics preserve the originating `DispatchID` when
+  a queued descendant action is dropped, without reviving completed dispatches
+  or affecting sibling work.
+- Release publication is now gated by a candidate-bound, independently defined
+  evidence policy. Receipts bind commands and artifacts to the exact candidate,
+  parse xcresult summaries fail-closed, and separate manual observation from
+  automated evidence.
+
+- The checked-in Swift Format configuration now declares the current ordered-
+  import grouping key, restoring the documented strict formatting gate with
+  the Swift 6.4 toolchain.
+- Macro expansion snapshots now report through Swift Testing's failure channel
+  instead of an XCTest-only bridge, so expansion and diagnostic drift fails the
+  suite. The explicit-reducer migration Fix-It also preserves valid indentation.
+- Authoring rules and macro diagnostics now describe both valid third-generic
+  forms (`Never` and a feature's typed `Output`) instead of incorrectly
+  presenting the no-output form as the only supported contract.
+- The SwiftUI animation modifier is defined on `ReducerEffect`, so typed-output
+  effects preserve their `Output` while the `EffectTask` no-output alias keeps
+  the same source spelling. Popover helpers are excluded from tvOS and watchOS,
+  where the underlying presentation API is unavailable.
+- Built-in Console and Instruments instrumentation now redacts dynamic
+  cancellation-ID descriptions by default. Hosts must pass
+  `includeCancellationIDs: true` when those values are intentionally safe to
+  expose in logs or traces.
+- The security policy now lists the 6.x development line and 5.x public line
+  instead of incorrectly claiming that only 4.x is supported, and the major
+  release checklist requires an explicit support-table review.
+- Tag releases now require independent package builds for macOS, iOS, tvOS,
+  watchOS, and visionOS plus independent thread/address sanitizer suites before
+  the GitHub release can be published.
+- DocC generation now binds the plugin, SymbolKit, and SwiftSyntax documentation
+  tool graph to immutable commits with automatic resolution disabled,
+  tag gates require the exact triggering tag to point at the release checkout,
+  and the release checklist requires server-side protection against tag update
+  or deletion. Every CI, documentation, and release job has an explicit
+  execution timeout. Read-only CI checkouts no longer persist credentials.
+- The 5.1.1-to-6.0.0 API digester result is classified in
+  `docs/API_BREAKAGE_6_0.md`, separating the intentional typed-output,
+  `FlowTask`, and TestStore migrations from package-internal or
+  source-compatible diagnostics.
+- Reused trailing throttles now keep their timer under runtime ownership, so
+  cancelling an older `FlowTask` cannot discard a newer dispatch's pending
+  action or output.
+- Completed descendant cancellation scopes no longer accumulate for the full
+  lifetime of an unrelated long-running sibling in the same dispatch tree.
+- Non-exhaustive `TestStore.finish(timeout:)` applies one total deadline to
+  buffered outputs as well as actions.
+- The sample router rechecks current authentication before consuming a
+  buffered login output, so logout cannot be undone by delayed navigation.
+- API compatibility enforcement now derives staged versus mandatory behavior
+  from machine-checked `STABLE_VERSION`; once 6.x is stable, a missing baseline
+  tag fails closed.
+
 ## [5.1.1] - 2026-08-26
 
 ### Added

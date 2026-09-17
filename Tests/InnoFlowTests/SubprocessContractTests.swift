@@ -9,7 +9,11 @@ import os
 @testable import InnoFlowCore
 @testable import InnoFlowTesting
 
-@Suite("Stale Scope Crash Contract Tests", .serialized)
+@Suite(
+  "Stale Scope Crash Contract Tests",
+  .serialized,
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct StaleScopeCrashContractTests {
   @Test("Stale ScopedStore parent-release contract crashes in a subprocess")
   func staleScopedStoreParentReleaseContract() throws {
@@ -84,7 +88,11 @@ struct StaleScopeCrashContractTests {
   }
 }
 
-@Suite("Stale Scope Release Contract Tests", .serialized)
+@Suite(
+  "Stale Scope Release Contract Tests",
+  .serialized,
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct StaleScopeReleaseContractTests {
   @Test("Stale ScopedStore returns cached state after parent release in release-like execution")
   func staleScopedStoreReleaseNoCrash() throws {
@@ -110,7 +118,11 @@ struct StaleScopeReleaseContractTests {
   }
 }
 
-@Suite("PhaseMap Crash Contract Tests", .serialized)
+@Suite(
+  "PhaseMap Crash Contract Tests",
+  .serialized,
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct PhaseMapCrashContractTests {
   @Test("PhaseMap direct phase mutations crash in a subprocess with contextual diagnostics")
   func phaseMapDirectMutationCrashContract() throws {
@@ -159,7 +171,11 @@ struct PhaseMapCrashContractTests {
   }
 }
 
-@Suite("Conditional Reducer Release Contract Tests", .serialized)
+@Suite(
+  "Conditional Reducer Release Contract Tests",
+  .serialized,
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct ConditionalReducerReleaseContractTests {
   @Test("IfLet drops child actions as a release-safe no-op when optional state is nil")
   func ifLetReleaseNoOpWhenStateAbsent() throws {

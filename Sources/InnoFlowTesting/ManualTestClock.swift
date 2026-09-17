@@ -16,9 +16,10 @@ public actor ManualTestClock {
   }
 
   private struct SleeperWaiter {
-    /// Evaluated against `(sleeperCount, sleepRegistrationCount)` after every
-    /// successful sleep registration.
-    let condition: @Sendable (Int, UInt64) -> Bool
+    /// Evaluated against
+    /// `(sleeperCount, sleepRegistrationCount, nowReadCount)` after every
+    /// observable clock event.
+    let condition: @Sendable (Int, UInt64, UInt64) -> Bool
     let continuation: CheckedContinuation<Void, any Error>
   }
 
@@ -27,6 +28,7 @@ public actor ManualTestClock {
   private var sleeperWaiters: [UUID: SleeperWaiter] = [:]
   private var nextInsertionOrder: UInt64 = 0
   private var successfulSleepRegistrationCount: UInt64 = 0
+  private var successfulNowReadCount: UInt64 = 0
 
   deinit {
     for request in sleepers.values {
@@ -39,6 +41,7 @@ public actor ManualTestClock {
     sleeperWaiters.removeAll()
     nextInsertionOrder = 0
     successfulSleepRegistrationCount = 0
+    successfulNowReadCount = 0
   }
 
   /// Creates a deterministic test clock starting from the supplied instant.
@@ -68,6 +71,16 @@ public actor ManualTestClock {
   /// effects without relying on a fixed number of executor yields.
   public var sleepRegistrationCount: UInt64 {
     successfulSleepRegistrationCount
+  }
+
+  /// The number of scheduling-time reads made through ``StoreClock/manual(_:)``.
+  ///
+  /// Capture this value before sending a throttle action and wait for
+  /// ``waitForNowReads(toReach:)`` to ensure the effect has observed the
+  /// intended logical instant before advancing manual time. Reading ``now``
+  /// directly does not increment this counter.
+  public var nowReadCount: UInt64 {
+    successfulNowReadCount
   }
 
   /// Advances the clock and resumes any sleepers whose deadlines have passed.
@@ -114,7 +127,7 @@ public actor ManualTestClock {
   /// - Throws: `CancellationError` if the waiting task is cancelled first.
   public func waitForSleepers(atLeast count: Int) async throws {
     guard sleepers.count < count else { return }
-    try await suspendWaiter { sleeperCount, _ in
+    try await suspendWaiter { sleeperCount, _, _ in
       sleeperCount >= count
     }
   }
@@ -131,8 +144,23 @@ public actor ManualTestClock {
   /// - Throws: `CancellationError` if the waiting task is cancelled first.
   public func waitForSleepRegistrations(toReach threshold: UInt64) async throws {
     guard successfulSleepRegistrationCount < threshold else { return }
-    try await suspendWaiter { _, registrations in
+    try await suspendWaiter { _, registrations, _ in
       registrations >= threshold
+    }
+  }
+
+  /// Suspends until scheduling code has read this clock at least `threshold`
+  /// times through the ``StoreClock/manual(_:)`` adapter.
+  ///
+  /// This is useful for throttle tests whose active-window updates do not
+  /// register a new sleeper. It prevents a test from advancing manual time
+  /// before the effect has captured the trigger's logical instant.
+  ///
+  /// - Throws: `CancellationError` if the waiting task is cancelled first.
+  public func waitForNowReads(toReach threshold: UInt64) async throws {
+    guard successfulNowReadCount < threshold else { return }
+    try await suspendWaiter { _, _, nowReads in
+      nowReads >= threshold
     }
   }
 
@@ -218,6 +246,12 @@ public actor ManualTestClock {
     resumeSatisfiedSleeperWaiters()
   }
 
+  fileprivate func readNowForScheduling() -> Instant {
+    successfulNowReadCount += 1
+    resumeSatisfiedSleeperWaiters()
+    return current
+  }
+
   private func cancelSleep(id: UUID) {
     guard let request = sleepers.removeValue(forKey: id) else {
       return
@@ -226,11 +260,11 @@ public actor ManualTestClock {
   }
 
   /// Suspends the caller until `condition` holds for
-  /// `(sleeperCount, sleepRegistrationCount)`. The condition is re-evaluated
-  /// after every successful sleep registration — the only event that can
-  /// raise either value.
+  /// `(sleeperCount, sleepRegistrationCount, nowReadCount)`. The condition is
+  /// re-evaluated after every successful sleep registration or scheduling-time
+  /// read — the only events that can raise those values.
   private func suspendWaiter(
-    until condition: @escaping @Sendable (Int, UInt64) -> Bool
+    until condition: @escaping @Sendable (Int, UInt64, UInt64) -> Bool
   ) async throws {
     let waiterID = UUID()
     try Task.checkCancellation()
@@ -257,7 +291,11 @@ public actor ManualTestClock {
   private func resumeSatisfiedSleeperWaiters() {
     guard sleeperWaiters.isEmpty == false else { return }
     let satisfied = sleeperWaiters.filter { _, waiter in
-      waiter.condition(sleepers.count, successfulSleepRegistrationCount)
+      waiter.condition(
+        sleepers.count,
+        successfulSleepRegistrationCount,
+        successfulNowReadCount
+      )
     }
     for (id, waiter) in satisfied {
       sleeperWaiters.removeValue(forKey: id)
@@ -278,7 +316,7 @@ extension StoreClock {
   public static func manual(_ clock: ManualTestClock) -> Self {
     .init(
       now: {
-        await clock.now
+        await clock.readNowForScheduling()
       },
       sleep: { duration in
         try await clock.sleep(for: duration)

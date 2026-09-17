@@ -10,7 +10,9 @@ import Testing
 
 // MARK: - Compile Contract Helpers
 
-func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Action>) -> String {
+func effectOperationSignature<Action: Sendable, Output: Sendable>(
+  _ effect: ReducerEffect<Action, Output>
+) -> String {
   switch effect.operation {
   case .none:
     return "none"
@@ -18,8 +20,15 @@ func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Action>) ->
   case .send(let action):
     return "send(\(String(describing: action)))"
 
+  case .output(let output):
+    return "output(\(String(describing: output)))"
+
   case .run(let priority, _):
     return "run(priority:\(String(describing: priority)))"
+
+  case .scheduledRun(let id, let policy, let priority, _, _):
+    return
+      "scheduledRun(id:\(id.description),policy:\(String(describing: policy)),priority:\(String(describing: priority)))"
 
   case .merge(let children):
     return "merge(\(children.map(effectOperationSignature).joined(separator: ",")))"
@@ -55,7 +64,9 @@ func effectOperationSignature<Action: Sendable>(_ effect: EffectTask<Action>) ->
   }
 }
 
-func normalizedConcatenateSignature<Action: Sendable>(_ effect: EffectTask<Action>)
+func normalizedConcatenateSignature<Action: Sendable, Output: Sendable>(
+  _ effect: ReducerEffect<Action, Output>
+)
   -> String
 {
   switch effect.operation {
@@ -71,8 +82,10 @@ func normalizedConcatenateSignature<Action: Sendable>(_ effect: EffectTask<Actio
   }
 }
 
-func flattenConcatenateChildren<Action: Sendable>(_ effect: EffectTask<Action>)
-  -> [EffectTask<Action>]
+func flattenConcatenateChildren<Action: Sendable, Output: Sendable>(
+  _ effect: ReducerEffect<Action, Output>
+)
+  -> [ReducerEffect<Action, Output>]
 {
   switch effect.operation {
   case .concatenate(let children):
@@ -230,7 +243,8 @@ func runTimingScenario<R: Reducer>(
   emitted: KeyPath<R.State, [Int]>,
   expectedCount: Int,
   expectedCountAfterEachStep: [Int]? = nil,
-  awaitSleepRegistrationAfterTrigger: Bool = false
+  awaitSleepRegistrationAfterTrigger: Bool = false,
+  awaitNowReadAfterTrigger: Bool = false
 ) async throws -> [Int]
 where
   R.State: Equatable & Sendable & DefaultInitializable,
@@ -256,6 +270,14 @@ where
         // Deterministic: resumes on the registration event itself instead of
         // polling with a wall-clock timeout.
         try await clock.waitForSleepRegistrations(toReach: previousRegistrationCount + 1)
+      } else if awaitNowReadAfterTrigger {
+        let previousNowReadCount = await clock.nowReadCount
+        store.send(trigger(value))
+        // Active-window throttle updates reuse the existing sleeper. Wait for
+        // their scheduling-time read so manual time cannot move first under a
+        // slow executor or sanitizer build.
+        try await clock.waitForNowReads(toReach: previousNowReadCount + 1)
+        await settleTimingScenarioWork()
       } else {
         store.send(trigger(value))
         await settleTimingScenarioWork()
@@ -438,6 +460,16 @@ struct CapturedProcessResult: Sendable {
   let stderr: String
 }
 
+#if os(macOS)
+  let hostProcessTestsSupported = true
+#else
+  let hostProcessTestsSupported = false
+#endif
+
+enum CapturedProcessError: Error {
+  case unsupportedPlatform
+}
+
 func runCapturedProcess(
   executableURL: URL,
   arguments: [String],
@@ -469,33 +501,37 @@ func runCapturedProcess(
     }
   }
 
-  let process = Process()
-  process.executableURL = executableURL
-  process.arguments = arguments
-  process.currentDirectoryURL = currentDirectoryURL
-  process.standardOutput = stdoutHandle
-  process.standardError = stderrHandle
+  #if os(macOS)
+    let process = Process()
+    process.executableURL = executableURL
+    process.arguments = arguments
+    process.currentDirectoryURL = currentDirectoryURL
+    process.standardOutput = stdoutHandle
+    process.standardError = stderrHandle
 
-  if !environment.isEmpty {
-    var mergedEnvironment = ProcessInfo.processInfo.environment
-    for (key, value) in environment {
-      mergedEnvironment[key] = value
+    if !environment.isEmpty {
+      var mergedEnvironment = ProcessInfo.processInfo.environment
+      for (key, value) in environment {
+        mergedEnvironment[key] = value
+      }
+      process.environment = mergedEnvironment
     }
-    process.environment = mergedEnvironment
-  }
 
-  try process.run()
-  process.waitUntilExit()
+    try process.run()
+    process.waitUntilExit()
 
-  try stdoutHandle.close()
-  try stderrHandle.close()
-  captureHandlesAreClosed = true
+    try stdoutHandle.close()
+    try stderrHandle.close()
+    captureHandlesAreClosed = true
 
-  return CapturedProcessResult(
-    terminationStatus: process.terminationStatus,
-    stdout: String(decoding: try Data(contentsOf: stdoutURL), as: UTF8.self),
-    stderr: String(decoding: try Data(contentsOf: stderrURL), as: UTF8.self)
-  )
+    return CapturedProcessResult(
+      terminationStatus: process.terminationStatus,
+      stdout: String(decoding: try Data(contentsOf: stdoutURL), as: UTF8.self),
+      stderr: String(decoding: try Data(contentsOf: stderrURL), as: UTF8.self)
+    )
+  #else
+    throw CapturedProcessError.unsupportedPlatform
+  #endif
 }
 
 enum CompileContractError: Error, CustomStringConvertible {
@@ -578,14 +614,9 @@ func findBuiltModuleDirectory(
   }
   attemptedPaths = Array(Set(attemptedPaths)).sorted()
 
-  var matches: [(directory: URL, modificationDate: Date)] = []
-
-  func appendMatchIfPresent(at directory: URL) {
+  func containsModule(at directory: URL) -> Bool {
     let moduleURL = directory.appendingPathComponent("\(moduleName).swiftmodule")
-    guard fileManager.fileExists(atPath: moduleURL.path) else { return }
-    let resourceValues = try? moduleURL.resourceValues(forKeys: [.contentModificationDateKey])
-    let modificationDate = resourceValues?.contentModificationDate ?? .distantPast
-    matches.append((directory, modificationDate))
+    return fileManager.fileExists(atPath: moduleURL.path)
   }
 
   for attemptedPath in orderedAttemptedPaths {
@@ -596,7 +627,9 @@ func findBuiltModuleDirectory(
     }
 
     let directory = URL(fileURLWithPath: attemptedPath, isDirectory: true)
-    appendMatchIfPresent(at: directory)
+    if containsModule(at: directory) {
+      return directory
+    }
   }
 
   guard
@@ -609,6 +642,7 @@ func findBuiltModuleDirectory(
     throw CompileContractError.moduleNotFound(attemptedPaths: attemptedPaths)
   }
 
+  var hostMatches: [(directory: URL, modificationDate: Date)] = []
   for case let fileURL as URL in enumerator
   where fileURL.lastPathComponent == "\(moduleName).swiftmodule" {
     if let configuration,
@@ -616,12 +650,27 @@ func findBuiltModuleDirectory(
     {
       continue
     }
+    let values = try? fileURL.resourceValues(forKeys: [.isDirectoryKey])
+    if values?.isDirectory == true {
+      let slices = (try? fileManager.contentsOfDirectory(atPath: fileURL.path)) ?? []
+      let supportsHost = slices.contains {
+        $0.hasSuffix(".swiftmodule") && $0.contains("-apple-macos")
+          && !$0.contains("-apple-ios-macabi")
+      }
+      if !supportsHost { continue }
+    } else {
+      let pathComponents = fileURL.pathComponents
+      let supportsHost = pathComponents.contains {
+        $0.contains("apple-macosx") || $0 == "debug" || $0 == "release"
+      }
+      if !supportsHost { continue }
+    }
     let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey])
     let modificationDate = resourceValues?.contentModificationDate ?? .distantPast
-    matches.append((fileURL.deletingLastPathComponent(), modificationDate))
+    hostMatches.append((fileURL.deletingLastPathComponent(), modificationDate))
   }
 
-  if let newest = matches.max(by: { $0.modificationDate < $1.modificationDate }) {
+  if let newest = hostMatches.max(by: { $0.modificationDate < $1.modificationDate }) {
     return newest.directory
   }
 
@@ -1072,7 +1121,7 @@ private let conditionalReducerReleaseHarnessSource = #"""
     }
 
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-      CombineReducers<State, Action> {
+      CombineReducers<State, Action, Never> {
         Reduce { _, _ in .none }
         IfLet(
           state: \.child,
@@ -1129,7 +1178,7 @@ private let conditionalReducerReleaseHarnessSource = #"""
     }
 
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-      CombineReducers<State, Action> {
+      CombineReducers<State, Action, Never> {
         Reduce { _, _ in .none }
         IfCaseLet(
           state: Self.childStateCasePath,
@@ -1403,7 +1452,7 @@ private let phaseMapCrashHarnessSource = #"""
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
       let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
-      return Reduce<State, Action> { state, action in
+      return Reduce<State, Action, Never> { state, action in
         switch action {
         case .load:
           state.phase = .loaded
@@ -1454,7 +1503,7 @@ private let phaseMapCrashHarnessSource = #"""
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
       let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
-      return Reduce<State, Action> { state, action in
+      return Reduce<State, Action, Never> { state, action in
         switch action {
         case .attemptRecover(let shouldRecover):
           state.log.append(shouldRecover ? "recover" : "skip")
@@ -1527,7 +1576,7 @@ private let phaseMapReleaseHarnessSource = #"""
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
       let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
-      return Reduce<State, Action> { state, action in
+      return Reduce<State, Action, Never> { state, action in
         switch action {
         case .load:
           state.phase = .loaded
@@ -1579,7 +1628,7 @@ private let phaseMapReleaseHarnessSource = #"""
     func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
       let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
-      return Reduce<State, Action> { state, action in
+      return Reduce<State, Action, Never> { state, action in
         switch action {
         case .attemptRecover(let shouldRecover):
           state.log.append(shouldRecover ? "recover" : "skip")

@@ -61,12 +61,15 @@ Cons:
 - substantially more macro code to maintain for diagnostics that overlap with
   the runtime `validationReport(...)` flows
 
-### 3. Unreferenced-case diagnostic at compile time (current decision)
+### 3. Unreferenced-case diagnostic with opt-in strictness (current decision)
 
 For phase-managed features (`@InnoFlow(phaseManaged: true)`), walk the
 syntactic body of the static `phaseMap` getter, collect the names of every
 `MemberAccessExprSyntax` (e.g. `.idle`, `.loading`, `.failed`), and warn for
-any Phase enum case whose name does not appear in that set.
+any Phase enum case whose name does not appear in that set. When a feature
+opts into
+`@InnoFlow(phaseManaged: true, strictPhaseTotality: true)`, promote the same
+diagnostic to an error and require a directly visible nested `Phase` enum.
 
 Pros:
 
@@ -77,15 +80,15 @@ Pros:
   duplicating it
 - the diagnostic anchors on the enum case itself, so the offending
   declaration is the file/line surfaced to the author
-- pure macro-time cost; no runtime impact, no public API change
+- pure macro-time cost; no runtime impact
+- preserves warning-grade migration by default while giving release-critical
+  state machines an explicit compile-time gate
 
 Cons:
 
-- a Phase case referenced from a non-phaseMap context (e.g. tested directly
-  in a unit test) but never wired into the phaseMap is still flagged. The
-  warning is therefore advisory; severity is `warning`, not `error`, so
-  authors can suppress it with a one-line `_ = State.Phase.x` reference
-  inside the phaseMap getter when they truly intend to keep an unused case
+- the analysis is syntax-level and cannot inspect maps assembled entirely in
+  helper functions or extensions; strict mode therefore requires the direct
+  nested declarations needed to produce a deterministic diagnostic
 - does not detect unreachable phases that *are* referenced in phaseMap (e.g.
   appear as a `to:` target but no path reaches their `From` rule)
 
@@ -94,9 +97,11 @@ Cons:
 Choose option 3.
 
 `@InnoFlow(phaseManaged: true)` runs an unreferenced-case diagnostic at
-macro-expansion time. Severity is `warning`. The runtime `PhaseMap`
-contract — partial by default, validated through `validationReport(...)`
-when teams want stronger guarantees — is unchanged.
+macro-expansion time. Severity is `warning` by default. A feature can set
+`strictPhaseTotality: true` to promote missing direct declaration coverage to
+an error. The runtime `PhaseMap` contract — partial by default, validated
+through `validationReport(...)` when teams want stronger semantic guarantees
+— is unchanged.
 
 Full graph-based reachability remains out of scope for this layer for the
 reasons in option 2.
@@ -108,12 +113,12 @@ reasons in option 2.
   validation report
 - the diagnostic is local to phase-managed features; legacy `@InnoFlow`
   (no-arg) features keep their existing macro surface unchanged
+- strict mode is source-opt-in and requires `phaseManaged: true`; it does not
+  silently strengthen existing features
 - the warning anchors on the enum case syntax, so the file/line surfaced
   matches where the author would fix the omission
-- false positives are possible for Phase cases that are intentionally
-  unwired but referenced from outside the phaseMap (tests, derived state
-  helpers); authors silence them by referencing the case once inside the
-  phaseMap getter or by removing the case
+- intentionally unwired Phase cases stay warning-grade unless the feature
+  chooses strict mode; strict adopters must either wire or remove the case
 - a future option-2-style reachability analyzer would slot in next to this
   diagnostic without changing the runtime contract; this ADR records the
   current choice as the smallest analysis that catches the dominant hazard

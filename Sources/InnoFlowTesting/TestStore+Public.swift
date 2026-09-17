@@ -24,7 +24,12 @@ extension TestStore {
     await prepareForSend(file: file, line: line)
     let previousState = state
 
-    let effect = reducer.reduce(into: &state, action: action)
+    let effect = reduceAction(
+      action,
+      source: .send,
+      file: file,
+      line: line
+    )
     assertStateTransition(
       from: previousState,
       expectedStateMutation: updateExpectedState.map { update in
@@ -275,7 +280,12 @@ extension TestStore {
   ) async {
     let previousState = state
 
-    let effect = reducer.reduce(into: &state, action: action)
+    let effect = reduceAction(
+      action,
+      source: .receive,
+      file: file,
+      line: line
+    )
     assertStateTransition(
       from: previousState,
       expectedStateMutation: updateExpectedState.map { update in
@@ -294,51 +304,6 @@ extension TestStore {
       context: nextEffectContext(for: effect, file: file, line: line),
       awaited: false
     )
-  }
-
-  /// Performs the legacy single-action absence check.
-  ///
-  /// This does not wait for the complete effect lifecycle. Use `finish()` at
-  /// the terminal test boundary or `assertNoBufferedActions()` for an
-  /// intermediate queue checkpoint.
-  @available(
-    *,
-    deprecated,
-    message:
-      "Use finish() for terminal verification, or assertNoBufferedActions() for an intermediate queue checkpoint."
-  )
-  public func assertNoMoreActions(
-    file: StaticString = #file,
-    line: UInt = #line
-  ) async {
-    if let buffered = await popBufferedAction() {
-      testStoreAssertionFailure(
-        """
-        Unhandled received action:
-        \(buffered)
-
-        All effect actions should be verified with `receive(_:assert:)`.
-        """,
-        file: file,
-        line: line
-      )
-      return
-    }
-
-    let leftover = await nextActionWithinTimeout()
-
-    if let leftover {
-      testStoreAssertionFailure(
-        """
-        Unhandled received action:
-        \(leftover)
-
-        All effect actions should be verified with `receive(_:assert:)`.
-        """,
-        file: file,
-        line: line
-      )
-    }
   }
 
   public func assertNoBufferedActions(
@@ -492,12 +457,17 @@ extension TestStore {
     )
   }
 
-  package func applyScopedAction(_ action: R.Action) -> EffectTask<R.Action> {
-    reducer.reduce(into: &state, action: action)
+  package func applyScopedAction(
+    _ action: R.Action,
+    source: TestStoreReductionSource,
+    file: StaticString,
+    line: UInt
+  ) -> ReducerEffect<R.Action, R.Output> {
+    reduceAction(action, source: source, file: file, line: line)
   }
 
   package func walkScopedEffect(
-    _ effect: EffectTask<R.Action>,
+    _ effect: ReducerEffect<R.Action, R.Output>,
     file: StaticString,
     line: UInt
   ) async {
@@ -508,7 +478,7 @@ extension TestStore {
     )
   }
 
-  package func walkScopedEffect(_ effect: EffectTask<R.Action>) async {
+  package func walkScopedEffect(_ effect: ReducerEffect<R.Action, R.Output>) async {
     let source = terminalVerificationSource ?? (#file, #line)
     await walkScopedEffect(effect, file: source.file, line: source.line)
   }

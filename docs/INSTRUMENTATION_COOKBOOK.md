@@ -74,6 +74,14 @@ metricsBackend.gauge(
 )
 ```
 
+Reducer output delivery is counted without recording output payloads. Use
+`outputWithoutSubscribers` to catch subscribe-after-send mistakes,
+`outputSubscriberDrops` and `outputDispatchCaptureDrops` to enforce bounded
+buffer budgets, and `outputSuppressedByCancellation` to distinguish accepted
+cancellation from a missing coordinator handler. The underlying
+`outputDelivered` event also exposes enqueue/termination counts and sequence
+metadata for custom sinks.
+
 The collector is intentionally optional. If you already ship a vendor SDK
 (Datadog, Prometheus, swift-metrics) prefer the `.sink { event in ... }`
 adapter and emit counters directly into that backend.
@@ -272,8 +280,33 @@ let store = Store(
 
 Keep `includeActions` false unless action payloads are safe to show in traces.
 Keep `includeErrorPayload` false unless effect error descriptions are safe to
-show in traces. The signpost adapter opens intervals for effect runs and emits
-inline events for action emissions, run failures, drops, and cancellations.
+show in traces. Keep `includeCancellationIDs` false unless dynamic effect IDs
+cannot contain user or tenant data. The signpost adapter opens intervals for
+effect runs and emits inline events for action emissions, run failures, drops,
+and cancellations.
+
+## Correlate One Dispatch Without Recording Payloads
+
+```swift
+let diagnostics = StoreDiagnostics(capacity: 256)
+let store = Store(
+  reducer: Feature(),
+  diagnostics: diagnostics
+)
+
+let task = store.send(.load)
+await task.finish()
+
+let snapshot = diagnostics.snapshot(activeLimit: 32)
+```
+
+Every root send receives a `DispatchID`, which is propagated through its
+descendant actions, scheduled-run admission, output, cancellation, and
+termination records. A dispatch ID is not an effect ID or domain identifier.
+Records contain lifecycle metadata only; action, state, output, error, and
+effect-ID payloads are not stored. The history is bounded by `capacity`, and
+`droppedRecordCount` makes truncation visible. Omit `diagnostics` entirely when
+history is not needed.
 
 ## Fan Out To Multiple Adapters
 

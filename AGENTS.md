@@ -7,7 +7,9 @@
 
 Key reminders that earn their own line here so search tooling still surfaces them:
 
-- `@InnoFlow` features must declare `var body: some Reducer<State, Action>`.
+- `@InnoFlow` features must declare the third reducer generic: use
+  `var body: some Reducer<State, Action, Never>` without app-boundary output,
+  or the feature's typed `Output` when it emits one.
 - Compose with `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`,
   `ForEachReducer`, `ForEachIdentifiedReducer`.
 - Bind through `@BindableField` + `store.binding(\.$field, to:)` (canonical;

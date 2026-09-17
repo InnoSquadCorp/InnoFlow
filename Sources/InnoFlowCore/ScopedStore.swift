@@ -488,19 +488,40 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     state[keyPath: keyPath].value
   }
 
-  public func send(_ action: ChildAction) {
+  @discardableResult
+  public func send(_ action: ChildAction) -> FlowTask {
     // Lifecycle race: silently drop the action if the parent store is gone.
     // See `state` above and ARCHITECTURE_CONTRACT.md — "Projection lifecycle
     // contract". Debug builds still surface the race via `assertionFailure`.
     guard let parent else {
       assertionFailure(parentReleasedMessage())
-      return
+      return .completed
     }
     guard isActive else {
       assertionFailure(staleMessage())
-      return
+      return .completed
     }
-    parent.send(actionTransform(action))
+    return parent.send(actionTransform(action))
+  }
+
+  /// Sends a child action and captures parent outputs from only that dispatch tree.
+  @discardableResult
+  public func send(
+    _ action: ChildAction,
+    capturingOutputs bufferingPolicy: AsyncStream<ParentReducer.Output>.Continuation.BufferingPolicy
+  ) -> OutputFlowTask<ParentReducer.Output> {
+    guard let parent else {
+      assertionFailure(parentReleasedMessage())
+      return .completed
+    }
+    guard isActive else {
+      assertionFailure(staleMessage())
+      return .completed
+    }
+    return parent.send(
+      actionTransform(action),
+      capturingOutputs: bufferingPolicy
+    )
   }
 
   package var projectionObserverStats: ProjectionObserverRegistryStats {

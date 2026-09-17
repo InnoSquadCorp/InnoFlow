@@ -1,0 +1,168 @@
+name: Release Evidence Producer
+
+on:
+  workflow_dispatch:
+    inputs:
+      mulbyul_sha:
+        description: "Exact 40-character Mulbyul candidate commit"
+        required: true
+        type: string
+      intake_name:
+        description: "Preloaded fail-closed evidence directory name on the dedicated runner"
+        required: true
+        type: string
+      release_approval:
+        description: "Attest that the dispatch actor approves this exact candidate for release review"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-evidence-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  produce-release-evidence:
+    if: github.ref_type == 'tag' && inputs.release_approval
+    runs-on: [self-hosted, macOS, innoflow-release-evidence]
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout exact InnoFlow candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: components/InnoFlow
+
+      - name: Validate immutable producer inputs
+        working-directory: components/InnoFlow
+        env:
+          MULBYUL_SHA: ${{ inputs.mulbyul_sha }}
+          INTAKE_NAME: ${{ inputs.intake_name }}
+        run: |
+          set -euo pipefail
+          [[ "$MULBYUL_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$INTAKE_NAME" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$GITHUB_REF" == "refs/tags/$GITHUB_REF_NAME" ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+
+      - name: Checkout exact Mulbyul candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          repository: InnoSquad/Mulbyul
+          ref: ${{ inputs.mulbyul_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.MULBYUL_READ_TOKEN }}
+          path: components/Mulbyul
+
+      - name: Import a preserved local-preflight bundle
+        id: evidence
+        working-directory: components/InnoFlow
+        env:
+          INTAKE_NAME: ${{ inputs.intake_name }}
+        run: |
+          set -euo pipefail
+          intake="$RUNNER_TEMP/innoflow-release-evidence-intake/$INTAKE_NAME"
+          evidence_root="$RUNNER_TEMP/innoflow-release-evidence-work/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          [[ -d "$intake" && ! -L "$intake" ]]
+          [[ ! -e "$evidence_root" && ! -L "$evidence_root" ]]
+          mkdir -p "$(dirname "$evidence_root")"
+          ditto "$intake" "$evidence_root"
+          [[ -f "$evidence_root/candidate.json" && ! -L "$evidence_root/candidate.json" ]]
+          [[ -f "$evidence_root/manifest.tsv" && ! -L "$evidence_root/manifest.tsv" ]]
+          [[ -f "$evidence_root/attempts.tsv" && ! -L "$evidence_root/attempts.tsv" ]]
+          echo "root=$evidence_root" >>"$GITHUB_OUTPUT"
+
+      - name: Verify exact candidate and complete local evidence
+        working-directory: components/InnoFlow
+        env:
+          EVIDENCE_ROOT: ${{ steps.evidence.outputs.root }}
+        run: |
+          set -euo pipefail
+          candidate_hash="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV.fetch(0))).fetch("aggregateDigest")' "$EVIDENCE_ROOT/candidate.json")"
+          scripts/verify-candidate-component.sh \
+            --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+            --label innoflow \
+            --repository "$GITHUB_WORKSPACE/components/InnoFlow" \
+            --policy docs/contracts/release-evidence-policy.json
+          scripts/verify-candidate-component.sh \
+            --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+            --label mulbyul \
+            --repository "$GITHUB_WORKSPACE/components/Mulbyul" \
+            --policy docs/contracts/release-evidence-policy.json
+          scripts/verify-release-evidence.sh \
+            --candidate-hash "$candidate_hash" \
+            --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+            --evidence-root "$EVIDENCE_ROOT" \
+            --manifest "$EVIDENCE_ROOT/manifest.tsv" \
+            --attempt-index attempts.tsv \
+            --policy docs/contracts/release-evidence-policy.json \
+            --stage local-preflight
+
+      - name: Record tag baseline and explicit release approval
+        working-directory: components/InnoFlow
+        env:
+          EVIDENCE_ROOT: ${{ steps.evidence.outputs.root }}
+        run: |
+          set -euo pipefail
+          candidate_hash="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV.fetch(0))).fetch("aggregateDigest")' "$EVIDENCE_ROOT/candidate.json")"
+          producer_json="$(jq -cn \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg ref "$GITHUB_REF" \
+            --arg sha "$GITHUB_SHA" \
+            --arg run "$GITHUB_RUN_ID" \
+            --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            '{schema:"inno-flow-github-actions-producer-v1",repository:$repository,workflowPath:".github/workflows/release-evidence.yml",ref:$ref,headSha:$sha,runId:$run,runAttempt:$attempt,candidateComponentLabel:"innoflow"}')"
+          toolchain="$(xcodebuild -version | tr '\n' ' '); $(swift --version | head -n 1)"
+          INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION="$GITHUB_REF_NAME" \
+            scripts/record-release-evidence.sh \
+              --check-id tag-api-baseline \
+              --candidate-hash "$candidate_hash" \
+              --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+              --repository "innoflow=$GITHUB_WORKSPACE/components/InnoFlow" \
+              --repository "mulbyul=$GITHUB_WORKSPACE/components/Mulbyul" \
+              --component-label innoflow \
+              --evidence-root "$EVIDENCE_ROOT" \
+              --manifest manifest.tsv \
+              --attempt-index attempts.tsv \
+              --artifact prepublication/tag-api-baseline.log \
+              --receipt prepublication/tag-api-baseline.receipt.json \
+              --toolchain "$toolchain" \
+              --producer-json "$producer_json" \
+              -- scripts/check-release-sync.sh
+          approval_artifact="$EVIDENCE_ROOT/prepublication/release-approval.txt"
+          mkdir -p "$(dirname "$approval_artifact")"
+          printf 'Candidate %s approved by GitHub actor %s at %s in run %s attempt %s.\n' \
+            "$candidate_hash" "$GITHUB_ACTOR" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >"$approval_artifact"
+          observed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          environment_json="$(jq -cn --arg repository "$GITHUB_REPOSITORY" --arg ref "$GITHUB_REF" '{repository:$repository,ref:$ref,source:"workflow-dispatch"}')"
+          scripts/record-manual-release-evidence.sh \
+            --check-id release-approval \
+            --candidate-hash "$candidate_hash" \
+            --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
+            --evidence-root "$EVIDENCE_ROOT" \
+            --manifest manifest.tsv \
+            --attempt-index attempts.tsv \
+            --artifact prepublication/release-approval.txt \
+            --receipt prepublication/release-approval.receipt.json \
+            --reviewer "$GITHUB_ACTOR" \
+            --observed-at "$observed_at" \
+            --environment-json "$environment_json" \
+            --producer-json "$producer_json"
+
+      - name: Upload candidate-bound evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: innoflow-release-evidence-${{ github.sha }}
+          path: ${{ steps.evidence.outputs.root }}
+          if-no-files-found: error
+          include-hidden-files: true
+          overwrite: false
+          retention-days: 30

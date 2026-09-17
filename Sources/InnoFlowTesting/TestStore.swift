@@ -52,6 +52,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let wallClock = ContinuousClock()
   package let manualClock: ManualTestClock?
   package let queue = ActionQueue<R.Action>()
+  package let outputQueue = ActionQueue<R.Output>()
   package let finishActivity = TestStoreFinishActivity()
   package var assertionFailureReporter: (String, StaticString, UInt) -> Void = {
     testStoreAssertionFailure($0, file: $1, line: $2)
@@ -69,7 +70,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package var throttleActivityTokenByID: [AnyEffectID: UUID] = [:]
   package var nextDebounceGenerationValue: UInt64 = 0
   package let effectBoundaries = EffectCancellationBoundaries()
-  package let throttleState = ThrottleStateMap<R.Action>()
+  package let throttleState = ThrottleStateMap<R.Action, R.Output>()
+  package let runScheduler = EffectRunScheduler()
+  package var invariants: [TestStoreInvariant<R.State>] = []
 
   package var walker: EffectWalker<TestStore<R>> {
     EffectWalker(driver: self)
@@ -129,6 +132,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     for trackedTask in debounceTasksByID.values {
       trackedTask.task?.cancel()
     }
+    runScheduler.cancelAll()
     throttleState.clearAll()
 
     guard let diagnostic else { return }
@@ -161,7 +165,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   }
 
   package func nextEffectContext(
-    for effect: EffectTask<R.Action>,
+    for effect: ReducerEffect<R.Action, R.Output>,
     file: StaticString,
     line: UInt
   ) -> EffectExecutionContext {

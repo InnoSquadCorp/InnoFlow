@@ -8,17 +8,21 @@
 // MARK: - InnoFlow Macro
 
 /// Generates `Reducer` conformance boilerplate, validates the official
-/// body-based InnoFlow authoring contract, and synthesizes reusable action paths
-/// for scoping helpers on nested `Action` enums.
+/// body-based InnoFlow authoring contract, and synthesizes reusable paths for
+/// scoping nested `Action` enums and matching nested `Output` enums.
 ///
 /// `@InnoFlow` requires:
 /// 1. Nested `State` type
 /// 2. Nested `Action` type
-/// 3. `var body: some Reducer<State, Action>`
+/// 3. `var body: some Reducer<State, Action, Never>`
 ///
 /// When the nested `Action` enum exposes:
 /// - `case child(ChildAction)` the macro synthesizes `Action.childCasePath`
 /// - `case todo(id: ID, action: ChildAction)` the macro synthesizes `Action.todoActionPath`
+///
+/// Nested `Output` enums receive `<caseName>CasePath` members for no-payload,
+/// single-payload, and ordinary multi-payload cases. These paths can be used by
+/// `TestStore.receiveOutput` without requiring `Output: Equatable`.
 ///
 /// Generated action-path names must be unique and cannot reuse an existing
 /// static member name. Rename the enum case or expose a manually declared path
@@ -36,7 +40,7 @@
 ///         case increment
 ///     }
 ///
-///     var body: some Reducer<State, Action> {
+///     var body: some Reducer<State, Action, Never> {
 ///         Reduce { state, action in
 ///             switch action {
 ///             case .increment:
@@ -93,7 +97,7 @@ public macro InnoFlow() =
 ///         }
 ///     }
 ///
-///     var body: some Reducer<State, Action> {
+///     var body: some Reducer<State, Action, Never> {
 ///         Reduce { state, action in
 ///             // No need to call `.phaseMap(Self.phaseMap)` — it is applied
 ///             // by the synthesized `reduce(into:action:)`.
@@ -106,6 +110,25 @@ public macro InnoFlow() =
 @attached(memberAttribute)
 @attached(extension, conformances: Reducer, names: arbitrary)
 public macro InnoFlow(phaseManaged: Bool) =
+  #externalMacro(
+    module: "InnoFlowMacros",
+    type: "InnoFlowMacro"
+  )
+
+/// Strict phase-declaration variant of `@InnoFlow`.
+///
+/// Set `strictPhaseTotality: true` only with `phaseManaged: true`. The macro
+/// then requires every nested `Phase` enum case to appear directly in the
+/// static `phaseMap` DSL as a `From` source or an `On` target. Missing phase
+/// coverage is a compile-time error instead of the default warning.
+///
+/// This is syntax-level declaration completeness. Predicate and payload
+/// trigger semantics remain runtime values and must still be verified with
+/// `PhaseMap.requireComplete(expectedTriggersByPhase:)`.
+@attached(member, names: named(reduce), arbitrary)
+@attached(memberAttribute)
+@attached(extension, conformances: Reducer, names: arbitrary)
+public macro InnoFlow(phaseManaged: Bool, strictPhaseTotality: Bool) =
   #externalMacro(
     module: "InnoFlowMacros",
     type: "InnoFlowMacro"
@@ -136,4 +159,15 @@ public macro _InnoFlowActionPaths() =
   #externalMacro(
     module: "InnoFlowMacros",
     type: "InnoFlowActionPathsMacro"
+  )
+
+/// Synthesizes case-path members for nested `Output` enums.
+///
+/// This is an implementation hook used by `@InnoFlow`; invoke `@InnoFlow`
+/// rather than applying this macro directly.
+@attached(member, names: arbitrary)
+public macro _InnoFlowOutputPaths() =
+  #externalMacro(
+    module: "InnoFlowMacros",
+    type: "InnoFlowOutputPathsMacro"
   )

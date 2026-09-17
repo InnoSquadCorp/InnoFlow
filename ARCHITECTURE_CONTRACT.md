@@ -11,7 +11,9 @@ This document captures the stable framework guarantees that should not drift wit
 
 ## Official authoring surface
 
-- Official feature authoring uses `var body: some Reducer<State, Action>`.
+- Official feature authoring declares the reducer output generic explicitly:
+  `var body: some Reducer<State, Action, Never>` without app-boundary output,
+  or the feature's typed `Output` when it emits one.
 - Composition happens through `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`.
 - Binding remains explicit through `@BindableField`, and SwiftUI bindings use projected key paths such as `\.$field`.
 - `Store.preview(...)` and `#Preview` are the canonical preview entry points.
@@ -28,6 +30,40 @@ This document captures the stable framework guarantees that should not drift wit
 - `SelectedStore` is the official derived-read model.
 - Use `select(dependingOn:)` for a single explicit state slice; use the variadic `select(dependingOnAll:)` for two or more slices. Both forms keep selective invalidation regardless of arity.
 - Closure-based `select { ... }` remains an always-refresh fallback when dependency reads cannot be declared soundly.
+
+## Reducer output contract
+
+- A reducer's associated `Output` is a typed, ephemeral event channel for
+  one-shot app-boundary intent. Renderable, restorable, or queryable values
+  remain in `State`.
+- Reducers emit with `Self.output(_:)`. `mapOutput(_:)` explicitly lifts a
+  child's output to a parent output type.
+  `promoteOutput(to:)` adapts only `Output == Never` reducers or effects;
+  it preserves effects and cannot discard an inhabited output type.
+- `Store.outputs()` is live, broadcast, and non-replaying. Subscribers must be
+  active before emission. Each subscriber chooses its own `AsyncStream`
+  buffering policy. The lossless default is unbounded because one-shot
+  coordinator commands must not be silently dropped; a bounded policy is an
+  explicit opt-in to loss and its memory/ordering tradeoff belongs to the host.
+- `Store.send(_:capturingOutputs:)` installs a single-consumer capture before
+  enqueue and returns `OutputFlowTask<Output>`. It contains synchronous root
+  output and descendant output from only that dispatch, preserves the caller's
+  explicit buffering policy, and terminates when the action tree becomes idle.
+  Cancellation of the task awaiting this capture cancels its dispatch, not
+  unrelated work. Normal completion and broadcast subscriber cancellation do
+  not cancel dispatches. A retained capture abandoned via `break` must be
+  explicitly cancelled by its owner.
+- Output is delivered after the reducer's synchronous state mutation and
+  observer refresh. It does not re-enter the action queue.
+  Queued descendant actions recheck dispatch cancellation before reduction;
+  immediate output also observes cancellation accepted during state/observer
+  execution. Cancellation does not roll back already-applied state changes.
+- Output is intent, never authorization. A coordinator that handles buffered
+  output after logout, account switching, or other session change must recheck
+  current domain state before navigating or starting protected work.
+- Every delivery attempt emits a payload-free instrumentation event containing
+  store-wide subscriber enqueue/drop/termination counts, dispatch-capture
+  disposition, sequence, and cancellation-suppression state.
 
 ## Effect runtime failure contract
 
@@ -73,9 +109,14 @@ This document captures the stable framework guarantees that should not drift wit
   `TestStore`.
 - `finish()` is the terminal assertion. `.on` fails on unreceived actions;
   `.off` reduces buffered, late, and follow-up actions until the harness is
-  idle. `assertNoBufferedActions()` is an immediate intermediate checkpoint.
-  The ambiguous `assertNoMoreActions()` API is deprecated in 5.x and planned
-  for removal in 6.0.
+  idle. It also fails on unreceived reducer outputs. `receiveOutput(_:)`
+  consumes outputs explicitly. `assertNoBufferedActions()` is an immediate
+  intermediate checkpoint. The ambiguous `assertNoMoreActions()` API was
+  removed in 6.0.
+- Output reception supports exact values, predicates, and case-path payload
+  extraction without imposing `Equatable` on every output. It follows the same
+  exhaustive/non-exhaustive policy and single total deadline as action matching,
+  including invalidated buffered values. Caller cancellation is not a timeout.
 - Deinitialization is a synchronous terminal safety net, not a second drain.
   If valid buffered actions or framework-owned run, composite, debounce, or
   throttle activity remains, `.on` records one failure,
@@ -99,8 +140,8 @@ expose the same tiered read contract:
   marked inactive. This fallback exists only for SwiftUI's same-tick observer
   race; the API cannot bound how long an external handle is retained, so it is
   not a general lifecycle-aware read path.
-- `ScopedStore.send(_:)` is a **silent no-op** once the parent is gone or the
-  projection is inactive.
+- `ScopedStore.send(_:)` returns a completed `FlowTask` and is a **silent
+  no-op** once the parent is gone or the projection is inactive.
 - `ScopedStore.optionalState` returns `nil` for the same dead-projection cases
   where `ScopedStore.state` would use its cached snapshot fallback.
 - `SelectedStore.optionalValue` returns `nil` when the parent is gone or the
@@ -158,6 +199,14 @@ children, and derived `SelectedStore` projections.
 - `PhaseMap` is a post-reduce decorator and owns the declared phase key path.
 - `phaseGraph = phaseMap.derivedGraph` remains the canonical pattern when a feature needs static topology checks and runtime phase ownership together.
 - `PhaseTransitionGraph` stays topology-only and `validationReport(...)` remains the graph-level validation surface.
+- `PhaseMap.requireComplete(...)` is an opt-in throwing gate over explicitly
+  declared trigger expectations. It does not change partial runtime semantics.
+- `@InnoFlow(phaseManaged: true, strictPhaseTotality: true)` upgrades missing
+  direct `Phase` source/target references from warnings to compile-time errors.
+  The syntax-only macro does not claim arbitrary predicate, helper-built DSL,
+  or payload-domain exhaustiveness; those remain `requireComplete(...)` tests.
+- `PhaseTransitionGraph.mermaidDiagram()` and `dotGraph(name:)` export stable,
+  deterministic documentation source from the same declared topology.
 - `validatePhaseTransitions(...)` still exists for backward compatibility.
 - Guard-bearing transitions remain intentionally out of scope for `PhaseTransitionGraph`; see [ADR-phase-transition-guards](docs/adr/ADR-phase-transition-guards.md).
 - Conditional phase resolution lives in `PhaseMap`; see [ADR-declarative-phase-map](docs/adr/ADR-declarative-phase-map.md).
@@ -165,15 +214,36 @@ children, and derived `SelectedStore` projections.
 ## Effects and runtime
 
 - `EffectContext` is the canonical effect helper surface. Prefer `context.sleep(for:)` over raw `Task.sleep(...)` inside `.run`.
+- Scheduled `.run(id:policy:onAdmission:)` lanes are Store-local. Admission
+  order follows reducer effect reception; serial lanes advance only after the
+  active run closure physically returns. Rejection is data, not a trap.
+- Execution admission does not replace domain revisions, transactions, retry,
+  rollback, or exactly-once persistence. Cancellation remains cooperative.
+- `FlowScope` owns only explicitly tracked dispatch handles and must never use
+  Store-wide cancellation to close a lexical scope. Core remains SwiftUI-free.
+- Prefer `EffectTask.perform(operation:success:failure:)` for one throwing
+  request that maps to exactly one success or failure action. Accepted
+  cancellation emits neither terminal action.
+- `Reducer.onChange(of:perform:)` observes one narrow equatable state slice
+  after the base reducer. It merges the returned effect only on a value change.
 - Cancellation is cooperative. Runtime teardown continues as best-effort async cleanup.
 - `EffectTask.concatenate` rechecks both task cancellation and the effect-sequence boundary before every child, including inside nested concatenations. Once cancellation is accepted, no remaining child starts.
 - Every throttle window owns one generation-scoped drain through its original deadline, including leading-only windows with no pending value. This bounds per-ID scope/window state, lets a later trailing request reuse the same deadline, and makes the active window visible to TestStore terminal verification without delaying leading-only effect ordering.
-- A reused trailing-throttle drain adopts the latest pending effect sequence and cancellation-ID ownership. Store and TestStore therefore apply stale ID/global cancellation to the same active throttle scope, while TestStore keeps one finish activity through post-fire recursion.
+- A reused trailing-throttle drain adopts the latest pending effect sequence
+  and cancellation-ID ownership. Its timer is runtime-owned; each `FlowTask`
+  observes completion without receiving authority to cancel another
+  dispatch's pending work. Store and TestStore therefore apply stale ID/global
+  cancellation to the same active throttle scope, while TestStore keeps one
+  finish activity through post-fire recursion.
+- A `FlowTask` retains cancellation scopes weakly. Live effect contexts keep
+  their own scopes alive, while completed descendants do not accumulate behind
+  one long-running sibling.
 - The runtime is designed to be deadlock-resistant and avoids coupling reducer semantics to middleware-style interception.
 
 ### `Store.send(_:)` scheduling contract
 
-`Store.send(_:)` is synchronous. It guarantees two things and nothing more:
+`Store.send(_:)` synchronously accepts the action and returns a `FlowTask`. It
+guarantees two things before returning:
 
 1. The reducer has finished running against the current state and any
    `.send(...)` follow-up actions returned by the reducer have been drained.
@@ -181,6 +251,11 @@ children, and derived `SelectedStore` projections.
    `.throttle(...)` effect returned by the reducer has been **scheduled** onto
    an unstructured `Task`, but the body of that task has not necessarily started
    yet.
+
+`FlowTask.finish()` then waits until every effect and follow-up action descended
+from that dispatch becomes idle. `FlowTask.cancel()` requests cancellation only
+for that tree; it does not cancel work started by another send. Cancellation
+remains cooperative inside user operations.
 
 Reaching the first `await` inside an effect's operation requires scheduler
 turns — the outer `Task`, the `EffectWalker`, and `driver.startRun` each cross
@@ -206,8 +281,22 @@ cover.
 
 ## Instrumentation
 
-- `StoreInstrumentation.sink`, `.osLog`, `.signpost`, and `.combined` are the official instrumentation surfaces. `.signpost(signposter:name:)` brings the run lifecycle into Instruments without an external dependency; token, sequence, and cancellation identifiers stay visible in signpost messages, while action payloads are redacted unless `includeActions: true` is passed. Pair it with `.osLog(logger:)` through `.combined(...)` to keep both Console output and signpost-driven traces from the same store.
+- `StoreInstrumentation.sink`, `.osLog`, `.signpost`, and `.combined` are the official instrumentation surfaces. `.signpost(signposter:name:)` brings the run lifecycle into Instruments without an external dependency. Action, error, and cancellation-ID payloads are redacted by default; exposing any of them requires its explicit opt-in. Reducer output payloads are never included: `outputDelivered` carries only delivery counts, dispatch-capture disposition, suppression state, and sequence. Pair `.signpost` with `.osLog(logger:)` through `.combined(...)` to keep both Console output and signpost-driven traces from the same store.
 - External metrics backends such as `swift-metrics`, Datadog, or Prometheus should integrate through those sinks instead of changing reducer semantics.
+- A root `DispatchID` is propagated through descendant actions, runs, outputs,
+  and cancellation events. It is distinct from effect IDs, run tokens, and
+  admission sequence numbers.
+- `StoreDiagnostics` is opt-in, bounded, and payload-free. History truncation
+  is explicit and active snapshots reflect live queued/running ownership.
+
+## Testing-only contracts
+
+- `TestStoreInvariant` runs exactly once after the fully composed reducer for
+  every reduction entry path, before its returned effect is interpreted.
+- `TestStoreScenario` is deterministic test input, not a production recording
+  or state replay facility.
+- Scoped output matching consumes the root output queue and preserves one
+  ordering, exhaustivity, and deadline contract across root and child views.
 
 ## Accessibility and sample contract
 

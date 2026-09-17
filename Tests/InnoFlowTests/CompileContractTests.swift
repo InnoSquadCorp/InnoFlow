@@ -9,7 +9,10 @@ import os
 @testable import InnoFlowCore
 @testable import InnoFlowTesting
 
-@Suite("Compile Contract Tests")
+@Suite(
+  "Compile Contract Tests",
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct CompileContractTests {
 
   @Test("Generic extension features expose synthesized action paths")
@@ -127,6 +130,7 @@ struct CompileContractTests {
     let source = """
       import Foundation
       import InnoFlowCore
+      import InnoFlowTesting
 
       let dynamic = String("dynamic-id")
       let stringID = StaticEffectID(dynamic)
@@ -140,6 +144,125 @@ struct CompileContractTests {
       moduleDirectory: moduleDirectory
     )
 
+    #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+  }
+
+  @Test("child output must be mapped before entering a different parent output space")
+  func mismatchedChildOutputFailsToCompile() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+
+    let source = """
+      import InnoFlowCore
+
+      struct Child: Reducer {
+          struct State: Sendable {}
+          enum Action: Sendable { case finish }
+          typealias Output = String
+
+          func reduce(
+              into state: inout State,
+              action: Action
+          ) -> ReducerEffect<Action, Output> {
+              Self.output("finished")
+          }
+      }
+
+      struct Parent: Reducer {
+          struct State: Sendable { var child = Child.State() }
+          enum Action: Sendable { case child(Child.Action) }
+          typealias Output = Int
+
+          static let childPath = CasePath<Action, Child.Action>(
+              embed: Action.child,
+              extract: {
+                  guard case .child(let action) = $0 else { return nil }
+                  return action
+              }
+          )
+
+          func reduce(
+              into state: inout State,
+              action: Action
+          ) -> ReducerEffect<Action, Output> {
+              Scope(
+                  state: \\.child,
+                  action: Self.childPath,
+                  reducer: Child()
+              )
+              .reduce(into: &state, action: action)
+          }
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+
+    #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+    #expect(result.normalizedOutput.contains("String"))
+    #expect(result.normalizedOutput.contains("Int"))
+  }
+
+  @Test("output promotion cannot discard a real reducer or effect output")
+  func outputPromotionCannotDiscardRealOutputs() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+    let snippets = [
+      """
+      import InnoFlowCore
+      let child = Reduce<Int, Int, String> { _, _ in .none }
+      let _ = child.promoteOutput(to: Int.self)
+      """,
+      """
+      import InnoFlowCore
+      let effect = ReducerEffect<Int, String>.none
+      let _ = effect.promoteOutput(to: Int.self)
+      """,
+    ]
+
+    for source in snippets {
+      let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
+      #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
+      #expect(result.normalizedOutput.contains("String"))
+      #expect(result.normalizedOutput.contains("Never"))
+    }
+  }
+
+  @Test("external consumers can promote Never and match non-equatable outputs")
+  func outputErgonomicsArePublicAPI() throws {
+    let packageRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let moduleDirectory = try findBuiltInnoFlowModuleDirectory(in: packageRoot)
+    let source = """
+      import InnoFlowTesting
+
+      struct Receipt: Sendable { let value: Int }
+
+      @MainActor
+      func checkPublicAPI() async {
+          let child = Reduce<Int, Int, Never> { _, _ in .none }
+          let parent = child.promoteOutput(to: Receipt.self)
+          let effect: ReducerEffect<Int, Receipt> =
+              EffectTask<Int>.send(1).promoteOutput(to: Receipt.self)
+          _ = effect
+          let store = TestStore(reducer: parent, initialState: 0)
+          let receipt: Receipt? = await store.receiveOutput(where: { $0.value == 1 })
+          let path = CasePath<Receipt, Int>(
+              embed: { Receipt(value: $0) }, extract: { $0.value }
+          )
+          let value: Int? = await store.receiveOutput(path)
+          _ = (receipt, value)
+      }
+      """
+
+    let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
   }
 
@@ -160,27 +283,27 @@ struct CompileContractTests {
       """
       import InnoFlowCore
 
-      let first = Reduce<Int, Int> { _, _ in .none }
-      let second = Reduce<Int, Int> { _, _ in .none }
+      let first = Reduce<Int, Int, Never> { _, _ in .none }
+      let second = Reduce<Int, Int, Never> { _, _ in .none }
       let _ = _ReducerSequence(first: first, second: second)
       """,
       """
       import InnoFlowCore
 
-      let reducer = Reduce<Int, Int> { _, _ in .none }
+      let reducer = Reduce<Int, Int, Never> { _, _ in .none }
       let _ = _OptionalReducer(reducer)
       """,
       """
       import InnoFlowCore
 
-      let first = Reduce<Int, Int> { _, _ in .none }
-      let second = Reduce<Int, Int> { _, _ in .none }
+      let first = Reduce<Int, Int, Never> { _, _ in .none }
+      let second = Reduce<Int, Int, Never> { _, _ in .none }
       let _ = _ConditionalReducer(branch: .first(first))
       """,
       """
       import InnoFlowCore
 
-      let reducer = Reduce<Int, Int> { _, _ in .none }
+      let reducer = Reduce<Int, Int, Never> { _, _ in .none }
       let _ = _ArrayReducer([reducer])
       """,
     ]
@@ -247,7 +370,8 @@ struct CompileContractTests {
     let result = try typecheckSource(source, moduleDirectory: moduleDirectory)
 
     #expect(result.status != 0, Comment(rawValue: result.normalizedOutput))
-    #expect(!result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
+    #expect(
+      !result.normalizedOutput.localizedCaseInsensitiveContains("no such module 'InnoFlow'"))
   }
 
   @Test("Module lookup supports custom SwiftPM build paths")
@@ -278,6 +402,18 @@ struct CompileContractTests {
       atPath: moduleDirectory.appendingPathComponent("InnoFlow.swiftmodule").path,
       contents: Data()
     )
+    let foreignModule = packageRoot.appendingPathComponent(
+      ".build/release-evidence/DerivedData/Build/Products/Debug-iphonesimulator/InnoFlow.swiftmodule",
+      isDirectory: true
+    )
+    try FileManager.default.createDirectory(
+      at: foreignModule,
+      withIntermediateDirectories: true
+    )
+    FileManager.default.createFile(
+      atPath: foreignModule.appendingPathComponent("arm64-apple-ios-simulator.swiftmodule").path,
+      contents: Data()
+    )
 
     let resolved = try findBuiltModuleDirectory(
       named: "InnoFlow",
@@ -299,6 +435,7 @@ struct CompileContractTests {
     let source = """
       import Foundation
       import InnoFlowCore
+      import InnoFlowTesting
 
       let token = UUID()
       let staticID: StaticEffectID = "legacy-id"
@@ -345,6 +482,21 @@ struct CompileContractTests {
           id: nil,
           sequence: 5
       )
+      let failed = StoreInstrumentation<Int>.RunFailedEvent(
+          token: token,
+          cancellationID: staticID,
+          sequence: 6,
+          errorDescription: "failed",
+          errorTypeName: "SampleError"
+      )
+      let metrics = StoreInstrumentationMetricsSnapshot(runStarted: 1)
+      let timing = EffectTimingRecorder.Entry(
+          phase: .runStarted,
+          sequence: 7,
+          effectID: nil,
+          actionLabel: nil,
+          timestampNanos: 0
+      )
 
       let _ = run.cancellationID
       let _ = run.cancellationID?.rawValue.description
@@ -355,6 +507,9 @@ struct CompileContractTests {
       let _ = emittedWithoutID.cancellationID
       let _ = droppedWithoutID.cancellationID
       let _ = cancelledWithoutID.id
+      let _ = failed.dispatchID
+      let _ = metrics.runStarted
+      let _ = timing.dispatchID
       """
 
     let result = try typecheckSource(
@@ -560,7 +715,7 @@ struct CompileContractTests {
 
           public init() {}
 
-          var body: some Reducer<State, Action> {
+          var body: some Reducer<State, Action, Never> {
               Reduce { state, action in
                   if case .increment = action {
                       state.count += 1
@@ -584,7 +739,7 @@ struct CompileContractTests {
 
           public init() {}
 
-          var body: some Reducer<State, Action> {
+          var body: some Reducer<State, Action, Never> {
               Reduce { state, action in
                   switch action {
                   case .replace(let value), .child(_, let value):
@@ -595,7 +750,164 @@ struct CompileContractTests {
           }
       }
 
-      @InnoFlow(phaseManaged: true)
+      @InnoFlow
+      public struct PublicOutputFeature {
+          public struct State: Equatable, Sendable, DefaultInitializable {
+              public init() {}
+          }
+
+          public enum Action: Equatable, Sendable {
+              case emit(Int)
+          }
+
+          public enum Output: Equatable, Sendable {
+              case value(Int)
+              case conditionalManual(Int)
+              #if MANUAL_PATH
+              public static let conditionalManualCasePath = CasePath<Self, Int>(
+                  embed: { .conditionalManual($0) },
+                  extract: { output in
+                      guard case .conditionalManual(let value) = output else { return nil }
+                      return value
+                  }
+              )
+              #endif
+              @available(macOS 26.0, *)
+              case modern
+              #if os(macOS)
+              @available(macOS 26.0, *)
+              #endif
+              case conditionalModern
+              @available(*, unavailable)
+              case retired
+              @available(macOS, unavailable)
+              case retiredOnMac
+              @available(macOS, message: "arguments can be reordered", unavailable)
+              case reorderedUnavailableOnMac
+              #if os(macOS)
+              @available(*, unavailable)
+              #endif
+              case conditionallyRetired
+              #if os(macOS)
+              case platform(Int)
+              #elseif os(iOS)
+              case platform(Double)
+              #else
+              case platform(String)
+              #endif
+              #if os(macOS)
+              case independent(Int)
+              #endif
+              #if !os(macOS)
+              case independent(String)
+              #endif
+              case complexManual(Int)
+              #if !FEATURE_A && FEATURE_B
+              public static let complexManualCasePath = CasePath<Self, Int>(
+                  embed: { .complexManual($0) },
+                  extract: { output in
+                      guard case .complexManual(let value) = output else { return nil }
+                      return value
+                  }
+              )
+              #endif
+              case complexThreeFlagManual(Int)
+              #if (FEATURE_A && FEATURE_B) || FEATURE_C
+              public static let complexThreeFlagManualCasePath = CasePath<Self, Int>(
+                  embed: { .complexThreeFlagManual($0) },
+                  extract: { output in
+                      guard case .complexThreeFlagManual(let value) = output else { return nil }
+                      return value
+                  }
+              )
+              #endif
+              case disjunctionManual(Int)
+              #if !FEATURE_A || FEATURE_B
+              public static let disjunctionManualCasePath = CasePath<Self, Int>(
+                  embed: { .disjunctionManual($0) },
+                  extract: { output in
+                      guard case .disjunctionManual(let value) = output else { return nil }
+                      return value
+                  }
+              )
+              #endif
+              case doubleNegationManual(Int)
+              #if !(!FEATURE_A)
+              public static let doubleNegationManualCasePath = CasePath<Self, Int>(
+                  embed: { .doubleNegationManual($0) },
+                  extract: { output in
+                      guard case .doubleNegationManual(let value) = output else { return nil }
+                      return value
+                  }
+              )
+              #endif
+              #if os(macOS)
+              case parenthesizedPlatform(Int)
+              #endif
+              #if !(os(macOS))
+              case parenthesizedPlatform(String)
+              #endif
+              #if arch(arm64)
+              case architecture(Int)
+              #elseif arch(x86_64)
+              case architecture(Int)
+              #endif
+              #if swift(>=6.0)
+              case swiftVersion(Int)
+              #else
+              case swiftVersion(Int)
+              #endif
+              #if compiler(>=6.0)
+              case compilerVersion(Int)
+              #else
+              case compilerVersion(Int)
+              #endif
+              #if targetEnvironment(simulator)
+              case targetSpecific(Int)
+              #endif
+              #if targetEnvironment(macCatalyst)
+              case targetSpecific(String)
+              #endif
+              @available(iOS, unavailable)
+              @available(macCatalyst 13.0, *)
+              case catalystOverride(Int)
+              @available(macOSApplicationExtension, unavailable)
+              case appOnly(Int)
+              @available(macOS, introduced: 15.0, message: "unavailable is documentation, not a declaration")
+              case availabilityMessage(Int)
+              @available(macOS, introduced: 15.0, deprecated: 99.0, renamed: "unavailableReplacement")
+              case availabilityRenamed(Int)
+              #if os(macOS)
+              @InnoFlowCasePathIgnored
+              #endif
+              case conditionallyIgnored
+              #if FEATURE_A
+              @InnoFlowCasePathIgnored
+              #endif
+              case flagIgnored
+              #if FEATURE_A
+              @available(*, unavailable)
+              #endif
+              case exclusiveValue(Int)
+              #if !FEATURE_A
+              @available(*, unavailable)
+              #endif
+              case _exclusiveValue(Int)
+          }
+
+          public init() {}
+
+          var body: some Reducer<State, Action, Output> {
+              Reduce { _, action in
+                  switch action {
+                  case .emit(let value):
+                      return Self.output(.value(value))
+                  }
+              }
+          }
+      }
+
+      @InnoFlow(phaseManaged: true, strictPhaseTotality: true)
       package struct PackageFeature {
           package struct State: Equatable, Sendable, DefaultInitializable {
               package enum Phase: Hashable, Sendable { case idle, loaded }
@@ -621,7 +933,7 @@ struct CompileContractTests {
 
           package init() {}
 
-          var body: some Reducer<State, Action> {
+          var body: some Reducer<State, Action, Never> {
               Reduce { _, _ in .none }
           }
       }
@@ -645,7 +957,7 @@ struct CompileContractTests {
 
               public init() {}
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { _, _ in .none }
               }
           }
@@ -679,7 +991,7 @@ struct CompileContractTests {
 
               package init() {}
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { _, _ in .none }
               }
           }
@@ -710,6 +1022,99 @@ struct CompileContractTests {
       let _ = genericFeature.reduce(into: &genericState, action: .replace(42))
       let _ = GenericFeature<Int>.Action.replaceCasePath.embed(42)
       let _ = GenericFeature<Int>.Action.childActionPath.embed(1, 42)
+
+      @MainActor
+      func compileOutputCaptureContract() async {
+          let outputStore = Store(reducer: PublicOutputFeature())
+          let outputTask = outputStore.send(.emit(42), capturingOutputs: .unbounded)
+          var outputIterator = outputTask.outputs.makeAsyncIterator()
+          await outputTask.finish()
+          guard await outputIterator.next() == .value(42) else {
+              fatalError("dispatch-scoped output capture failed")
+          }
+          let platform = PublicOutputFeature.Output.platformCasePath.embed(42)
+          guard platform == .platform(42) else {
+              fatalError("conditional output path failed")
+          }
+          let conditionalManual = PublicOutputFeature.Output.conditionalManualCasePath.embed(7)
+          guard conditionalManual == .conditionalManual(7) else {
+              fatalError("conditional manual output path failed")
+          }
+          let independent = PublicOutputFeature.Output.independentCasePath.embed(9)
+          guard independent == .independent(9) else {
+              fatalError("independent conditional output path failed")
+          }
+          let complex = PublicOutputFeature.Output.complexManualCasePath.embed(10)
+          guard complex == .complexManual(10) else {
+              fatalError("complex conditional manual output path failed")
+          }
+          let complexThreeFlag = PublicOutputFeature.Output.complexThreeFlagManualCasePath.embed(13)
+          guard complexThreeFlag == .complexThreeFlagManual(13) else {
+              fatalError("three-flag conditional manual output path failed")
+          }
+          let disjunction = PublicOutputFeature.Output.disjunctionManualCasePath.embed(15)
+          guard disjunction == .disjunctionManual(15) else {
+              fatalError("disjunction conditional manual output path failed")
+          }
+          let doubleNegation = PublicOutputFeature.Output.doubleNegationManualCasePath.embed(16)
+          guard doubleNegation == .doubleNegationManual(16) else {
+              fatalError("double-negation conditional manual output path failed")
+          }
+          let parenthesized = PublicOutputFeature.Output.parenthesizedPlatformCasePath.embed(11)
+          guard parenthesized == .parenthesizedPlatform(11) else {
+              fatalError("parenthesized platform output path failed")
+          }
+          let architecture = PublicOutputFeature.Output.architectureCasePath.embed(18)
+          guard architecture == .architecture(18) else {
+              fatalError("architecture conditional output path failed")
+          }
+          let swiftVersion = PublicOutputFeature.Output.swiftVersionCasePath.embed(19)
+          guard swiftVersion == .swiftVersion(19) else {
+              fatalError("Swift version conditional output path failed")
+          }
+          let compilerVersion = PublicOutputFeature.Output.compilerVersionCasePath.embed(21)
+          guard compilerVersion == .compilerVersion(21) else {
+              fatalError("compiler version conditional output path failed")
+          }
+          let appOnly = PublicOutputFeature.Output.appOnlyCasePath.embed(20)
+          guard appOnly == .appOnly(20) else {
+              fatalError("application-only output path failed")
+          }
+          let availabilityMessage = PublicOutputFeature.Output.availabilityMessageCasePath.embed(12)
+          guard availabilityMessage == .availabilityMessage(12) else {
+              fatalError("availability message output path failed")
+          }
+          let availabilityRenamed = PublicOutputFeature.Output.availabilityRenamedCasePath.embed(14)
+          guard availabilityRenamed == .availabilityRenamed(14) else {
+              fatalError("availability renamed output path failed")
+          }
+          #if !FEATURE_A
+          let flagIgnored = PublicOutputFeature.Output.flagIgnoredCasePath.embed(())
+          guard flagIgnored == .flagIgnored else {
+              fatalError("conditional ignored output path failed")
+          }
+          let exclusiveValue = PublicOutputFeature.Output.exclusiveValueCasePath.embed(17)
+          guard exclusiveValue == .exclusiveValue(17) else {
+              fatalError("complementary availability output path failed")
+          }
+          #else
+          let exclusiveValue = PublicOutputFeature.Output.exclusiveValueCasePath.embed(17)
+          guard exclusiveValue == ._exclusiveValue(17) else {
+              fatalError("complementary availability output path failed")
+          }
+          #endif
+          if #available(macOS 26.0, *) {
+              let modern = PublicOutputFeature.Output.modernCasePath.embed(())
+              guard modern == .modern else {
+                  fatalError("available output path failed")
+              }
+              let conditionalModern = PublicOutputFeature.Output.conditionalModernCasePath.embed(())
+              guard conditionalModern == .conditionalModern else {
+                  fatalError("conditional availability output path failed")
+              }
+          }
+      }
+      await compileOutputCaptureContract()
 
       var packageState = PackageFeature.State()
       let packageFeature = PackageFeature()
@@ -751,6 +1156,121 @@ struct CompileContractTests {
     )
 
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+
+    let manualResult = try runProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+      arguments: [
+        "swift",
+        "build",
+        "--package-path",
+        clientRoot.path,
+        "--build-path",
+        buildPath.appendingPathComponent("manual-path").path,
+        "--product",
+        "PublicMacroClient",
+        "--disable-experimental-prebuilts",
+        "-Xswiftc",
+        "-warnings-as-errors",
+        "-Xswiftc",
+        "-DMANUAL_PATH",
+      ]
+    )
+
+    #expect(manualResult.status == 0, Comment(rawValue: manualResult.normalizedOutput))
+
+    for flags in [
+      ["FEATURE_A"],
+      ["FEATURE_B"],
+      ["FEATURE_C"],
+      ["FEATURE_A", "FEATURE_B"],
+      ["FEATURE_A", "FEATURE_C"],
+      ["FEATURE_B", "FEATURE_C"],
+      ["FEATURE_A", "FEATURE_B", "FEATURE_C"],
+    ] {
+      let flagArguments = flags.flatMap { ["-Xswiftc", "-D\($0)"] }
+      let conditionalResult = try runProcess(
+        executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+        arguments: [
+          "swift",
+          "build",
+          "--package-path",
+          clientRoot.path,
+          "--build-path",
+          buildPath.appendingPathComponent(flags.joined(separator: "-")).path,
+          "--product",
+          "PublicMacroClient",
+          "--disable-experimental-prebuilts",
+          "-Xswiftc",
+          "-warnings-as-errors",
+        ] + flagArguments
+      )
+      #expect(
+        conditionalResult.status == 0,
+        Comment(rawValue: conditionalResult.normalizedOutput)
+      )
+    }
+
+    let unavailableUseSource =
+      executableSource + """
+
+        let _ = PublicOutputFeature.Output.retired
+        """
+    try unavailableUseSource.write(
+      to: executableRoot.appendingPathComponent("main.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+    let unavailableUseResult = try runProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+      arguments: [
+        "swift",
+        "build",
+        "--package-path",
+        clientRoot.path,
+        "--build-path",
+        buildPath.path,
+        "--product",
+        "PublicMacroClient",
+        "--disable-experimental-prebuilts",
+        "-Xswiftc",
+        "-warnings-as-errors",
+      ]
+    )
+
+    #expect(unavailableUseResult.status != 0)
+    #expect(
+      unavailableUseResult.normalizedOutput.localizedCaseInsensitiveContains("unavailable"),
+      Comment(rawValue: unavailableUseResult.normalizedOutput)
+    )
+
+    try executableSource.write(
+      to: executableRoot.appendingPathComponent("main.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+    let applicationExtensionResult = try runProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+      arguments: [
+        "swift",
+        "build",
+        "--package-path",
+        clientRoot.path,
+        "--build-path",
+        buildPath.appendingPathComponent("application-extension").path,
+        "--product",
+        "PublicMacroClient",
+        "--disable-experimental-prebuilts",
+        "-Xswiftc",
+        "-warnings-as-errors",
+        "-Xswiftc",
+        "-application-extension",
+      ]
+    )
+    #expect(applicationExtensionResult.status != 0)
+    #expect(
+      applicationExtensionResult.normalizedOutput.localizedCaseInsensitiveContains("unavailable"),
+      Comment(rawValue: applicationExtensionResult.normalizedOutput)
+    )
   }
 
   @Test("InnoFlowCore does not expose macro declarations")
@@ -775,7 +1295,7 @@ struct CompileContractTests {
               case increment
           }
 
-          var body: some Reducer<State, Action> {
+          var body: some Reducer<State, Action, Never> {
               Reduce { state, action in
                   state.count += 1
                   return .none
@@ -855,7 +1375,7 @@ struct CompileContractTests {
               case increment
           }
 
-          var body: some Reducer<State, Action> {
+          var body: some Reducer<State, Action, Never> {
               Reduce { state, action in
                   state.count += 1
                   return .none
@@ -1175,7 +1695,7 @@ struct CompileContractTests {
               case increment
           }
 
-          var body: some Reducer<State, Action> {
+          var body: some Reducer<State, Action, Never> {
               Reduce { state, action in
                   state.count += 1
                   return .none
@@ -1269,7 +1789,7 @@ struct CompileContractTests {
       import InnoFlowCore
 
       var count = 0
-      let reducer = Reduce<Int, Int> { state, action in
+      let reducer = Reduce<Int, Int, Never> { state, action in
           state += action
           return .none
       }
@@ -1774,7 +2294,7 @@ struct CompileContractTests {
               }
           )
 
-          var body: some Reducer<State, Action> {
+          var body: some Reducer<State, Action, Never> {
               CombineReducers {
                   Scope(
                       state: \\.child,

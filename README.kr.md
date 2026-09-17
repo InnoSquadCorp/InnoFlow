@@ -6,11 +6,14 @@
 
 InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단방향 아키텍처 프레임워크입니다.
 
-`main` 문서와 아래 설치 예시는 정식 5.1.1 공개 계약을 설명합니다.
+`main` 문서와 아래 설치 예시는 로컬 6.0.0 배포 후보 계약을 설명합니다. 태그가
+게시되기 전까지 공개 안정 버전은 5.1.1입니다.
 
 ## 핵심 방향
 
-- 공식 feature authoring은 `var body: some Reducer<State, Action>`입니다.
+- 공식 feature authoring은 세 번째 reducer generic을 명시합니다. 앱 경계
+  output이 없으면 `Never`, 내보내는 경우에는 feature의 typed `Output`을
+  사용합니다.
 - 표준 합성 형태가 아닌 labeled/multi-payload `Action` case는 canonical
   `<caseName>CasePath` 수동 선언이나 `@InnoFlowCasePathIgnored`로 경고 의도를 명시합니다.
 - 합성은 `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`를 중심으로 이뤄집니다.
@@ -18,6 +21,20 @@ InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단
 - `PhaseTransitionGraph`는 generic automata runtime이 아니라 opt-in validation layer입니다.
 - binding은 `@BindableField`와 projected key path를 통해 명시적으로 연결합니다.
 - `TestStore.exhaustivity`는 기본값이 `.on`이며, 모든 상태 전환과 effect action을 빠짐없이 검증합니다. 테스트는 `finish()`로 끝내며, 미검증 작업을 남긴 deinit은 정책에 따라 실패, 경고 또는 무음으로 처리됩니다. 실행 취소가 먼저 수락되지 않은 상태에서 `EffectTask.run`을 빠져나온 취소 이외의 오류는 이 정책과 무관하게 원래 action assertion 위치에서 한 번 실패합니다.
+- `Store.send(_:)`는 해당 dispatch에서 파생된 전체 effect 트리만 완료하거나 취소할 수 있는 `FlowTask`를 반환합니다.
+- reducer는 일회성 앱 경계 명령을 typed `Output`으로 내보낼 수 있으며, 복원·렌더링할 값은 계속 `State`에 둡니다.
+- 특정 dispatch의 output이 필요하면 `send(_:capturingOutputs:)`가 enqueue
+  전에 single-consumer `OutputFlowTask` 스트림을 설치합니다. 전역
+  `outputs()` broadcast와 섞이지 않습니다.
+- 캡처 출력의 `for await` 소비 Task를 취소하면 해당 dispatch만 취소됩니다.
+  정상 완료나 전역 구독 취소는 effect를 취소하지 않습니다. `break`로 빠져나오면서
+  캡처를 유지할 때는 작업 중단을 위해 `cancel()`을 명시적으로 호출합니다.
+- 출력 없는 자식 reducer와 effect helper는 `promoteOutput(to:)`로 재사용합니다.
+  실제 출력 타입은 여전히 `mapOutput(_:)`로 변환해야 하므로 이벤트가 묵시적으로 버려지지 않습니다.
+- `TestStore.receiveOutput`은 정확한 값 외에 predicate와 `CasePath`를 지원하여
+  `Equatable`이 아닌 출력도 검증합니다. 모든 방식이 exhaustivity와 전체 제한시간을 지킵니다.
+- `strictPhaseTotality: true`는 직접 선언된 `Phase` source/target 누락을
+  컴파일 오류로 만들며, 동적 trigger 의미는 계속 `requireComplete(...)`로 검증합니다.
 - `Store`는 effect 취소와 run 실패를 MainActor 경계에서 순서화합니다. 취소가 먼저 수락되면 협조하지 않는 작업이 뒤늦게 던진 오류를 `didFailRun`으로 재분류하지 않습니다.
 - 앱 라우팅, transport, 세션 라이프사이클, 생성 시점 의존성 그래프는 앱 경계 바깥에서 소유합니다.
 
@@ -41,7 +58,7 @@ InnoFlow는 더 작은 경계를 원할 때 선택합니다. reducer는 비즈�
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "5.1.1")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.0")
 ]
 ```
 
@@ -103,7 +120,7 @@ struct CounterFeature {
     case setStep(Int)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .increment:
@@ -189,6 +206,15 @@ scope한 row는 새 path로 라우팅됩니다. 매크로가 생성한 path는 �
 - 영어 문서를 기준 문서로 유지합니다.
 - 한국어/일본어/중국어 문서는 개요, 빠른 시작, 샘플 카탈로그, 경계 문서를 함께 제공합니다.
 - 상세 authoring 가이드와 API 계약은 영어 문서를 먼저 갱신합니다.
+
+## 6.0 실행 조율과 검증
+
+서로 다른 dispatch가 같은 Store 로컬 자원을 사용할 때는 `.latest`,
+`.dropWhileRunning`, bounded `.serial(maxPending:)` 실행 정책을 사용합니다.
+여러 dispatch의 수명은 `withFlowScope`로 소유하고, 프로덕션 진단은 opt-in
+`StoreDiagnostics`의 제한된 payload-free 기록을 사용합니다. 테스트에서는
+`TestStoreInvariant`, `TestStoreScenario`, 매크로가 합성한 Output case path를
+사용할 수 있습니다. 이 기능들은 저장 트랜잭션, 재시도, rollback을 대신하지 않습니다.
 
 ## 언제 `PhaseMap`을 쓰면 좋은가
 

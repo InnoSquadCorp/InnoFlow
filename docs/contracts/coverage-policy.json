@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "minimumLineCoverage": 85,
+  "requiredModules": [
+    "InnoFlowCore",
+    "InnoFlowMacros",
+    "InnoFlowSwiftUI",
+    "InnoFlowTesting"
+  ]
+}

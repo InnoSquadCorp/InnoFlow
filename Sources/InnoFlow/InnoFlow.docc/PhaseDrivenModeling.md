@@ -58,7 +58,7 @@ struct ItemsFeature {
     phaseMap.derivedGraph
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .load:
@@ -104,6 +104,7 @@ Rules:
 - `PhaseMap` remains partial by default. Unmatched phase/action pairs are legal no-ops unless tests opt into stricter validation.
 - Illegal transitions and undeclared dynamic targets assert in debug builds.
 - `@InnoFlow(phaseManaged: true)` applies `Self.phaseMap` automatically and warns for Phase cases never referenced by name from the static phase map.
+- `@InnoFlow(phaseManaged: true, strictPhaseTotality: true)` promotes that direct declaration-coverage diagnostic to an error. It does not evaluate predicates, helper-built DSL fragments, dynamic targets, or graph reachability.
 - `PhaseTransitionGraph` is a topology validation tool, not a general state-machine runtime.
 - Prefer `On(CasePath, ...)` when payload drives the phase decision, `On(.equatableAction, ...)`
   for simple phase events, and keep `On(where:)` as an escape hatch.
@@ -134,7 +135,10 @@ assertValidGraph(
 ```
 
 Use `PhaseMap` for runtime phase ownership, `assertValidGraph(...)` for static graph topology
-checks, and `assertPhaseMapCovers(...)` for explicit trigger coverage. `validatePhaseTransitions(...)`
+checks, and `assertPhaseMapCovers(...)` for explicit trigger coverage. Use
+`try phaseMap.requireComplete(...)` when missing coverage should fail a release
+gate, and `phaseMap.derivedGraph.mermaidDiagram()` or `.dotGraph()` when the
+declared topology should feed documentation. `validatePhaseTransitions(...)`
 remains available for backwards compatibility.
 
 If you want stronger trigger coverage without changing runtime behavior, validate explicit expected
@@ -155,9 +159,11 @@ let totalityReport = assertPhaseMapCovers(
 precondition(totalityReport.isEmpty)
 ```
 
-The phase-managed compile-time warning is intentionally name-based. It catches declared Phase
-cases that never appear in the static `phaseMap`, but it does not prove graph reachability,
-predicate exhaustiveness, or guard target completeness.
+The default phase-managed compile-time warning is intentionally name-based.
+Add `strictPhaseTotality: true` to promote missing direct `Phase` source/target
+coverage to an error. Both modes are syntax-level only: graph reachability,
+arbitrary predicate exhaustiveness, payload domains, and helper-built DSL
+remain runtime/test responsibilities.
 
 ## When to use it
 

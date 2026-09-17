@@ -1929,7 +1929,7 @@ struct TestStoreCoreTests {
         On(.load, to: .loaded)
       }
     }
-    let reducer = Reduce<State, Action> { _, action in
+    let reducer = Reduce<State, Action, Never> { _, action in
       switch action {
       case .load:
         return .none
@@ -2026,7 +2026,7 @@ struct TestStoreCoreTests {
       }
 
       func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-        Reduce<State, Action> { _, _ in .none }
+        Reduce<State, Action, Never> { _, _ in .none }
           .phaseMap(Self.phaseMap)
           .reduce(into: &state, action: action)
       }
@@ -2112,6 +2112,37 @@ struct TestStoreCoreTests {
 
     #expect(report.isEmpty)
     #expect(report.missingTriggers.isEmpty)
+  }
+
+  @Test("PhaseMap strict validation throws when a declared contract is incomplete")
+  func phaseMapStrictValidationThrowsForIncompleteContract() {
+    #expect(throws: PhaseMapValidationError<PhaseMapHarness.State.Phase>.self) {
+      try PhaseMapHarness.phaseMap.requireComplete(
+        expectedTriggersByPhase: [
+          .idle: [
+            .action(.noop, label: "noop")
+          ]
+        ]
+      )
+    }
+  }
+
+  @Test("PhaseTransitionGraph exports deterministic Mermaid and DOT diagrams")
+  func phaseTransitionGraphExportsDiagrams() {
+    enum Phase: Hashable, Sendable {
+      case idle
+      case loading
+      case loaded
+    }
+
+    let graph = PhaseTransitionGraph<Phase>.linear(.idle, .loading, .loaded)
+
+    #expect(graph.mermaidDiagram() == graph.mermaidDiagram())
+    #expect(graph.mermaidDiagram().contains("stateDiagram-v2"))
+    #expect(graph.mermaidDiagram().contains("idle"))
+    #expect(graph.mermaidDiagram().contains("-->"))
+    #expect(graph.dotGraph(name: "Load flow").contains("digraph \"Load flow\""))
+    #expect(graph.dotGraph().contains("->"))
   }
 
   @Test("PhaseMap testing helper asserts clean coverage for expected triggers")
@@ -2309,7 +2340,7 @@ struct TestStoreCoreTests {
         )
       }
     }
-    let reducer = Reduce<State, Action> { _, _ in .none }.phaseMap(map)
+    let reducer = Reduce<State, Action, Never> { _, _ in .none }.phaseMap(map)
 
     var state = State()
     _ = reducer.reduce(into: &state, action: .tick)
@@ -2368,7 +2399,7 @@ struct TestStoreCoreTests {
         )
       }
     }
-    let reducer = Reduce<State, Action> { state, _ in
+    let reducer = Reduce<State, Action, Never> { state, _ in
       state.observerTicks += 1
       return .none
     }
