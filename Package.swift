@@ -49,7 +49,7 @@ let package = Package(
         // while still letting consumer graphs share a newer 603.x patch
         // with other macro packages. Maintainer reproducibility comes from
         // Package.resolved, not the manifest (docs/MACRO_OPERATIONS.md).
-        .package(url: "https://github.com/swiftlang/swift-syntax.git", "603.0.0"..<"604.0.0"),
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", "603.0.0"..<"605.0.0"),
     ],
     targets: [
         // MARK: - Core Library
