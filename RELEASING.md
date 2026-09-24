@@ -205,7 +205,7 @@ and a hashed non-empty artifact; generating a receipt is not a substitute for
 performing the manual check.
 
 For a clean isolated candidate, `scripts/run-release-preflight.sh plan
---evidence-root <outside-repository-directory>` lists the 25 required local
+--evidence-root <outside-repository-directory>` lists the policy's required local
 check IDs, their reviewed commands, and expected environments without running
 them. `execute` collects them serially into a new evidence root; `resume`
 reuses only independently verified receipts for the same candidate and current
