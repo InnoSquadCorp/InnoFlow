@@ -41,11 +41,13 @@ cat >"$repo/docs/contracts/release-evidence-policy.json" <<'JSON'
   "stageOrder": ["local-preflight", "pre-publication", "post-publication"],
   "profiles": {
     "static": {"evidenceKind": "automated", "resultFormat": "command-exit", "artifactContent": "allow-empty"},
-    "command": {"evidenceKind": "automated", "resultFormat": "command-exit", "artifactContent": "non-empty"}
+    "command": {"evidenceKind": "automated", "resultFormat": "command-exit", "artifactContent": "non-empty"},
+    "tests": {"evidenceKind": "automated", "resultFormat": "xcresult-summary", "artifactContent": "non-empty", "requiresRawArtifact": true, "minimumTestCount": 1}
   },
   "checks": [
     {"id": "static-innoflow-diff", "stage": "local-preflight", "requirement": "required", "profile": "static", "allowedCommand": "git diff --check", "component": "innoflow", "commandContract": {"executable": "git", "exactArguments": ["diff", "--check"]}},
-    {"id": "static-principle", "stage": "local-preflight", "requirement": "required", "profile": "command", "allowedCommand": "scripts/principle-gates.sh --static", "component": "innoflow", "commandContract": {"executable": "scripts/principle-gates.sh", "exactArguments": ["--static"]}}
+    {"id": "static-principle", "stage": "local-preflight", "requirement": "required", "profile": "command", "allowedCommand": "scripts/principle-gates.sh --static", "component": "innoflow", "commandContract": {"executable": "scripts/principle-gates.sh", "exactArguments": ["--static"]}},
+    {"id": "runtime-visionos-2.5", "stage": "local-preflight", "requirement": "required", "profile": "tests", "allowedCommand": "scripts/run-focused-platform-runtime-tests.sh", "component": "innoflow", "commandContract": {"executable": "scripts/run-focused-platform-runtime-tests.sh", "requiredArguments": ["--destination", "--derived-data", "--result-bundle"]}, "environment": {"platform": "visionOS Simulator", "os": "2.5"}}
   ],
   "matrices": []
 }
@@ -93,6 +95,47 @@ scripts/run-release-preflight.sh resume --evidence-root "$evidence" --check-id s
 scripts/run-release-preflight.sh report --evidence-root "$evidence" --check-id static-principle |
   grep -q 'PASS_VERIFIED.*attempts=2'
 [[ "$(wc -l <"$evidence/attempts.tsv")" -eq 4 ]]
+
+mkdir -p "$fixture_root/runtimebin"
+cat >"$fixture_root/runtimebin/xcrun" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == "simctl" ]] || exit 64
+shift
+printf '%s\n' "$*" >>"${INNOFLOW_RUNTIME_CALLS:?}"
+case "${1:-}" in
+  list)
+    printf '%s\n' '{"runtimes":[{"identifier":"com.apple.CoreSimulator.SimRuntime.xrOS-2-5","isAvailable":true}]}'
+    ;;
+  create)
+    case "${3:-}" in
+      *Apple-Vision-Pro-4K) printf '%s\n' 'AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA' ;;
+      *Apple-Vision-Pro) printf '%s\n' 'BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB' ;;
+      *) exit 65 ;;
+    esac
+    ;;
+  boot)
+    [[ "${2:-}" == 'BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB' ]] || { echo 'incompatible 4K device' >&2; exit 65; }
+    ;;
+  bootstatus)
+    echo 'stop after testing fallback selection' >&2
+    exit 65
+    ;;
+  shutdown|delete) ;;
+  *) exit 64 ;;
+esac
+SH
+chmod +x "$fixture_root/runtimebin/xcrun"
+if INNOFLOW_RUNTIME_CALLS="$fixture_root/runtime-calls" PATH="$fixture_root/runtimebin:$PATH" \
+  scripts/run-release-preflight.sh execute --evidence-root "$fixture_root/runtime-evidence" \
+    --check-id runtime-visionos-2.5 >"$fixture_root/runtime.log" 2>&1; then
+  echo "Stopped fixture runtime was accepted" >&2
+  exit 1
+fi
+grep -q 'simctl bootstatus BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB -b failed' "$fixture_root/runtime.log"
+grep -q 'delete AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA' "$fixture_root/runtime-calls"
+grep -q 'delete BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB' "$fixture_root/runtime-calls"
+[[ ! -f "$fixture_root/runtime-evidence/attempts.tsv" ]]
 
 ruby -e 'File.open(ARGV[0], "w") { |lock| lock.flock(File::LOCK_EX); File.write(ARGV[1], "ready"); sleep 10 }' \
   "$evidence/.runner.lock" "$fixture_root/lock-ready" &
@@ -174,4 +217,4 @@ if scripts/run-release-preflight.sh execute --evidence-root "$fixture_root/dirty
   exit 1
 fi
 grep -q 'clean isolated candidate' "$fixture_root/dirty.log"
-echo '[release-preflight-selftest] plan, execute, verified report, reuse, fail/retry, lock, interrupt/retry, disk, tamper, candidate-change, dirty controls passed'
+echo '[release-preflight-selftest] plan, execute, verified report, reuse, fail/retry, runtime fallback/cleanup, lock, interrupt/retry, disk, tamper, candidate-change, dirty controls passed'

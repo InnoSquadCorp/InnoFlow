@@ -179,13 +179,25 @@ def execute_check(check, policy, evidence, snapshot, candidate, toolchain, env)
     if runtime_info(check)
       runtime, device_types, platform = runtime_info(check)
       available_runtime!(check)
+      device_failures = []
       device_types.each do |type|
-        output, = Open3.capture3("xcrun", "simctl", "create", "InnoFlow-Preflight-#{attempt}", type, runtime)
-        device_id = output.strip unless output.strip.empty?
-        break if device_id
+        output, error, created = Open3.capture3("xcrun", "simctl", "create", "InnoFlow-Preflight-#{attempt}", type, runtime)
+        unless created.success? && output.strip.match?(/\A[0-9A-Fa-f-]{36}\z/)
+          device_failures << "#{type}: create failed: #{error.strip}"
+          next
+        end
+        candidate_id = output.strip
+        _boot_output, boot_error, booted = Open3.capture3("xcrun", "simctl", "boot", candidate_id)
+        if booted.success?
+          device_id = candidate_id
+          break
+        end
+        device_failures << "#{type}: boot failed: #{boot_error.strip}"
+        Open3.capture3("xcrun", "simctl", "shutdown", candidate_id)
+        _delete_output, delete_error, deleted = Open3.capture3("xcrun", "simctl", "delete", candidate_id)
+        abort_preflight("Failed to clean up unbootable simulator #{candidate_id}: #{delete_error.strip}") unless deleted.success?
       end
-      abort_preflight("No compatible simulator device type for #{id}") unless device_id
-      capture!("xcrun", "simctl", "boot", device_id)
+      abort_preflight("No bootable simulator device type for #{id}: #{device_failures.join('; ')}") unless device_id
       capture!("xcrun", "simctl", "bootstatus", device_id, "-b")
       destination = "platform=#{platform},id=#{device_id}"
     end
