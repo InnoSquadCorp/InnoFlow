@@ -37,6 +37,10 @@ examples = {
     ["README.cn.md", "dc7f9a836da4c857e0443ab46b240a9d9ff6ca904f4e7b98a48636044ea12759"],
     ["README.cn.md", "dedbc2f5bfb98fee0406b0224e27c798c6e5b1116cef5a250bc76c1f0a41f706"],
   ],
+  "CrossFrameworkChatTransport" => [
+    ["docs/CROSS_FRAMEWORK.md", "65a189bf009dbde02b91ceaef847743fa92d5cda04a1f1468e37b45985317a69"],
+    ["docs/CROSS_FRAMEWORK.md", "d779045b77d48796e3b12f4347c8f3453db9f0d2bc12ca9ca293f5c78d571764"],
+  ],
 }
 
 def swift_blocks(root, relative)
@@ -92,6 +96,35 @@ begin
       sources.unshift(<<~SWIFT)
         import InnoFlow
         struct Item: Equatable, Sendable {}
+      SWIFT
+    when "CrossFrameworkChatTransport"
+      abort "[doc-copyable] Missing transport import in reviewed fence" unless
+        sources.fetch(1).include?("import InnoNetworkWebSocket\n")
+      sources[1] = sources.fetch(1).sub("import InnoNetworkWebSocket\n", "")
+      sources.unshift(<<~SWIFT)
+        // The transport's external API is checked separately. These stubs
+        // typecheck the two exact documentation fences and their actor boundary.
+        import Foundation
+
+        actor WebSocketTask {}
+        enum WebSocketEvent: Sendable {
+          case connected(String?)
+          case disconnected(String?)
+          case string(String)
+          case other
+        }
+        struct WebSocketConfiguration: Sendable {
+          static func safeDefaults() -> Self { .init() }
+        }
+        actor WebSocketManager {
+          init(configuration: WebSocketConfiguration) {}
+          func connect(url: URL) async -> WebSocketTask { .init() }
+          func disconnect(_ task: WebSocketTask) async {}
+          func send(_ task: WebSocketTask, string: String) async throws {}
+          func events(for task: WebSocketTask) async -> AsyncStream<WebSocketEvent> {
+            AsyncStream { $0.finish() }
+          }
+        }
       SWIFT
     end
     if name.start_with?("Readme") && name != "ReadmeEnglish"

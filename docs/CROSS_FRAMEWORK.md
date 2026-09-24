@@ -128,7 +128,7 @@ protocol ChatTransport: Sendable {
   func connect() async
   func disconnect() async
   func send(text: String) async throws
-  func events() -> AsyncStream<ChatTransportEvent>
+  func events() async -> AsyncStream<ChatTransportEvent>
 }
 
 enum ChatTransportEvent: Equatable, Sendable {
@@ -164,7 +164,7 @@ struct ChatFeature {
         let transport = dependencies.transport
         return .run { send, _ in
           await transport.connect()
-          for await event in transport.events() {
+          for await event in await transport.events() {
             await send(._transportEvent(event))
           }
         }
@@ -227,7 +227,7 @@ actor LiveChatTransport: ChatTransport {
     try await manager.send(task, string: text)
   }
 
-  func events() -> AsyncStream<ChatTransportEvent> {
+  func events() async -> AsyncStream<ChatTransportEvent> {
     guard let task else { return AsyncStream { $0.finish() } }
     return AsyncStream { continuation in
       let relay = Task {
