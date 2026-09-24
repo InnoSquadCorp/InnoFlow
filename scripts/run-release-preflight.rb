@@ -319,6 +319,7 @@ File.open(lock, File::RDWR | File::CREAT, 0o600) do |file|
   end
   if options[:check_id].nil?
     puts capture!("scripts/verify-release-evidence.sh", "--candidate-hash", candidate,
-      "--candidate-snapshot", snapshot, "--evidence-root", evidence, "--manifest", "manifest.tsv", "--policy", policy).strip
+      "--candidate-snapshot", snapshot, "--evidence-root", evidence,
+      "--manifest", File.join(evidence, "manifest.tsv"), "--policy", policy).strip
   end
 end

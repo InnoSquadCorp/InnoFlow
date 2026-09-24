@@ -217,4 +217,22 @@ if scripts/run-release-preflight.sh execute --evidence-root "$fixture_root/dirty
   exit 1
 fi
 grep -q 'clean isolated candidate' "$fixture_root/dirty.log"
-echo '[release-preflight-selftest] plan, execute, verified report, reuse, fail/retry, runtime fallback/cleanup, lock, interrupt/retry, disk, tamper, candidate-change, dirty controls passed'
+
+aggregate_repo="$fixture_root/aggregate-repo"
+git clone -q "$repo" "$aggregate_repo"
+git -C "$aggregate_repo" config user.name "InnoFlow Preflight Test"
+git -C "$aggregate_repo" config user.email "preflight@example.invalid"
+ruby -rjson -e '
+  path = ARGV.fetch(0)
+  policy = JSON.parse(File.read(path))
+  policy.fetch("checks").reject! { |check| check.fetch("id").start_with?("runtime-") }
+  File.write(path, JSON.pretty_generate(policy) + "\n")
+' "$aggregate_repo/docs/contracts/release-evidence-policy.json"
+git -C "$aggregate_repo" add -- docs/contracts/release-evidence-policy.json
+git -C "$aggregate_repo" commit -qm aggregate-fixture
+"$aggregate_repo/scripts/run-release-preflight.sh" resume \
+  --evidence-root "$fixture_root/aggregate-evidence" >"$fixture_root/aggregate.log"
+grep -q 'RELEASE_EVIDENCE_COMPLETE.*rows=2 expected=2' "$fixture_root/aggregate.log"
+[[ "$(wc -l <"$fixture_root/aggregate-evidence/manifest.tsv")" -eq 2 ]]
+
+echo '[release-preflight-selftest] plan, execute, aggregate verification, verified report, reuse, fail/retry, runtime fallback/cleanup, lock, interrupt/retry, disk, tamper, candidate-change, dirty controls passed'
