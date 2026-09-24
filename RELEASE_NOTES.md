@@ -2,6 +2,10 @@
 
 ## 6.0.0 Release
 
+This section describes the 6.0.0 target changes; its presence does not mean
+the tag or GitHub Release has been published. Check the public release state
+separately.
+
 InnoFlow 6.0.0 adds caller-owned action lifetimes and a typed reducer output
 channel while keeping the core boundary focused on domain state transitions.
 It also rounds out common effect, state-observation, presentation, and phase

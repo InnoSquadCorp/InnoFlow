@@ -252,7 +252,7 @@ publication remains blocked rather than silently reducing the policy.
 
 ## GitHub Release Notes
 
-The tag-driven `Release Gate` workflow automatically runs the principle gate with release-tag enforcement, creates the GitHub Release, and uses the matching changelog section from [CHANGELOG.md](CHANGELOG.md) as the release body.
+The tag-triggered `Release Gate` runs the principle gate with release-tag enforcement, but a tag push does not create a GitHub Release. After the exact-tag evidence producer and a verify-only Release Gate run have passed, a separately approved `workflow_dispatch` with `publish_release=true` may create the GitHub Release. That publishing job uses the matching section of [CHANGELOG.md](CHANGELOG.md) as its release body.
 
 That changelog section should summarize:
 
