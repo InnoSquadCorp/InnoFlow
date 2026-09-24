@@ -6,6 +6,7 @@ require "fileutils"
 require "json"
 require "open3"
 require "tmpdir"
+require_relative "release-evidence-output-parser"
 
 root = File.realpath(File.expand_path("..", __dir__))
 examples = {
@@ -20,6 +21,14 @@ examples = {
   ],
   "DocCPhaseFeature" => [
     ["Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md", "37aef6225e84c59299e8d44290b6ae2c47befee5ddf9457bb0681ddf7fc83552"],
+  ],
+  "ReadmePhaseRuntime" => [
+    ["README.md", "74e84070d7dfd0ec5d6d803dd3772ffa8a4d2f31f5401076ae779c125e9b68ff"],
+    ["README.md", "acea7240e0b3338ae01cda5dab43c23a7dee2b6d022b3b505c401ca1e8774a89"],
+  ],
+  "DocCPhaseRuntime" => [
+    ["Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md", "37aef6225e84c59299e8d44290b6ae2c47befee5ddf9457bb0681ddf7fc83552"],
+    ["Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md", "78535a0d5fb4b143dcb0e9318bebcb848f9fb2b9fbd7d09f8c5e15b896968919"],
   ],
   "ReadmeEnglish" => [
     ["README.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
@@ -70,6 +79,7 @@ def swift_blocks(root, relative)
 end
 
 selected = examples.values.flatten(1).map(&:first).uniq.to_h { |relative| [relative, swift_blocks(root, relative)] }
+runtime_examples = %w[ReadmePhaseRuntime DocCPhaseRuntime].freeze
 fixture = Dir.mktmpdir("innoflow-doc-copyable-")
 begin
   package = <<~SWIFT
@@ -96,6 +106,18 @@ begin
         }
       SWIFT
     when "DocCPhaseFeature"
+      sources.unshift(<<~SWIFT)
+        import InnoFlow
+        struct Item: Equatable, Sendable {}
+      SWIFT
+    when "ReadmePhaseRuntime"
+      sources.unshift(<<~SWIFT)
+        import InnoFlow
+        struct UserProfile: Equatable, Sendable {
+          static let fixture = Self()
+        }
+      SWIFT
+    when "DocCPhaseRuntime"
       sources.unshift(<<~SWIFT)
         import InnoFlow
         struct Item: Equatable, Sendable {}
@@ -157,48 +179,49 @@ begin
         }
       SWIFT
     end
-    if name.start_with?("Readme") && name != "ReadmeEnglish"
-      if name == "ReadmeDependencyInjection"
-        sources.unshift(<<~SWIFT)
-          protocol APIClientProtocol: Sendable {
-            func fetchName() async throws -> String
-          }
-          struct APIClient: APIClientProtocol {
-            static let live = Self()
-            func fetchName() async throws -> String { "Ada" }
-          }
-          protocol LoggerProtocol: Sendable {
-            func log(_ message: String)
-          }
-          struct Logger: LoggerProtocol {
-            static let live = Self()
-            func log(_ message: String) {}
-          }
-        SWIFT
-      else
-        feature, stepper = sources
-        sources = [feature, <<~SWIFT]
-          import InnoFlowSwiftUI
-          import SwiftUI
+    if name == "ReadmeDependencyInjection"
+      sources.unshift(<<~SWIFT)
+        protocol APIClientProtocol: Sendable {
+          func fetchName() async throws -> String
+        }
+        struct APIClient: APIClientProtocol {
+          static let live = Self()
+          func fetchName() async throws -> String { "Ada" }
+        }
+        protocol LoggerProtocol: Sendable {
+          func log(_ message: String)
+        }
+        struct Logger: LoggerProtocol {
+          static let live = Self()
+          func log(_ message: String) {}
+        }
+      SWIFT
+    elsif %w[ReadmeKorean ReadmeJapanese ReadmeChinese].include?(name)
+      feature, stepper = sources
+      sources = [feature, <<~SWIFT]
+        import InnoFlowSwiftUI
+        import SwiftUI
 
-          struct LocalizedExampleView: View {
-            @State private var store = Store(reducer: CounterFeature())
+        struct LocalizedExampleView: View {
+          @State private var store = Store(reducer: CounterFeature())
 
-            var body: some View {
-          #{stepper.lines.map { |line| "    #{line}" }.join.rstrip}
-            }
+          var body: some View {
+        #{stepper.lines.map { |line| "    #{line}" }.join.rstrip}
           }
-        SWIFT
-      end
+        }
+      SWIFT
     end
-    source_directory = File.join(fixture, "Sources", name)
+    source_directory = File.join(fixture, runtime_examples.include?(name) ? "Tests" : "Sources", name)
     FileUtils.mkdir_p(source_directory)
     File.write(File.join(source_directory, "Example.swift"), sources.join("\n"))
+    target_kind = runtime_examples.include?(name) ? ".testTarget" : ".target"
+    dependencies = [
+      '.product(name: "InnoFlow", package: "InnoFlow")',
+      '.product(name: "InnoFlowSwiftUI", package: "InnoFlow")',
+    ]
+    dependencies << '.product(name: "InnoFlowTesting", package: "InnoFlow")' if runtime_examples.include?(name)
     package << <<~SWIFT
-        .target(name: "#{name}", dependencies: [
-          .product(name: "InnoFlow", package: "InnoFlow"),
-          .product(name: "InnoFlowSwiftUI", package: "InnoFlow"),
-        ]),
+        #{target_kind}(name: "#{name}", dependencies: [#{dependencies.join(", ")}]),
     SWIFT
   end
   package << "  ]\n)\n"
@@ -210,7 +233,21 @@ begin
   print output
   warn error unless error.empty?
   abort "[doc-copyable] External package build failed" unless status.success?
-  puts "[doc-copyable] Compiled #{examples.length} external targets from #{examples.values.sum(&:length)} exact Swift fences"
+  output, error, status = Open3.capture3("swift", "test", "--package-path", fixture,
+    "--disable-automatic-resolution", "--jobs", "1", "--no-parallel",
+    "-Xswiftc", "-warnings-as-errors")
+  print output
+  warn error unless error.empty?
+  abort "[doc-copyable] External phase example tests failed" unless status.success?
+  test_result = ReleaseEvidenceOutputParser.parse({
+    "expectedTestRunCount" => 2,
+    "minimumTestCount" => 2,
+    "maximumTestCount" => 2,
+    "expectedTestNames" => ["loadFlow()", "validatesItemsPhaseTransitions()"],
+  }, output + error)
+  abort "[doc-copyable] Phase test evidence invalid: #{test_result.fetch("failures").join(", ")}" unless
+    test_result.fetch("failures").empty?
+  puts "[doc-copyable] Compiled #{examples.length} external targets from #{examples.values.flatten(1).uniq.length} distinct exact Swift fences (#{examples.values.sum(&:length)} uses)"
 ensure
   if ENV["INNOFLOW_KEEP_DOC_FIXTURE"] == "1"
     warn "[doc-copyable] Preserved fixture: #{fixture}"

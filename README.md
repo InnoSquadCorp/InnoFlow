@@ -854,6 +854,7 @@ action must be consumed with `receive`. Omitting an assertion closure means
 
 ```swift
 import InnoFlowTesting
+import Testing
 
 @Test
 @MainActor
@@ -867,7 +868,8 @@ func loadFlow() async {
     $0.phase = .loading
   }
 
-  await store.receive(._loaded(.fixture), through: phaseMap) {
+  // The reducer's `.load` branch returns `.none`; send the result explicitly.
+  await store.send(._loaded(.fixture), through: phaseMap) {
     $0.phase = .loaded
     $0.profile = .fixture
   }

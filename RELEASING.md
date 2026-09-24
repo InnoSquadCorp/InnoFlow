@@ -78,10 +78,12 @@ tag, run and confirm:
     every Swift fence. Its 12 pinned contextual/historical exceptions are not
     typecheck approvals; runnable and partial examples still need their
     versioned compilation/harness review before the 6.0 candidate is approved.
-    `scripts/check-doc-copyable-examples.rb` additionally compiles fifteen exact
+    `scripts/check-doc-copyable-examples.rb` additionally compiles eighteen distinct exact
     README/DocC quick-start, dependency-injection, phase-modeling,
     cross-framework transport, and instrumentation fences in ten external
-    SwiftPM targets with warnings as errors. It uses the
+    SwiftPM targets and two phase-runtime test targets (nineteen fence uses)
+    with warnings as errors.
+    The two phase tests must each execute and pass, not merely compile. It uses the
     release candidate's `Package.resolved` without automatic version updates.
     This focused executable check does not classify or typecheck the remaining
     contextual fences.

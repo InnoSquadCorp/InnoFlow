@@ -80,20 +80,27 @@ struct ItemsFeature {
 
 ```swift
 import InnoFlowTesting
+import Testing
 
-let phaseMap: PhaseMap<ItemsFeature.State, ItemsFeature.Action, ItemsFeature.State.Phase> =
-  ItemsFeature.phaseMap
+@Test @MainActor
+func validatesItemsPhaseTransitions() async {
+  let store = TestStore(reducer: ItemsFeature())
+  let items = [Item()]
+  let phaseMap: PhaseMap<ItemsFeature.State, ItemsFeature.Action, ItemsFeature.State.Phase> =
+    ItemsFeature.phaseMap
 
-await store.send(.load, through: phaseMap) {
-  $0.phase = .loading
+  await store.send(.load, through: phaseMap) {
+    $0.phase = .loading
+  }
+
+  // The reducer's `.load` branch returns `.none`; send the result explicitly.
+  await store.send(._loaded(items), through: phaseMap) {
+    $0.phase = .loaded
+    $0.items = items
+  }
+
+  await store.finish()
 }
-
-await store.receive(._loaded(items), through: phaseMap) {
-  $0.phase = .loaded
-  $0.items = items
-}
-
-await store.finish()
 ```
 
 Rules:
