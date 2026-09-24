@@ -41,6 +41,9 @@ examples = {
     ["docs/CROSS_FRAMEWORK.md", "65a189bf009dbde02b91ceaef847743fa92d5cda04a1f1468e37b45985317a69"],
     ["docs/CROSS_FRAMEWORK.md", "d779045b77d48796e3b12f4347c8f3453db9f0d2bc12ca9ca293f5c78d571764"],
   ],
+  "InstrumentationEventBuffer" => [
+    ["docs/INSTRUMENTATION_COOKBOOK.md", "897cd0e48ff3a5a817ad5e385a8157d46eac4198f030cabc1e4f8a5c72f1643a"],
+  ],
 }
 
 def swift_blocks(root, relative)
@@ -124,6 +127,33 @@ begin
           func events(for task: WebSocketTask) async -> AsyncStream<WebSocketEvent> {
             AsyncStream { $0.finish() }
           }
+        }
+      SWIFT
+    when "InstrumentationEventBuffer"
+      actor_source, usage = sources.fetch(0).split("\nlet buffer = ", 2)
+      abort "[doc-copyable] Missing event-buffer usage in reviewed fence" unless usage
+      sources = [<<~SWIFT, actor_source, <<~SWIFT]
+        import InnoFlow
+        import Testing
+
+        @InnoFlow
+        struct Feature {
+          struct State: Equatable, Sendable, DefaultInitializable {
+            var count = 0
+          }
+          enum Action: Equatable, Sendable {
+            case load
+          }
+          var body: some Reducer<State, Action, Never> {
+            Reduce { state, _ in
+              state.count += 1
+              return .none
+            }
+          }
+        }
+      SWIFT
+        @Test @MainActor func eventBufferExample() async throws {
+      #{("let buffer = " + usage).lines.map { |line| "  #{line}" }.join.rstrip}
         }
       SWIFT
     end

@@ -199,8 +199,12 @@ actor EventBuffer<Action: Sendable> {
       try await withCheckedThrowingContinuation { continuation in
         waiters[waiterID] = (count, continuation)
         Task {
-          try await Task.sleep(for: timeout)
-          await failWaiter(waiterID, with: Timeout.timedOut)
+          do {
+            try await Task.sleep(for: timeout)
+          } catch {
+            return
+          }
+          failWaiter(waiterID, with: Timeout.timedOut)
         }
       }
     } onCancel: {
