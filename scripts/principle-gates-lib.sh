@@ -626,6 +626,18 @@ run_sample_static_contract_checks() {
     echo "[principle-gates] Failed: canonical sample app is missing"
     exit 1
   fi
+  echo "[principle-gates] Checking sample dependency locks against the release package"
+  ruby -rjson -e '
+    expected = JSON.parse(File.read("Package.resolved")).fetch("pins")
+    paths = [
+      "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.resolved",
+      "Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+    ]
+    paths.each do |path|
+      actual = JSON.parse(File.read(path)).fetch("pins")
+      abort "[principle-gates] Failed: sample dependency lock drift: #{path}" unless actual == expected
+    end
+  '
   if search_lines "InnoFlowDIBridge|FeatureDependencies|import InnoDI|import InnoRouter" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc Examples/README.md Examples/InnoFlowSampleApp/README.md Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.swift; then
     echo "[principle-gates] Failed: canonical docs or sample still reference removed bridge/extra libraries"
     exit 1
@@ -1317,7 +1329,7 @@ run_sample_runtime_contract_checks() {
   run_low_priority swift package --package-path "$sample_package_path" clean
   if ! run_logged_gate_command \
       "sample package tests" \
-      run_low_priority swift test --package-path "$sample_package_path" --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors; then
+      run_low_priority swift test --package-path "$sample_package_path" --disable-automatic-resolution --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors; then
     exit 1
   fi
 
@@ -1334,6 +1346,7 @@ run_sample_runtime_contract_checks() {
       -derivedDataPath "$sample_derived" \
       -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
       -scheme InnoFlowSampleApp \
+      -disableAutomaticPackageResolution \
       -destination 'generic/platform=iOS' \
       CODE_SIGNING_ALLOWED=NO \
       CODE_SIGNING_REQUIRED=NO \

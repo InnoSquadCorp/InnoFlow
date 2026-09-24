@@ -49,7 +49,11 @@ tag, run and confirm:
 
 1. Main package tests: `swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
 2. Release package tests: `swift test -c release --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
-3. Sample package tests: `swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1 -Xswiftc -warnings-as-errors`
+3. Sample package tests: `swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --disable-automatic-resolution --jobs 1 -Xswiftc -warnings-as-errors`
+   The sample SwiftPM package and Xcode project's tracked `Package.resolved`
+   files must match the root package pins. CI and release checks disable
+   automatic package resolution so the canonical sample cannot silently use
+   a different SwiftSyntax patch than the release candidate.
    Also run the required Swift 6.3 command-line sample gate through
    `scripts/check-sample-swift63.sh --scratch-path <isolated-build-path>` with
    `TOOLCHAINS=org.swift.633202606251a` and

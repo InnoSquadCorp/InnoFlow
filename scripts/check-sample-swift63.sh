@@ -25,5 +25,5 @@ fi
 # separate required gate and verifies that previews remain compilable.
 exec "$script_dir/run-swift-toolchain-evidence.sh" --expected-prefix 6.3 -- \
   swift test --package-path "$sample" --scratch-path "$scratch" \
-    --jobs 1 --no-parallel -Xswiftc -warnings-as-errors \
+    --disable-automatic-resolution --jobs 1 --no-parallel -Xswiftc -warnings-as-errors \
     -Xswiftc -DINNOFLOW_DISABLE_PREVIEWS

@@ -178,7 +178,7 @@ jobs:
       - name: Run sample package tests
         run: |
           set -eo pipefail
-          swift test --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" --jobs 1 -Xswiftc -warnings-as-errors
+          swift test --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" --disable-automatic-resolution --jobs 1 -Xswiftc -warnings-as-errors
 
   package-builds:
     name: Package Build (${{ matrix.platform }})
@@ -277,6 +277,7 @@ jobs:
           xcodebuild \
             -jobs 1 \
             -scheme InnoFlowSampleAppFeature \
+            -disableAutomaticPackageResolution \
             -destination 'generic/platform=visionOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -303,6 +304,7 @@ jobs:
             -jobs 1 \
             -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
             -scheme InnoFlowSampleApp \
+            -disableAutomaticPackageResolution \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -395,6 +397,7 @@ jobs:
             -parallel-testing-enabled NO \
             -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
             -scheme InnoFlowSampleApp \
+            -disableAutomaticPackageResolution \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.udid }}" \
             -only-testing:InnoFlowSampleAppUITests \
             CODE_SIGNING_ALLOWED=NO \

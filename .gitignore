@@ -98,6 +98,8 @@ iOSInjectionProject/
 **/.swiftpm/
 **/Package.resolved
 !/Package.resolved
+!/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.resolved
+!/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 # Xcode user data (should be ignored)
 **/xcuserdata/
