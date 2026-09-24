@@ -186,7 +186,7 @@ private struct RouterLoginRootView: View {
               to: RouterLoginFeature.Action.setUsername
             )
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .accessibilityIdentifier("router.username")
           .accessibilityLabel("Demo email")
           .accessibilityHint("Enter the account used for the app-boundary navigation example")

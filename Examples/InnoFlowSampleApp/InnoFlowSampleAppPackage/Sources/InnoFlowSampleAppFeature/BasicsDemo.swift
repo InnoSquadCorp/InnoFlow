@@ -96,21 +96,41 @@ struct BasicsDemoView: View {
         .accessibilityLabel("Queue a follow-up increment")
         .accessibilityHint("Dispatches an additional increment through the store queue")
 
-        Stepper(
-          "Step",
-          value: store.binding(\.$step, to: BasicsFeature.Action.setStep),
-          in: 1...10
-        )
-        .accessibilityHint("Adjusts how much each increment or decrement changes the count")
-        .padding()
-        .background(Color.primary.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        stepControl
+          .accessibilityHint("Adjusts how much each increment or decrement changes the count")
+          .padding()
+          .background(Color.primary.opacity(0.06))
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
         LogSection(title: "Action Log", entries: store.eventLog)
       }
       .padding()
     }
     .navigationTitle("Basics")
+  }
+
+  private var stepControl: some View {
+    #if os(tvOS)
+      return HStack(spacing: 12) {
+        Button("Decrease step") {
+          store.send(.setStep(max(1, store.step - 1)))
+        }
+        .disabled(store.step <= 1)
+
+        Text("Step: \(store.step)")
+
+        Button("Increase step") {
+          store.send(.setStep(min(10, store.step + 1)))
+        }
+        .disabled(store.step >= 10)
+      }
+    #else
+      return Stepper(
+        "Step",
+        value: store.binding(\.$step, to: BasicsFeature.Action.setStep),
+        in: 1...10
+      )
+    #endif
   }
 }
 

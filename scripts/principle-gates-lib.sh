@@ -1197,6 +1197,11 @@ run_workflow_security_checks() {
   ruby "$SCRIPT_DIR/check-release-evidence-policy.rb" "$ROOT_DIR"
 
   echo "[principle-gates] Checking tag-release multi-platform build coverage"
+  local ci_workflow="$ROOT_DIR/.github/workflows/ci.yml"
+  if ! grep -E 'platform: \[tvOS, watchOS, visionOS\]' "$ci_workflow" >/dev/null; then
+    echo "[principle-gates] Failed: canonical sample package CI must build tvOS, watchOS, and visionOS"
+    return 1
+  fi
   local release_workflow="$ROOT_DIR/.github/workflows/cd.yml"
   if [[ ! -f "$release_workflow" ]]; then
     echo "[principle-gates] Failed: release workflow is missing"

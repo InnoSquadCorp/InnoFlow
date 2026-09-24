@@ -232,7 +232,7 @@ struct OfflineFirstDemoView: View {
               set: { store.send(.titleChanged($0)) }
             )
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .accessibilityIdentifier("offline.title")
 
           HStack {

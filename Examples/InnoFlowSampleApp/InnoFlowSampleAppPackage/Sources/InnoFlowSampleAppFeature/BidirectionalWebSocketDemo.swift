@@ -458,7 +458,7 @@ struct BidirectionalWebSocketDemoView: View {
             text: store.binding(
               \.$draftMessage, to: BidirectionalWebSocketFeature.Action.setDraftMessage)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .autocorrectionDisabled()
           .accessibilityIdentifier("websocket.message")
 

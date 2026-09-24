@@ -257,10 +257,14 @@ jobs:
         run: '"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'
 
   sample-package-builds:
-    name: Sample Package Build (visionOS)
+    name: Sample Package Build (${{ matrix.platform }})
     runs-on: macos-26
     timeout-minutes: 30
     needs: sample-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [tvOS, watchOS, visionOS]
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -270,7 +274,7 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Build sample package for visionOS
+      - name: Build sample package for ${{ matrix.platform }}
         run: |
           set -eo pipefail
           cd "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
@@ -278,7 +282,7 @@ jobs:
             -jobs 1 \
             -scheme InnoFlowSampleAppFeature \
             -disableAutomaticPackageResolution \
-            -destination 'generic/platform=visionOS' \
+            -destination 'generic/platform=${{ matrix.platform }}' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build

@@ -50,6 +50,9 @@ tag, run and confirm:
 1. Main package tests: `swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
 2. Release package tests: `swift test -c release --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
 3. Sample package tests: `swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --disable-automatic-resolution --jobs 1 -Xswiftc -warnings-as-errors`
+   CI also builds the sample feature package for its declared `tvOS`,
+   `watchOS`, and `visionOS` destinations; local platform validation must
+   cover all five declared destinations when preparing a release.
    The sample SwiftPM package and Xcode project's tracked `Package.resolved`
    files must match the root package pins. CI and release checks disable
    automatic package resolution so the canonical sample cannot silently use

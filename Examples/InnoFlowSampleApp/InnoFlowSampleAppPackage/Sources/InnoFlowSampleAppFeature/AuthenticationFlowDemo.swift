@@ -303,7 +303,7 @@ struct AuthenticationFlowDemoView: View {
             "Email",
             text: store.binding(\.$username, to: AuthenticationFlowFeature.Action.setUsername)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .accessibilityLabel(Text("Email"))
           .accessibilityIdentifier("auth.username")
 
@@ -311,7 +311,7 @@ struct AuthenticationFlowDemoView: View {
             "Password",
             text: store.binding(\.$password, to: AuthenticationFlowFeature.Action.setPassword)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .accessibilityLabel(Text("Password"))
           .accessibilityIdentifier("auth.password")
 
@@ -320,7 +320,7 @@ struct AuthenticationFlowDemoView: View {
               "MFA code",
               text: store.binding(\.$mfaCode, to: AuthenticationFlowFeature.Action.setMFACode)
             )
-            .textFieldStyle(.roundedBorder)
+            .sampleTextFieldStyle()
             .accessibilityLabel(Text("MFA code"))
             .accessibilityIdentifier("auth.mfa-code")
           }
