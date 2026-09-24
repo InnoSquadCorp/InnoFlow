@@ -14,7 +14,7 @@ trap cleanup EXIT
 repo="$fixture_root/repo"
 evidence="$fixture_root/evidence"
 mkdir -p "$repo/scripts" "$repo/docs/contracts"
-for script in run-release-preflight.sh run-release-preflight.rb release-candidate-snapshot.rb \
+for script in run-release-preflight.sh run-release-preflight.rb release-runtime-catalog.rb release-candidate-snapshot.rb \
   release-evidence-tool.rb release-evidence-output-parser.rb record-release-evidence.sh \
   verify-release-evidence.sh; do
   cp "$script_dir/$script" "$repo/scripts/$script"
@@ -57,6 +57,22 @@ git -C "$repo" add scripts docs
 git -C "$repo" commit -qm fixture
 
 cd "$repo"
+ruby -r ./scripts/release-runtime-catalog -e '
+  {
+    "ios" => ["iOS", "iOS Simulator", "18.5"],
+    "tvos" => ["tvOS", "tvOS Simulator", "18.5"],
+    "watchos" => ["watchOS", "watchOS Simulator", "11.5"],
+    "visionos" => ["xrOS", "visionOS Simulator", "2.5"],
+  }.each do |id, (runtime_platform, destination, version)|
+    check = {"id" => "runtime-#{id}-#{version}", "environment" => {"os" => version, "platform" => destination}}
+    runtime, device_types, actual_destination = ReleaseRuntimeCatalog.runtime_info(check)
+    expected = "com.apple.CoreSimulator.SimRuntime.#{runtime_platform}-#{version.tr(".", "-")}"
+    abort "incorrect runtime #{id}: #{runtime}" unless runtime == expected
+    abort "missing device type #{id}" if device_types.empty?
+    abort "incorrect destination #{id}" unless actual_destination == destination
+  end
+  abort "unexpected runtime entry" unless ReleaseRuntimeCatalog.runtime_info({"id" => "sdk-ios"}).nil?
+'
 scripts/run-release-preflight.sh plan --evidence-root "$evidence" --check-id static-innoflow-diff |
   grep -q 'git diff --check'
 scripts/run-release-preflight.sh execute --evidence-root "$evidence" --check-id static-innoflow-diff |

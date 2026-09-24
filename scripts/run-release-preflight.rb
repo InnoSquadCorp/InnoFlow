@@ -10,6 +10,7 @@ require "pathname"
 require "securerandom"
 require "shellwords"
 require "time"
+require_relative "release-runtime-catalog"
 
 ROOT = File.realpath(File.expand_path("..", __dir__))
 LOCAL_STAGE = "local-preflight"
@@ -61,19 +62,7 @@ def catalog(check, raw, derived, destination = nil)
 end
 
 def runtime_info(check)
-  id = check.fetch("id")
-  return nil unless id.start_with?("runtime-")
-  platform = id.split("-")[1]
-  version = check.fetch("environment").fetch("os")
-  runtime_platform = platform == "visionos" ? "xrOS" : platform
-  runtime = "com.apple.CoreSimulator.SimRuntime.#{runtime_platform}-#{version.tr('.', '-')}"
-  types = {
-    "ios" => %w[com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro],
-    "tvos" => %w[com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K-3rd-generation-4K],
-    "watchos" => %w[com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-10-46mm],
-    "visionos" => %w[com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro],
-  }
-  [runtime, types.fetch(platform), check.fetch("environment").fetch("platform")]
+  ReleaseRuntimeCatalog.runtime_info(check)
 end
 
 def available_runtime!(check)
