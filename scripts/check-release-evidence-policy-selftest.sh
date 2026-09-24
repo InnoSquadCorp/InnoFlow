@@ -11,7 +11,8 @@ cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/c
 cp "$root_dir/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/"
 cp "$root_dir/Tests/InnoFlowTests/CompileContractTests.swift" "$fixture_root/Tests/InnoFlowTests/"
 cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
-cp "$root_dir/scripts/run-release-preflight.sh" "$root_dir/scripts/run-release-preflight.rb" "$fixture_root/scripts/"
+cp "$root_dir/scripts/run-release-preflight.sh" "$root_dir/scripts/run-release-preflight.rb" \
+  "$root_dir/scripts/release-runtime-catalog.rb" "$fixture_root/scripts/"
 cp "$root_dir/scripts/check-sample-swift63.sh" "$fixture_root/scripts/"
 cp "$root_dir/scripts/check-doc-swift-syntax.rb" "$fixture_root/scripts/"
 cp "$root_dir/scripts/check-doc-copyable-examples.rb" "$fixture_root/scripts/"
