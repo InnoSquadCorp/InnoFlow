@@ -82,10 +82,23 @@ begin
   platform_builds = job!(jobs, "release-platform-builds")
   fail_contract("release SDK matrix changed") unless
     platform_builds.dig("strategy", "matrix", "platform") == %w[macOS iOS tvOS watchOS visionOS]
+  platform_steps = steps!(platform_builds, "release-platform-builds")
   strict_script_step!(
-    steps!(platform_builds, "release-platform-builds"),
+    platform_steps,
     "scripts/run-sdk-platform-build.sh",
     ["--platform", "${{ matrix.platform }}", "--derived-data", "--result-bundle"]
+  )
+  sample_steps = platform_steps.select { |step| step["name"] == "Build canonical sample package for ${{ matrix.platform }}" }
+  fail_contract("release sample platform build step is missing or duplicated") unless sample_steps.one?
+  fail_contract("release sample platform build is conditional") if sample_steps.first.key?("if")
+  fail_contract("release sample platform build must use the canonical package") unless
+    sample_steps.first.fetch("run", "").include?('cd "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"')
+  strict_script_step!(
+    sample_steps,
+    "xcodebuild",
+    ["-scheme InnoFlowSampleAppFeature", "-disableAutomaticPackageResolution",
+      "generic/platform=${{ matrix.platform }}", "-derivedDataPath", "-resultBundlePath",
+      "CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO", "build"]
   )
   evidence = job!(jobs, "release-evidence")
   fail_contract("release-evidence job uses continue-on-error") if evidence["continue-on-error"] == true

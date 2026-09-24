@@ -83,6 +83,21 @@ jobs:
             --derived-data "$RUNNER_TEMP/innoflow-sdk-derived" \
             --result-bundle "$RUNNER_TEMP/innoflow-sdk-${{ matrix.platform }}.xcresult"
 
+      - name: Build canonical sample package for ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
+          xcodebuild \
+            -jobs 1 \
+            -scheme InnoFlowSampleAppFeature \
+            -disableAutomaticPackageResolution \
+            -destination "generic/platform=${{ matrix.platform }}" \
+            -derivedDataPath "$RUNNER_TEMP/innoflow-sample-derived" \
+            -resultBundlePath "$RUNNER_TEMP/innoflow-sample-${{ matrix.platform }}.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
   release-runtime-tests:
     name: Release Focused Runtime Tests (${{ matrix.platform }})
     runs-on: macos-26

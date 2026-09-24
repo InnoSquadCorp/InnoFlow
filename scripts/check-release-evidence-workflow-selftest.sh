@@ -44,6 +44,8 @@ expect_mutation_failure publish-on-tag-push \
   's=File.read(ARGV[0]); s.sub!("github.event_name == '\''workflow_dispatch'\'' && ", ""); File.write(ARGV[1],s)'
 expect_mutation_failure sdk-build-bypass \
   's=File.read(ARGV[0]); s.sub!("scripts/run-sdk-platform-build.sh", "xcodebuild"); File.write(ARGV[1],s)'
+expect_mutation_failure sample-platform-build-bypass \
+  's=File.read(ARGV[0]); s.sub!("-scheme InnoFlowSampleAppFeature", "-scheme MissingSampleFeature"); File.write(ARGV[1],s)'
 expect_mutation_failure checkout-after-script \
   's=File.read(ARGV[0]); block=s[/      - name: Checkout exact release candidate\n.*?          persist-credentials: false\n/m]; s.sub!(block, ""); marker="      - name: Download candidate-bound release evidence\n"; s.sub!(marker, block+"\n"+marker); File.write(ARGV[1],s)'
 expect_mutation_failure retired-consumer-checkout \

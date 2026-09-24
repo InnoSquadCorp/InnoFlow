@@ -78,8 +78,11 @@ Release test suite and isolated timing baseline. The unqualified local
 `principle-gates.sh` command remains the complete sequential preflight.
 
 `Release Gate /
-release-evidence` requires `release-coverage` and explicitly checks its result
-before processing candidate evidence. The reusable job has its own bounded
+release-evidence` requires `release-coverage` and the five-platform package
+build matrix before processing candidate evidence. Each platform job builds
+both the library and the canonical sample feature package, so a tag cannot
+bypass the sample's tvOS, watchOS, or visionOS compile contract. The reusable
+job has its own bounded
 runtime and namespace; caller jobs deliberately have no `timeout-minutes`
 because GitHub does not support it on reusable-workflow calls.
 
