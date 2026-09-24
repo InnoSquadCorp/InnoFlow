@@ -7,7 +7,7 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
-## [6.0.0] - 2026-09-03
+## [6.0.0] - Unreleased
 
 ### Added
 

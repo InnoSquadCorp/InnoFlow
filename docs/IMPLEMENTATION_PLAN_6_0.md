@@ -1,5 +1,7 @@
 # InnoFlow 6.0.0 — 1~7단계 코드 작업 계획
 
+> 2026-09-23 계획 개정: 물별 검증 제외(9월 18일)는 유지한다. [종합 검토](COMPREHENSIVE_REVIEW_6_0_2026_09_23.md)를 반영한 현재 순서는 [배포 전 실행 계획](PRE_RELEASE_EXECUTION_PLAN_6_0.md)의 **R68 → R69 → R59~R67**이다. 신규 FR-009/010은 해당 계획의 Draft 요구사항이며 기존 FR-008(물별)은 범위 제외 상태로 보존한다. [R52~R58](FRAMEWORK_ONLY_REMEDIATION_PLAN_6_0.md)의 구현 이력과 미충족 조건도 계승한다. 아래 과거 완료 표시는 새 후보의 완료를 뜻하지 않는다.
+
 - 상태: **1~7 implementation complete · local RC verification complete** · 작성 기준: 2026-09-05 로컬 소스
 - 대상: `release/6.0.0-local`의 현재 변경분을 보존한 Swift 6.0.0 후보
 - 요청 범위: 1~7단계 로컬 구현과 검증. 커밋, 푸시, 태그, 공개 배포 승인은 아니다.
@@ -14,7 +16,7 @@
 - 실행 정책을 사용해도 중복 실행, 대기 작업 유실, 취소 뒤 상태 변경, 영구적인 로딩 상태가 생기지 않는다.
 - 화면 또는 코디네이터가 소유한 dispatch를 정확히 정리하고, 별도 소유자의 저장 작업까지 취소하지 않는다.
 - 실패를 요청 단위로 추적하고 동일한 테스트 시나리오로 재현할 수 있다.
-- 물별의 실제 기능과 선언한 Apple 플랫폼에서 기존 사용자 동작이 유지된다.
+- 독립 소비자·canonical sample과 선언한 Apple 플랫폼에서 InnoFlow의 계약을 검증한다. 물별 제품의 기능·UI 검증은 제외한다.
 
 비목표: 저장소·네트워크·재시도·트랜잭션·라우팅 프레임워크 추가, 비협조적 외부 작업 강제 중단, exactly-once 저장 보장, 프로덕션 상태 전체 녹화/재생, DevTools UI 신설. 기존 `State`, typed ephemeral `Output`, `PhaseMap`의 post-reduce 소유권을 바꾸지 않는다.
 
@@ -44,7 +46,7 @@
 | FR-004: 한 요청의 실행 이력을 연결해서 진단한다. | AC-004: root/descendant 상관관계, 제한된 기록, 누락 표시, 기본 비식별 진단을 검증한다. | IF6-04A~C | DispatchDiagnosticsTests, EffectTimingRecorderTests |
 | FR-005: 모든 테스트 상태 전이에 불변식을 적용하고 시나리오를 재현한다. | AC-005: exhaustive/scoped/자동 소비 경로에서 정확히 1회 검사하고, 같은 시나리오의 의미적 결과와 실패 위치가 재현된다. | IF6-05A~C | TestStoreInvariantTests.swift의 invariant/scenario suites |
 | FR-006: Output 작성·scoped 검증의 반복 코드를 줄인다. | AC-006: 공개/제네릭/충돌 매크로 계약과 root output 큐의 순서·exhaustivity·단일 deadline을 유지한다. | IF6-06A~C | OutputCasePathTests, TestStoreOutputMatchingTests, macro tests |
-| FR-007: 실제 소비자와 지원 플랫폼에서 통합 검증한다. | AC-007: 물별 파일럿·5 SDK·런타임 시나리오·품질/배포 게이트의 증거와 미검증 경계가 동일 후보에 연결된다. | IF6-07A~D | 소비자 diff/테스트, SDK 로그, QA 표, 릴리스 체크리스트 |
+| FR-007 (2026-09-18 개정): 특정 제품 앱에 의존하지 않고 독립 소비자·sample과 지원 플랫폼에서 통합 검증한다. | AC-007: 독립 macro/compile consumer·Catalyst·sample·5 SDK·런타임·품질/배포 게이트의 증거와 미검증 경계가 동일 후보에 연결된다. 물별 검증 및 물별 checkout/token/SHA/receipt는 필수가 아니다. | IF6-07B~D, IF6-R52~R67; IF6-07A는 과거 파일럿 기록 | 독립 소비자/샘플 테스트, SDK/runtime 로그, 후보별 manifest, 릴리스 체크리스트 |
 
 공통 제약:
 

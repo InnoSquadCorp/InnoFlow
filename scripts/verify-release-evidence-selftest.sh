@@ -32,6 +32,7 @@ cat >"$policy" <<'JSON'
     "command":{"evidenceKind":"automated","resultFormat":"command-exit","artifactContent":"non-empty"},
     "swift":{"evidenceKind":"automated","resultFormat":"swift-test-output","artifactContent":"non-empty","minimumTestCount":1},
     "tests":{"evidenceKind":"automated","resultFormat":"xcresult-summary","artifactContent":"non-empty","requiresRawArtifact":true,"minimumTestCount":2,"allowsExpectedFailures":false,"allowsRuntimeWarnings":false},
+    "build":{"evidenceKind":"automated","resultFormat":"xcresult-build-results","artifactContent":"non-empty","requiresRawArtifact":true},
     "manual":{"evidenceKind":"manual-attestation","resultFormat":"manual-observation","artifactContent":"non-empty"}
   },
   "checks":[
@@ -39,6 +40,7 @@ cat >"$policy" <<'JSON'
     {"id":"core","stage":"local-preflight","requirement":"required","profile":"command","allowedCommand":"printf","component":"fixture","commandContract":{"executable":"printf"}},
     {"id":"swift","stage":"local-preflight","requirement":"required","profile":"swift","allowedCommand":"printf","component":"fixture","commandContract":{"executable":"printf"},"minimumTestCount":2,"maximumTestCount":2,"expectedTestRunCount":1,"expectedResultSuites":["Required suite"]},
     {"id":"ui","stage":"local-preflight","requirement":"required","profile":"tests","allowedCommand":"xcodebuild test","component":"fixture","commandContract":{"executable":"xcodebuild","requiredArguments":["test","-resultBundlePath"]},"expectedTestIdentifiers":["A/testOne","A/testTwo"],"environment":{"platform":"iOS Simulator","os":"18.5"}},
+    {"id":"build-fixture","stage":"local-preflight","requirement":"optional","profile":"build","allowedCommand":"xcodebuild build","component":"fixture","commandContract":{"executable":"xcodebuild","requiredArguments":["build","-resultBundlePath"]},"environment":{"platform":"macOS"}},
     {"id":"voiceover","stage":"local-preflight","requirement":"required","profile":"manual","environment":{"assistiveTechnology":"VoiceOver"}},
     {"id":"mutator","stage":"local-preflight","requirement":"optional","profile":"command","allowedCommand":"sh -c","component":"fixture","commandContract":{"executable":"sh","exactArguments":["-c","printf mutation >> source.txt"]}},
     {"id":"interruptor","stage":"local-preflight","requirement":"optional","profile":"command","allowedCommand":"sh -c","component":"fixture","commandContract":{"executable":"sh","exactArguments":["-c","kill -TERM \"$PPID\"; sleep 1"]}},
@@ -61,13 +63,16 @@ set -euo pipefail
 raw=""; kind=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    summary|tests) kind="$1" ;;
+    summary|tests|build-results) kind="$1" ;;
     --path) raw="${2:-}"; shift ;;
   esac
   shift
 done
 [[ -n "$raw" && -n "$kind" ]]
 cat "$raw/$kind.json"
+if [[ "${SELFTEST_MUTATE_RAW_ON_SUMMARY:-0}" == "1" && "$kind" == "summary" ]]; then
+  printf '\nmutated during semantic validation\n' >>"$raw/summary.json"
+fi
 SH
 chmod +x "$fake_bin/xcrun"
 cat >"$fake_bin/xcodebuild" <<'SH'
@@ -102,6 +107,14 @@ make_xcresult() {
   fi
 }
 
+make_build_xcresult() {
+  local name="$1" status="$2" title="$3" warnings="$4"
+  local raw="$SELFTEST_XCRESULT_FIXTURES/$name.xcresult"
+  mkdir -p "$raw"
+  printf '{"actionTitle":"%s","status":"%s","startTime":100,"endTime":101,"destination":{"platform":"macOS","osVersion":"27.0","deviceId":"fixture-mac","deviceName":"Mac"},"errorCount":0,"warningCount":%s,"analyzerWarningCount":0,"errors":[],"warnings":[],"analyzerWarnings":[]}\n' \
+    "$title" "$status" "$warnings" >"$raw/build-results.json"
+}
+
 record() {
   local check_id="$1" artifact="$2" receipt="$3"; shift 3
   (cd "$repository" && "$recorder" --policy "$policy" --check-id "$check_id" --candidate-hash "$candidate_hash" \
@@ -115,6 +128,14 @@ verify_local() {
     --evidence-root "$evidence" --manifest "$manifest" --stage local-preflight >/dev/null
 }
 
+verify_one() {
+  "$script_dir/release-evidence-tool.rb" verify --policy "$policy" \
+    --candidate "$candidate_hash" --candidate-snapshot "$snapshot" \
+    --evidence-root "$evidence" --manifest "$manifest" \
+    --attempt-index attempts.tsv --stage local-preflight \
+    --only-check-id "$1" >/dev/null
+}
+
 expect_failure() {
   local description="$1"; shift
   if "$@" >/dev/null 2>&1; then
@@ -125,13 +146,18 @@ expect_failure() {
 
 empty_row="$(record static-empty static-empty.log static-empty.receipt -- true)"
 core_row="$(record core core.log core.receipt -- printf 'PASS\n')"
-swift_output='Suite "Required suite" started.
+swift_output='Test run started.
+Suite "Required suite" started.
+Test "one" started.
+Test "two" started.
 Test "one" passed after 0.001 seconds.
 Test "two" passed after 0.001 seconds.
 Suite "Required suite" passed after 0.002 seconds.
 Test run with 2 tests in 1 suite passed after 0.002 seconds.'
 swift_row="$(record swift swift.log swift.receipt -- printf '%s\n' "$swift_output")"
 make_xcresult ui Passed 0 0 '[]'
+mkdir -p "$SELFTEST_XCRESULT_FIXTURES/ui.xcresult/nested"
+printf 'nested raw evidence\n' >"$SELFTEST_XCRESULT_FIXTURES/ui.xcresult/nested/metadata.txt"
 ui_row="$(record ui ui.log ui.receipt --raw-artifact ui.xcresult --environment-json '{"platform":"iOS Simulator","os":"18.5"}' -- xcodebuild test -resultBundlePath "$evidence/ui.xcresult" --fixture ui)"
 printf 'VoiceOver traversal evidence\n' >"$evidence/voiceover.txt"
 voiceover_row="$("$manual_recorder" --policy "$policy" --check-id voiceover --candidate-hash "$candidate_hash" \
@@ -149,6 +175,31 @@ $ui_row
 $voiceover_row"
 write_manifest "$all_local"
 verify_local
+verify_one ui
+
+SELFTEST_MUTATE_RAW_ON_SUMMARY=1 expect_failure "raw artifact changed during verification" verify_one ui
+cp "$SELFTEST_XCRESULT_FIXTURES/ui.xcresult/summary.json" "$evidence/ui.xcresult/summary.json"
+verify_one ui
+
+make_xcresult ui-mutate Passed 0 0 '[]'
+SELFTEST_MUTATE_RAW_ON_SUMMARY=1 expect_failure "raw artifact changed during recording" \
+  record ui ui-mutate.log ui-mutate.receipt --raw-artifact ui-mutate.xcresult \
+    --environment-json '{"platform":"iOS Simulator","os":"18.5"}' \
+    -- xcodebuild test -resultBundlePath "$evidence/ui-mutate.xcresult" --fixture ui-mutate
+[[ ! -e "$evidence/ui-mutate.receipt" ]] || { echo "Mutation receipt must not exist" >&2; exit 1; }
+
+make_build_xcresult build-good succeeded 'Building workspace InnoFlow' 0
+build_row="$(record build-fixture build-good.log build-good.receipt --raw-artifact build-good.xcresult --environment-json '{"platform":"macOS"}' -- xcodebuild build -resultBundlePath "$evidence/build-good.xcresult" --fixture build-good)"
+write_manifest "$all_local
+$build_row"
+verify_local
+write_manifest "$all_local"
+make_build_xcresult build-failed failed 'Building workspace InnoFlow' 0
+expect_failure "failed build status" record build-fixture build-failed.log build-failed.receipt --raw-artifact build-failed.xcresult --environment-json '{"platform":"macOS"}' -- xcodebuild build -resultBundlePath "$evidence/build-failed.xcresult" --fixture build-failed
+make_build_xcresult build-test succeeded 'Testing workspace InnoFlow' 0
+expect_failure "non-build action" record build-fixture build-test.log build-test.receipt --raw-artifact build-test.xcresult --environment-json '{"platform":"macOS"}' -- xcodebuild build -resultBundlePath "$evidence/build-test.xcresult" --fixture build-test
+make_build_xcresult build-warning succeeded 'Building workspace InnoFlow' 1
+expect_failure "build warning" record build-fixture build-warning.log build-warning.receipt --raw-artifact build-warning.xcresult --environment-json '{"platform":"macOS"}' -- xcodebuild build -resultBundlePath "$evidence/build-warning.xcresult" --fixture build-warning
 
 write_manifest "$core_row
 $swift_row
@@ -174,6 +225,15 @@ printf 'tampered\n' >"$evidence/core.log"
 expect_failure "artifact tamper" verify_local
 cp "$fixture_root/core.log" "$evidence/core.log"
 
+cp "$evidence/ui.xcresult/nested/metadata.txt" "$fixture_root/ui-metadata.txt"
+printf 'modified raw evidence\n' >"$evidence/ui.xcresult/nested/metadata.txt"
+expect_failure "nested xcresult tamper" verify_local
+expect_failure "single-check nested xcresult tamper" verify_one ui
+cp "$fixture_root/ui-metadata.txt" "$evidence/ui.xcresult/nested/metadata.txt"
+mkdir "$evidence/ui.xcresult/empty"
+expect_failure "empty directory addition" verify_one ui
+rmdir "$evidence/ui.xcresult/empty"
+
 core_attempt_id="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV.fetch(0))).fetch("attemptId")' "$evidence/core.receipt")"
 cp "$evidence/attempts.tsv" "$fixture_root/attempts.tsv"
 awk -F '\t' -v attempt="$core_attempt_id" 'NR == 1 || $1 != attempt' "$evidence/attempts.tsv" >"$fixture_root/attempts-without-core.tsv"
@@ -189,6 +249,9 @@ cp "$fixture_root/core.attempt.json" "$core_attempt"
 cp "$evidence/core.receipt" "$fixture_root/core.receipt"
 ruby -rjson -e 'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j["command"]=["false"]; File.write(p, JSON.pretty_generate(j)+"\n")' "$evidence/core.receipt"
 expect_failure "command relabel" verify_local
+cp "$fixture_root/core.receipt" "$evidence/core.receipt"
+ruby -rjson -e 'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("execution")["componentPath"]="../foreign"; File.write(p, JSON.pretty_generate(j)+"\n")' "$evidence/core.receipt"
+expect_failure "execution path relabel" verify_local
 cp "$fixture_root/core.receipt" "$evidence/core.receipt"
 
 cp "$snapshot" "$fixture_root/candidate.good.json"
@@ -213,6 +276,11 @@ make_xcresult stale Passed 0 0 '[]'
 cp -R "$SELFTEST_XCRESULT_FIXTURES/stale.xcresult" "$evidence/stale.xcresult"
 expect_failure "preexisting xcresult" record ui stale.log stale.receipt --raw-artifact stale.xcresult --environment-json '{"platform":"iOS Simulator","os":"18.5"}' -- xcodebuild test -resultBundlePath "$evidence/stale.xcresult" --fixture stale
 [[ ! -e "$evidence/stale.log" ]] || { echo "Command ran with a stale xcresult" >&2; exit 1; }
+make_xcresult linked-directory Passed 0 0 '[]'
+mkdir -p "$SELFTEST_XCRESULT_FIXTURES/linked-directory.xcresult/nested"
+ln -s .. "$SELFTEST_XCRESULT_FIXTURES/linked-directory.xcresult/nested/linked"
+expect_failure "directory symlink in raw xcresult" record ui linked-directory.log linked-directory.receipt --raw-artifact linked-directory.xcresult --environment-json '{"platform":"iOS Simulator","os":"18.5"}' -- xcodebuild test -resultBundlePath "$evidence/linked-directory.xcresult" --fixture linked-directory
+[[ ! -e "$evidence/linked-directory.receipt" ]] || { echo "Symlinked raw evidence received a PASS receipt" >&2; exit 1; }
 expect_failure "empty artifact forbidden" record core empty-core.log empty-core.receipt -- true
 expect_failure "zero Swift tests" record swift zero-swift.log zero-swift.receipt -- printf 'Test run with 0 tests in 0 suites passed after 0.001 seconds.\n'
 expect_failure "hidden Swift failure behind exit zero" record swift hidden-failure.log hidden-failure.receipt -- printf 'Test run with 2 tests in 1 suite failed after 0.001 seconds.\n%s\n' "$swift_output"

@@ -36,8 +36,18 @@ expect_mutation_failure missing-snapshot \
   's=File.read(ARGV[0]); s.gsub!(/--candidate-snapshot [^ \\\n]+/, "--snapshot-removed"); File.write(ARGV[1],s)'
 expect_mutation_failure publish-bypass \
   's=File.read(ARGV[0]); s.sub!("    needs: [release-evidence]", "    needs: [release-gate]"); File.write(ARGV[1],s)'
+expect_mutation_failure publish-default-true \
+  's=File.read(ARGV[0]); s.sub!("      publish_release:\n        description: \"Explicitly publish the GitHub Release after every release gate passes\"\n        required: false\n        default: false", "      publish_release:\n        description: \"Explicitly publish the GitHub Release after every release gate passes\"\n        required: false\n        default: true"); File.write(ARGV[1],s)'
+expect_mutation_failure publish-without-opt-in \
+  's=File.read(ARGV[0]); s.sub!("inputs.publish_release == true && ", ""); File.write(ARGV[1],s)'
+expect_mutation_failure publish-on-tag-push \
+  's=File.read(ARGV[0]); s.sub!("github.event_name == '\''workflow_dispatch'\'' && ", ""); File.write(ARGV[1],s)'
+expect_mutation_failure sdk-build-bypass \
+  's=File.read(ARGV[0]); s.sub!("scripts/run-sdk-platform-build.sh", "xcodebuild"); File.write(ARGV[1],s)'
 expect_mutation_failure checkout-after-script \
   's=File.read(ARGV[0]); block=s[/      - name: Checkout exact release candidate\n.*?          persist-credentials: false\n/m]; s.sub!(block, ""); marker="      - name: Download candidate-bound release evidence\n"; s.sub!(marker, block+"\n"+marker); File.write(ARGV[1],s)'
+expect_mutation_failure retired-consumer-checkout \
+  's=File.read(ARGV[0]); marker="      - name: Verify complete pre-publication evidence\n"; block="      - name: Checkout Mulbyul\n        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10\n        with:\n          repository: InnoSquadCorp/Mulbyul\n          fetch-depth: 0\n          persist-credentials: false\n          path: release-components/Mulbyul\n\n"; s.sub!(marker, block+marker); File.write(ARGV[1],s)'
 
 expect_producer_mutation_failure() {
   local name="$1" expression="$2"
@@ -61,6 +71,8 @@ expect_producer_mutation_failure overwrite-artifact \
   's=File.read(ARGV[0]); s.sub!("overwrite: false", "overwrite: true"); File.write(ARGV[1],s)'
 expect_producer_mutation_failure deploy-command \
   's=File.read(ARGV[0]); s.sub!("set -euo pipefail", "set -euo pipefail\n          gh release create 6.0.0"); File.write(ARGV[1],s)'
+expect_producer_mutation_failure retired-consumer-input \
+  's=File.read(ARGV[0]); marker="      intake_name:\n"; block="      mulbyul_sha:\n        description: retired\n        required: true\n        type: string\n"; s.sub!(marker, block+marker); File.write(ARGV[1],s)'
 
 RELEASE_GATE_RESULT=success RELEASE_PLATFORM_BUILDS_RESULT=success \
   RELEASE_RUNTIME_TESTS_RESULT=success RELEASE_SANITIZERS_RESULT=success RELEASE_COVERAGE_RESULT=success \

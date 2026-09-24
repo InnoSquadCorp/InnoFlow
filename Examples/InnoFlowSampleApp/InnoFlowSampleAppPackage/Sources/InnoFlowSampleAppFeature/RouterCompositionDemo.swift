@@ -288,8 +288,11 @@ private func describe(route: RouterDemoRoute) -> String {
   }
 }
 
-#Preview("App-Boundary Navigation") {
-  NavigationStack {
-    RouterCompositionDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("App-Boundary Navigation") {
+    NavigationStack {
+      RouterCompositionDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

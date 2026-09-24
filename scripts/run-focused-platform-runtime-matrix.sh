@@ -117,6 +117,11 @@ trap cleanup EXIT INT TERM
 echo "[focused-runtime] created=$device_name id=$device_id runtime=$runtime"
 xcrun simctl boot "$device_id"
 xcrun simctl bootstatus "$device_id" -b
-"$script_dir/run-focused-platform-runtime-tests.sh" \
-  --destination "platform=$destination_platform,id=$device_id" \
-  "${forwarded[@]}"
+if (( ${#forwarded[@]} > 0 )); then
+  "$script_dir/run-focused-platform-runtime-tests.sh" \
+    --destination "platform=$destination_platform,id=$device_id" \
+    "${forwarded[@]}"
+else
+  "$script_dir/run-focused-platform-runtime-tests.sh" \
+    --destination "platform=$destination_platform,id=$device_id"
+fi

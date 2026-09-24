@@ -108,9 +108,13 @@ struct CompileContractTests {
               store.scope(state: state, action: action)
           }
           let second = wrapped(\\.child, ParentFeature.Action.childCasePath)
+          let rootSelection = store.select(dependingOn: \\.child.count, id: "root-count") { $0 }
+          let childSelection = first.select(dependingOn: \\.count, id: "child-count") { $0 }
 
           _ = first.count
           _ = second.count
+          _ = rootSelection.optionalValue
+          _ = childSelection.optionalValue
       }
       """
 
@@ -402,6 +406,17 @@ struct CompileContractTests {
       atPath: moduleDirectory.appendingPathComponent("InnoFlow.swiftmodule").path,
       contents: Data()
     )
+    // A package-root release module must not outrank the running test bundle's
+    // custom Debug module merely because its path sorts first. Toolchains can
+    // differ between those builds, making a lexicographic choice invalid.
+    let staleReleaseModule = packageRoot.appendingPathComponent(
+      ".build/arm64-apple-macosx/release/InnoFlow.swiftmodule"
+    )
+    try FileManager.default.createDirectory(
+      at: staleReleaseModule.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    FileManager.default.createFile(atPath: staleReleaseModule.path, contents: Data())
     let foreignModule = packageRoot.appendingPathComponent(
       ".build/release-evidence/DerivedData/Build/Products/Debug-iphonesimulator/InnoFlow.swiftmodule",
       isDirectory: true
@@ -551,6 +566,8 @@ struct CompileContractTests {
       func compileContract() {
           let store = Store(reducer: CoreFeature(), initialState: .init())
           store.send(.increment)
+          let selected = store.select(dependingOn: \\.count, id: "count") { $0 }
+          _ = selected.optionalValue
       }
       """
 
@@ -643,7 +660,7 @@ struct CompileContractTests {
               .executable(name: "PublicMacroClient", targets: ["PublicMacroClient"])
           ],
           dependencies: [
-              .package(path: "\(escapedPackagePath)")
+              .package(name: "InnoFlow", path: "\(escapedPackagePath)")
           ],
           targets: [
               .target(
@@ -1131,6 +1148,38 @@ struct CompileContractTests {
       let nestedPackageFeature = PackageNamespace.Feature()
       let _ = nestedPackageFeature.reduce(into: &nestedPackageState, action: .child(.start))
       let _ = PackageNamespace.Feature.Action.childCasePath
+
+      @MainActor
+      func verifySelectionIdentityAndLifetime() {
+          var store: Store<PublicFeature>? = Store(reducer: PublicFeature())
+          func selected(_ offset: Int) -> SelectedStore<Int> {
+              store!.select(dependingOn: \\.count) { $0 + offset }
+          }
+          let first = selected(0)
+          let second = selected(10)
+          guard first !== second, first.requireAlive() == 0, second.requireAlive() == 10 else {
+              fatalError("closure selections aliased different captured inputs")
+          }
+          func selectedStable() -> SelectedStore<Int> {
+              store!.select(dependingOn: \\.count, id: "plus-five") { $0 + 5 }
+          }
+          let stable = selectedStable()
+          let sameStable = selectedStable()
+          guard stable === sameStable else {
+              fatalError("explicit semantic selection identity was not reused")
+          }
+          store!.send(.increment)
+          guard first.requireAlive() == 1, second.requireAlive() == 11,
+                stable.requireAlive() == 6 else {
+              fatalError("live selections did not update independently")
+          }
+          store = nil
+          guard first.optionalValue == nil, second.optionalValue == nil,
+                stable.optionalValue == nil else {
+              fatalError("released parent left a selection alive")
+          }
+      }
+      await MainActor.run { verifySelectionIdentityAndLifetime() }
       """
     try executableSource.write(
       to: executableRoot.appendingPathComponent("main.swift"),
@@ -1156,6 +1205,12 @@ struct CompileContractTests {
     )
 
     #expect(result.status == 0, Comment(rawValue: result.normalizedOutput))
+
+    let runtimeResult = try runProcess(
+      executableURL: buildPath.appendingPathComponent("debug/PublicMacroClient"),
+      arguments: []
+    )
+    #expect(runtimeResult.status == 0, Comment(rawValue: runtimeResult.normalizedOutput))
 
     let manualResult = try runProcess(
       executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
@@ -1430,7 +1485,7 @@ struct CompileContractTests {
               .executable(name: "TestingClient", targets: ["TestingClient"])
           ],
           dependencies: [
-              .package(path: "\(escapedPackagePath)")
+              .package(name: "InnoFlow", path: "\(escapedPackagePath)")
           ],
           targets: [
               .executableTarget(
@@ -1663,7 +1718,7 @@ struct CompileContractTests {
               .executable(name: "TestingMacroClient", targets: ["TestingMacroClient"])
           ],
           dependencies: [
-              .package(path: "\(escapedPackagePath)")
+              .package(name: "InnoFlow", path: "\(escapedPackagePath)")
           ],
           targets: [
               .executableTarget(
@@ -1767,7 +1822,7 @@ struct CompileContractTests {
               .executable(name: "CoreClient", targets: ["CoreClient"])
           ],
           dependencies: [
-              .package(path: "\(escapedPackagePath)")
+              .package(name: "InnoFlow", path: "\(escapedPackagePath)")
           ],
           targets: [
               .executableTarget(

@@ -234,7 +234,7 @@ package final class FlowTaskTracker: Sendable {
       await withTaskCancellationHandler {
         _ = await sharedTask.result
         self?.endActivity(token)
-      } onCancel: {
+      } onCancel: { [weak self] in
         // Cancelling one dispatch must release only that dispatch's observer.
         // The runtime-owned shared task may still carry another dispatch's
         // latest throttle work and therefore must not be cancelled here.

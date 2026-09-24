@@ -1,8 +1,14 @@
 # InnoFlow 6.0.0 — 남은 배포 차단 조건 해소 계획
 
+> **2026-09-18 범위 / 2026-09-23 계획 개정:** 사용자 지시로 물별 전용 검증은 필수 목록에서 제외됐다. R40/AC-R040·R41/AC-R041은 범위 제외이며 PASS가 아니다. 아래 물별 조사·수행 절차는 역사적 기록이다. 활성 계획은 [배포 전 R68 → R69 → R59~R67](PRE_RELEASE_EXECUTION_PLAN_6_0.md)이며 [R52~R58](FRAMEWORK_ONLY_REMEDIATION_PLAN_6_0.md)의 구현 이력과 재개 조건을 계승한다. 물별 없는 정책·workflow 전환은 R52에서 반영됐고 R43/R44의 실제 producer·최종 증거 조건은 계속 열려 있다.
+
+> 2026-09-17 후속 검토: 결과 파서·기대 테스트 정책·consumer checkout·ASan·필수 CI의 추가 결함은 [검증·배포 경로 수정 계획](VALIDATION_REMEDIATION_PLAN_6_0.md)의 R46~R51에서 다룬다. 아래 과거 실행 기록은 보존하며, R39/R43의 해당 부분은 재개한다. R46~R51의 로컬 수정·회귀는 완료됐지만 원격 PR CI·required check 적용과 기존 배포 미완료 조건은 남아 있다.
+>
+> 증거 보존 참고: 2026-09-17 문서 링크 검사에서 아래의 `.build/release-evidence-r38/principle-final-candidate.log`는 현재 경로에 존재하지 않았다. 과거 실행 기록과 현재 재개방 가능한 원본은 구분하며, 해당 링크만으로 현재 후보의 통과를 입증하지 않는다.
+
 - 문서 상태: **실행 중**, 2026-09-12. 로컬 구현과 일부 실제 검증이 진행됐으며 원격 검증·배포 승인 완료가 아니다.
 - 결정권자: 프로젝트 소유자. 구현 담당: 후속 실행 담당자. 검토자·승인일: 미기록.
-- 활성 범위: **InnoFlow docs / release 기술 계획**. 후속 구현은 InnoFlow 검증·CI/CD 및 Mulbyul Apple TrainingRecords의 관련 UI·검증 경로다.
+- 활성 범위: **InnoFlow 자체 runtime·검증·CI/CD**. 물별 제품 코드 및 UI·접근성·VoiceOver 검증은 제외한다.
 - 기존 요구사항: [구현 계획](IMPLEMENTATION_PLAN_6_0.md)의 FR-001~007/NFR-001~005, [첫 후속 계획](REMEDIATION_FOLLOWUP_PLAN_6_0.md)의 FR-008을 유지한다.
 - 관계: [네 번째 후속 계획](REMEDIATION_FOURTH_FOLLOWUP_PLAN_6_0.md)의 R32~R38을 닫기 위한 잔여 작업이다. 기존 ID를 바꾸지 않고 **IF6-R39~R45 / AC-R039~045**를 추가한다.
 - 목적: 실제 물별 실패, 실행되지 않은 필수 검사, 증거 생성·전달의 구현 공백을 해소해 승인 직전의 검토 가능한 6.0.0 후보를 만든다. 새로운 제품 기능은 추가하지 않는다.
@@ -143,11 +149,11 @@
 - [x] 명령 matcher의 full→static 허용을 실제 함수로 재현하고 R39에 반영했다. CD checkout 순서 문제는 소스 수준 확인이며 원격 재현 완료로 주장하지 않는다.
 - [x] 요구사항→작업→완료 조건→증거를 연결하고 기존 ID·과거 실행 기록을 보존한다.
 - [x] R39의 v3 evidence schema, 정확한 명령·test identity·fresh xcresult 검증, 원자적 manifest 및 attempt 이력과 우회/손상/중단 회귀를 구현하고 일곱 self-test를 통과했다.
-- [x] R40의 대표 iPhone/iPad audit 실패를 재현·축소하고, 의미 대상과 OS build에 묶인 fail-closed 분류 및 반례 검사를 구현했다. 과거 24조합 통과 증거는 보존하되 이후 harness 변경 때문에 최종 후보 증거로 재사용하지 않는다.
-- [ ] R41은 iPhone/iPad 기능·복구 자동 검증과 Mac build-for-testing까지 확보했지만 실제 iPhone/iPad/Mac VoiceOver 및 Mac UI runtime/좁은 창은 열려 있다. 현재 Mac은 Developer Mode 비활성화로 UI test discovery 전에 차단된다.
+- R40 — **범위 제외 (2026-09-18 사용자 결정).** 물별 contrast/24조합의 과거 구현·증거는 보존하되 InnoFlow 릴리스의 재검증 조건으로 요구하지 않는다.
+- R41 — **범위 제외 (2026-09-18 사용자 결정).** 물별 기능·복구·Mac UI·좁은 창·iPhone/iPad/Mac VoiceOver는 미완료 차단 목록에서 제거한다. 검증 통과로 변경한 것은 아니다.
 - [ ] R42는 Xcode 27.0 (`27A5252f`) / Apple Swift 6.4에서 779개 package test를 통과했다. 이 호스트에 정확한 Swift 6.3 toolchain이 없어 6.3 행은 미완료다.
-- [ ] R43은 producer·CD checkout/전달·독립 provenance 검증과 로컬 회귀를 구현했다. 검토된 revision의 commit/push 및 trusted remote no-publish run은 아직 수행하지 않았다.
-- [ ] R44는 정책상 필수 68개(명시적 44 + 접근성 매트릭스 24)의 동일 후보 receipt가 모두 모일 때까지 미완료다. 후보 변경 뒤 최종 전체 수집을 다시 수행한다.
+- [ ] R43은 R52의 물별 없는 producer·CD 전환과 독립 provenance 검증을 완료해야 한다. 검토된 revision의 원격 실행은 별도 승인 단계다.
+- [ ] R44는 R52 이후의 프레임워크 전용 정책으로 최종 후보 receipt를 재수집한다. 2026-09-18 기준 예상 집합은 local 24개·pre-publication 3개·post-publication 1개이며 각 단계별로 판정한다. 물별 41개는 제외한다.
 - [ ] R45의 승인·태그·공개 배포·독립 설치는 요청·증거가 없으므로 미수행이다.
 
 필수 반례: “전체” 이름에 static-only 결과, 다른 저장소의 깨끗한 diff, 임의 필터 0-test, nil issue 횟수만 허용, 한 플랫폼 VoiceOver로 세 플랫폼 충족, 생성 프로젝트만 빌드, producer 자기 성공 순환 대기, 다른 consumer/attempt artifact, 원본 없는 summary, 실패 행 삭제, 소스 변경 후 이전 receipt, 공개 설치 없는 배포 완료. 이 중 하나가 서면 조건을 모두 충족하고도 허용된다면 해당 AC를 보완한 뒤 구현한다.

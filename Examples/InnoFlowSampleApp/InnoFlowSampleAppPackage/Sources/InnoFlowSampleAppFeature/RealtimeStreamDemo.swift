@@ -175,8 +175,11 @@ struct RealtimeStreamDemoView: View {
   }
 }
 
-#Preview("Realtime Stream") {
-  NavigationStack {
-    RealtimeStreamDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Realtime Stream") {
+    NavigationStack {
+      RealtimeStreamDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

@@ -1,0 +1,18 @@
+{
+  "schema": "innoflow-doc-swift-syntax-exceptions-v1",
+  "scope": "Syntax-only exceptions for contextual or historical Swift fences; not typecheck approval",
+  "exceptions": [
+    {"file":"README.cn.md","sha256":"87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019","reason":"Package.swift dependency-list fragment"},
+    {"file":"README.jp.md","sha256":"87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019","reason":"Package.swift dependency-list fragment"},
+    {"file":"README.kr.md","sha256":"87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019","reason":"Package.swift dependency-list fragment"},
+    {"file":"README.md","sha256":"87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019","reason":"Package.swift dependency-list fragment"},
+    {"file":"README.md","sha256":"1c01f66242bd0b67a45a05213569fca164e1aa8289ecf91e1035fb57763efc87","reason":"Static Action member fragment"},
+    {"file":"RELEASE_NOTES.md","sha256":"bf464868ea8a860cb99e935a12ce8296ce37b9a835aefb302624f68ccf75cf7d","reason":"Historical Package.swift dependency-list fragment"},
+    {"file":"Sources/InnoFlow/InnoFlow.docc/PhaseDrivenWalkthrough.md","sha256":"37175ccc4318fe1250ab24743c167322192c63d070a2545787491b841cbb0b7e","reason":"Static feature member fragment"},
+    {"file":"docs/DEPENDENCY_PATTERNS.md","sha256":"59fa5c94c6d6c68aac401fd23b98c8212a8a0629498dd22af46b84cf8a8e9c75","reason":"Reducer switch-arm fragment"},
+    {"file":"docs/MIGRATION_3_1.md","sha256":"d8624b7647bfbf3d40dab0e23c4049174dbdc36340c94cb46501d8ee0acbb267","reason":"Versioned historical pseudocode"},
+    {"file":"docs/MIGRATION_3_1.md","sha256":"452d458b606baafbbea5d3286e395e9674cd2664f7a0cafff745e91c2b81e58c","reason":"Versioned historical pseudocode"},
+    {"file":"docs/REMEDIATION_FOURTH_FOLLOWUP_PLAN_6_0.md","sha256":"419fa5655df6b7a85a47a88ef2636489be704d908bcd1f60580d287555e26722","reason":"Review-only conditional-compilation fragment"},
+    {"file":"docs/REMEDIATION_FOURTH_FOLLOWUP_PLAN_6_0.md","sha256":"7a26674121d179f391c4d4606bfedd0a41e7ce7aff89307ec28fdbcdb1cf9a95","reason":"Review-only conditional-compilation fragment"}
+  ]
+}

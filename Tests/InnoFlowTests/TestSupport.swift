@@ -584,6 +584,11 @@ func findBuiltModuleDirectory(
   for root in additionalSearchRoots {
     appendCandidateAndAncestors(from: root)
   }
+  // SwiftPM can launch this test bundle through swiftpm-testing-helper, in
+  // which case Bundle.main/argv[0] point at the helper rather than the
+  // current toolchain's built test product. A type in this module resolves
+  // the loaded test bundle itself and keeps its sibling Modules first.
+  appendCandidateAndAncestors(from: Bundle(for: TestBundleLocationToken.self).bundleURL)
   if let executableURL = Bundle.main.executableURL {
     appendCandidateAndAncestors(from: executableURL.deletingLastPathComponent())
   }
@@ -607,12 +612,9 @@ func findBuiltModuleDirectory(
     }
   }
 
-  let orderedAttemptedPaths = attemptedPaths.reduce(into: [String]()) { result, path in
-    if !result.contains(path) {
-      result.append(path)
-    }
-  }
-  attemptedPaths = Array(Set(attemptedPaths)).sorted()
+  var seenPaths: Set<String> = []
+  let orderedAttemptedPaths = attemptedPaths.filter { seenPaths.insert($0).inserted }
+  attemptedPaths = orderedAttemptedPaths
 
   func containsModule(at directory: URL) -> Bool {
     let moduleURL = directory.appendingPathComponent("\(moduleName).swiftmodule")
@@ -677,6 +679,8 @@ func findBuiltModuleDirectory(
   throw CompileContractError.moduleNotFound(attemptedPaths: attemptedPaths)
 }
 
+private final class TestBundleLocationToken {}
+
 func findBuiltInnoFlowModuleDirectory(
   in packageRoot: URL,
   configuration: String? = nil
@@ -700,15 +704,34 @@ func typecheckSource(
   let sourceFile = temporaryDirectory.appendingPathComponent("CompileContract.swift")
   try source.write(to: sourceFile, atomically: true, encoding: .utf8)
 
+  let compilerLookup = try runCapturedProcess(
+    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+    arguments: ["--find", "swiftc"]
+  )
+  var compilerArguments = [
+    "swiftc",
+    "-typecheck",
+    sourceFile.path,
+    "-I",
+    moduleDirectory.path,
+  ]
+  if compilerLookup.terminationStatus == 0 {
+    let compilerPath = compilerLookup.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    let toolchainUsr = URL(fileURLWithPath: compilerPath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let testingModules = toolchainUsr.appendingPathComponent(
+      "lib/swift/macosx/testing", isDirectory: true
+    )
+    if FileManager.default.fileExists(
+      atPath: testingModules.appendingPathComponent("Testing.swiftmodule").path
+    ) {
+      compilerArguments += ["-I", testingModules.path]
+    }
+  }
   let result = try runCapturedProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: [
-      "swiftc",
-      "-typecheck",
-      sourceFile.path,
-      "-I",
-      moduleDirectory.path,
-    ]
+    arguments: compilerArguments
   )
 
   return TypecheckResult(

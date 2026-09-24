@@ -5,7 +5,7 @@ let package = Package(
   name: "CatalystMacroConsumer",
   platforms: [.iOS(.v18), .macOS(.v15)],
   products: [.library(name: "CatalystMacroConsumer", targets: ["CatalystMacroConsumer"])],
-  dependencies: [.package(path: "../../../..")],
+  dependencies: [.package(name: "InnoFlow", path: "../../../..")],
   targets: [
     .target(
       name: "CatalystMacroConsumer",

@@ -284,8 +284,11 @@ struct OfflineFirstDemoView: View {
   }
 }
 
-#Preview("Offline-First") {
-  NavigationStack {
-    OfflineFirstDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Offline-First") {
+    NavigationStack {
+      OfflineFirstDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

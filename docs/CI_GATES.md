@@ -59,8 +59,16 @@ lines remain visible, even when unreachable from the host unit tests.
 `CI / principle-gates` requires the reusable coverage job. Stale CI runs for
 the same pull request or branch are cancelled, ordinary label changes do not
 restart the full matrix, and the `run-asan` label is handled by the dedicated
-AddressSanitizer workflow. Dependabot groups each ecosystem's updates so one
+AddressSanitizer workflow. Once selected, AddressSanitizer follows subsequent
+PR commits and reopen events; unrelated labels neither start nor cancel it.
+Dependabot groups each ecosystem's updates so one
 weekly batch does not create several identical macOS matrices.
+
+`CI Required` is the stable branch-protection surface. It runs after every
+mandatory CI job and fails when any required result is failed, cancelled,
+skipped, or missing. Pull requests may skip only the full-CI push-only ASan
+job; a PR selected with `run-asan` is verified by the dedicated workflow and
+must be checked against the latest PR revision before merge.
 
 Debug tests, Release configuration tests, platform builds, focused runtime
 tests and the canonical sample build begin after lint instead of waiting for a

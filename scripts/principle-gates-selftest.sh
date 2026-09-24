@@ -484,6 +484,52 @@ run_api_compatibility_mode_tests() {
   rm -rf "$tmp_root"
 }
 
+run_release_sync_lifecycle_tests() {
+  local tmp_root
+  tmp_root="$(mktemp -d)"
+  trap 'rm -rf "$tmp_root"' RETURN
+  mkdir -p "$tmp_root/scripts"
+  cp "$SCRIPT_DIR/check-release-sync.sh" "$SCRIPT_DIR/release-tag-policy.sh" "$tmp_root/scripts/"
+  cp "$ROOT_DIR/STABLE_VERSION" "$ROOT_DIR/RELEASING.md" "$ROOT_DIR/README.md" \
+    "$ROOT_DIR/README.kr.md" "$ROOT_DIR/README.jp.md" "$ROOT_DIR/README.cn.md" \
+    "$ROOT_DIR/RELEASE_NOTES.md" "$ROOT_DIR/CHANGELOG.md" "$ROOT_DIR/MIGRATION.md" \
+    "$ROOT_DIR/ARCHITECTURE_CONTRACT.md" "$tmp_root/"
+  git -C "$tmp_root" init -q
+  git -C "$tmp_root" config user.name "InnoFlow Selftest"
+  git -C "$tmp_root" config user.email "selftest@invalid.example"
+  git -C "$tmp_root" add .
+  git -C "$tmp_root" commit -qm "candidate fixture"
+
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+    "$tmp_root/scripts/check-release-sync.sh"
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+    INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
+  printf '999999999999999999999999999999.0.0\n' >"$tmp_root/STABLE_VERSION"
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+    "$tmp_root/scripts/check-release-sync.sh"
+  printf '5.1.1\n' >"$tmp_root/STABLE_VERSION"
+  git -C "$tmp_root" tag 6.0.0
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+    INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
+  assert_failure env ROOT_DIR="$tmp_root" GITHUB_REF_TYPE=tag GITHUB_REF_NAME=5.1.1 \
+    INNOFLOW_RELEASE_VERSION=6.0.0 INNOFLOW_REQUIRE_RELEASE_TAG=1 \
+    "$tmp_root/scripts/check-release-sync.sh"
+  printf '6.0.0\n' >"$tmp_root/STABLE_VERSION"
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+    INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
+  ruby -e 'path=ARGV.fetch(0); body=File.read(path); old="Current stable public release: `5.1.1`"; abort "missing fixture marker" unless body.include?(old); File.write(path, body.sub(old, "Current stable public release: `6.0.0`"))' \
+    "$tmp_root/RELEASING.md"
+  git -C "$tmp_root" add STABLE_VERSION RELEASING.md
+  git -C "$tmp_root" commit -qm "post-publication metadata fixture"
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+    "$tmp_root/scripts/check-release-sync.sh"
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+    INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
+
+  trap - RETURN
+  rm -rf "$tmp_root"
+}
+
 run_release_test_command_tests() {
   local tmp_root
   tmp_root="$(mktemp -d)"
@@ -537,16 +583,29 @@ run_docc_plugin_pin_tests
 run_release_tag_policy_tests
 run_workflow_job_timeout_tests
 run_api_compatibility_mode_tests
+run_release_sync_lifecycle_tests
 run_release_test_command_tests
 run_release_configuration_split_tests
 assert_success "$SCRIPT_DIR/principle-gates.sh" --help
 assert_failure "$SCRIPT_DIR/principle-gates.sh" --unknown
 assert_failure "$SCRIPT_DIR/principle-gates.sh" --static --unexpected
 assert_success "$SCRIPT_DIR/verify-release-evidence-selftest.sh"
+assert_success "$SCRIPT_DIR/run-release-preflight-selftest.sh"
+assert_success "$SCRIPT_DIR/report-public-api-inventory-selftest.rb"
+assert_success "$SCRIPT_DIR/inventory-doc-swift-blocks-selftest.rb"
+assert_success "$SCRIPT_DIR/check-migration-consumer-selftest.sh"
+assert_success ruby "$SCRIPT_DIR/release-evidence-artifact-selftest.rb"
+assert_success ruby "$SCRIPT_DIR/release-evidence-output-parser-selftest.rb"
+assert_success bash "$SCRIPT_DIR/check-release-evidence-policy-selftest.sh"
+assert_success bash "$SCRIPT_DIR/check-required-ci-results-selftest.sh"
 assert_success "$SCRIPT_DIR/check-release-evidence-workflow-selftest.sh"
 assert_success "$SCRIPT_DIR/write-github-evidence-provenance-selftest.sh"
 assert_success "$SCRIPT_DIR/verify-github-evidence-run-selftest.sh"
 assert_success "$SCRIPT_DIR/run-swift-toolchain-evidence-selftest.sh"
+assert_success "$SCRIPT_DIR/run-focused-platform-runtime-matrix-selftest.sh"
+assert_success "$SCRIPT_DIR/run-focused-platform-runtime-tests-selftest.sh"
+assert_success bash "$SCRIPT_DIR/run-sdk-platform-build-selftest.sh"
+assert_success ruby "$SCRIPT_DIR/check-sample-concurrency-snippet.rb"
 assert_success "$SCRIPT_DIR/release-candidate-snapshot-selftest.sh"
 assert_success env PYTHONDONTWRITEBYTECODE=1 python3 "$SCRIPT_DIR/coverage-selftest.py"
 assert_success bash "$SCRIPT_DIR/check-coverage-workflow-selftest.sh"

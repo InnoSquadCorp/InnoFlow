@@ -226,8 +226,11 @@ struct FormValidationDemoView: View {
   }
 }
 
-#Preview("Form Validation") {
-  NavigationStack {
-    FormValidationDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Form Validation") {
+    NavigationStack {
+      FormValidationDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

@@ -33,6 +33,7 @@ package struct SelectionCallsite: Hashable, Equatable {
 
 package enum SelectionSignature: Hashable {
   case keyPath(AnyKeyPath)
+  case singleDependency(AnyKeyPath)
   case dependencies([AnyKeyPath])
   /// Closure-only selection (no declared keypath dependencies). `memoized`
   /// reflects whether the cached observer compares snapshots before rerunning
@@ -45,6 +46,29 @@ package enum SelectionSignature: Hashable {
 package struct SelectionCacheKey: Hashable {
   package let callsite: SelectionCallsite
   package let signature: SelectionSignature
+  package let semanticID: String?
+  package let valueType: ObjectIdentifier?
+
+  package init(
+    callsite: SelectionCallsite,
+    signature: SelectionSignature,
+    semanticID: String?,
+    valueType: ObjectIdentifier? = nil
+  ) {
+    self.callsite = callsite
+    self.signature = signature
+    self.semanticID = semanticID
+    self.valueType = valueType
+  }
+
+  package func forValueType<Value>(_ type: Value.Type) -> Self {
+    .init(
+      callsite: callsite,
+      signature: signature,
+      semanticID: semanticID,
+      valueType: ObjectIdentifier(type)
+    )
+  }
 }
 
 @MainActor
@@ -201,38 +225,39 @@ package final class CollectionScopeCache {
 package final class SelectionCacheEntry {
   package let key: SelectionCacheKey
   package let valueType: Any.Type
-  package let selection: AnyObject
+  private let strongSelection: AnyObject?
+  private weak var weakSelection: AnyObject?
+
+  package var selection: AnyObject? { strongSelection ?? weakSelection }
 
   package init(
     key: SelectionCacheKey,
     valueType: Any.Type,
-    selection: AnyObject
+    selection: AnyObject,
+    retainStrongly: Bool
   ) {
     self.key = key
     self.valueType = valueType
-    self.selection = selection
+    self.strongSelection = retainStrongly ? selection : nil
+    self.weakSelection = selection
   }
 }
 
-/// SelectionCache retains stable `SelectedStore` identities per call site and selection signature.
+/// SelectionCache retains key-path identities strongly and explicit semantic
+/// closure identities weakly. Keyless closures are never cached.
 ///
 /// Invariants:
-/// - one call site/signature must map to one selection value type per owner instance
-/// - cached selections stay alive for the lifetime of the owning store/projection
+/// - identity includes owner-local call site, signature, semantic ID and value type
+/// - key-path selections stay alive for the lifetime of the owner
+/// - semantic closure selections are reused only while an external handle lives
 ///
-/// Entries are retained strongly, unlike `SingleScopeCache`'s weak entries.
-/// This is deliberate: `select` is designed to be callable inside a SwiftUI
-/// `body` without the caller storing the result, and a weak entry would be
-/// recreated (new allocation + observer re-registration) on every body pass.
-/// Growth stays bounded because the key is a static call site
-/// (fileID:line:column) plus its dependency key-path signature — code has
-/// finitely many `select` call sites. The one shape that can grow past that
-/// bound is passing *dynamically constructed* key paths (e.g.
-/// `appending(path:)` in a loop) through one call site; don't do that — build
-/// a `ScopedStore` per element with `scope(collection:id:action:)` instead.
+/// Strong key-path entries support transient SwiftUI body reads. Explicit
+/// semantic IDs may be dynamic, so their entries are weak and periodically
+/// compacted instead of growing for the owner's entire lifetime.
 @MainActor
 package final class SelectionCache {
   private var entries: [SelectionCacheKey: SelectionCacheEntry] = [:]
+  private var accessCount: UInt64 = 0
 
   package init() {}
 
@@ -240,7 +265,12 @@ package final class SelectionCache {
     for key: SelectionCacheKey,
     valueType: Value.Type
   ) -> SelectedStore<Value>? {
+    compactIfNeeded()
     guard let entry = entries[key] else { return nil }
+    guard let selection = entry.selection else {
+      entries.removeValue(forKey: key)
+      return nil
+    }
     precondition(
       entry.valueType == valueType,
       """
@@ -250,7 +280,7 @@ package final class SelectionCache {
       Call site: \(key.callsite.fileID):\(key.callsite.line):\(key.callsite.column)
       """
     )
-    return entry.selection as? SelectedStore<Value>
+    return selection as? SelectedStore<Value>
   }
 
   package func store<Value>(
@@ -258,10 +288,20 @@ package final class SelectionCache {
     for key: SelectionCacheKey,
     valueType: Value.Type
   ) {
+    compactIfNeeded()
     entries[key] = .init(
       key: key,
       valueType: valueType,
-      selection: selection
+      selection: selection,
+      retainStrongly: key.semanticID == nil
     )
+  }
+
+  package var entryCount: Int { entries.count }
+
+  private func compactIfNeeded() {
+    accessCount &+= 1
+    guard accessCount % 64 == 0 else { return }
+    entries = entries.filter { $0.value.selection != nil }
   }
 }

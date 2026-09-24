@@ -377,6 +377,20 @@ failure in every build, replace `selected.someMember` with
 `selected.requireAlive().someMember`. For release-tolerant non-UI reads, use
 `selected.optionalValue` and regenerate the projection when it returns `nil`.
 
+In 6.0, closure-based `select` calls no longer infer identity from their call
+site alone. Each call creates an independent handle unless a stable semantic
+`id:` is supplied, including the dependency-aware and `memoize:` overloads.
+If a view relied on repeated closure calls at one call site returning the
+same handle, pass an ID that covers every captured input and retain the handle
+for as long as that identity is needed. Calls from different source locations
+do not share a handle. Key-path-only selections keep their existing cache.
+Code that stores a closure-based `select` method itself as a function value
+must adapt to the new defaulted `id:` parameter; Swift does not apply default
+arguments when converting a method to a function value.
+Tracked `isAlive`, `optionalState`, and `optionalValue` reads now invalidate
+when the parent store is released, not only when a collection element is
+removed or when the caller checks liveness again.
+
 `ScopedStore` now provides the same explicit strict path through
 `scoped.requireAlive()`. Its existing `state` and dynamic-member reads retain
 the view-facing cached fallback, while `optionalState` remains the

@@ -156,7 +156,17 @@ expose the same tiered read contract:
   cached-fallback accessor.
 - `ScopedStore.isAlive` and `SelectedStore.isAlive` report the same liveness
   signal as a `Bool` for sites that only need to gate work and do not read the
-  projected value.
+  projected value. Parent `Store` release invalidates tracked liveness and
+  optional reads of live external projections on the MainActor before the
+  store finishes deinitializing. When a collection element is removed, Observation invalidates
+  tracked reads of these liveness values and of `optionalState` / `optionalValue`;
+  removing a sibling element does not invalidate an unaffected projection.
+- Closure-based selections are independent by default, including declared-
+  dependency and memoized forms. An explicit semantic `id` opts into live-
+  handle reuse at a matching call site, selector signature and value type;
+  the ID must include captured inputs that affect the result. The ID cache
+  holds handles weakly and compacts dead entries. Key-path-only selections
+  retain their stable, strongly cached identity.
 - Repeated `Store.scope(state:action:)` calls reuse a live `ScopedStore` only
   when source location, state key path, child types, and the opaque `CasePath`
   identity token all match. The parent cache holds the projection weakly, so

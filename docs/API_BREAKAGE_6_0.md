@@ -9,17 +9,43 @@ swift package diagnose-api-breaking-changes 5.1.1 \
   --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting
 ```
 
-The command exited with status 1, as expected for this major release. The API
-digester reported:
+The post-R68 comparison exited with status 1, as expected for this major
+release. The API digester reported:
 
 - `InnoFlow`: no breaking changes
-- `InnoFlowCore`: 164 diagnostics
+- `InnoFlowCore`: 203 diagnostics (164 before the selector identity change)
 - `InnoFlowSwiftUI`: 1 diagnostic
 - `InnoFlowTesting`: 21 diagnostics
 
 The number of diagnostics is not the number of independent consumer
 migrations. One generic signature change expands into many type, accessor,
 builder, composition, and package-internal diagnostics.
+
+The separate public-only symbol-graph inventory for this local candidate
+filters declarations to the four products' own `Sources/<module>/` files and
+compares precise identifiers, declarations, generic constraints, signatures,
+availability, and access level. It is not the final frozen-candidate report:
+
+| Product | 5.1.1 → candidate declarations | Added | Removed | Same-identifier changed |
+| --- | ---: | ---: | ---: | ---: |
+| InnoFlow | 3 → 4 | 1 | 0 | 0 |
+| InnoFlowCore | 380 → 510 | 193 | 63 | 6 |
+| InnoFlowSwiftUI | 9 → 10 | 2 | 1 | 0 |
+| InnoFlowTesting | 75 → 108 | 36 | 3 | 0 |
+
+The 63 removed Core identifiers group by owner as: `EffectTask` 18,
+`Store`/`ScopedStore` 12, reducer/composition types 19, and
+instrumentation/metrics 14. The six changed same-identifier declarations are
+the `Output` generic propagation through `Reducer`, `Reduce`,
+`CombineReducers`, `ReducerBuilder`, `phaseMap(_:)`, and
+`validatePhaseTransitions(...)`. The SwiftUI removal is the relocated
+`EffectTask.animation(_:)` extension. Testing removes the two deprecated
+`assertNoMoreActions` forms and replaces one timing-entry initializer with a
+defaulted dispatch ID. No removed owner family is left unclassified by this
+review; the final candidate must regenerate the inventory and inspect any
+new or changed entry before approval. Additions group under the documented
+typed-output/dispatch, selection, scheduler/scope, diagnostics/phase, and test
+scenario APIs; a count match alone is not approval of their runtime semantics.
 
 ## Consumer-facing major changes
 
@@ -42,11 +68,26 @@ builder, composition, and package-internal diagnostics.
    `StoreInstrumentationMetricsSnapshot` gains output-delivery counters.
    Exhaustive switches over either public event enum must handle the new cases.
    The new dispatch-capture and strict-phase APIs are additive.
+6. Closure-based `Store.select` and `ScopedStore.select` now create independent
+   handles per call by default, including dependency-aware and memoized forms.
+   A defaulted `id: String?` parameter opts into weak reuse of a live handle
+   when the ID includes all captured inputs that determine its meaning.
+   Key-path-only selections keep stable caching. Stored closure-selection
+   method values must adapt to the added parameter because Swift does not
+   apply default arguments to function values.
+
+Of the 39 additional `InnoFlowCore` diagnostics, 38 describe those eight
+`select` signature changes: the digester pairs old/new parameter positions
+and reports renamed overloads. The remaining diagnostic is the new
+package-only `ProjectionDependencyKey.memoizedCustom` case; it is not an
+external consumer API. Existing ordinary calls still compile through the
+defaulted argument; the changed closure-selection identity and stored
+method-value type are the actual migration work.
 
 The ordered 6.0 hardening pass also adds run-admission policies, `FlowScope`,
 `DispatchID` correlation and bounded diagnostics, TestStore invariants and
 scenarios, and macro-synthesized Output case paths. These APIs are additive;
-they do not add another migration beyond the five changes above. Adoption is
+they do not add another migration beyond the six changes above. Adoption is
 explicit, and existing cancellation, action, output, and persistence ownership
 continues to apply until a consumer opts into the new APIs.
 
@@ -73,11 +114,23 @@ These changes are intentional and are covered by [MIGRATION.md](../MIGRATION.md)
 - The scheduler adds a `scheduled` finish-activity kind and driver requirements
   inside `InnoFlowTesting`; those symbols are package implementation details.
   They account for diagnostics without creating an external migration.
+- `EffectTimingRecorder.Entry.init` adds a defaulted `dispatchID` argument.
+  The old positional call remains valid; the external 5.1.1/6.0 consumer
+  compiles and runs that exact call shape against both versions.
 
 ## Release decision
 
-The nonzero comparison is accepted only for 6.0.0 as a semantic-major release.
-No diagnostic identifies an undocumented external removal beyond the five
-consumer-facing migrations above. Patch and minor releases must not reuse this
-classification to waive new breakage; they require a fresh comparison and no
-unexplained consumer-facing diagnostics.
+The updated nonzero comparison is classified for 6.0.0 as a semantic-major
+release. An independent local SwiftPM consumer now builds/runs the same counter
+and key-path selection result from exact annotated `5.1.1` and this 6.0
+candidate. Its 6.0 variant also checks independent closure captures and
+same-callsite semantic-ID reuse. The expanded external fixture checks the
+same state transition, effect completion/cancellation, and scoped parent
+lifetime behavior against each exact version: three testing-product tests pass
+on each side. The 6.0-only variant additionally captures and consumes a typed
+output (`selected(42)`) before dispatch completion. These are focused source
+and runtime controls, not proof that every consumer-specific migration is
+safe. The final candidate-bound four-product inventory and owner approval
+remain open. Patch and minor
+releases must not reuse this classification to waive new breakage; they require
+a fresh comparison and no unexplained consumer-facing diagnostics.

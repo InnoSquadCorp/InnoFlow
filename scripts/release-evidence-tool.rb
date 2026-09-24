@@ -7,6 +7,7 @@ require "json"
 require "open3"
 require "pathname"
 require "time"
+require_relative "release-evidence-output-parser"
 
 STAGES = %w[local-preflight pre-publication post-publication].freeze
 
@@ -19,26 +20,71 @@ def sha256_file(path)
   Digest::SHA256.file(path).hexdigest
 end
 
-def artifact_manifest(path)
-  if File.file?(path) && !File.symlink?(path)
-    [{ "path" => File.basename(path), "sha256" => sha256_file(path), "size" => File.size(path) }]
-  elsif File.directory?(path) && !File.symlink?(path)
-    root = File.realpath(path)
-    entries = Dir.glob(File.join(root, "**", "*"), File::FNM_DOTMATCH).sort.filter_map do |entry|
-      next if [".", ".."].include?(File.basename(entry)) || File.directory?(entry)
-      fail!("Evidence artifact contains a symlink: #{entry}") if File.symlink?(entry)
-      relative = Pathname.new(entry).relative_path_from(Pathname.new(root)).to_s
-      { "path" => relative, "sha256" => sha256_file(entry), "size" => File.size(entry) }
+def same_file_state?(first, second)
+  [first.dev, first.ino, first.mode, first.size, first.mtime, first.ctime] ==
+    [second.dev, second.ino, second.mode, second.size, second.mtime, second.ctime]
+end
+
+def artifact_file_entry(path, relative, initial_stat)
+  fail!("Evidence artifact changed before reading: #{path}") unless initial_stat.file?
+  digest = Digest::SHA256.new
+  size = nil
+  File.open(path, File::RDONLY | File::NOFOLLOW) do |file|
+    before = file.stat
+    fail!("Evidence artifact changed before reading: #{path}") unless same_file_state?(initial_stat, before)
+    while (chunk = file.read(1024 * 1024))
+      digest.update(chunk)
     end
-    fail!("Evidence artifact directory is empty: #{path}") if entries.empty?
+    after = file.stat
+    fail!("Evidence artifact changed while reading: #{path}") unless same_file_state?(before, after)
+    size = after.size
+  end
+  fail!("Evidence artifact changed after reading: #{path}") unless
+    same_file_state?(initial_stat, File.lstat(path))
+  { "path" => relative, "kind" => "file", "mode" => format("%04o", initial_stat.mode & 0o7777),
+    "sha256" => digest.hexdigest, "size" => size }
+rescue Errno::ELOOP
+  fail!("Evidence artifact became a symlink: #{path}")
+end
+
+def artifact_manifest(path)
+  root_stat = File.lstat(path)
+  if root_stat.file?
+    [artifact_file_entry(path, File.basename(path), root_stat)]
+  elsif root_stat.directory?
+    root = File.realpath(path)
+    fail!("Evidence artifact root changed: #{path}") unless same_file_state?(root_stat, File.lstat(root))
+    entries = Dir.glob(File.join(root, "**", "*"), File::FNM_DOTMATCH).sort.filter_map do |entry|
+      next if [".", ".."].include?(File.basename(entry))
+      entry_stat = File.lstat(entry)
+      fail!("Evidence artifact contains a symlink: #{entry}") if entry_stat.symlink?
+      relative = Pathname.new(entry).relative_path_from(Pathname.new(root)).to_s
+      mode = format("%04o", entry_stat.mode & 0o7777)
+      if entry_stat.directory?
+        { "path" => "#{relative}/", "kind" => "directory", "mode" => mode, "size" => 0 }
+      elsif entry_stat.file?
+        artifact_file_entry(entry, relative, entry_stat)
+      else
+        fail!("Evidence artifact contains an unsupported file type: #{entry}")
+      end
+    end
+    fail!("Evidence artifact root changed during reading: #{path}") unless same_file_state?(root_stat, File.lstat(root))
+    fail!("Evidence artifact directory has no files: #{path}") if entries.none? { |entry| entry["kind"] == "file" }
     entries
   else
-    fail!("Evidence artifact is missing or a symlink: #{path}")
+    fail!("Evidence artifact is a symlink or unsupported file type: #{path}")
   end
+rescue Errno::ENOENT
+  fail!("Evidence artifact is missing: #{path}")
 end
 
 def artifact_digest(entries)
   Digest::SHA256.hexdigest(entries.map { |entry| JSON.generate(entry) }.join("\n") + "\n")
+end
+
+def assert_artifact_unchanged!(path, initial_entries)
+  fail!("Evidence artifact changed during validation: #{path}") unless
+    artifact_manifest(path) == initial_entries
 end
 
 def cartesian(axes)
@@ -53,6 +99,32 @@ def resolved_policy(path)
   profiles = raw.fetch("profiles")
   checks = raw.fetch("checks").map do |check|
     profiles.fetch(check.fetch("profile")).merge(check)
+  end
+  checks.each do |check|
+    next unless check["testIdentifierInventory"]
+
+    relative = check.fetch("testIdentifierInventory")
+    fail!("Invalid test inventory path for #{check.fetch("id")}") unless
+      relative.is_a?(String) && relative.match?(/\A[a-zA-Z0-9_.\/-]+\z/) &&
+      !Pathname.new(relative).absolute? && !relative.split("/").include?("..")
+    root = File.expand_path("../..", File.dirname(path))
+    inventory_path = File.join(root, relative)
+    fail!("Test inventory is a symlink for #{check.fetch("id")}") if File.symlink?(inventory_path)
+    inventory = JSON.parse(File.read(inventory_path))
+    identifiers = inventory.fetch("expectedTestIdentifiers")
+    suites = inventory.fetch("suites")
+    fail!("Invalid test inventory for #{check.fetch("id")}") unless
+      inventory["schemaVersion"] == 1 &&
+      identifiers.is_a?(Array) && !identifiers.empty? &&
+      identifiers.all? { |item| item.is_a?(String) && item.match?(/\A[A-Za-z][A-Za-z0-9_]*\/[A-Za-z][^\/]*\z/) } &&
+      identifiers == identifiers.uniq.sort &&
+      suites.is_a?(Array) && suites == suites.uniq.sort &&
+      suites == identifiers.map { |item| item.split("/", 2).first }.uniq.sort
+    fail!("Test inventory digest mismatch for #{check.fetch("id")}") unless
+      check["testIdentifierInventorySha256"] == sha256_file(inventory_path)
+    check["expectedTestIdentifiers"] = identifiers
+    check["minimumTestCount"] = identifiers.length
+    check["maximumTestCount"] = identifiers.length
   end
   raw.fetch("matrices", []).each do |matrix|
     cartesian(matrix.fetch("axes")).each do |values|
@@ -79,9 +151,13 @@ def resolved_policy(path)
     if check.fetch("evidenceKind") == "automated"
       fail!("Automated check is missing a component: #{check.fetch("id")}") if check["component"].to_s.empty?
       fail!("Automated check is missing a command contract: #{check.fetch("id")}") unless check["commandContract"].is_a?(Hash)
-      fail!("Automated check has an invalid result format: #{check.fetch("id")}") unless %w[command-exit xcresult-summary swift-test-output].include?(check["resultFormat"])
+      fail!("Automated check has an invalid result format: #{check.fetch("id")}") unless %w[command-exit xcresult-summary xcresult-build-results swift-test-output].include?(check["resultFormat"])
     elsif check["resultFormat"] != "manual-observation"
       fail!("Manual check has an invalid result format: #{check.fetch("id")}")
+    end
+    expected_test_names = Array(check["expectedTestNames"])
+    unless expected_test_names.all? { |name| name.is_a?(String) && !name.empty? } && expected_test_names.uniq.length == expected_test_names.length
+      fail!("Invalid expected Swift test names for #{check.fetch("id")}")
     end
   end
   [raw, checks]
@@ -164,6 +240,33 @@ def option_values(arguments, option)
   values
 end
 
+def sdk_build_arguments?(arguments)
+  return false unless arguments.length == 6
+  return false unless arguments[0] == "--platform" &&
+                      arguments[2] == "--derived-data" &&
+                      arguments[4] == "--result-bundle"
+  return false unless %w[macOS iOS tvOS watchOS visionOS].include?(arguments[1])
+  [arguments[3], arguments[5]].all? do |path|
+    path.start_with?("/") && Pathname.new(path).cleanpath.to_s == path &&
+      !path.split("/").include?("..")
+  end
+end
+
+def focused_runtime_arguments?(arguments)
+  seen = Hash.new(0)
+  cursor = 0
+  while cursor < arguments.length
+    token = arguments[cursor]
+    return false unless %w[--destination --derived-data --result-bundle].include?(token)
+    value = arguments[cursor + 1]
+    return false if value.nil? || value.empty? || value.start_with?("--")
+    seen[token] += 1
+    return false if seen[token] > 1
+    cursor += 2
+  end
+  %w[--destination --derived-data --result-bundle].all? { |token| seen[token] == 1 }
+end
+
 def command_matches?(check, command)
   actual = normalized_command(command)
   contract = check.fetch("commandContract")
@@ -175,6 +278,8 @@ def command_matches?(check, command)
 
   arguments = actual.drop(1)
   return arguments == contract.fetch("exactArguments") if contract.key?("exactArguments")
+  return false if check.fetch("id").start_with?("sdk-") && !sdk_build_arguments?(arguments)
+  return false if check.fetch("id").start_with?("runtime-") && !focused_runtime_arguments?(arguments)
   return false unless Array(contract["requiredArguments"]).all? { |argument| arguments.include?(argument) }
   return false if Array(contract["forbiddenArguments"]).any? { |argument| arguments.include?(argument) }
   return false if Array(contract["forbiddenArgumentPrefixes"]).any? do |prefix|
@@ -285,6 +390,17 @@ def validate_xcresult!(check, raw_path, observed_environment)
   errors << "discoveredTests=#{cases.length}" if cases.length < minimum
   errors << "discoveredTests=#{cases.length}" if maximum && cases.length > maximum
   errors << "nonPassedTestCase" unless cases.all? { |test| test["result"] == "Passed" }
+  if check["testIdentifierInventory"]
+    actual_identifiers = cases.map { |test| test["nodeIdentifier"] }
+    expected_identifiers = check.fetch("expectedTestIdentifiers")
+    if actual_identifiers.any? { |identifier| !identifier.is_a?(String) } ||
+       actual_identifiers.sort != expected_identifiers
+      errors << "testInventoryMismatch missing=#{(expected_identifiers - actual_identifiers).inspect} " \
+                "unexpected=#{(actual_identifiers - expected_identifiers).inspect}"
+    end
+    errors << "duplicateTestIdentifier" unless actual_identifiers.uniq.length == actual_identifiers.length
+    errors << "summaryTestCountMismatch" unless summary["totalTestCount"] == cases.length
+  end
   identities = cases.map { |test| test["nodeIdentifierURL"] || test["nodeIdentifier"] || test["name"] }.compact
   if let_expected = check["expectedTestIdentifier"]
     errors << "expectedTestIdentifier=#{let_expected}" unless identities.compact.any? { |identity| identity.include?(let_expected) }
@@ -324,46 +440,49 @@ def validate_xcresult!(check, raw_path, observed_environment)
   }
 end
 
+def validate_build_xcresult!(check, raw_path, observed_environment)
+  output, error, status = Open3.capture3(
+    "xcrun", "xcresulttool", "get", "build-results", "--path", raw_path, "--compact"
+  )
+  fail!("xcresult build results failed: #{error.strip}") unless status.success?
+  build = JSON.parse(output)
+  errors = []
+  errors << "status=#{build["status"]}" unless build["status"] == "succeeded"
+  errors << "actionTitle=#{build["actionTitle"]}" unless build["actionTitle"].to_s.match?(/\ABuild(?:ing)?\b/i)
+  %w[errorCount warningCount analyzerWarningCount].each do |key|
+    errors << "#{key}=#{build[key]}" unless build[key] == 0
+  end
+  %w[errors warnings analyzerWarnings].each do |key|
+    errors << "#{key}=#{build[key].inspect}" unless build[key] == []
+  end
+  started = build["startTime"]
+  finished = build["endTime"]
+  errors << "invalidBuildTime" unless started.is_a?(Numeric) && finished.is_a?(Numeric) && finished >= started
+  device = build["destination"]
+  errors << "missingBuildDestination" unless device.is_a?(Hash) && device["platform"].is_a?(String)
+  fail!("xcresult is not a complete build for #{check.fetch("id")}: #{errors.join(", ")}") unless errors.empty?
+  actual_environment = observed_environment.merge("platform" => device["platform"], "os" => device["osVersion"]).compact
+  validate_environment!(check, actual_environment)
+  {
+    "status" => build["status"],
+    "actionTitle" => build["actionTitle"],
+    "startTime" => started,
+    "endTime" => finished,
+    "destination" => device,
+    "environment" => actual_environment,
+  }
+rescue JSON::ParserError => error
+  fail!("xcresult build JSON is malformed: #{error.message}")
+end
+
 def validate_swift_test_output!(check, artifact_path, observed_environment)
   output = File.read(artifact_path, mode: "rb").encode("UTF-8", invalid: :replace, undef: :replace)
-  output = output.gsub(/\e\[[0-9;?]*[ -\/]*[@-~]/, "")
-  failures = []
-  failures << "failed test run" if output.match?(/Test run with .* failed after/i)
-  failures << "failed test leaf" if output.match?(/Test \".*?\" failed(?: after| with|\.)/i)
-  failures << "failed XCTest suite" if output.match?(/Test Suite .* failed at/)
-  failures << "skipped test" if output.match?(/(?:Test|Suite) .* skipped/i)
-  failures << "unexpected signal" if output.match?(/unexpected signal|signal [0-9]+/i)
-
-  summaries = output.scan(/Test run with ([0-9]+) tests?(?: in ([0-9]+) suites?)? passed after/i)
-  failures << "missing Swift Testing pass summary" if summaries.empty?
-  test_count = summaries.sum { |tests, _suites| tests.to_i }
-  suite_count = summaries.sum { |_tests, suites| suites.to_i }
-  leaf_count = output.scan(/Test \".*?\" passed after [0-9.]+ seconds?\./).length
-  passed_suite_names = output.scan(/Suite \"(.*?)\" passed after [0-9.]+ seconds?\./).flatten
-  failures << "zero discovered tests" if test_count.zero?
-  failures << "summary tests=#{test_count} leaves=#{leaf_count}" unless test_count == leaf_count
-  failures << "summary suites=#{suite_count} passedSuites=#{passed_suite_names.length}" unless suite_count == passed_suite_names.length
-
-  minimum = check.fetch("minimumTestCount", 1).to_i
-  maximum = check["maximumTestCount"]&.to_i
-  failures << "testCount=#{test_count} minimum=#{minimum}" if test_count < minimum
-  failures << "testCount=#{test_count} maximum=#{maximum}" if maximum && test_count > maximum
-  if check["expectedTestRunCount"]
-    failures << "testRunCount=#{summaries.length}" unless summaries.length == check.fetch("expectedTestRunCount").to_i
-  end
-  Array(check["expectedResultSuites"]).each do |suite|
-    failures << "missingSuite=#{suite}" unless passed_suite_names.include?(suite)
-  end
+  parsed = ReleaseEvidenceOutputParser.parse(check, output)
+  failures = parsed.fetch("failures")
   fail!("Swift test output is not a complete pass for #{check.fetch("id")}: #{failures.join(", ")}") unless failures.empty?
 
   validate_environment!(check, observed_environment)
-  {
-    "environment" => observed_environment,
-    "testCount" => test_count,
-    "suiteCount" => suite_count,
-    "testRunCount" => summaries.length,
-    "passedSuites" => passed_suite_names.sort,
-  }
+  parsed.fetch("result").merge("environment" => observed_environment)
 end
 
 def load_snapshot(path, expected_digest, expected_policy_digest)
@@ -544,17 +663,23 @@ when "record-automated"
   end
   result = { "environment" => observed }
   raw_record = nil
-  if check["resultFormat"] == "xcresult-summary"
+  if %w[xcresult-summary xcresult-build-results].include?(check["resultFormat"])
     raw_relative = required_option(options, "raw-artifact")
     raw_path = resolve_inside(evidence_root, raw_relative)
     raw_entries = artifact_manifest(raw_path)
-    result = validate_xcresult!(check, raw_path, observed)
+    result = if check["resultFormat"] == "xcresult-summary"
+      validate_xcresult!(check, raw_path, observed)
+    else
+      validate_build_xcresult!(check, raw_path, observed)
+    end
     raw_record = { "path" => raw_relative, "sha256" => artifact_digest(raw_entries), "entries" => raw_entries }
   elsif check["resultFormat"] == "swift-test-output"
     result = validate_swift_test_output!(check, artifact, observed)
   else
     validate_environment!(check, observed)
   end
+  assert_artifact_unchanged!(artifact, artifact_entries)
+  assert_artifact_unchanged!(raw_path, raw_entries) if raw_record
   receipt_body = {
     "schema" => "inno-flow-release-evidence-receipt-v3",
     "attemptId" => required_option(options, "attempt-id"),
@@ -569,6 +694,7 @@ when "record-automated"
     "commandSha256" => Digest::SHA256.hexdigest(normalized_command(command).join("\0")),
     "execution" => {
       "componentLabel" => component_label,
+      "componentPath" => ".",
       "workingDirectory" => required_option(options, "working-directory"),
       "startedAt" => Time.iso8601(required_option(options, "started-at")).utc.iso8601,
       "finishedAt" => Time.iso8601(required_option(options, "finished-at")).utc.iso8601,
@@ -664,6 +790,12 @@ when "verify"
   end
   requested_rank = STAGES.index(stage)
   expected = checks.select { |check| STAGES.index(check.fetch("stage")) <= requested_rank }
+  only_check_id = options["only-check-id"]
+  if only_check_id
+    fail!("Single-check verification is only for local-preflight", 64) unless stage == "local-preflight"
+    expected = expected.select { |check| check.fetch("id") == only_check_id }
+    fail!("Unknown local-preflight check ID: #{only_check_id}", 64) unless expected.one?
+  end
   trusted_context = nil
   if expected.any? { |check| check["trustedProducerRequired"] }
     trusted_context = load_trusted_context(required_option(options, "trusted-producer-context"), snapshot)
@@ -671,6 +803,7 @@ when "verify"
   expected_by_id = expected.to_h { |check| [check.fetch("id"), check] }
   fail!("Evidence manifest is missing: #{manifest}", 66) unless File.file?(manifest)
   rows = File.readlines(manifest, chomp: true).reject { |line| line.empty? || line.start_with?("#", "check_id\t") }
+  rows.select! { |line| line.split("\t", 2).first == only_check_id } if only_check_id
   seen = {}
   errors = []
   rows.each do |line|
@@ -718,6 +851,7 @@ when "verify"
         errors << "Receipt execution metadata is missing for #{identifier}" unless execution.is_a?(Hash)
         if execution.is_a?(Hash)
           errors << "Receipt execution component mismatch for #{identifier}" unless execution["componentLabel"] == check["component"] || check["component"].nil?
+          errors << "Receipt execution path mismatch for #{identifier}" unless execution["componentPath"] == "."
           errors << "Receipt working directory is missing for #{identifier}" if execution["workingDirectory"].to_s.empty?
           started_at = Time.iso8601(execution.fetch("startedAt"))
           finished_at = Time.iso8601(execution.fetch("finishedAt"))
@@ -725,7 +859,7 @@ when "verify"
         end
         errors << "Receipt exit code mismatch for #{identifier}" unless receipt["exitCode"] == 0
         errors << "Receipt toolchain is missing for #{identifier}" if receipt["toolchain"].to_s.empty?
-        unless %w[xcresult-summary swift-test-output].include?(check["resultFormat"])
+        unless %w[xcresult-summary xcresult-build-results swift-test-output].include?(check["resultFormat"])
           validate_environment!(check, receipt.dig("result", "environment") || {})
         end
       else
@@ -741,15 +875,25 @@ when "verify"
           errors << "Evidence artifact is empty for #{identifier}"
         end
       end
-      if check["resultFormat"] == "xcresult-summary"
+      if %w[xcresult-summary xcresult-build-results].include?(check["resultFormat"])
         raw_record = receipt["rawArtifact"]
         if raw_record.nil?
           errors << "Raw xcresult is missing for #{identifier}"
         else
-          validate_xcresult!(check, resolve_inside(evidence_root, raw_record.fetch("path")), receipt.dig("result", "environment") || {})
+          raw_path = resolve_inside(evidence_root, raw_record.fetch("path"))
+          if check["resultFormat"] == "xcresult-summary"
+            validate_xcresult!(check, raw_path, receipt.dig("result", "environment") || {})
+          else
+            validate_build_xcresult!(check, raw_path, receipt.dig("result", "environment") || {})
+          end
         end
       elsif check["resultFormat"] == "swift-test-output"
         validate_swift_test_output!(check, resolve_inside(evidence_root, receipt.fetch("artifact").fetch("path")), receipt.dig("result", "environment") || {})
+      end
+      [receipt["artifact"], receipt["rawArtifact"]].compact.each do |record|
+        actual_path = resolve_inside(evidence_root, record.fetch("path"))
+        errors << "Artifact changed during verification for #{identifier}" unless
+          artifact_digest(artifact_manifest(actual_path)) == record["sha256"]
       end
     rescue JSON::ParserError, KeyError, TypeError, ArgumentError, SystemExit => error
       errors << "Receipt or artifact invalid for #{identifier}: #{error.message}"
@@ -765,7 +909,11 @@ when "verify"
     puts "RELEASE_EVIDENCE_INCOMPLETE errors=#{errors.length} rows=#{rows.length} expected=#{expected.length} stage=#{stage}"
     exit 1
   end
-  puts "RELEASE_EVIDENCE_COMPLETE candidate=#{candidate} rows=#{rows.length} expected=#{expected.length} stage=#{stage}"
+  if only_check_id
+    puts "RELEASE_EVIDENCE_CHECK_VALID candidate=#{candidate} check=#{only_check_id}"
+  else
+    puts "RELEASE_EVIDENCE_COMPLETE candidate=#{candidate} rows=#{rows.length} expected=#{expected.length} stage=#{stage}"
+  end
 else
   fail!("Unknown command: #{command_name}", 64)
 end

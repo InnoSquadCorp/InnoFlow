@@ -528,8 +528,11 @@ struct BidirectionalWebSocketDemoView: View {
   }
 }
 
-#Preview("Bidirectional WebSocket") {
-  NavigationStack {
-    BidirectionalWebSocketDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Bidirectional WebSocket") {
+    NavigationStack {
+      BidirectionalWebSocketDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

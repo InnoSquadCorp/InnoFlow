@@ -121,6 +121,23 @@ require_pattern \
 
 escaped_version="${version//./\\.}"
 
+version_is_older() {
+  ruby -e '
+    left, right = ARGV.map { |version| version.split(".").map { |part| Integer(part, 10) } }
+    exit((left <=> right) == -1 ? 0 : 1)
+  ' "$1" "$2"
+}
+
+if is_truthy "${INNOFLOW_REQUIRE_RELEASE_TAG:-0}"; then
+  if ! version_is_older "$stable_version" "$version"; then
+    echo "[check-release-sync] Failed: tagged candidate must retain an earlier public stable baseline" >&2
+    exit 1
+  fi
+elif [[ "$stable_version" != "$version" ]] && ! version_is_older "$stable_version" "$version"; then
+  echo "[check-release-sync] Failed: stable version is newer than the release target" >&2
+  exit 1
+fi
+
 for readme in README.md README.kr.md README.jp.md README.cn.md; do
   require_pattern \
     "$readme" \
@@ -143,17 +160,10 @@ require_pattern \
   "^## ${escaped_version}$" \
   "migration section for ${version}"
 
-if is_truthy "${INNOFLOW_REQUIRE_RELEASE_TAG:-0}"; then
-  require_pattern \
-    RELEASING.md \
-    "Current stable public release: \`${escaped_version}\`" \
-    "current stable release ${version}"
-else
-  require_pattern \
-    RELEASING.md \
-    "Current (stable public release|staged release candidate): \`${escaped_version}\`" \
-    "stable or staged release ${version}"
-fi
+require_pattern \
+  RELEASING.md \
+  "Release target: \`${escaped_version}\`" \
+  "release target ${version}"
 
 require_pattern \
   ARCHITECTURE_CONTRACT.md \

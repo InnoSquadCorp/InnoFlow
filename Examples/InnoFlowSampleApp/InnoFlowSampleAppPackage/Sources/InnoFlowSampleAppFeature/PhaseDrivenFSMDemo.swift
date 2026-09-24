@@ -304,8 +304,11 @@ struct PhaseDrivenTodoRowView: View {
   }
 }
 
-#Preview("Phase-Driven FSM") {
-  NavigationStack {
-    PhaseDrivenFSMDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Phase-Driven FSM") {
+    NavigationStack {
+      PhaseDrivenFSMDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

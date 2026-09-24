@@ -337,8 +337,11 @@ struct OrchestrationDemoView: View {
   }
 }
 
-#Preview("Orchestration") {
-  NavigationStack {
-    OrchestrationDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Orchestration") {
+    NavigationStack {
+      OrchestrationDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

@@ -195,6 +195,7 @@ struct ModernButton: View {
 
 Example with @Observable:
 ```swift
+@MainActor
 @Observable
 class UserSettings {
     var theme: Theme = .light
@@ -242,6 +243,7 @@ struct MainView: View {
 
 Example with .task modifier for async operations:
 ```swift
+@MainActor
 @Observable
 class DataModel {
     var items: [Item] = []
@@ -301,8 +303,8 @@ struct ItemListView: View {
 Swift 6 enforces strict concurrency checking. All types that cross concurrency boundaries must be Sendable:
 
 - **Value types (struct, enum):** Usually Sendable if all properties are Sendable
-- **Classes:** Must be marked `final` and have immutable or Sendable properties, or use `@unchecked Sendable` with thread-safe implementation
-- **@Observable classes:** Automatically Sendable when all properties are Sendable
+- **Classes:** A nonisolated `Sendable` class must be `final` and keep stored state immutable; mutable UI models should instead be isolated to `@MainActor`
+- **@Observable classes:** Observation does not make mutable state `Sendable`. Isolate UI-owned observable models to `@MainActor`; use an actor for independently concurrent mutable services
 - **Closures:** Mark as `@Sendable` when captured by concurrent contexts
 
 ```swift
@@ -323,12 +325,13 @@ final class Configuration: Sendable {
     }
 }
 
-// @Observable with Sendable
+// Mutable observable UI state is safe to share through main-actor isolation.
+@MainActor
 @Observable
 final class UserModel: Sendable {
     var name: String = ""
     var age: Int = 0
-    // Automatically Sendable if all stored properties are Sendable
+    // Sendable is valid here because access to mutable state is actor-isolated.
 }
 
 // Using @unchecked Sendable for thread-safe types

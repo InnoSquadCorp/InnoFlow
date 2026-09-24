@@ -353,6 +353,9 @@ struct ListDetailPaginationDetailView: View {
   }
 }
 
-#Preview("List + Detail") {
-  ListDetailPaginationDemoView()
-}
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("List + Detail") {
+    ListDetailPaginationDemoView()
+  }
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

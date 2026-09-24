@@ -176,6 +176,11 @@ public final class Store<R: Reducer> {
     lifetime.markReleased()
     let shutdownSequence = effectBridge.shutdown()
     instrumentation.didCancelEffects(.init(id: nil, sequence: shutdownSequence))
+    // Projection handles can outlive this Store. Notify their observable
+    // liveness while the registry is still available on MainActor; weak
+    // registrations avoid extending the handles' lifetime.
+    observerRegistry.refreshAll()
+    observerRegistry.pruneAllObservers()
   }
 
   private func executeEffect(

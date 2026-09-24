@@ -56,6 +56,12 @@ jobs:
           esac
           swift format lint --strict --recursive Sources Tests Examples
 
+      - name: Check Swift documentation fence syntax
+        run: '"$GITHUB_WORKSPACE/scripts/check-doc-swift-syntax.rb"'
+
+      - name: Compile copyable documentation examples as external consumers
+        run: '"$GITHUB_WORKSPACE/scripts/check-doc-copyable-examples.rb"'
+
   tests:
     name: Package Tests (Core)
     runs-on: macos-26
@@ -109,7 +115,7 @@ jobs:
         run: xcodebuild -version
 
       - name: Run release configuration checks
-        run: "$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"
+        run: '"$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"'
 
   api-compatibility:
     name: Public API Compatibility
@@ -127,7 +133,10 @@ jobs:
         run: xcodebuild -version
 
       - name: Check compatibility with the 6.0 public baseline
-        run: "$GITHUB_WORKSPACE/scripts/check-api-compatibility.sh"
+        run: '"$GITHUB_WORKSPACE/scripts/check-api-compatibility.sh"'
+
+      - name: Run 5.1.1 to 6.0 external migration consumer
+        run: '"$GITHUB_WORKSPACE/scripts/check-migration-consumer.sh"'
 
   thread-sanitizer:
     name: Package Tests (ThreadSanitizer)
@@ -245,7 +254,7 @@ jobs:
           "$GITHUB_WORKSPACE/scripts/principle-gates.sh" --static
 
       - name: Verify gate negative controls
-        run: "$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"
+        run: '"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'
 
   sample-package-builds:
     name: Sample Package Build (visionOS)
@@ -391,3 +400,49 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test
+
+  ci-required:
+    name: CI Required
+    if: always()
+    needs:
+      - coverage
+      - lint
+      - tests
+      - release-tests
+      - api-compatibility
+      - thread-sanitizer
+      - sample-tests
+      - package-builds
+      - focused-runtime-tests
+      - principle-gates
+      - sample-package-builds
+      - sample-build
+      - address-sanitizer
+      - sample-ui-tests
+    runs-on: macos-26
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Require every mandatory CI result
+        run: |
+          set -euo pipefail
+          ruby "$GITHUB_WORKSPACE/scripts/check-required-ci-results.rb" \
+            "${{ github.event_name }}" \
+            "coverage=${{ needs.coverage.result }}" \
+            "lint=${{ needs.lint.result }}" \
+            "tests=${{ needs.tests.result }}" \
+            "release-tests=${{ needs.release-tests.result }}" \
+            "api-compatibility=${{ needs.api-compatibility.result }}" \
+            "thread-sanitizer=${{ needs.thread-sanitizer.result }}" \
+            "sample-tests=${{ needs.sample-tests.result }}" \
+            "package-builds=${{ needs.package-builds.result }}" \
+            "focused-runtime-tests=${{ needs.focused-runtime-tests.result }}" \
+            "principle-gates=${{ needs.principle-gates.result }}" \
+            "sample-package-builds=${{ needs.sample-package-builds.result }}" \
+            "sample-build=${{ needs.sample-build.result }}" \
+            "address-sanitizer=${{ needs.address-sanitizer.result }}" \
+            "sample-ui-tests=${{ needs.sample-ui-tests.result }}"

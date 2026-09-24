@@ -79,6 +79,14 @@ begin
 
   cd = load_workflow(cd_path)
   jobs = cd.fetch("jobs")
+  platform_builds = job!(jobs, "release-platform-builds")
+  fail_contract("release SDK matrix changed") unless
+    platform_builds.dig("strategy", "matrix", "platform") == %w[macOS iOS tvOS watchOS visionOS]
+  strict_script_step!(
+    steps!(platform_builds, "release-platform-builds"),
+    "scripts/run-sdk-platform-build.sh",
+    ["--platform", "${{ matrix.platform }}", "--derived-data", "--result-bundle"]
+  )
   evidence = job!(jobs, "release-evidence")
   fail_contract("release-evidence job uses continue-on-error") if evidence["continue-on-error"] == true
   required_needs = %w[release-gate release-platform-builds release-runtime-tests release-sanitizers release-coverage].sort
@@ -87,17 +95,15 @@ begin
   fail_contract("release-evidence must run after failures to reject them") unless evidence_if.include?("always()") && evidence_if.include?("refs/tags/")
   evidence_steps = steps!(evidence, "release-evidence")
   checkouts = checkout_steps(evidence_steps)
-  fail_contract("release-evidence must checkout InnoFlow and Mulbyul exactly once") unless checkouts.length == 2
+  fail_contract("release-evidence must checkout only InnoFlow") unless checkouts.length == 1
   innoflow_checkout, innoflow_index = checkouts.find { |step, _| step.dig("with", "path") == "release-components/InnoFlow" }
-  mulbyul_checkout, = checkouts.find { |step, _| step.dig("with", "path") == "release-components/Mulbyul" }
   assert_checkout!(innoflow_checkout, label: "release-evidence InnoFlow", path: "release-components/InnoFlow", ref: "${{ github.sha }}")
-  assert_checkout!(mulbyul_checkout, label: "release-evidence Mulbyul", path: "release-components/Mulbyul", repository: "InnoSquad/Mulbyul")
   repository_script_indices = evidence_steps.each_index.select { |index| evidence_steps[index]["run"].to_s.include?("scripts/") }
   fail_contract("release-evidence has no repository script step") if repository_script_indices.empty?
   fail_contract("InnoFlow checkout must precede every repository script") unless innoflow_index < repository_script_indices.min
   strict_script_step!(evidence_steps, "scripts/verify-release-prerequisites.sh", required_needs.map { |name| name.upcase.tr("-", "_") + "_RESULT" })
   strict_script_step!(evidence_steps, "scripts/write-github-evidence-provenance.sh", %w[--run-id --artifact-name --output])
-  strict_script_step!(evidence_steps, "scripts/verify-candidate-component.sh", ["--candidate-snapshot", "--label innoflow", "--label mulbyul", "--repository", "--policy"], exact_invocations: 2)
+  strict_script_step!(evidence_steps, "scripts/verify-candidate-component.sh", ["--candidate-snapshot", "--label innoflow", "--repository", "--policy"])
   strict_script_step!(evidence_steps, "scripts/record-release-evidence.sh", ["--check-id remote-ci", "--attempt-index attempts.tsv", "-- scripts/verify-github-evidence-run.sh"])
   strict_script_step!(evidence_steps, "scripts/verify-release-evidence.sh", ["--candidate-hash", "--candidate-snapshot", "--evidence-root", "--manifest", "--attempt-index attempts.tsv", "--policy", "--trusted-producer-context", "--stage pre-publication"])
   download_steps = evidence_steps.select { |step| step.fetch("run", "").include?("gh run download") }
@@ -108,8 +114,18 @@ begin
 
   publish = job!(jobs, "publish-release")
   fail_contract("publish-release must need only release-evidence") unless Array(publish["needs"]) == ["release-evidence"]
+  cd_trigger = cd["on"] || cd[true]
+  publish_input = cd_trigger.dig("workflow_dispatch", "inputs", "publish_release")
+  fail_contract("release publication must default to false") unless
+    publish_input.is_a?(Hash) && publish_input["type"] == "boolean" &&
+    publish_input["default"] == false && publish_input["required"] == false
   publish_if = publish["if"].to_s
-  fail_contract("publish-release must be tag-only and may not use always") unless publish_if.include?("refs/tags/") && !publish_if.include?("always()")
+  fail_contract("publish-release requires explicit dispatch, tag, evidence success, and opt-in") unless
+    publish_if.include?("github.event_name == 'workflow_dispatch'") &&
+    publish_if.include?("inputs.publish_release == true") &&
+    publish_if.include?("refs/tags/") &&
+    publish_if.include?("needs.release-evidence.result == 'success'") &&
+    !publish_if.include?("always()")
   fail_contract("publish-release uses continue-on-error") if publish["continue-on-error"] == true
   steps!(publish, "publish-release")
 
@@ -117,7 +133,7 @@ begin
   producer_trigger = producer["on"] || producer[true]
   fail_contract("producer must only expose workflow_dispatch") unless producer_trigger.is_a?(Hash) && producer_trigger.keys == ["workflow_dispatch"]
   inputs = producer_trigger.dig("workflow_dispatch", "inputs")
-  fail_contract("producer inputs are incomplete") unless inputs.is_a?(Hash) && %w[mulbyul_sha intake_name release_approval].all? { |name| inputs.key?(name) }
+  fail_contract("producer inputs are incomplete or contain retired inputs") unless inputs.is_a?(Hash) && inputs.keys.sort == %w[intake_name release_approval]
   fail_contract("producer permissions must be read-only") unless producer["permissions"] == { "contents" => "read" }
   producer_jobs = producer.fetch("jobs")
   fail_contract("producer must define exactly one non-deploy job") unless producer_jobs.keys == ["produce-release-evidence"]
@@ -127,12 +143,10 @@ begin
   fail_contract("producer must use the dedicated self-hosted labels") unless Array(producer_job["runs-on"]) == %w[self-hosted macOS innoflow-release-evidence]
   producer_steps = steps!(producer_job, "produce-release-evidence")
   producer_checkouts = checkout_steps(producer_steps)
-  fail_contract("producer must checkout InnoFlow and Mulbyul exactly once") unless producer_checkouts.length == 2
+  fail_contract("producer must checkout only InnoFlow") unless producer_checkouts.length == 1
   producer_innoflow, = producer_checkouts.find { |step, _| step.dig("with", "path") == "components/InnoFlow" }
-  producer_mulbyul, = producer_checkouts.find { |step, _| step.dig("with", "path") == "components/Mulbyul" }
   assert_checkout!(producer_innoflow, label: "producer InnoFlow", path: "components/InnoFlow", ref: "${{ github.sha }}")
-  assert_checkout!(producer_mulbyul, label: "producer Mulbyul", path: "components/Mulbyul", repository: "InnoSquad/Mulbyul")
-  strict_script_step!(producer_steps, "scripts/verify-candidate-component.sh", ["--candidate-snapshot", "--label innoflow", "--label mulbyul", "--repository", "--policy"], exact_invocations: 2)
+  strict_script_step!(producer_steps, "scripts/verify-candidate-component.sh", ["--candidate-snapshot", "--label innoflow", "--repository", "--policy"])
   strict_script_step!(producer_steps, "scripts/verify-release-evidence.sh", ["--candidate-hash", "--candidate-snapshot", "--evidence-root", "--manifest", "--attempt-index attempts.tsv", "--policy", "--stage local-preflight"])
   strict_script_step!(producer_steps, "scripts/record-release-evidence.sh", ["--check-id tag-api-baseline", "--attempt-index attempts.tsv", "-- scripts/check-release-sync.sh"])
   strict_script_step!(producer_steps, "scripts/record-manual-release-evidence.sh", ["--check-id release-approval", "--reviewer", "--observed-at", "--attempt-index attempts.tsv", "--producer-json"])
@@ -142,6 +156,9 @@ begin
   fail_contract("producer artifact name is not candidate-bound") unless upload["name"] == "innoflow-release-evidence-${{ github.sha }}"
   fail_contract("producer artifact must fail closed") unless upload["if-no-files-found"] == "error" && upload["overwrite"] == false
   fail_contract("producer may not contain deployment commands") if File.read(producer_path).match?(/\b(?:gh release create|swift package publish|npm publish|deploy)\b/i)
+  [File.read(cd_path), File.read(producer_path)].each do |source|
+    fail_contract("release workflows retain retired Mulbyul dependencies") if source.match?(/mulbyul|MULBYUL/i)
+  end
 
   puts "[check-release-evidence-workflow] OK"
 rescue KeyError, TypeError => error

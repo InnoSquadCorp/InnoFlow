@@ -16,6 +16,36 @@ This file explains the current InnoFlow authoring model and repository rules.
 - Respect unidirectional flow and explicit side-effect boundaries.
 - Prefer general-purpose architecture changes over case-specific patches.
 
+### Comprehensive review protocol
+
+For whole-repository, "anything else to improve/fix?", or "is this the best?"
+requests, establish the revision and dirty-input snapshot, complete module and
+product inventory, cross-feature matrix, exclusions, and exit criteria before
+investigating. Do not wait for repeated user questions to expand coverage.
+
+- Include source, tests, public contracts, independent consumers/examples,
+  toolchains/platforms, and CI/release trust boundaries. Track normal, failure,
+  cancellation, concurrency, retry/restoration, resource-limit, observability,
+  and security paths where applicable; state why other paths are inapplicable.
+- Reproduce suspected defects through the actual implementation with a passing
+  control, then run relevant regressions/integration checks. Keep review-only
+  probes outside production source/test trees. Separate product defects from
+  fixture, build, toolchain, and environment failures; deduplicate root causes.
+- Close every matrix row with exact evidence or a specific unverified boundary.
+  Label fresh, reused, static-only, blocked, and out-of-scope evidence explicitly.
+  Report confirmed defects, unresolved candidates, optional improvements, and
+  unverified boundaries separately. Never turn a missing check into a PASS.
+- Stop when the fixed review criteria are accounted for, not at a finding count.
+  A green suite or completed review does not mean no defects, fixes complete,
+  or release readiness. Reopen affected rows when candidate inputs change.
+- Review authorization alone does not permit production fixes, commits, pushes,
+  external messages, tags, or releases. Preserve existing work. User-approved
+  scope restrictions continue to apply; Mulbyul-specific validation is excluded
+  from the current InnoFlow 6.0 release review.
+
+Use `docs/COMPREHENSIVE_REVIEW_6_0_2026_09_23.md` as the initial inventory and
+evidence-ledger example, not as reusable proof for a later revision.
+
 ## InnoFlow 6.0.0 development rules
 
 These rules are source-of-truth and are enforced by macro diagnostics, tests, and principle gates.
@@ -64,6 +94,12 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
     bounded history but must never resurrect terminated work.
 15. Test invariants run once after composed reduction. Scenarios and scoped
     output helpers remain testing-only and must preserve root queue semantics.
+16. Closure-based `select` calls are independent by default, even at one
+    call site. A stable semantic `id:` may reuse only a live handle with the
+    same owner, call site, selector signature, and value type; it must cover
+    captured inputs and is weakly cached. Key-path-only selection retains
+    stable identity. Parent release invalidates tracked projection liveness
+    and optional reads on MainActor before Store deinitialization finishes.
 
 Macro-first means `@InnoFlow` is the canonical feature-authoring path, while
 `InnoFlowCore` remains a deliberate compiler-plugin-free runtime and recovery

@@ -3,10 +3,6 @@ name: Release Evidence Producer
 on:
   workflow_dispatch:
     inputs:
-      mulbyul_sha:
-        description: "Exact 40-character Mulbyul candidate commit"
-        required: true
-        type: string
       intake_name:
         description: "Preloaded fail-closed evidence directory name on the dedicated runner"
         required: true
@@ -42,24 +38,12 @@ jobs:
       - name: Validate immutable producer inputs
         working-directory: components/InnoFlow
         env:
-          MULBYUL_SHA: ${{ inputs.mulbyul_sha }}
           INTAKE_NAME: ${{ inputs.intake_name }}
         run: |
           set -euo pipefail
-          [[ "$MULBYUL_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$INTAKE_NAME" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$GITHUB_REF" == "refs/tags/$GITHUB_REF_NAME" ]]
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
-
-      - name: Checkout exact Mulbyul candidate
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: InnoSquad/Mulbyul
-          ref: ${{ inputs.mulbyul_sha }}
-          fetch-depth: 0
-          persist-credentials: false
-          token: ${{ secrets.MULBYUL_READ_TOKEN }}
-          path: components/Mulbyul
 
       - name: Import a preserved local-preflight bundle
         id: evidence
@@ -91,11 +75,6 @@ jobs:
             --label innoflow \
             --repository "$GITHUB_WORKSPACE/components/InnoFlow" \
             --policy docs/contracts/release-evidence-policy.json
-          scripts/verify-candidate-component.sh \
-            --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
-            --label mulbyul \
-            --repository "$GITHUB_WORKSPACE/components/Mulbyul" \
-            --policy docs/contracts/release-evidence-policy.json
           scripts/verify-release-evidence.sh \
             --candidate-hash "$candidate_hash" \
             --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
@@ -126,7 +105,6 @@ jobs:
               --candidate-hash "$candidate_hash" \
               --candidate-snapshot "$EVIDENCE_ROOT/candidate.json" \
               --repository "innoflow=$GITHUB_WORKSPACE/components/InnoFlow" \
-              --repository "mulbyul=$GITHUB_WORKSPACE/components/Mulbyul" \
               --component-label innoflow \
               --evidence-root "$EVIDENCE_ROOT" \
               --manifest manifest.tsv \

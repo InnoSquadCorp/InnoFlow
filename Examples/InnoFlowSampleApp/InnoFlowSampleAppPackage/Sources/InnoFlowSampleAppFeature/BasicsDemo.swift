@@ -114,8 +114,11 @@ struct BasicsDemoView: View {
   }
 }
 
-#Preview("Basics") {
-  NavigationStack {
-    BasicsDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Basics") {
+    NavigationStack {
+      BasicsDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

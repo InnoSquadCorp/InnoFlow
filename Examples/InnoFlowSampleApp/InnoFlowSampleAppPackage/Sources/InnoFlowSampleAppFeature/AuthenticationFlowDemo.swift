@@ -419,8 +419,11 @@ struct AuthenticationFlowDemoView: View {
   }
 }
 
-#Preview("Authentication Flow") {
-  NavigationStack {
-    AuthenticationFlowDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Authentication Flow") {
+    NavigationStack {
+      AuthenticationFlowDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

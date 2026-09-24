@@ -569,6 +569,13 @@ run_authoring_surface_checks() {
     echo "[principle-gates] Failed: SelectedStore variadic dependingOnAll overload is missing"
     exit 1
   fi
+  if ! search_multiline 'public func select<[\s\S]{0,280}dependingOn dependency:[\s\S]{0,100}id: String\? = nil' Sources/InnoFlowCore/SelectedStore.swift >/dev/null \
+    || ! search_lines 'func keylessClosureSelectionsDoNotAliasCapturedInput' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null \
+    || ! search_lines 'func explicitSelectionIDsReuseOnlyLiveHandles' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null \
+    || ! search_lines 'func parentReleaseInvalidatesProjectionObservers' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null; then
+    echo "[principle-gates] Failed: 6.0 selection identity/lifetime contract is missing"
+    exit 1
+  fi
   if search_multiline 'public init\([\s\S]{0,240}extractAction:\s*@escaping' Sources/InnoFlowCore/ReducerComposition.swift; then
     echo "[principle-gates] Failed: reducer composition still exposes public closure-based action lifting"
     exit 1
@@ -892,6 +899,7 @@ run_doc_contract_checks() {
     validate_selected_store_dynamic_member_doc "$lifecycle_doc" || exit 1
   done
   search_lines "dependingOn:" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines 'semantic `id`|semantic `id:`' CLAUDE.md README.md ARCHITECTURE_CONTRACT.md MIGRATION.md >/dev/null
   search_lines "always-refresh fallback|always refresh fallback" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "PhaseMap" README.md ARCHITECTURE_CONTRACT.md CLAUDE.md PHASE_DRIVEN_MODELING.md Sources/InnoFlow/InnoFlow.docc Examples/InnoFlowSampleApp/README.md >/dev/null
   search_lines "derivedGraph" README.md ARCHITECTURE_CONTRACT.md PHASE_DRIVEN_MODELING.md Sources/InnoFlow/InnoFlow.docc Examples/InnoFlowSampleApp/README.md >/dev/null
@@ -1174,6 +1182,7 @@ run_workflow_security_checks() {
 
   ruby "$SCRIPT_DIR/check-ci-efficiency.rb" "$ROOT_DIR"
   ruby "$SCRIPT_DIR/check-coverage-workflow.rb" "$ROOT_DIR/.github/workflows"
+  ruby "$SCRIPT_DIR/check-release-evidence-policy.rb" "$ROOT_DIR"
 
   echo "[principle-gates] Checking tag-release multi-platform build coverage"
   local release_workflow="$ROOT_DIR/.github/workflows/cd.yml"
@@ -1313,18 +1322,26 @@ run_sample_runtime_contract_checks() {
   fi
 
   echo "[principle-gates] Building canonical sample app"
+  # Xcode's shared DerivedData can retain a SwiftSyntax prebuilt module from
+  # an earlier compiler revision. A new DerivedData path selects prebuilts
+  # matching this invocation's compiler and keeps another user's cache intact.
+  local sample_derived
+  sample_derived="$(mktemp -d "${TMPDIR:-/tmp}/innoflow-sample-derived.XXXXXX")"
   if ! run_logged_gate_command \
       "canonical sample app build" \
       run_low_priority xcodebuild \
       -jobs 1 \
+      -derivedDataPath "$sample_derived" \
       -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
       -scheme InnoFlowSampleApp \
       -destination 'generic/platform=iOS' \
       CODE_SIGNING_ALLOWED=NO \
       CODE_SIGNING_REQUIRED=NO \
       build; then
+    echo "[principle-gates] Preserved failed sample DerivedData: $sample_derived"
     exit 1
   fi
+  rm -rf "$sample_derived"
 
   echo "[principle-gates] Checking PhaseMap totality enforcement"
   # Phase-managed reducers in the core (Sources/InnoFlowCore) live behind a

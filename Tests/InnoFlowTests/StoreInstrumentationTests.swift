@@ -678,8 +678,8 @@ struct StoreInstrumentationTests {
   func projectionObserverStatsTrackSelectiveRefresh() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     _ = store.select(\.child)
-    _ = store.select(dependingOn: \.child.title) { $0.uppercased() }
-    _ = store.select { $0.child.title }
+    let dependencySelection = store.select(dependingOn: \.child.title) { $0.uppercased() }
+    let fallbackSelection = store.select { $0.child.title }
 
     let initial = store.projectionObserverStats
     #expect(initial.registeredObservers == 3)
@@ -701,6 +701,7 @@ struct StoreInstrumentationTests {
     #expect(afterTitleMutation.refreshPassCount == afterChildMutation.refreshPassCount + 1)
     #expect(afterTitleMutation.evaluatedObservers == afterChildMutation.evaluatedObservers + 3)
     #expect(afterTitleMutation.refreshedObservers == afterChildMutation.refreshedObservers + 3)
+    withExtendedLifetime((dependencySelection, fallbackSelection)) {}
   }
 
   @Test(
@@ -708,7 +709,7 @@ struct StoreInstrumentationTests {
   )
   func projectionObserverStatsDedupeMultiFieldSelections() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    _ = store.select(dependingOnAll: \.child.step, \.child.title) { step, title in
+    let selection = store.select(dependingOnAll: \.child.step, \.child.title) { step, title in
       "\(title)-\(step)"
     }
 
@@ -721,6 +722,7 @@ struct StoreInstrumentationTests {
     #expect(afterSnapshotMutation.refreshPassCount == initial.refreshPassCount + 1)
     #expect(afterSnapshotMutation.evaluatedObservers == initial.evaluatedObservers + 1)
     #expect(afterSnapshotMutation.refreshedObservers == initial.refreshedObservers + 1)
+    withExtendedLifetime(selection) {}
   }
 
   @Test(
@@ -728,7 +730,7 @@ struct StoreInstrumentationTests {
   )
   func projectionObserverStatsDedupeSixFieldSelections() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    _ = store.select(
+    let dependencySelection = store.select(
       dependingOnAll:
         \.child.step,
       \.child.title,
@@ -740,7 +742,7 @@ struct StoreInstrumentationTests {
     ) { step, title, note, priority, isEnabled, version in
       "\(title)-\(step)-\(note)-\(priority)-\(isEnabled)-\(version)"
     }
-    _ = store.select {
+    let fallbackSelection = store.select {
       "\($0.child.title)-\($0.child.step)-\($0.child.note)-\($0.child.priority)-\($0.child.isEnabled)-\($0.child.version)"
     }
 
@@ -771,6 +773,7 @@ struct StoreInstrumentationTests {
     #expect(afterProbeMutation.refreshPassCount == afterUnrelated.refreshPassCount + 1)
     #expect(afterProbeMutation.evaluatedObservers == afterUnrelated.evaluatedObservers + 2)
     #expect(afterProbeMutation.refreshedObservers == afterUnrelated.refreshedObservers + 2)
+    withExtendedLifetime((dependencySelection, fallbackSelection)) {}
   }
 
   @Test("Scoped projection stats track dependency-annotated and fallback selections")
@@ -779,8 +782,8 @@ struct StoreInstrumentationTests {
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
     _ = scoped.select(\.step)
-    _ = scoped.select(dependingOn: \.title) { $0.uppercased() }
-    _ = scoped.select { $0.title }
+    let dependencySelection = scoped.select(dependingOn: \.title) { $0.uppercased() }
+    let fallbackSelection = scoped.select { $0.title }
 
     let initial = scoped.projectionObserverStats
     #expect(initial.registeredObservers == 3)
@@ -801,6 +804,7 @@ struct StoreInstrumentationTests {
     #expect(afterTitleMutation.refreshPassCount == afterChildMutation.refreshPassCount + 1)
     #expect(afterTitleMutation.evaluatedObservers == afterChildMutation.evaluatedObservers + 2)
     #expect(afterTitleMutation.refreshedObservers == afterChildMutation.refreshedObservers + 2)
+    withExtendedLifetime((dependencySelection, fallbackSelection)) {}
   }
 
   @Test(

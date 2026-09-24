@@ -8,8 +8,9 @@ InnoFlow is a SwiftUI-first unidirectional architecture framework for business a
 
 ## InnoFlow 6.0.0
 
-This branch documents the local 6.0.0 release candidate. The public stable tag
-remains 5.1.1 until the final tag gate succeeds.
+This source revision documents the 6.0.0 release candidate and target API.
+Version 5.1.1 was the published stable baseline at candidate freeze; verify
+the live 6.0.0 tag and GitHub Release status before treating it as published.
 
 The framework now treats the following as source-of-truth principles:
 
@@ -401,6 +402,22 @@ let summary = store.select(
 infer which fields a general closure reads. Use it when the dependency cannot be expressed as
 typed key paths or when always-refresh behavior is intentional.
 
+Closure-based selections (including `dependingOn:`, `dependingOnAll:`, and
+`memoize:`) are independent on every call by default: a shared source line
+does not prove that their captured inputs have the same meaning. To reuse a
+live selection from the same call site, pass a stable semantic `id` that
+includes every captured input that can affect the result:
+
+```swift
+let rowSummary = store.select(dependingOn: \.rows, id: "row-\(rowID)") { rows in
+  rows.first { $0.id == rowID }?.summary
+}
+```
+
+The explicit-ID cache is weak; retain the `SelectedStore` when identity must
+survive repeated view evaluations. Key-path-only `select(\.phase)` keeps its
+existing stable cache behavior.
+
 Use `SelectedStore` for read-only projections. Keep mutable child flows on `ScopedStore`.
 
 ## Dependency Integration
@@ -421,11 +438,13 @@ struct ProfileFeature {
 
   struct State: Equatable, Sendable, DefaultInitializable {
     var name = ""
+    var errorMessage: String?
   }
 
   enum Action: Equatable, Sendable {
     case load
     case _loaded(String)
+    case _failed(String)
   }
 
   let dependencies: Dependencies
@@ -438,6 +457,7 @@ struct ProfileFeature {
     Reduce { state, action in
       switch action {
       case .load:
+        state.errorMessage = nil
         let apiClient = dependencies.apiClient
         let logger = dependencies.logger
         return .run { send, context in
@@ -449,23 +469,31 @@ struct ProfileFeature {
             await send(._loaded(name))
           } catch is CancellationError {
             return
+          } catch {
+            await send(._failed(String(describing: error)))
           }
         }
       case ._loaded(let name):
         state.name = name
+        return .none
+      case ._failed(let message):
+        state.errorMessage = message
         return .none
       }
     }
   }
 }
 
-let feature = ProfileFeature(
-  dependencies: .init(
-    apiClient: APIClient.live,
-    logger: Logger.live
+@MainActor
+func makeProfileStore() -> Store<ProfileFeature> {
+  let feature = ProfileFeature(
+    dependencies: .init(
+      apiClient: APIClient.live,
+      logger: Logger.live
+    )
   )
-)
-let store = Store(reducer: feature)
+  return Store(reducer: feature)
+}
 ```
 
 If a SwiftUI view owns environment-specific values, resolve them in the view layer and forward the
@@ -947,7 +975,7 @@ Exhaustive scoped assertions still compare the complete root state. When a
 child action intentionally changes parent or sibling state, assert that action
 through the parent `TestStore`.
 Collection-scoped projections keep per-element `ScopedStore` identity stable by `id`, and row observers only invalidate when their own element snapshot changes.
-If an element is removed, discard any old row-scoped handle and recreate projections from the parent store. `ScopedStore.state` and projection dynamic-member reads keep a cached snapshot fallback for SwiftUI observer races, stale scoped sends become no-ops when the projection is dead, and non-UI callers should use `optionalState` / `optionalValue` for graceful absence or `requireAlive()` when a dead projection is a programmer error. `ScopedTestStore` keeps the testing contract louder and traps stale direct access via `preconditionFailure`.
+If an element is removed, discard any old row-scoped handle and recreate projections from the parent store. Observation invalidates tracked `isAlive`, `optionalState`, and `optionalValue` reads for the removed projection without invalidating surviving sibling rows. `ScopedStore.state` and projection dynamic-member reads keep a cached snapshot fallback for SwiftUI observer races, stale scoped sends become no-ops when the projection is dead, and non-UI callers should use `optionalState` / `optionalValue` for graceful absence or `requireAlive()` when a dead projection is a programmer error. `ScopedTestStore` keeps the testing contract louder and traps stale direct access via `preconditionFailure`.
 
 For store-level debounce and throttle tests, inject a `StoreClock`:
 
@@ -1035,6 +1063,7 @@ Launch-environment direct demo mode (`INNOFLOW_SAMPLE_DEMO`) remains available f
 - Prioritize explicit accessibility metadata on demo hub rows, modal dismiss actions, and long-running or destructive controls where context can be ambiguous in VoiceOver.
 - Prefer system controls and Dynamic Type-friendly layouts over custom fixed-size controls.
 - Use `SelectedStore` only for expensive read-only derived values. Use `select(dependingOn:)` for a single explicit state slice and the variadic `select(dependingOnAll:)` for two or more slices; reserve plain `select { ... }` for the always-refresh fallback. Keep mutable child flows on `ScopedStore`.
+- A closure selection has independent identity unless it has an explicit semantic `id` covering its captured inputs; retain an ID-keyed selection when stable view identity matters.
 - Use `Store.preview(...)` as the default path for preview and accessibility review passes so preview-only setup never changes production store wiring.
 
 ## Cross-framework notes
