@@ -67,12 +67,12 @@ dependencies: [
 .target(
   name: "YourDomain",
   dependencies: ["InnoFlowCore"]
-)
+),
 
 .target(
   name: "YourSwiftUIApp",
   dependencies: ["InnoFlow", "InnoFlowSwiftUI"]
-)
+),
 
 .testTarget(
   name: "YourAppTests",

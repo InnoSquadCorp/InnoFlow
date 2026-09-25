@@ -3,9 +3,13 @@
   "scope": "Syntax-only exceptions for contextual or historical Swift fences; not typecheck approval",
   "exceptions": [
     {"file":"README.cn.md","sha256":"87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019","reason":"Package.swift dependency-list fragment"},
+    {"file":"README.cn.md","sha256":"56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85","reason":"Package.swift targets-list fragment; exact wrapper checked by doc-copyable"},
     {"file":"README.jp.md","sha256":"87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019","reason":"Package.swift dependency-list fragment"},
+    {"file":"README.jp.md","sha256":"56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85","reason":"Package.swift targets-list fragment; exact wrapper checked by doc-copyable"},
     {"file":"README.kr.md","sha256":"87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019","reason":"Package.swift dependency-list fragment"},
+    {"file":"README.kr.md","sha256":"56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85","reason":"Package.swift targets-list fragment; exact wrapper checked by doc-copyable"},
     {"file":"README.md","sha256":"87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019","reason":"Package.swift dependency-list fragment"},
+    {"file":"README.md","sha256":"56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85","reason":"Package.swift targets-list fragment; exact wrapper checked by doc-copyable"},
     {"file":"README.md","sha256":"1c01f66242bd0b67a45a05213569fca164e1aa8289ecf91e1035fb57763efc87","reason":"Static Action member fragment"},
     {"file":"RELEASE_NOTES.md","sha256":"bf464868ea8a860cb99e935a12ce8296ce37b9a835aefb302624f68ccf75cf7d","reason":"Historical Package.swift dependency-list fragment"},
     {"file":"Sources/InnoFlow/InnoFlow.docc/PhaseDrivenWalkthrough.md","sha256":"37175ccc4318fe1250ab24743c167322192c63d070a2545787491b841cbb0b7e","reason":"Static feature member fragment"},

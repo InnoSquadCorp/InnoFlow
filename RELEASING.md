@@ -83,7 +83,7 @@ tag, run and confirm:
 10. Release sync: `scripts/check-release-sync.sh`
 11. Doc parity: `scripts/check-doc-parity.sh`
     Run `scripts/check-doc-swift-syntax.rb` as a separate syntax-only check for
-    every Swift fence. Its 12 pinned contextual/historical exceptions are not
+    every Swift fence. Its 16 pinned contextual/historical exceptions are not
     typecheck approvals; runnable and partial examples still need their
     versioned compilation/harness review before the 6.0 candidate is approved.
     `scripts/check-doc-copyable-examples.rb` additionally compiles eighteen distinct exact
@@ -93,8 +93,11 @@ tag, run and confirm:
     with warnings as errors.
     The two phase tests must each execute and pass, not merely compile. It uses the
     release candidate's `Package.resolved` without automatic version updates.
-    This focused executable check does not classify or typecheck the remaining
-    contextual fences.
+    It also parses four localized installation manifests assembled from eight
+    exact dependency/target-list fragments. The sample guidance gate strictly
+    typechecks four additional exact Swift fences (three SwiftUI examples on
+    iOS 18.5/26.0 and the complete Sendable example). These focused checks do
+    not classify or typecheck the remaining contextual fences.
 12. Full principle gates: `scripts/principle-gates.sh`
 13. Instrumented coverage and required-module inventory: `scripts/run-coverage.sh`.
     The shared CI/release workflow enforces the repository-owned

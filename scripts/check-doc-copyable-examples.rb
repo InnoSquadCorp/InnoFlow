@@ -248,7 +248,43 @@ begin
   }, output + error)
   abort "[doc-copyable] Phase test evidence invalid: #{test_result.fetch("failures").join(", ")}" unless
     test_result.fetch("failures").empty?
+
+  install_files = %w[README.md README.kr.md README.jp.md README.cn.md]
+  install_files.each do |relative|
+    fragments = {
+      dependency: "87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019",
+      targets: "56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85",
+    }.transform_values do |digest|
+      matches = selected.fetch(relative).select { |sha, _source| sha == digest }
+      abort "[doc-copyable] Missing or ambiguous install fence: #{relative} #{digest}" unless matches.one?
+      matches.first.last
+    end
+    install_dir = File.join(fixture, "InstallManifest", relative.delete_suffix(".md"))
+    FileUtils.mkdir_p(install_dir)
+    manifest = <<~SWIFT
+      // swift-tools-version: 6.3
+      import PackageDescription
+
+      let package = Package(
+        name: "DocumentedInstall",
+        platforms: [.iOS(.v18), .macOS(.v15), .tvOS(.v18), .watchOS(.v11), .visionOS(.v2)],
+      #{fragments.fetch(:dependency).lines.map { |line| "  #{line}" }.join.rstrip},
+        targets: [
+      #{fragments.fetch(:targets).lines.map { |line| "    #{line}" }.join.rstrip}
+        ]
+      )
+    SWIFT
+    File.write(File.join(install_dir, "Package.swift"), manifest)
+    output, error, status = Open3.capture3("swift", "package", "dump-package", "--package-path", install_dir)
+    abort "[doc-copyable] #{relative} install manifest failed: #{error}" unless status.success?
+    package = JSON.parse(output)
+    target_names = package.fetch("targets").map { |target| target.fetch("name") }
+    abort "[doc-copyable] #{relative} install targets drifted" unless
+      target_names.sort == %w[YourAppTests YourDomain YourSwiftUIApp]
+    abort "[doc-copyable] #{relative} install version drifted" unless output.include?("6.0.0")
+  end
   puts "[doc-copyable] Compiled #{examples.length} external targets from #{examples.values.flatten(1).uniq.length} distinct exact Swift fences (#{examples.values.sum(&:length)} uses)"
+  puts "[doc-copyable] Parsed four localized installation manifests from eight exact Swift fences"
 ensure
   if ENV["INNOFLOW_KEEP_DOC_FIXTURE"] == "1"
     warn "[doc-copyable] Preserved fixture: #{fixture}"
