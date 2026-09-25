@@ -282,7 +282,7 @@ struct LoadingFeature {
     return Reduce { state, action in
       switch action {
       case .load:
-        return .none
+        return .send(._loaded("fixture"))
       case ._loaded(let output):
         state.output = output
         return .none
@@ -318,6 +318,7 @@ Use `TestStore` for deterministic reducer tests.
 
 ```swift
 import InnoFlowTesting
+import Testing
 
 @Test
 @MainActor
@@ -330,8 +331,9 @@ func loadingFlow() async {
     $0.phase = .loading
   }
 
-  await store.receive(._loaded(.fixture), through: phaseMap) {
+  await store.receive(._loaded("fixture"), through: phaseMap) {
     $0.phase = .loaded
+    $0.output = "fixture"
   }
 
   await store.finish()
@@ -357,7 +359,7 @@ For child reducer assertions, project the parent harness instead of building a s
 
 ```swift
 let store = TestStore(reducer: ParentFeature())
-let child = store.scope(state: \.child, action: .childCasePath)
+let child = store.scope(state: \.child, action: ParentFeature.Action.childCasePath)
 
 await child.send(.start) {
   $0.phase = .loading
@@ -372,15 +374,46 @@ await child.finish()
 
 Scoped child state must conform to `Equatable`. `ScopedStore` keeps a cached child snapshot, refreshes that projection during the parent store's action drain, and only invalidates observers when that snapshot actually changes.
 
-When `ParentFeature.Action` declares `case child(ChildAction)`, `@InnoFlow` synthesizes
+When `ParentFeature.Action` declares `case child(ChildFeature.Action)`, `@InnoFlow` synthesizes
 `ParentFeature.Action.childCasePath` automatically. Reuse that generated path across both
 `Scope` and `TestStore.scope`:
 
 ```swift
 @InnoFlow
+struct ChildFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    enum Phase: Equatable, Sendable { case idle, loading, loaded }
+    var phase: Phase = .idle
+  }
+
+  enum Action: Equatable, Sendable { case start, finished }
+
+  var body: some Reducer<State, Action, Never> {
+    Reduce { state, action in
+      switch action {
+      case .start:
+        state.phase = .loading
+        return .send(.finished)
+      case .finished:
+        state.phase = .loaded
+        return .none
+      }
+    }
+  }
+}
+
+@InnoFlow
 struct ParentFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var child = ChildFeature.State()
+  }
+
   enum Action: Equatable, Sendable {
-    case child(ChildAction)
+    case child(ChildFeature.Action)
+  }
+
+  var body: some Reducer<State, Action, Never> {
+    Scope(state: \.child, action: Action.childCasePath, reducer: ChildFeature())
   }
 }
 ```

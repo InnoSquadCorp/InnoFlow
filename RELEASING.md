@@ -86,18 +86,21 @@ tag, run and confirm:
     every Swift fence. Its 16 pinned contextual/historical exceptions are not
     typecheck approvals; runnable and partial examples still need their
     versioned compilation/harness review before the 6.0 candidate is approved.
-    `scripts/check-doc-copyable-examples.rb` additionally compiles 23 distinct exact
+    `scripts/check-doc-copyable-examples.rb` additionally compiles 29 distinct exact
     README/DocC quick-start, dependency-injection, selection, phase-modeling,
-    cross-framework transport, and instrumentation fences in eleven external
-    SwiftPM targets and two phase-runtime test targets (24 fence uses)
+    cross-framework transport, instrumentation, and contributor-guidance
+    fences in eleven external SwiftPM targets and four phase-runtime test
+    targets (30 fence uses)
     with warnings as errors.
-    The two phase tests must each execute and pass, not merely compile. It uses the
+    The five phase tests must each execute and pass, not merely compile. It uses the
     release candidate's `Package.resolved` without automatic version updates.
     It also parses four localized installation manifests assembled from eight
-    exact dependency/target-list fragments. The sample guidance gate strictly
-    typechecks four additional exact Swift fences (three SwiftUI examples on
-    iOS 18.5/26.0 and the complete Sendable example). These focused checks do
-    not classify or typecheck the remaining contextual fences.
+    exact dependency/target-list fragments. The sample guidance gate checks
+    all six of its Swift fences: four exact typechecks (three SwiftUI examples
+    on iOS 18.5/26.0 and the complete Sendable example), a contextual SwiftData
+    typecheck on both iOS targets, and two executed Swift Testing examples in
+    a contextual fixture. These focused checks do not classify or typecheck
+    the remaining contextual fences elsewhere in the documentation corpus.
 12. Full principle gates: `scripts/principle-gates.sh`
 13. Instrumented coverage and required-module inventory: `scripts/run-coverage.sh`.
     The shared CI/release workflow enforces the repository-owned

@@ -185,3 +185,20 @@ receipt. After the README dependency example fix landed during that run, the
 static principle gate, 129-fence syntax check, release-sync, strict source
 format lint, CI/CD actionlint, and `git diff --check` each passed on the
 updated files.
+
+On 2026-09-25, the R64 documentation gate expanded to 15 external SwiftPM
+targets using 29 distinct exact Swift fences (30 uses) from the release
+documentation, plus eight localized installation fragments. Five extracted
+Swift Testing examples execute, including the contributor and README child
+scope examples. The new runtime check found that the two child examples'
+unqualified `.childCasePath` could not infer `ChildAction`; both now name
+`ParentFeature.Action.childCasePath`, and the exact corrected blocks compile
+and pass their tests under Xcode 27 and Swift 6.3.3. The sample guide's six Swift fences are
+also checked: three SwiftUI typechecks on both iOS 18.5 and 26.0, the
+Sendable positive/negative control, contextual SwiftData typechecks on both
+iOS targets, and two executed Swift Testing examples. The 129-block syntax
+check reports 113 parseable and 16 pinned contextual blocks with no unexpected
+failure; the complete principle-gate self-test passed after these changes.
+The expanded exact-document and sample-guidance checks also passed with the
+installed Swift 6.3.3 toolchain. Complete R64 block classification, sample UI
+interaction evidence, and clean final-SHA preflight/CI remain open.

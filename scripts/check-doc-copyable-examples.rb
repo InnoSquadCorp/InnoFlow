@@ -23,6 +23,16 @@ examples = {
     ["README.md", "035488092619f0f3049835027c4ecb7ca7c7ea3453de98f6332e58bef7e12fe9"],
     ["README.md", "370136f1aefef6b5e0b64b3b299b4321f71203bd251f56c39999d1b8713486f2"],
   ],
+  "ContributorPhaseGuide" => [
+    ["CLAUDE.md", "58f2e554319fa7393e3b198acdaf683eceec867e63e1459a8ae4e7c96c7465e8"],
+    ["CLAUDE.md", "31cde3813cbe5998a368e98bdbe879df9b65c3de463c1bf9bb0b8da88b6e9bcb"],
+    ["CLAUDE.md", "e5431019b2aa30bf6184538f029c704aceae04fc79a1ca030b5bdfdc05b20e9a"],
+  ],
+  "ContributorChildGuide" => [
+    ["CLAUDE.md", "d7e82607cc8c67a3a69b56ae2b0beb22dd10fe905453cb113a72a63b7a92770a"],
+    ["CLAUDE.md", "5178b34e63e5e8611103968258bc740110e15c68dd74c723b21b917ee1bb812d"],
+    ["README.md", "5178b34e63e5e8611103968258bc740110e15c68dd74c723b21b917ee1bb812d"],
+  ],
   "PhaseGuideFeature" => [
     ["PHASE_DRIVEN_MODELING.md", "5a1c5fa991819e6afab1e975945498539caf63634d0f610a9219374d1023b85c"],
   ],
@@ -86,7 +96,7 @@ def swift_blocks(root, relative)
 end
 
 selected = examples.values.flatten(1).map(&:first).uniq.to_h { |relative| [relative, swift_blocks(root, relative)] }
-runtime_examples = %w[ReadmePhaseRuntime DocCPhaseRuntime].freeze
+runtime_examples = %w[ReadmePhaseRuntime DocCPhaseRuntime ContributorPhaseGuide ContributorChildGuide].freeze
 fixture = Dir.mktmpdir("innoflow-doc-copyable-")
 begin
   package = <<~SWIFT
@@ -247,6 +257,21 @@ begin
           _ = rowSummary
         }
       SWIFT
+    when "ContributorChildGuide"
+      feature, contributor_steps, readme_steps = sources
+      sources = [<<~SWIFT, feature, <<~SWIFT, <<~SWIFT]
+        import InnoFlow
+        import InnoFlowTesting
+        import Testing
+      SWIFT
+        @Test @MainActor func scopedChildFlow() async {
+      #{contributor_steps.lines.map { |line| "  #{line}" }.join.rstrip}
+        }
+      SWIFT
+        @Test @MainActor func scopedReadmeChildFlow() async {
+      #{readme_steps.lines.map { |line| "  #{line}" }.join.rstrip}
+        }
+      SWIFT
     end
     if name == "ReadmeDependencyInjection"
       sources.unshift(<<~SWIFT)
@@ -309,11 +334,11 @@ begin
   warn error unless error.empty?
   abort "[doc-copyable] External phase example tests failed" unless status.success?
   test_result = ReleaseEvidenceOutputParser.parse({
-    # SwiftPM may group both test targets into one run (Xcode 26) or emit two
-    # runs (Xcode 27). The exact two test identities and total remain required.
-    "minimumTestCount" => 2,
-    "maximumTestCount" => 2,
-    "expectedTestNames" => ["loadFlow()", "validatesItemsPhaseTransitions()"],
+    # SwiftPM may group test targets into one run (Xcode 26) or emit separate
+    # runs (Xcode 27). The exact five test identities and total remain required.
+    "minimumTestCount" => 5,
+    "maximumTestCount" => 5,
+    "expectedTestNames" => ["loadFlow()", "validatesItemsPhaseTransitions()", "loadingFlow()", "scopedChildFlow()", "scopedReadmeChildFlow()"],
   }, output + error)
   abort "[doc-copyable] Phase test evidence invalid: #{test_result.fetch("failures").join(", ")}" unless
     test_result.fetch("failures").empty?

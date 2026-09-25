@@ -959,7 +959,7 @@ For deeply composed reducers, project the parent `TestStore` instead of creating
 
 ```swift
 let store = TestStore(reducer: ParentFeature())
-let child = store.scope(state: \.child, action: .childCasePath)
+let child = store.scope(state: \.child, action: ParentFeature.Action.childCasePath)
 
 await child.send(.start) {
   $0.phase = .loading
