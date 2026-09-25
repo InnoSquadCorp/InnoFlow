@@ -600,6 +600,10 @@ See [API_DESIGN_EVALUATION.md](API_DESIGN_EVALUATION.md) for full migration and 
 
 ## InnoFlow 1.0.0 Release Notes (Legacy v1 API)
 
+Historical archive only: the installation URL and Swift examples in this
+section describe the 1.0.0 API. They are not copyable guidance for 6.0.0;
+use the current README and [MIGRATION.md](MIGRATION.md) instead.
+
 We're excited to announce the initial release of **InnoFlow** - a lightweight, hybrid architecture framework for SwiftUI that combines the best of Elm Architecture with SwiftUI's native `@Observable` pattern.
 
 ## 🎉 What is InnoFlow?

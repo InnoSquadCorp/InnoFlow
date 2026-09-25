@@ -1,4 +1,5 @@
 import InnoFlowSampleAppFeature
+import UIKit
 import XCTest
 
 final class InnoFlowSampleAppUITests: XCTestCase {
@@ -406,6 +407,81 @@ final class InnoFlowSampleAppUITests: XCTestCase {
         "Expected hub button \(demo.accessibilityIdentifier)"
       )
     }
+  }
+
+  @MainActor
+  func testDemoHubHeaderScrollsOutOfViewOnPhone() throws {
+    guard UIDevice.current.userInterfaceIdiom == .phone else {
+      throw XCTSkip("The iPad catalog may fit without scrolling")
+    }
+
+    let app = launchApp { app in
+      exists(
+        app.navigationBars["InnoFlow Samples"],
+        describedAs: "the sample hub navigation bar"
+      )
+    }
+    let header = app.staticTexts["Canonical Reference App"]
+    XCTAssertTrue(header.isHittable)
+
+    app.swipeUp()
+    app.swipeUp()
+
+    XCTAssertFalse(header.isHittable, "The introductory card must scroll with the catalog")
+  }
+
+  @MainActor
+  func testListDetailFavoritePersistsAcrossDetailNavigation() throws {
+    let app = launchApp(
+      environment: ["INNOFLOW_SAMPLE_DEMO": "list-detail-pagination"]
+    ) { app in
+      exists(app.buttons["list.load-first-page"], describedAs: "the first-page load button")
+    }
+
+    let firstArticle = app.staticTexts["Article #1"].firstMatch
+    tapButton(
+      "list.load-first-page",
+      in: app,
+      until: exists(firstArticle, describedAs: "the first loaded article")
+    )
+    XCTAssertTrue(scrollToHittable(firstArticle, in: app))
+    firstArticle.tap()
+
+    let favorite = app.switches["list.detail.favorite-toggle"]
+    XCTAssertTrue(
+      waitForCondition(
+        exists(favorite, describedAs: "the detail favorite toggle"),
+        timeout: UIWait.transition
+      )
+    )
+    // This ungrouped Toggle exposes a full-width accessibility frame, while
+    // its actual switch control is at the trailing edge of that frame.
+    favorite.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+    XCTAssertTrue(
+      waitForCondition(
+        switchMatches(favorite, isOn: true, describedAs: "enabled detail favorite"),
+        timeout: UIWait.acknowledgement
+      )
+    )
+
+    let back = app.navigationBars.buttons["List + Detail"]
+    XCTAssertTrue(scrollToHittable(back, in: app))
+    back.tap()
+
+    XCTAssertTrue(
+      waitForCondition(
+        exists(firstArticle, describedAs: "the article after returning from detail"),
+        timeout: UIWait.transition
+      )
+    )
+    XCTAssertTrue(scrollToHittable(firstArticle, in: app))
+    firstArticle.tap()
+    XCTAssertTrue(
+      waitForCondition(
+        switchMatches(favorite, isOn: true, describedAs: "persisted favorite selection"),
+        timeout: UIWait.transition
+      )
+    )
   }
 
   @MainActor

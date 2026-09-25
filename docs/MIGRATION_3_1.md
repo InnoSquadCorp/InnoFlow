@@ -1,5 +1,9 @@
 # InnoFlow 3.1 Migration Notes
 
+Historical 3.1 guidance only. Its partial Swift examples are not copyable
+6.0.0 recipes; use the current [migration guide](../MIGRATION.md) and README
+for 6.0.0 applications.
+
 InnoFlow 3.1 is source-compatible with the 3.0 line. The release mainly adds
 more explicit authoring surfaces for phase-heavy features, projection liveness,
 selection dependencies, and instrumentation.

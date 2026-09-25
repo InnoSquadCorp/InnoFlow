@@ -193,12 +193,45 @@ Swift Testing examples execute, including the contributor and README child
 scope examples. The new runtime check found that the two child examples'
 unqualified `.childCasePath` could not infer `ChildAction`; both now name
 `ParentFeature.Action.childCasePath`, and the exact corrected blocks compile
-and pass their tests under Xcode 27 and Swift 6.3.3. The sample guide's six Swift fences are
-also checked: three SwiftUI typechecks on both iOS 18.5 and 26.0, the
-Sendable positive/negative control, contextual SwiftData typechecks on both
+and pass their tests under Xcode 27 and Swift 6.3.3. The sample guide's six
+Swift fences are also checked: three SwiftUI typechecks on both iOS 18.5 and
+26.0, the Sendable positive/negative control, contextual SwiftData typechecks on both
 iOS targets, and two executed Swift Testing examples. The 129-block syntax
 check reports 113 parseable and 16 pinned contextual blocks with no unexpected
 failure; the complete principle-gate self-test passed after these changes.
 The expanded exact-document and sample-guidance checks also passed with the
 installed Swift 6.3.3 toolchain. Complete R64 block classification, sample UI
 interaction evidence, and clean final-SHA preflight/CI remain open.
+
+An actual iPhone 16 Pro/iOS 18.5 sample run then exposed a separate hub layout
+defect: the translucent fixed `safeAreaInset` introduction showed scrolling
+catalog text through the card. A new XCUITest reproduced it as a red assertion
+that the introduction remained hittable after scrolling, while the existing
+hub-to-router navigation XCUITest passed. The introduction now lives as the
+first `List` row; the same two UI tests passed (2/2) on the same dedicated
+simulator. The iPad 18.5 simulator installed the app but CoreSimulator's
+launch/container queries stalled, so iPad visual interaction is not claimed
+as passed. Post-fix iPhone screenshots and accessibility hierarchy confirm the
+card scrolls away without overlapping catalog rows. Broader UI regression and
+final-SHA evidence remain open. Legacy 1.0 release-note and 3.1 migration
+examples now carry explicit historical/non-copyable warnings, without
+reclassifying their Swift fences as current executable examples.
+
+The release owner confirmed on 2026-09-25 that they will configure and provide
+evidence for `main` protection and the dedicated release runner. This is an
+ownership assignment, not verification that either remote control is active.
+The same owner retains final approval of the four-product public API change
+classification; no public tag or GitHub Release is authorized by the Draft PR.
+
+A new iPhone list/detail UI test initially failed to observe the favorite
+toggle changing. The failure artifact showed XCTest tapping the center of a
+370-point-wide accessibility frame while the physical switch sat at its
+trailing edge. A separate sample test proved the actual scoped `Binding`
+updates parent and refreshed child state. Targeting the visible switch then
+passed the UI flow: first-page load, article detail, favorite on, back, and
+re-entry with the favorite still on. This classifies the initial failure as
+an automation hit-target assumption, not a confirmed InnoFlow binding bug.
+The expanded sample SwiftPM suite passes 44/44 tests on Xcode 27. The full
+nine-case sample UI suite passed with no failure or skip on a dedicated
+iPhone 16 Pro/iOS 18.5 simulator. iPad UI, unsupported sample deletion and
+reinsertion, parent-release UI boundaries, and final-SHA evidence remain open.

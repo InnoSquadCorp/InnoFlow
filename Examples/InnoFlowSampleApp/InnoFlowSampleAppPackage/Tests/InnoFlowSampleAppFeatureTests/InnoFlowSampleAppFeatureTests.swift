@@ -1,4 +1,5 @@
 import Foundation
+import InnoFlowSwiftUI
 import InnoFlowTesting
 import Testing
 
@@ -588,6 +589,35 @@ struct InnoFlowSampleAppFeatureTests {
     }
     #expect(store.state.articles.first(where: { $0.id == targetID })?.isFavorite == true)
     await store.finish()
+  }
+
+  @Test("List-detail scoped favorite binding updates the parent and refreshed projection")
+  @MainActor
+  func listDetailFavoriteBinding() {
+    let first = SampleArticle(title: "Article #1", summary: "First article")
+    let store = Store(
+      reducer: ListDetailPaginationFeature(),
+      initialState: .init(articles: [first])
+    )
+    let article = store.scope(
+      collection: \.articles,
+      action: ListDetailPaginationFeature.Action.articleActionPath
+    )[0]
+    let favorite = article.binding(
+      \.$isFavorite,
+      to: SampleArticleRowFeature.Action.setIsFavorite
+    )
+
+    #expect(favorite.wrappedValue == false)
+    favorite.wrappedValue = true
+    #expect(store.state.articles[0].isFavorite)
+    #expect(article.isFavorite)
+    #expect(
+      store.scope(
+        collection: \.articles,
+        action: ListDetailPaginationFeature.Action.articleActionPath
+      )[0].isFavorite
+    )
   }
 
   // MARK: - OfflineFirstDemo
