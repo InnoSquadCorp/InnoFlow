@@ -270,7 +270,7 @@ warn_if_optimize_none_workaround_should_be_retested() {
     local major="${BASH_REMATCH[1]}"
     local minor="${BASH_REMATCH[2]}"
     if (( major > 6 || (major == 6 && minor >= 4) )); then
-      echo "[principle-gates] Warning: Swift ${major}.${minor} detected; retest removing @_optimize(none) from Store/TestStore deinits (swiftlang/swift#88173)."
+      echo "[principle-gates] Warning: Swift ${major}.${minor} detected; retest removing @_optimize(none) from Store, StoreOutputHub, and TestStore deinits (swiftlang/swift#88173)."
     fi
   fi
 }

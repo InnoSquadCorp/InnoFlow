@@ -73,6 +73,11 @@ package final class StoreOutputHub<Output: Sendable> {
     return summary
   }
 
+  // Swift 6.3.3 crashes in EarlyPerfInliner on this generic isolated deinit
+  // under -O (the same stack as Store.deinit; swiftlang/swift#88173).
+  // Keep the workaround local to teardown, which is not a hot path, and
+  // retest release compilation when the supported compiler changes.
+  @_optimize(none)
   isolated deinit {
     for continuation in continuations.values {
       continuation.finish()

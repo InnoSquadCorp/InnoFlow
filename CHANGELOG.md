@@ -155,6 +155,13 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   from machine-checked `STABLE_VERSION`; once 6.x is stable, a missing baseline
   tag fails closed.
 
+### Notes
+
+- Xcode 26.6 / Swift 6.3.3 Release builds require a narrowly scoped
+  `@_optimize(none)` workaround on `StoreOutputHub.deinit` for an upstream SIL
+  performance-inliner crash. The module remains optimized, and the workaround
+  is tracked for removal in `docs/SWIFT_TOOLCHAIN_TRACKING.md`.
+
 ## [5.1.1] - 2026-08-26
 
 ### Added
