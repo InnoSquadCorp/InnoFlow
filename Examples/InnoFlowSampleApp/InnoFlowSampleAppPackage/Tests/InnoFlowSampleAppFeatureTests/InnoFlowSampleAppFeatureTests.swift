@@ -1,4 +1,5 @@
 import Foundation
+import InnoFlowSwiftUI
 import InnoFlowTesting
 import Testing
 
@@ -6,33 +7,6 @@ import Testing
 
 @Suite("InnoFlowSampleAppFeature tests")
 struct InnoFlowSampleAppFeatureTests {
-  @MainActor
-  private func waitForAuthVersion(
-    _ target: Int,
-    in coordinator: RouterCompositionCoordinator,
-    timeout: Duration = .seconds(2)
-  ) async throws {
-    let clock = ContinuousClock()
-    let deadline = clock.now.advanced(by: timeout)
-    while clock.now < deadline {
-      if coordinator.loginStore.authVersion == target {
-        return
-      }
-      try Task.checkCancellation()
-      await Task.yield()
-      do {
-        try await Task.sleep(for: .milliseconds(20))
-      } catch is CancellationError {
-        throw CancellationError()
-      } catch {
-        Issue.record("Unexpected wait failure while observing authVersion: \(error)")
-        return
-      }
-    }
-
-    Issue.record("Expected authVersion to reach \(target) before timing out")
-  }
-
   @Test("Basics demo records queued follow-up increment")
   @MainActor
   func basicsQueuedFollowUp() async {
@@ -95,7 +69,8 @@ struct InnoFlowSampleAppFeatureTests {
   func orchestrationSyncPipeline() async {
     let store = TestStore(reducer: OrchestrationFeature())
 
-    await store.send(.startSync) {
+    await store.send(.startSync)
+    await store.receive(._syncAdmission(.started)) {
       $0.isSyncing = true
       $0.syncLog = ["sync started"]
     }
@@ -276,23 +251,69 @@ struct InnoFlowSampleAppFeatureTests {
 
     await clock.advance(by: .milliseconds(200))
     await store.finish()
-    #expect(store.state.authVersion == 0)
     #expect(store.state.isAuthenticated == false)
   }
 
-  @Test("Router composition replays pending detail when view syncs after auth version changes")
+  @Test("Router login emits a typed authenticated output after success")
   @MainActor
-  func routerCompositionReplaysPendingRoute() async throws {
+  func routerLoginEmitsAuthenticatedOutput() async throws {
+    let clock = ManualTestClock()
+    let store = TestStore(
+      reducer: RouterLoginFeature(),
+      clock: clock
+    )
+
+    await store.send(.submit) {
+      $0.isSubmitting = true
+      $0.log = ["submit login"]
+    }
+    try await clock.advance(by: .milliseconds(150), onceSleepersReach: 1)
+    await store.receive(._loginSucceeded) {
+      $0.isSubmitting = false
+      $0.isAuthenticated = true
+      $0.log = ["submit login", "login succeeded"]
+    }
+    await store.receiveOutput(.authenticated)
+    await store.finish()
+  }
+
+  @Test("Router composition consumes typed login output and replays pending detail")
+  @MainActor
+  func routerCompositionReplaysPendingRoute() async {
     let protectedDetailID = "invoice-99"
     let coordinator = RouterCompositionCoordinator(protectedDetailID: protectedDetailID)
     coordinator.queueProtectedDetail()
-    coordinator.submitLogin()
-
-    try await waitForAuthVersion(1, in: coordinator)
-
-    coordinator.syncNavigationWithDomainState()
+    let login = coordinator.loginStore.send(.submit, capturingOutputs: .unbounded)
+    var outputs = login.outputs.makeAsyncIterator()
+    await login.finish()
+    if let output = await outputs.next() {
+      coordinator.handle(output)
+    } else {
+      Issue.record("Expected the successful login output")
+    }
 
     #expect(coordinator.path == [.dashboard, .detail(id: protectedDetailID)])
+    #expect(coordinator.pendingRoute == nil)
+  }
+
+  @Test("Router composition ignores a buffered login output after logout")
+  @MainActor
+  func routerCompositionRejectsStaleAuthenticatedOutput() async {
+    let coordinator = RouterCompositionCoordinator(protectedDetailID: "invoice-stale")
+    coordinator.queueProtectedDetail()
+    let login = coordinator.loginStore.send(.submit, capturingOutputs: .unbounded)
+    var outputs = login.outputs.makeAsyncIterator()
+    await login.finish()
+
+    coordinator.logout()
+    if let output = await outputs.next() {
+      coordinator.handle(output)
+    } else {
+      Issue.record("Expected the buffered successful-login output")
+    }
+
+    #expect(coordinator.loginStore.isAuthenticated == false)
+    #expect(coordinator.path.isEmpty)
     #expect(coordinator.pendingRoute == nil)
   }
 
@@ -570,6 +591,35 @@ struct InnoFlowSampleAppFeatureTests {
     await store.finish()
   }
 
+  @Test("List-detail scoped favorite binding updates the parent and refreshed projection")
+  @MainActor
+  func listDetailFavoriteBinding() {
+    let first = SampleArticle(title: "Article #1", summary: "First article")
+    let store = Store(
+      reducer: ListDetailPaginationFeature(),
+      initialState: .init(articles: [first])
+    )
+    let article = store.scope(
+      collection: \.articles,
+      action: ListDetailPaginationFeature.Action.articleActionPath
+    )[0]
+    let favorite = article.binding(
+      \.$isFavorite,
+      to: SampleArticleRowFeature.Action.setIsFavorite
+    )
+
+    #expect(favorite.wrappedValue == false)
+    favorite.wrappedValue = true
+    #expect(store.state.articles[0].isFavorite)
+    #expect(article.isFavorite)
+    #expect(
+      store.scope(
+        collection: \.articles,
+        action: ListDetailPaginationFeature.Action.articleActionPath
+      )[0].isFavorite
+    )
+  }
+
   // MARK: - OfflineFirstDemo
 
   @Test("Offline-first save confirms optimistic update when repository succeeds")
@@ -786,12 +836,14 @@ struct InnoFlowSampleAppFeatureTests {
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(1)) {
       $0.ticks = [1]
+      $0.totalTicksReceived = 1
     }
 
     try await clock.waitForSleepers(atLeast: 1)
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(2)) {
       $0.ticks = [1, 2]
+      $0.totalTicksReceived = 2
     }
 
     await store.send(.unsubscribe) {
@@ -840,6 +892,7 @@ struct InnoFlowSampleAppFeatureTests {
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(1)) {
       $0.ticks = [1]
+      $0.totalTicksReceived = 1
     }
 
     // Ensure the original loop has parked its next sleep before measuring the
@@ -861,12 +914,30 @@ struct InnoFlowSampleAppFeatureTests {
     await clock.advance(by: .milliseconds(100))
     await store.receive(._tick(1)) {
       $0.ticks = [1, 1]
+      $0.totalTicksReceived = 2
     }
 
     await store.send(.unsubscribe) {
       $0.isSubscribed = false
     }
     await store.finish()
+  }
+
+  @Test("Realtime stream retains only the displayed tick window and preserves totals")
+  @MainActor
+  func realtimeStreamBoundsRetainedTicks() async {
+    let store = Store(reducer: RealtimeStreamFeature())
+
+    for value in 1...20 {
+      store.send(._tick(value))
+    }
+
+    #expect(store.state.ticks == Array(9...20))
+    #expect(store.state.totalTicksReceived == 20)
+
+    store.send(.clearTicks)
+    #expect(store.state.ticks.isEmpty)
+    #expect(store.state.totalTicksReceived == 0)
   }
 
   // MARK: - FormValidationDemo
@@ -939,6 +1010,33 @@ struct InnoFlowSampleAppFeatureTests {
   }
 
   // MARK: - BidirectionalWebSocketDemo
+
+  @Test("Bidirectional websocket bounds transcript rows and oversized payloads")
+  @MainActor
+  func bidirectionalWebSocketBoundsTranscript() async throws {
+    let store = Store(
+      reducer: BidirectionalWebSocketFeature(
+        socketClient: ScriptedBidirectionalSocketClient(),
+        integrationNote: "Test transport"
+      )
+    )
+
+    for value in 0..<11 {
+      store.send(._transportEvent(.received("message \(value)")))
+    }
+
+    #expect(
+      store.state.transcript.count == BidirectionalWebSocketFeature.State.retainedTranscriptLimit)
+    #expect(store.state.transcript.first == "inbound: message 1")
+    #expect(store.state.transcript.last == "inbound: message 10")
+
+    let oversizedPayload = String(repeating: "물", count: 2_000)
+    store.send(._transportEvent(.received(oversizedPayload)))
+    let retainedPayload = try #require(store.state.transcript.last)
+    #expect(
+      retainedPayload.utf8.count <= BidirectionalWebSocketFeature.State.maximumTranscriptRowBytes)
+    #expect(retainedPayload.hasSuffix(BidirectionalWebSocketFeature.State.truncationMarker))
+  }
 
   @Test("Bidirectional websocket demo connects, sends, and disconnects through the adapter")
   @MainActor

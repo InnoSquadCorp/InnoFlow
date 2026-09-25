@@ -389,10 +389,16 @@ extension InnoFlowMacro {
   }
 
   private static func generatedActionPathBaseName(from caseName: String) -> String {
-    if caseName.hasPrefix("_"), caseName.count > 1 {
-      return String(caseName.dropFirst())
+    let identifier: String
+    if caseName.hasPrefix("`"), caseName.hasSuffix("`"), caseName.count >= 2 {
+      identifier = String(caseName.dropFirst().dropLast())
+    } else {
+      identifier = caseName
     }
-    return caseName
+    if identifier.hasPrefix("_"), identifier.count > 1 {
+      return String(identifier.dropFirst())
+    }
+    return identifier
   }
 
   private static func diagnoseGeneratedActionPathCollisionIfNeeded(

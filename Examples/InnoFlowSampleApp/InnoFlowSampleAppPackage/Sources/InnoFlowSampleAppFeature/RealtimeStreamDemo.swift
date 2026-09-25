@@ -23,8 +23,20 @@ struct RealtimeStreamFeature {
   }
 
   struct State: Equatable, Sendable, DefaultInitializable {
+    static let retainedTickLimit = 12
+
     var ticks: [Int] = []
+    var totalTicksReceived = 0
     var isSubscribed: Bool = false
+
+    mutating func appendTick(_ value: Int) {
+      totalTicksReceived += 1
+      ticks.append(value)
+      let overflow = ticks.count - Self.retainedTickLimit
+      if overflow > 0 {
+        ticks.removeFirst(overflow)
+      }
+    }
   }
 
   enum Action: Equatable, Sendable {
@@ -44,7 +56,7 @@ struct RealtimeStreamFeature {
     self.init(dependencies: .init(tickInterval: tickInterval))
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .subscribe:
@@ -75,10 +87,11 @@ struct RealtimeStreamFeature {
 
       case .clearTicks:
         state.ticks = []
+        state.totalTicksReceived = 0
         return .none
 
       case ._tick(let value):
-        state.ticks.append(value)
+        state.appendTick(value)
         return .none
       }
     }
@@ -137,7 +150,7 @@ struct RealtimeStreamDemoView: View {
             .accessibilityIdentifier("realtime.clear")
           }
 
-          Text("Ticks received: \(store.ticks.count)")
+          Text("Ticks received: \(store.totalTicksReceived)")
             .font(.footnote)
             .foregroundStyle(.secondary)
             .accessibilityIdentifier("realtime.tick-count")
@@ -162,8 +175,11 @@ struct RealtimeStreamDemoView: View {
   }
 }
 
-#Preview("Realtime Stream") {
-  NavigationStack {
-    RealtimeStreamDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Realtime Stream") {
+    NavigationStack {
+      RealtimeStreamDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

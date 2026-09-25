@@ -1,5 +1,9 @@
 # InnoFlow 3.1 Migration Notes
 
+Historical 3.1 guidance only. Its partial Swift examples are not copyable
+6.0.0 recipes; use the current [migration guide](../MIGRATION.md) and README
+for 6.0.0 applications.
+
 InnoFlow 3.1 is source-compatible with the 3.0 line. The release mainly adds
 more explicit authoring surfaces for phase-heavy features, projection liveness,
 selection dependencies, and instrumentation.
@@ -50,7 +54,7 @@ Existing explicit phase maps still work:
 struct Feature {
   static var phaseMap: PhaseMap<State, Action, State.Phase> { ... }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in ... }
       .phaseMap(Self.phaseMap)
   }
@@ -64,7 +68,7 @@ For new phase-heavy features, prefer the macro-managed form:
 struct Feature {
   static var phaseMap: PhaseMap<State, Action, State.Phase> { ... }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in ... }
   }
 }

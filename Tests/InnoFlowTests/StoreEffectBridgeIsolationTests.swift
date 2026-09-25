@@ -17,7 +17,7 @@ import Testing
 struct StoreEffectBridgeIsolationTests {
   @Test("markCancelledInFlight rolls the boundary back by exactly one sequence")
   func markCancelledInFlightRollsBackByOne() {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let id = AnyEffectID(StaticEffectID("isolation.in-flight"))
 
     let s1 = bridge.nextSequence()
@@ -42,7 +42,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("markCancelledInFlight is monotonic — earlier calls cannot lower the boundary")
   func markCancelledInFlightIsMonotonic() {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let id = AnyEffectID(StaticEffectID("isolation.monotonic"))
 
     let s1 = bridge.nextSequence()
@@ -78,7 +78,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("markCancelledInFlight at zero does not retain a phantom boundary")
   func markCancelledInFlightSaturatesAtZero() {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let id = AnyEffectID(StaticEffectID("isolation.saturate"))
 
     let boundary = bridge.markCancelledInFlight(id: id, upTo: 0)
@@ -89,7 +89,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("markCancelled and markCancelledInFlight maintain independent semantics")
   func cancelVariantsHaveDistinctSemantics() {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let id = AnyEffectID(StaticEffectID("isolation.distinct"))
 
     let s1 = bridge.nextSequence()
@@ -121,7 +121,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("nested cancellation contexts honor every active boundary")
   func nestedCancellationContextChecksEveryBoundary() {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let outer = AnyEffectID(StaticEffectID("isolation.outer"))
     let inner = AnyEffectID(StaticEffectID("isolation.inner"))
     let sequence = bridge.nextSequence()
@@ -138,7 +138,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("ID cancellation honors its effective boundary and preserves newer indexes")
   func idCancellationHonorsEffectiveCompositeBoundary() async {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let id = AnyEffectID(StaticEffectID("composite.sequence.id"))
     let staleSequence = bridge.nextSequence()
     let effectiveSequence = bridge.nextSequence()
@@ -197,7 +197,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("Cancel all honors its effective boundary and preserves newer indexes")
   func cancelAllHonorsEffectiveCompositeBoundary() async {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let id = AnyEffectID(StaticEffectID("composite.sequence.all"))
     let staleSequence = bridge.nextSequence()
     let effectiveSequence = bridge.nextSequence()
@@ -248,7 +248,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("Delayed debounce cancellation honors inherited ID effective boundaries")
   func delayedDebounceHonorsInheritedIDEffectiveBoundary() async throws {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let outerID = AnyEffectID(StaticEffectID("delayed.debounce.outer"))
     let effectiveID = AnyEffectID(StaticEffectID("delayed.debounce.effective"))
     let newerID = AnyEffectID(StaticEffectID("delayed.debounce.newer"))
@@ -315,7 +315,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("Debounce registration rejects older scopes and replaces equal sequences")
   func debounceRegistrationHonorsSequenceOwnership() async throws {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let id = AnyEffectID(StaticEffectID("delayed.debounce.registration"))
     let hold = RunStartGate()
     let firstTask = Task<Void, Never> { await hold.wait() }
@@ -366,7 +366,7 @@ struct StoreEffectBridgeIsolationTests {
 
   @Test("Delayed cancel-all honors effective global boundaries")
   func delayedCancelAllHonorsEffectiveGlobalBoundary() async throws {
-    let bridge = StoreEffectBridge<Int>()
+    let bridge = StoreEffectBridge<Int, Never>()
     let effectiveThrottleID = AnyEffectID(StaticEffectID("delayed.throttle.effective"))
     let newerThrottleID = AnyEffectID(StaticEffectID("delayed.throttle.newer"))
     let effectiveDebounceID = AnyEffectID(StaticEffectID("delayed.debounce.global.effective"))

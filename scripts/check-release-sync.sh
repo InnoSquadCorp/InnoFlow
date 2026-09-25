@@ -2,6 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "$SCRIPT_DIR/release-tag-policy.sh"
 
 cd "$ROOT_DIR"
 
@@ -66,19 +69,7 @@ require_published_tag_version() {
     return
   fi
 
-  local tag_name
-  tag_name="$(latest_release_tag_name || true)"
-  if [[ -z "$tag_name" ]]; then
-    echo "[check-release-sync] Failed: INNOFLOW_REQUIRE_RELEASE_TAG=1 but no exact semantic release tag exists" >&2
-    echo "[check-release-sync] Create/pull tag ${version}; v${version} is not accepted for this release train" >&2
-    exit 1
-  fi
-
-  if [[ "$tag_name" != "$version" ]]; then
-    echo "[check-release-sync] Failed: staged release surface targets ${version}, but latest exact published tag is ${tag_name}" >&2
-    echo "[check-release-sync] Create/pull tag ${version} or rerun without INNOFLOW_REQUIRE_RELEASE_TAG for staged-doc sync" >&2
-    exit 1
-  fi
+  require_release_tag_at_head "$version"
 }
 
 require_pattern() {
@@ -106,7 +97,46 @@ fi
 
 require_published_tag_version "$version"
 
+if [[ ! -f STABLE_VERSION ]]; then
+  echo "[check-release-sync] Failed: STABLE_VERSION not found" >&2
+  exit 1
+fi
+
+if [[ "$(awk 'END { print NR }' STABLE_VERSION)" != "1" ]]; then
+  echo "[check-release-sync] Failed: STABLE_VERSION must contain exactly one line" >&2
+  exit 1
+fi
+
+stable_version="$(sed -n '1p' STABLE_VERSION)"
+if [[ ! "$stable_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  echo "[check-release-sync] Failed: STABLE_VERSION must be numeric SemVer" >&2
+  exit 1
+fi
+
+escaped_stable_version="${stable_version//./\\.}"
+require_pattern \
+  RELEASING.md \
+  "Current stable public release: \`${escaped_stable_version}\`" \
+  "current stable release ${stable_version} matching STABLE_VERSION"
+
 escaped_version="${version//./\\.}"
+
+version_is_older() {
+  ruby -e '
+    left, right = ARGV.map { |version| version.split(".").map { |part| Integer(part, 10) } }
+    exit((left <=> right) == -1 ? 0 : 1)
+  ' "$1" "$2"
+}
+
+if is_truthy "${INNOFLOW_REQUIRE_RELEASE_TAG:-0}"; then
+  if ! version_is_older "$stable_version" "$version"; then
+    echo "[check-release-sync] Failed: tagged candidate must retain an earlier public stable baseline" >&2
+    exit 1
+  fi
+elif [[ "$stable_version" != "$version" ]] && ! version_is_older "$stable_version" "$version"; then
+  echo "[check-release-sync] Failed: stable version is newer than the release target" >&2
+  exit 1
+fi
 
 for readme in README.md README.kr.md README.jp.md README.cn.md; do
   require_pattern \
@@ -132,8 +162,8 @@ require_pattern \
 
 require_pattern \
   RELEASING.md \
-  "Current stable public release: \`${escaped_version}\`" \
-  "current stable release ${version}"
+  "Release target: \`${escaped_version}\`" \
+  "release target ${version}"
 
 require_pattern \
   ARCHITECTURE_CONTRACT.md \

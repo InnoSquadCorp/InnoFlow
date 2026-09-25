@@ -9,6 +9,7 @@ package import InnoFlowCore
 
 extension TestStore: EffectDriver {
   package typealias Action = R.Action
+  package typealias Output = R.Output
 
   package func deliverAction(_ action: R.Action, context: EffectExecutionContext?) {
     // BREAKING (InnoFlow 4.0.0): deliverAction now enqueues synchronously on
@@ -22,6 +23,13 @@ extension TestStore: EffectDriver {
     guard shouldProceed(context: context) else { return }
     noteUnverifiedWorkAfterTerminalVerification()
     queue.enqueue(action, context: context)
+    finishActivity.noteProgress()
+  }
+
+  package func deliverOutput(_ output: R.Output, context: EffectExecutionContext?) {
+    guard shouldProceed(context: context) else { return }
+    noteUnverifiedWorkAfterTerminalVerification()
+    outputQueue.enqueue(output, context: context)
     finishActivity.noteProgress()
   }
 
@@ -64,7 +72,7 @@ extension TestStore: EffectDriver {
 
   @discardableResult
   package func scheduleDebounce(
-    _ nested: EffectTask<R.Action>,
+    _ nested: ReducerEffect<R.Action, R.Output>,
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
@@ -72,7 +80,7 @@ extension TestStore: EffectDriver {
     nestedAwaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
-        EffectTask<R.Action>, EffectExecutionContext?, Bool
+        ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async -> Task<Void, Never>? {
     let sequence = markCancelledInFlight(id: id, upTo: context?.sequence)
@@ -132,7 +140,7 @@ extension TestStore: EffectDriver {
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
-        EffectTask<R.Action>, EffectExecutionContext?, Bool
+        ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) -> Task<Void, Never> {
     let schedulingContext = schedulingContext.frozenForExecution()
@@ -147,7 +155,7 @@ extension TestStore: EffectDriver {
     )
     let endpoint = makeRunEndpoint()
     let task = Task { [weak self] in
-      let pending: ThrottleStateMap<R.Action>.PendingTrailing?
+      let pending: ThrottleStateMap<R.Action, R.Output>.PendingTrailing?
       do {
         try await delayClock.sleep(interval)
         pending = await MainActor.run { [weak self] in
@@ -210,12 +218,12 @@ extension TestStore: EffectDriver {
   }
 
   package func runConcurrently(
-    _ children: [EffectTask<R.Action>],
+    _ children: [ReducerEffect<R.Action, R.Output>],
     context: EffectExecutionContext?,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
-        EffectTask<R.Action>, EffectExecutionContext?, Bool
+        ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
     if awaited {
@@ -249,12 +257,12 @@ extension TestStore: EffectDriver {
   }
 
   package func runSequentially(
-    _ children: [EffectTask<R.Action>],
+    _ children: [ReducerEffect<R.Action, R.Output>],
     context: EffectExecutionContext?,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
-        EffectTask<R.Action>, EffectExecutionContext?, Bool
+        ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
     if awaited {

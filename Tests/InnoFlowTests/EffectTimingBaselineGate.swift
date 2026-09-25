@@ -22,7 +22,10 @@ import InnoFlow
 import InnoFlowTesting
 import Testing
 
-@Suite("EffectTimingBaselineGate")
+@Suite(
+  "EffectTimingBaselineGate",
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct EffectTimingBaselineGate {
   private struct BaselineSnapshot: Sendable {
     let preparedRuns: UInt64
@@ -50,7 +53,8 @@ struct EffectTimingBaselineGate {
     let store = Store(
       reducer: EffectTimingBaselineProbeFeature(),
       instrumentation: .combined(
-        recorder.instrumentation() as StoreInstrumentation<EffectTimingBaselineProbeFeature.Action>,
+        recorder.instrumentation()
+          as StoreInstrumentation<EffectTimingBaselineProbeFeature.Action>,
         witness.instrumentation()
       )
     )
@@ -60,7 +64,8 @@ struct EffectTimingBaselineGate {
     // has the same shape as the committed fixture.
     for cycle in 1...EffectTimingBaselineContract.runCount {
       store.send(.start)
-      guard await waitForRecordedProbeCycle(cycle, in: store, recorder: recorder, witness: witness)
+      guard
+        await waitForRecordedProbeCycle(cycle, in: store, recorder: recorder, witness: witness)
       else { return }
       #expect(store.didTick)
       store.send(.reset)
@@ -225,7 +230,7 @@ struct EffectTimingBaselineProbeFeature {
     case _tick
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .start:

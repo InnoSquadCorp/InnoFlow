@@ -227,6 +227,7 @@ extension TestStore {
     identifiedBy id: AnyEffectID,
     upTo sequence: UInt64
   ) {
+    runScheduler.cancel(id: id, upTo: sequence)
     cancelDebounceTasks { scope in
       scope.contains(id)
         && (scope.sequence <= sequence
@@ -254,6 +255,7 @@ extension TestStore {
   }
 
   package func cancelAllEffectsSynchronously(upTo sequence: UInt64) {
+    runScheduler.cancelAll(upTo: sequence)
     let tokens = runningTasks.compactMap { token, trackedTask in
       let isPastBoundary =
         (trackedTask.context?.sequence ?? 0) <= sequence

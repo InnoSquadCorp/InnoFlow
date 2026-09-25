@@ -21,7 +21,7 @@ struct PhaseDrivenTodoRowFeature {
     case setIsDone(Bool)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .setIsDone(let isDone):
@@ -56,7 +56,7 @@ actor SampleTodoService: SampleTodoServiceProtocol {
   }
 }
 
-@InnoFlow(phaseManaged: true)
+@InnoFlow(phaseManaged: true, strictPhaseTotality: true)
 struct PhaseDrivenTodoFeature {
   struct Dependencies: Sendable {
     let todoService: any SampleTodoServiceProtocol
@@ -124,7 +124,7 @@ struct PhaseDrivenTodoFeature {
     phaseMap.derivedGraph
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     CombineReducers {
       Reduce { state, action in
         switch action {
@@ -187,7 +187,7 @@ struct PhaseDrivenFSMDemoView: View {
         DemoCard(
           title: "What this demonstrates",
           summary:
-            "A business lifecycle modeled with `@InnoFlow(phaseManaged: true)` and `PhaseMap`: `idle -> loading -> loaded|failed`. Transport and navigation transitions stay outside this phase layer."
+            "A business lifecycle modeled with strict compile-time phase coverage and `PhaseMap`: `idle -> loading -> loaded|failed`. Transport and navigation transitions stay outside this phase layer."
         )
 
         VStack(alignment: .leading, spacing: 12) {
@@ -304,8 +304,11 @@ struct PhaseDrivenTodoRowView: View {
   }
 }
 
-#Preview("Phase-Driven FSM") {
-  NavigationStack {
-    PhaseDrivenFSMDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Phase-Driven FSM") {
+    NavigationStack {
+      PhaseDrivenFSMDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

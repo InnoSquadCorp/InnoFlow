@@ -5,23 +5,34 @@
 @_exported public import InnoFlowCore
 public import SwiftUI
 
+extension Store {
+  /// Creates a live Boolean presentation binding for an optional state slice.
+  ///
+  /// The reducer owns presentation by making the slice non-nil. SwiftUI owns
+  /// interactive dismissal, which this binding translates back into one
+  /// explicit action.
+  public func presentationBinding<Child>(
+    state stateKeyPath: KeyPath<R.State, Child?>,
+    onDismiss: @escaping @Sendable () -> R.Action
+  ) -> Binding<Bool> {
+    Binding(
+      get: { self.state[keyPath: stateKeyPath] != nil },
+      set: { newValue in
+        guard newValue == false else { return }
+        guard self.state[keyPath: stateKeyPath] != nil else { return }
+        self.send(onDismiss())
+      }
+    )
+  }
+}
+
 @MainActor
 package func innoFlowOptionalPresentationBinding<R: Reducer, Child>(
   store: Store<R>,
   state stateKeyPath: KeyPath<R.State, Child?>,
   onDismiss: @escaping @Sendable () -> R.Action
 ) -> Binding<Bool> {
-  Binding(
-    get: { store.state[keyPath: stateKeyPath] != nil },
-    set: { newValue in
-      // SwiftUI only writes `false` here — the present-true edge is owned
-      // by the reducer that produced the non-nil state. Translate the
-      // false write into a dismiss action so the reducer can clear state.
-      guard newValue == false else { return }
-      guard store.state[keyPath: stateKeyPath] != nil else { return }
-      store.send(onDismiss())
-    }
-  )
+  store.presentationBinding(state: stateKeyPath, onDismiss: onDismiss)
 }
 
 extension View {
@@ -100,12 +111,74 @@ extension View {
       )
     )
   }
+
+  #if !os(tvOS) && !os(watchOS)
+    /// Presents a popover driven by an optional state slice.
+    ///
+    /// SwiftUI does not provide popovers on tvOS or watchOS, so this adapter
+    /// is intentionally absent from those platform surfaces.
+    public func innoFlowPopover<R: Reducer, Child>(
+      store: Store<R>,
+      state stateKeyPath: KeyPath<R.State, Child?>,
+      onDismiss: @escaping @Sendable () -> R.Action,
+      @ViewBuilder content: @escaping (Child) -> some View
+    ) -> some View {
+      modifier(
+        InnoFlowOptionalPresentation(
+          store: store,
+          stateKeyPath: stateKeyPath,
+          onDismiss: onDismiss,
+          style: .popover,
+          destinationContent: content
+        )
+      )
+    }
+  #endif
+
+  /// Presents an alert driven by an optional state slice.
+  public func innoFlowAlert<R: Reducer, Child, Actions: View, Message: View>(
+    _ title: String,
+    store: Store<R>,
+    state stateKeyPath: KeyPath<R.State, Child?>,
+    onDismiss: @escaping @Sendable () -> R.Action,
+    @ViewBuilder actions: @escaping (Child) -> Actions,
+    @ViewBuilder message: @escaping (Child) -> Message
+  ) -> some View {
+    alert(
+      title,
+      isPresented: store.presentationBinding(state: stateKeyPath, onDismiss: onDismiss),
+      presenting: store.state[keyPath: stateKeyPath],
+      actions: actions,
+      message: message
+    )
+  }
+
+  /// Presents a confirmation dialog driven by an optional state slice.
+  public func innoFlowConfirmationDialog<R: Reducer, Child, Actions: View, Message: View>(
+    _ title: String,
+    store: Store<R>,
+    state stateKeyPath: KeyPath<R.State, Child?>,
+    onDismiss: @escaping @Sendable () -> R.Action,
+    @ViewBuilder actions: @escaping (Child) -> Actions,
+    @ViewBuilder message: @escaping (Child) -> Message
+  ) -> some View {
+    confirmationDialog(
+      title,
+      isPresented: store.presentationBinding(state: stateKeyPath, onDismiss: onDismiss),
+      presenting: store.state[keyPath: stateKeyPath],
+      actions: actions,
+      message: message
+    )
+  }
 }
 
 private enum InnoFlowPresentationStyle {
   case sheet
   case fullScreenCover
   case navigationDestination
+  #if !os(tvOS) && !os(watchOS)
+    case popover
+  #endif
 }
 
 private struct InnoFlowOptionalPresentation<R: Reducer, Child, Destination: View>: ViewModifier {
@@ -117,11 +190,7 @@ private struct InnoFlowOptionalPresentation<R: Reducer, Child, Destination: View
 
   @MainActor
   private var isPresentedBinding: Binding<Bool> {
-    innoFlowOptionalPresentationBinding(
-      store: store,
-      state: stateKeyPath,
-      onDismiss: onDismiss
-    )
+    store.presentationBinding(state: stateKeyPath, onDismiss: onDismiss)
   }
 
   func body(content: Content) -> some View {
@@ -147,6 +216,12 @@ private struct InnoFlowOptionalPresentation<R: Reducer, Child, Destination: View
       content.navigationDestination(isPresented: isPresentedBinding) {
         snapshotDestination
       }
+    #if !os(tvOS) && !os(watchOS)
+      case .popover:
+        content.popover(isPresented: isPresentedBinding) {
+          snapshotDestination
+        }
+    #endif
     }
   }
 

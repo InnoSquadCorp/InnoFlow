@@ -48,13 +48,14 @@ public struct PhaseValidationDiagnostics<Action: Sendable, Phase: Hashable & Sen
 private struct PhaseValidatedReducer<Base: Reducer, Phase: Hashable & Sendable>: Reducer {
   typealias State = Base.State
   typealias Action = Base.Action
+  typealias Output = Base.Output
 
   let base: Base
   let phase: KeyPath<State, Phase>
   let graph: PhaseTransitionGraph<Phase>
   let diagnostics: PhaseValidationDiagnostics<Action, Phase>
 
-  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
     let previousPhase = state[keyPath: phase]
     let effect = base.reduce(into: &state, action: action)
     let nextPhase = state[keyPath: phase]
@@ -115,7 +116,7 @@ extension Reducer {
     tracking phase: KeyPath<State, Phase>,
     through graph: PhaseTransitionGraph<Phase>,
     diagnostics: PhaseValidationDiagnostics<Action, Phase> = .disabled
-  ) -> some Reducer<State, Action> {
+  ) -> some Reducer<State, Action, Output> {
     PhaseValidatedReducer(
       base: self,
       phase: phase,

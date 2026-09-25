@@ -39,11 +39,13 @@ windows, or session lifecycle.
 
 ## 2. Keep the reducer phase-focused
 
-The sample reducer uses `@InnoFlow(phaseManaged: true)` so the macro applies the static
-`phaseMap` as a post-reduce decorator:
+The sample reducer uses
+`@InnoFlow(phaseManaged: true, strictPhaseTotality: true)` so the macro applies
+the static `phaseMap` as a post-reduce decorator and fails compilation when a
+declared phase is omitted from the directly authored map:
 
 ```swift
-var body: some Reducer<State, Action> {
+var body: some Reducer<State, Action, Never> {
   Reduce { state, action in
     switch action {
     case .loadTodos:

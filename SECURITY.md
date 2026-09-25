@@ -2,13 +2,14 @@
 
 ## Supported Versions
 
-Security fixes are prioritized for the latest public major release and the
-current `main` branch before a release is cut.
+Security fixes are prioritized for the current major development line and the
+most recent supported public line shown below.
 
 | Version | Supported |
 | --- | --- |
-| 4.x | Yes |
-| 3.x and earlier | No |
+| 6.x | Yes |
+| 5.x | Yes |
+| 4.x and earlier | No |
 
 ## Reporting a Vulnerability
 

@@ -33,7 +33,7 @@ Use `@InnoFlow` from the start; the macro both synthesizes `reduce(into:action:)
 struct Feature {
   struct State: Equatable, Sendable, DefaultInitializable { /* ... */ }
   enum Action: Equatable, Sendable { /* ... */ }
-  var body: some Reducer<State, Action> { /* ... */ }
+  var body: some Reducer<State, Action, Never> { /* ... */ }
 }
 ```
 
@@ -72,14 +72,20 @@ A high-volume effect (real-time stream, sensor fan-out) should compress at the b
 Once the feature is wired end-to-end, decide what to observe at the runtime layer.
 
 - `StoreInstrumentation.osLog(...)` and `.signpost(...)` cover Console + Instruments
-- `StoreInstrumentationMetricsCollector` ships a built-in counter for runStarted / runFinished / runFailed / actionEmitted / actionDropped / effectsCancelled
+- `StoreInstrumentationMetricsCollector` ships built-in counters for runStarted / runFinished / runFailed / actionEmitted / actionDropped / effectsCancelled and payload-free output-delivery results, including missing subscribers and bounded-buffer drops
 - `.sink { event in ... }` is the escape hatch for vendor SDKs
 
 For phase-managed features the matching surface is `PhaseMapDiagnostics` — see the *Phase Map Violations* section in [`docs/INSTRUMENTATION_COOKBOOK.md`](INSTRUMENTATION_COOKBOOK.md). The default `.disabled` keeps phase violations silent, so production deployments should always wire at least `.osLog` or `.sink` to a metrics backend.
 
 ### 6. Validate phase contracts in tests
 
-If the feature is `@InnoFlow(phaseManaged: true)`, lock the legal transitions with `assertPhaseMapCovers(...)`. The principle gates enforce this for every phase-managed feature in `Sources/InnoFlow`; it is recommended for sample apps too.
+If every declared phase must be wired by name, adopt
+`@InnoFlow(phaseManaged: true, strictPhaseTotality: true)` so an omitted phase is
+a compile-time error. Keep `assertPhaseMapCovers(...)` or `requireComplete(...)`
+for semantic trigger samples, predicate-driven rules, and dynamic targets that
+syntax-level macro analysis cannot prove. The principle gates enforce explicit
+phase coverage for framework-owned phase-managed features; it is recommended
+for sample apps too.
 
 ## Where to read next
 

@@ -9,7 +9,10 @@ import InnoFlow
 import InnoFlowTesting
 import Testing
 
-@Suite("Reducer composition perf comparison script")
+@Suite(
+  "Reducer composition perf comparison script",
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct ReducerCompositionPerfComparisonScriptTests {
 
   @Test("Reducer perf comparison passes when all benchmarks stay within tolerance")

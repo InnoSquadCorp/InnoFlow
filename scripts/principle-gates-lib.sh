@@ -270,7 +270,7 @@ warn_if_optimize_none_workaround_should_be_retested() {
     local major="${BASH_REMATCH[1]}"
     local minor="${BASH_REMATCH[2]}"
     if (( major > 6 || (major == 6 && minor >= 4) )); then
-      echo "[principle-gates] Warning: Swift ${major}.${minor} detected; retest removing @_optimize(none) from Store/TestStore deinits (swiftlang/swift#88173)."
+      echo "[principle-gates] Warning: Swift ${major}.${minor} detected; retest removing @_optimize(none) from Store, StoreOutputHub, and TestStore deinits (swiftlang/swift#88173)."
     fi
   fi
 }
@@ -470,6 +470,10 @@ run_authoring_surface_checks() {
     echo "[principle-gates] Failed: legacy explicit reducer authoring found in docs or sample sources"
     exit 1
   fi
+  if search_lines 'some Reducer<State, Action>' "${DOC_AND_SAMPLE_PATHS[@]}"; then
+    echo "[principle-gates] Failed: 6.0 reducer bodies must declare the Output generic (Never or Output)"
+    exit 1
+  fi
 
   echo "[principle-gates] Checking binding authoring contract"
   # `store.binding(\.$field, to: Feature.Action.setX)` is the preferred spelling;
@@ -526,6 +530,29 @@ run_authoring_surface_checks() {
   search_lines "public struct StoreInstrumentation" Sources/InnoFlowCore/StoreInstrumentation.swift >/dev/null
   search_lines "public final class SelectedStore<" Sources/InnoFlowCore/SelectedStore.swift >/dev/null
   search_lines "public struct EffectContext" Sources/InnoFlowCore/EffectTask.swift >/dev/null
+  search_lines "public struct FlowTask" Sources/InnoFlowCore/FlowTask.swift >/dev/null
+  search_lines "public struct OutputFlowTask" Sources/InnoFlowCore/FlowTask.swift >/dev/null
+  search_lines "public protocol Reducer<State, Action, Output>" Sources/InnoFlowCore/Reducer.swift >/dev/null
+  search_lines "public struct ReducerEffect<Action: Sendable, Output: Sendable>" Sources/InnoFlowCore/EffectTask.swift >/dev/null
+  search_lines "associatedtype Output: Sendable = Never" Sources/InnoFlowCore/Reducer.swift >/dev/null
+  search_lines "public func outputs\\(" Sources/InnoFlowCore/Store.swift >/dev/null
+  search_lines "capturingOutputs" Sources/InnoFlowCore/Store.swift >/dev/null
+  search_multiline 'public func outputs\([\s\S]{0,180}= \.unbounded' Sources/InnoFlowCore/Store.swift >/dev/null
+  search_lines "public static func perform<" Sources/InnoFlowCore/EffectTask.swift >/dev/null
+  search_lines "public func onChange<" Sources/InnoFlowCore/ReducerOnChange.swift >/dev/null
+  search_lines "public func requireComplete\\(" Sources/InnoFlowCore/PhaseMap.swift >/dev/null
+  search_lines "strictPhaseTotality" Sources/InnoFlow/InnoFlow.swift Sources/InnoFlowMacros >/dev/null
+  search_lines "public func mermaidDiagram\\(" Sources/InnoFlowCore/PhaseTransitionGraph.swift >/dev/null
+  search_lines "public func dotGraph\\(" Sources/InnoFlowCore/PhaseTransitionGraph.swift >/dev/null
+  search_lines "public func receiveOutput" Sources/InnoFlowTesting/TestStore+Output.swift >/dev/null
+  search_multiline 'extension Reducer where Output == Never[\s\S]{0,500}public func promoteOutput' Sources/InnoFlowCore/ReducerOutputMapping.swift >/dev/null
+  search_multiline 'extension ReducerEffect where Output == Never[\s\S]{0,400}public func promoteOutput' Sources/InnoFlowCore/ReducerOutputMapping.swift >/dev/null
+  search_lines 'func cancellingCapturedOutputConsumerCancelsDispatch' Tests/InnoFlowTests/ReducerOutputTests.swift >/dev/null
+  search_lines 'func cancellationBeforeReductionDropsDescendants' Tests/InnoFlowTests/FlowTaskCancellationBoundaryTests.swift >/dev/null
+  search_lines 'func cancellationDuringObservationSuppressesOutput' Tests/InnoFlowTests/FlowTaskCancellationBoundaryTests.swift >/dev/null
+  search_lines 'func outputPromotionCannotDiscardRealOutputs' Tests/InnoFlowTests/CompileContractTests.swift >/dev/null
+  search_lines 'func predicateReceivesNonEquatableOutput' Tests/InnoFlowTests/TestStoreOutputMatchingTests.swift >/dev/null
+  search_lines 'func invalidatedOutputHonorsTotalDeadline' Tests/InnoFlowTests/TestStoreOutputMatchingTests.swift >/dev/null
   search_lines "public actor ManualTestClock" Sources/InnoFlowTesting/ManualTestClock.swift >/dev/null
   search_lines "public static func preview\\(" Sources/InnoFlowSwiftUI/Store+SwiftUIPreviews.swift >/dev/null
   search_lines "public func map<" Sources/InnoFlowCore/EffectTask.swift >/dev/null
@@ -542,6 +569,13 @@ run_authoring_surface_checks() {
     echo "[principle-gates] Failed: SelectedStore variadic dependingOnAll overload is missing"
     exit 1
   fi
+  if ! search_multiline 'public func select<[\s\S]{0,280}dependingOn dependency:[\s\S]{0,100}id: String\? = nil' Sources/InnoFlowCore/SelectedStore.swift >/dev/null \
+    || ! search_lines 'func keylessClosureSelectionsDoNotAliasCapturedInput' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null \
+    || ! search_lines 'func explicitSelectionIDsReuseOnlyLiveHandles' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null \
+    || ! search_lines 'func parentReleaseInvalidatesProjectionObservers' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null; then
+    echo "[principle-gates] Failed: 6.0 selection identity/lifetime contract is missing"
+    exit 1
+  fi
   if search_multiline 'public init\([\s\S]{0,240}extractAction:\s*@escaping' Sources/InnoFlowCore/ReducerComposition.swift; then
     echo "[principle-gates] Failed: reducer composition still exposes public closure-based action lifting"
     exit 1
@@ -554,6 +588,16 @@ run_authoring_surface_checks() {
     echo "[principle-gates] Failed: TestStore.scope still exposes public closure-based action lifting"
     exit 1
   fi
+  if search_lines "public func assertNoMoreActions" Sources >/dev/null; then
+    echo "[principle-gates] Failed: assertNoMoreActions returned after its 6.0 removal"
+    exit 1
+  fi
+  if search_lines '^[[:space:]]+assertMacroExpansion\(' Tests/InnoFlowMacrosTests >/dev/null; then
+    echo "[principle-gates] Failed: macro snapshots must use the Swift Testing failure bridge"
+    exit 1
+  fi
+  search_lines "SwiftSyntaxMacrosGenericTestSupport.assertMacroExpansion" Tests/InnoFlowMacrosTests/MacroExpansionTesting.swift >/dev/null
+  search_lines "Issue.record" Tests/InnoFlowMacrosTests/MacroExpansionTesting.swift >/dev/null
 }
 
 run_sample_static_contract_checks() {
@@ -582,6 +626,18 @@ run_sample_static_contract_checks() {
     echo "[principle-gates] Failed: canonical sample app is missing"
     exit 1
   fi
+  echo "[principle-gates] Checking sample dependency locks against the release package"
+  ruby -rjson -e '
+    expected = JSON.parse(File.read("Package.resolved")).fetch("pins")
+    paths = [
+      "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.resolved",
+      "Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+    ]
+    paths.each do |path|
+      actual = JSON.parse(File.read(path)).fetch("pins")
+      abort "[principle-gates] Failed: sample dependency lock drift: #{path}" unless actual == expected
+    end
+  '
   if search_lines "InnoFlowDIBridge|FeatureDependencies|import InnoDI|import InnoRouter" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc Examples/README.md Examples/InnoFlowSampleApp/README.md Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Sources Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.swift; then
     echo "[principle-gates] Failed: canonical docs or sample still reference removed bridge/extra libraries"
     exit 1
@@ -621,7 +677,13 @@ validate_selected_store_dynamic_member_doc() {
 verify_docc_plugin_pin() {
   local generator_path="$1"
   local release_policy_path="$2"
+  local lockfile_path="$3"
   local plugin_version
+  local plugin_revision
+  local symbolkit_version
+  local symbolkit_revision
+  local swift_syntax_version
+  local swift_syntax_revision
 
   plugin_version="$(
     sed -nE 's/^DOCC_PLUGIN_VERSION="([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' "$generator_path"
@@ -630,16 +692,78 @@ verify_docc_plugin_pin() {
     echo "[principle-gates] Failed: $generator_path must declare an exact semantic DOCC_PLUGIN_VERSION" >&2
     return 1
   fi
-  if ! grep -F 'swift-docc-plugin", exact:' "$generator_path" >/dev/null; then
-    echo "[principle-gates] Failed: $generator_path must inject swift-docc-plugin with exact:" >&2
+  plugin_revision="$(
+    sed -nE 's/^DOCC_PLUGIN_REVISION="([0-9a-f]{40})"$/\1/p' "$generator_path"
+  )"
+  if [[ -z "$plugin_revision" ]]; then
+    echo "[principle-gates] Failed: $generator_path must declare a lowercase 40-character DOCC_PLUGIN_REVISION" >&2
     return 1
   fi
-  if grep -E 'swift-docc-plugin.*from:' "$generator_path" >/dev/null; then
-    echo "[principle-gates] Failed: $generator_path must not use a moving swift-docc-plugin range" >&2
+  symbolkit_version="$(
+    sed -nE 's/^DOCC_SYMBOLKIT_VERSION="([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' "$generator_path"
+  )"
+  symbolkit_revision="$(
+    sed -nE 's/^DOCC_SYMBOLKIT_REVISION="([0-9a-f]{40})"$/\1/p' "$generator_path"
+  )"
+  swift_syntax_version="$(
+    sed -nE 's/^DOCC_SWIFT_SYNTAX_VERSION="([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' "$generator_path"
+  )"
+  swift_syntax_revision="$(
+    sed -nE 's/^DOCC_SWIFT_SYNTAX_REVISION="([0-9a-f]{40})"$/\1/p' "$generator_path"
+  )"
+  if [[ -z "$symbolkit_version" || -z "$symbolkit_revision" ]]; then
+    echo "[principle-gates] Failed: $generator_path must pin swift-docc-symbolkit by semantic version and lowercase 40-character revision" >&2
     return 1
   fi
-  if ! grep -F "\`swift-docc-plugin\` $plugin_version" "$release_policy_path" >/dev/null; then
-    echo "[principle-gates] Failed: $release_policy_path must document swift-docc-plugin $plugin_version" >&2
+  if [[ -z "$swift_syntax_version" || -z "$swift_syntax_revision" ]]; then
+    echo "[principle-gates] Failed: $generator_path must pin docs SwiftSyntax by semantic version and lowercase 40-character revision" >&2
+    return 1
+  fi
+  if ! grep -F 'swift-docc-plugin", revision: "{plugin_revision}"' "$generator_path" >/dev/null; then
+    echo "[principle-gates] Failed: $generator_path must inject swift-docc-plugin with the immutable revision variable" >&2
+    return 1
+  fi
+  if grep -E 'swift-docc-plugin.*(exact:|from:|branch:)' "$generator_path" >/dev/null; then
+    echo "[principle-gates] Failed: $generator_path must not use a mutable swift-docc-plugin requirement" >&2
+    return 1
+  fi
+  if ! grep -F 'cp "$DOCC_LOCKFILE" "$DOCS_PACKAGE_DIR/Package.resolved"' "$generator_path" >/dev/null; then
+    echo "[principle-gates] Failed: $generator_path must install the committed documentation lockfile" >&2
+    return 1
+  fi
+  if [[ "$(grep -c -- '--disable-automatic-resolution' "$generator_path")" -lt 2 ]]; then
+    echo "[principle-gates] Failed: every documentation command must disable automatic resolution" >&2
+    return 1
+  fi
+  if ! ruby -rjson -e '
+    path, plugin_revision, symbolkit_version, symbolkit_revision, syntax_version, syntax_revision = ARGV
+    document = JSON.parse(File.read(path))
+    pins = document.fetch("pins").to_h { |pin| [pin.fetch("identity"), pin] }
+    expected = {
+      "swift-docc-plugin" => [nil, plugin_revision],
+      "swift-docc-symbolkit" => [symbolkit_version, symbolkit_revision],
+      "swift-syntax" => [syntax_version, syntax_revision],
+    }
+    abort "unexpected documentation pins" unless pins.keys.sort == expected.keys.sort
+    expected.each do |identity, (version, revision)|
+      state = pins.fetch(identity).fetch("state")
+      abort "revision mismatch for #{identity}" unless state["revision"] == revision
+      abort "version mismatch for #{identity}" unless state["version"] == version
+    end
+  ' "$lockfile_path" "$plugin_revision" "$symbolkit_version" "$symbolkit_revision" "$swift_syntax_version" "$swift_syntax_revision"; then
+    echo "[principle-gates] Failed: $lockfile_path must pin the complete expected documentation tool graph" >&2
+    return 1
+  fi
+  if ! grep -F "\`swift-docc-plugin\` $plugin_version at revision \`$plugin_revision\`" "$release_policy_path" >/dev/null; then
+    echo "[principle-gates] Failed: $release_policy_path must document swift-docc-plugin $plugin_version at revision $plugin_revision" >&2
+    return 1
+  fi
+  if ! grep -F "\`swift-docc-symbolkit\` $symbolkit_version at revision \`$symbolkit_revision\`" "$release_policy_path" >/dev/null; then
+    echo "[principle-gates] Failed: $release_policy_path must document swift-docc-symbolkit $symbolkit_version at revision $symbolkit_revision" >&2
+    return 1
+  fi
+  if ! grep -F "\`swift-syntax\` $swift_syntax_version at revision \`$swift_syntax_revision\`" "$release_policy_path" >/dev/null; then
+    echo "[principle-gates] Failed: $release_policy_path must document docs SwiftSyntax $swift_syntax_version at revision $swift_syntax_revision" >&2
     return 1
   fi
 }
@@ -663,7 +787,7 @@ run_doc_contract_checks() {
   ensure_principle_gate_context
 
   echo "[principle-gates] Checking required documentation sections"
-  verify_docc_plugin_pin Tools/generate-docc.sh RELEASING.md || exit 1
+  verify_docc_plugin_pin Tools/generate-docc.sh RELEASING.md Tools/docc-package.resolved || exit 1
   verify_release_test_commands RELEASING.md || exit 1
   if [[ ! -f "ARCHITECTURE_CONTRACT.md" ]]; then
     echo "[principle-gates] Failed: ARCHITECTURE_CONTRACT.md is missing"
@@ -743,6 +867,14 @@ run_doc_contract_checks() {
     echo "[principle-gates] CHECK-RELEASE-SYNC FAILED" >&2
     exit "$release_sync_status"
   fi
+
+  echo "[principle-gates] Checking staged 6.x API compatibility gate"
+  test -f STABLE_VERSION
+  test -x scripts/check-api-compatibility.sh
+  search_lines "STABLE_VERSION" scripts/check-api-compatibility.sh scripts/check-release-sync.sh >/dev/null
+  search_lines "diagnose-api-breaking-changes" scripts/check-api-compatibility.sh >/dev/null
+  search_lines "scripts/check-api-compatibility.sh" .github/workflows/ci.yml >/dev/null
+  scripts/check-api-compatibility.sh
   if [[ -n "$release_sync_output" ]]; then
     printf '%s\n' "$release_sync_output"
   fi
@@ -779,10 +911,17 @@ run_doc_contract_checks() {
     validate_selected_store_dynamic_member_doc "$lifecycle_doc" || exit 1
   done
   search_lines "dependingOn:" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines 'semantic `id`|semantic `id:`' CLAUDE.md README.md ARCHITECTURE_CONTRACT.md MIGRATION.md >/dev/null
   search_lines "always-refresh fallback|always refresh fallback" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "PhaseMap" README.md ARCHITECTURE_CONTRACT.md CLAUDE.md PHASE_DRIVEN_MODELING.md Sources/InnoFlow/InnoFlow.docc Examples/InnoFlowSampleApp/README.md >/dev/null
   search_lines "derivedGraph" README.md ARCHITECTURE_CONTRACT.md PHASE_DRIVEN_MODELING.md Sources/InnoFlow/InnoFlow.docc Examples/InnoFlowSampleApp/README.md >/dev/null
   search_lines "EffectContext|context\\.sleep" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines "FlowTask" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines "Reducer output contract|typed.*Output|typed, ephemeral" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines "receiveOutput" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlowTesting/InnoFlowTesting.docc >/dev/null
+  search_lines "EffectTask\\.perform|perform\\(operation:success:failure:" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines "onChange\\(of:perform:" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines "requireComplete" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "validationReport" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "ADR-phase-transition-guards|guard-bearing transitions remain intentionally out of scope" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc docs/adr >/dev/null
   search_lines "ADR-declarative-phase-map|topology-only|post-reduce" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc docs/adr >/dev/null
@@ -946,7 +1085,7 @@ run_macro_operations_checks() {
     echo "[principle-gates] Failed: the release gate must verify the source-built SwiftSyntax fallback"
     exit 1
   fi
-  if ! search_multiline 'func exportedMacroFeaturesWorkAcrossTargetBoundaries[\s\S]{0,16000}"--disable-experimental-prebuilts"' Tests/InnoFlowTests/CompileContractTests.swift >/dev/null; then
+  if ! search_multiline 'func exportedMacroFeaturesWorkAcrossTargetBoundaries[\s\S]{0,30000}"--disable-experimental-prebuilts"' Tests/InnoFlowTests/CompileContractTests.swift >/dev/null; then
     echo "[principle-gates] Failed: the external macro consumer must exercise the source-built fallback"
     exit 1
   fi
@@ -1049,9 +1188,56 @@ run_workflow_security_checks() {
 
   echo "[principle-gates] Checking GitHub Actions commit SHA pins"
   "$SCRIPT_DIR/check-workflow-action-pins.sh" "$ROOT_DIR/.github/workflows"
+
+  echo "[principle-gates] Checking GitHub Actions job timeouts"
+  "$SCRIPT_DIR/check-workflow-job-timeouts.sh" "$ROOT_DIR/.github/workflows"
+
+  ruby "$SCRIPT_DIR/check-ci-efficiency.rb" "$ROOT_DIR"
+  ruby "$SCRIPT_DIR/check-coverage-workflow.rb" "$ROOT_DIR/.github/workflows"
+  ruby "$SCRIPT_DIR/check-release-evidence-policy.rb" "$ROOT_DIR"
+
+  echo "[principle-gates] Checking tag-release multi-platform build coverage"
+  local ci_workflow="$ROOT_DIR/.github/workflows/ci.yml"
+  if ! grep -E 'platform: \[tvOS, watchOS, visionOS\]' "$ci_workflow" >/dev/null; then
+    echo "[principle-gates] Failed: canonical sample package CI must build tvOS, watchOS, and visionOS"
+    return 1
+  fi
+  local release_workflow="$ROOT_DIR/.github/workflows/cd.yml"
+  if [[ ! -f "$release_workflow" ]]; then
+    echo "[principle-gates] Failed: release workflow is missing"
+    exit 1
+  fi
+  if ! search_lines \
+      'platform: \[macOS, iOS, tvOS, watchOS, visionOS\]' \
+      "$release_workflow" >/dev/null; then
+    echo "[principle-gates] Failed: tag release must build macOS, iOS, tvOS, watchOS, and visionOS"
+    exit 1
+  fi
+  echo "[principle-gates] Checking candidate-bound release evidence dependency"
+  "$SCRIPT_DIR/check-release-evidence-workflow.sh" "$release_workflow"
+  if ! search_lines \
+      'sanitizer: \[thread, address\]' \
+      "$release_workflow" >/dev/null; then
+    echo "[principle-gates] Failed: tag release must run thread and address sanitizer suites"
+    exit 1
+  fi
+  if [[ ! -x "$SCRIPT_DIR/run-focused-platform-runtime-tests.sh" \
+      || ! -x "$SCRIPT_DIR/run-focused-platform-runtime-matrix.sh" ]]; then
+    echo "[principle-gates] Failed: focused platform runtime harnesses must be executable"
+    exit 1
+  fi
+  local workflow
+  for workflow in "$ROOT_DIR/.github/workflows/ci.yml" "$release_workflow"; do
+    search_lines 'platform: \[iOS, tvOS, watchOS, visionOS\]' "$workflow" >/dev/null
+    search_lines 'run-focused-platform-runtime-matrix\.sh' "$workflow" >/dev/null
+  done
+  local suite
+  for suite in EffectRunSchedulerTests DispatchDiagnosticsTests FlowScopeTests OutputCasePathTests; do
+    search_lines "$suite" "$SCRIPT_DIR/run-focused-platform-runtime-tests.sh" >/dev/null
+  done
 }
 
-run_release_build_checks() {
+run_release_configuration_checks() {
   ensure_principle_gate_context
 
   echo "[principle-gates] Verifying release build succeeds (SIL inliner regression guard)"
@@ -1061,28 +1247,17 @@ run_release_build_checks() {
   # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
   # debug and release artifacts there causes duplicate-symbol failures.
   RELEASE_GATE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
-  if ! run_low_priority swift build \
+  if ! run_logged_gate_command "release build" run_low_priority swift build \
       --package-path "$ROOT_DIR" \
       --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
       --jobs "$SWIFTPM_JOBS" \
-      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" >/dev/null 2>&1; then
-    echo "[principle-gates] Failed: 'swift build -c release' crashed or failed — SIL inliner regression suspected"
+      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}"; then
+    echo "[principle-gates] Failed: 'swift build -c release' failed; inspect the build diagnostic above"
     swift --version || true
     rm -rf "$RELEASE_GATE_BUILD_PATH"
     exit 1
   fi
-
-  echo "[principle-gates] Running package tests"
-  # SwiftPM's --jobs limit applies to the build, while Swift Testing still
-  # schedules suites concurrently. On shared macOS runners that can starve
-  # unrelated MainActor-bound async tests behind the long-running randomized
-  # effect suites until their guardrail timeouts fire together.
-  run_low_priority swift test \
-    --package-path "$ROOT_DIR" \
-    --jobs "$SWIFTPM_JOBS" \
-    --no-parallel \
-    -Xswiftc -warnings-as-errors
 
   echo "[principle-gates] Running package tests in release configuration"
   # Release-mode test gate. Uses an isolated build path for the same reason as
@@ -1129,6 +1304,23 @@ run_release_build_checks() {
   rm -rf "$RELEASE_GATE_BUILD_PATH"
 }
 
+run_release_build_checks() {
+  ensure_principle_gate_context
+
+  echo "[principle-gates] Running package tests"
+  # SwiftPM's --jobs limit applies to the build, while Swift Testing still
+  # schedules suites concurrently. On shared macOS runners that can starve
+  # unrelated MainActor-bound timeout tests behind long-running randomized
+  # effect suites until their guardrail timeouts fire together.
+  run_low_priority swift test \
+    --package-path "$ROOT_DIR" \
+    --jobs "$SWIFTPM_JOBS" \
+    --no-parallel \
+    -Xswiftc -warnings-as-errors
+
+  run_release_configuration_checks
+}
+
 run_sample_runtime_contract_checks() {
   ensure_principle_gate_context
 
@@ -1142,23 +1334,32 @@ run_sample_runtime_contract_checks() {
   run_low_priority swift package --package-path "$sample_package_path" clean
   if ! run_logged_gate_command \
       "sample package tests" \
-      run_low_priority swift test --package-path "$sample_package_path" --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors; then
+      run_low_priority swift test --package-path "$sample_package_path" --disable-automatic-resolution --jobs "$SWIFTPM_JOBS" -Xswiftc -warnings-as-errors; then
     exit 1
   fi
 
   echo "[principle-gates] Building canonical sample app"
+  # Xcode's shared DerivedData can retain a SwiftSyntax prebuilt module from
+  # an earlier compiler revision. A new DerivedData path selects prebuilts
+  # matching this invocation's compiler and keeps another user's cache intact.
+  local sample_derived
+  sample_derived="$(mktemp -d "${TMPDIR:-/tmp}/innoflow-sample-derived.XXXXXX")"
   if ! run_logged_gate_command \
       "canonical sample app build" \
       run_low_priority xcodebuild \
       -jobs 1 \
+      -derivedDataPath "$sample_derived" \
       -project "$sample_test_root/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
       -scheme InnoFlowSampleApp \
+      -disableAutomaticPackageResolution \
       -destination 'generic/platform=iOS' \
       CODE_SIGNING_ALLOWED=NO \
       CODE_SIGNING_REQUIRED=NO \
       build; then
+    echo "[principle-gates] Preserved failed sample DerivedData: $sample_derived"
     exit 1
   fi
+  rm -rf "$sample_derived"
 
   echo "[principle-gates] Checking PhaseMap totality enforcement"
   # Phase-managed reducers in the core (Sources/InnoFlowCore) live behind a
@@ -1213,32 +1414,56 @@ run_sample_contract_checks() {
   run_with_principle_gate_cleanup run_sample_contract_checks_impl "$@"
 }
 
+run_gate_negative_controls() {
+  "$SCRIPT_DIR/principle-gates-selftest.sh"
+}
+
 run_principle_gates_impl() {
   # --static skips the build/test gates (release builds, debug + release
   # test runs, sample runtime contracts) and keeps only the fast static
   # analysis. Intended for local pre-commit iteration; CI and release
   # preparation must run the full suite.
   local gate_mode="full"
-  if [[ "${1:-}" == "--static" ]]; then
-    gate_mode="static"
-    shift
+  case "${1:-}" in
+    "") ;;
+    --static)
+      gate_mode="static"
+      shift
+      ;;
+    --help)
+      echo "Usage: scripts/principle-gates.sh [--static]"
+      echo "Run without arguments for the complete release gate; --static runs only fast static checks."
+      return 0
+      ;;
+    *)
+      echo "[principle-gates] Unknown argument: $1" >&2
+      echo "Usage: scripts/principle-gates.sh [--static]" >&2
+      return 64
+      ;;
+  esac
+  if [[ $# -ne 0 ]]; then
+    echo "[principle-gates] Unexpected extra argument: $1" >&2
+    echo "Usage: scripts/principle-gates.sh [--static]" >&2
+    return 64
   fi
 
-  run_workflow_security_checks "$@"
-  run_authoring_surface_checks "$@"
-  run_sample_static_contract_checks "$@"
-  run_doc_contract_checks "$@"
-  run_authoring_policy_checks "$@"
-  run_macro_operations_checks "$@"
-  run_community_health_checks "$@"
+  run_workflow_security_checks
+  run_authoring_surface_checks
+  run_sample_static_contract_checks
+  run_doc_contract_checks
+  run_authoring_policy_checks
+  run_macro_operations_checks
+  run_community_health_checks
 
   if [[ "$gate_mode" == "static" ]]; then
     echo "[principle-gates] Static checks passed (skipped release-build and sample-runtime gates; run without --static before pushing a release)"
     return 0
   fi
 
-  run_release_build_checks "$@"
-  run_sample_runtime_contract_checks "$@"
+  echo "[principle-gates] Checking gate negative controls"
+  run_gate_negative_controls
+  run_release_build_checks
+  run_sample_runtime_contract_checks
   echo "[principle-gates] All checks passed"
 }
 

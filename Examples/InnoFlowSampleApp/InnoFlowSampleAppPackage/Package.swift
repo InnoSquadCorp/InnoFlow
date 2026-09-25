@@ -39,6 +39,7 @@ let package = Package(
       dependencies: [
         "InnoFlowSampleAppFeature",
         .product(name: "InnoFlowTesting", package: "InnoFlow"),
+        .product(name: "InnoFlowSwiftUI", package: "InnoFlow"),
       ],
       swiftSettings: swift6PackageContract
     ),

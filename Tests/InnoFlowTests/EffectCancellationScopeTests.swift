@@ -82,24 +82,13 @@ struct EffectCancellationScopeTests {
     let boundaries = EffectCancellationBoundaries()
     let id = AnyEffectID(StaticEffectID("scope.exact"))
     let sequence = boundaries.nextSequence()
-    var interpreter: EffectExecutionContext? = boundaries.makeContext(
-      sequence: sequence,
-      cancellationIDs: [id],
-      potentialCancellationIDs: [id]
-    )
-    var frozen: EffectExecutionContext? = interpreter?.frozenForExecution()
+    let observed = observeFrozenCancellation(boundaries: boundaries, id: id, sequence: sequence)
 
-    interpreter = nil
-    #expect(boundaries.liveInterpreterCount == 0)
-    #expect(boundaries.retainedPotentialIDCount == 0)
-    #expect(boundaries.liveExactTokenCount == 1)
-
-    boundaries.markCancelled(id: id, upTo: sequence)
-
-    #expect(frozen?.shouldProceed == false)
-    #expect(boundaries.retainedCancellationIDCount == 0)
-
-    frozen = nil
+    #expect(observed.liveInterpreterCount == 0)
+    #expect(observed.retainedPotentialIDCount == 0)
+    #expect(observed.liveExactTokenCount == 1)
+    #expect(observed.shouldProceed == false)
+    #expect(observed.retainedCancellationIDCount == 0)
     #expect(boundaries.liveScopeCount == 0)
     #expect(boundaries.liveExactTokenCount == 0)
   }
@@ -123,21 +112,76 @@ struct EffectCancellationScopeTests {
     let boundaries = EffectCancellationBoundaries()
     let id = AnyEffectID(StaticEffectID("scope.weak-token"))
     let sequence = boundaries.nextSequence()
-    var interpreter: EffectExecutionContext? = boundaries.makeContext(
+    let interpreter = boundaries.makeContext(
       sequence: sequence,
       potentialCancellationIDs: [id]
     )
-    let scopeKeeper = interpreter?.frozenForExecution()
-    var exactContext: EffectExecutionContext? = .withCancellation(id, on: interpreter)
+    let scopeKeeper = interpreter.frozenForExecution()
+    let observed = observeExactToken(boundaries: boundaries, id: id, interpreter: interpreter)
 
-    #expect(exactContext?.shouldProceed == true)
-    #expect(boundaries.liveExactTokenCount == 1)
-    exactContext = nil
+    #expect(observed.shouldProceed == true)
+    #expect(observed.liveExactTokenCount == 1)
     #expect(boundaries.liveExactTokenCount == 0)
 
-    interpreter = nil
-    #expect(scopeKeeper?.shouldProceed == true)
+    #expect(scopeKeeper.shouldProceed == true)
     #expect(boundaries.liveScopeCount == 1)
+  }
+
+  // The Release optimizer may keep a nilled optional's former payload alive
+  // until the enclosing function exits. A non-inlined boundary makes the ARC
+  // release observable without changing the cancellation contract under test.
+  @inline(never)
+  private func makeFrozenContext(
+    boundaries: EffectCancellationBoundaries,
+    id: AnyEffectID,
+    sequence: UInt64
+  ) -> EffectExecutionContext {
+    let interpreter = boundaries.makeContext(
+      sequence: sequence,
+      cancellationIDs: [id],
+      potentialCancellationIDs: [id]
+    )
+    return interpreter.frozenForExecution()
+  }
+
+  @inline(never)
+  private func observeFrozenCancellation(
+    boundaries: EffectCancellationBoundaries,
+    id: AnyEffectID,
+    sequence: UInt64
+  ) -> (
+    liveInterpreterCount: Int,
+    retainedPotentialIDCount: Int,
+    liveExactTokenCount: Int,
+    shouldProceed: Bool,
+    retainedCancellationIDCount: Int
+  ) {
+    let frozen = makeFrozenContext(boundaries: boundaries, id: id, sequence: sequence)
+    return withExtendedLifetime(frozen) {
+      let liveInterpreterCount = boundaries.liveInterpreterCount
+      let retainedPotentialIDCount = boundaries.retainedPotentialIDCount
+      let liveExactTokenCount = boundaries.liveExactTokenCount
+      boundaries.markCancelled(id: id, upTo: sequence)
+      return (
+        liveInterpreterCount,
+        retainedPotentialIDCount,
+        liveExactTokenCount,
+        frozen.shouldProceed,
+        boundaries.retainedCancellationIDCount
+      )
+    }
+  }
+
+  @inline(never)
+  private func observeExactToken(
+    boundaries: EffectCancellationBoundaries,
+    id: AnyEffectID,
+    interpreter: EffectExecutionContext
+  ) -> (shouldProceed: Bool, liveExactTokenCount: Int) {
+    let exactContext = EffectExecutionContext.withCancellation(id, on: interpreter)
+    return withExtendedLifetime(exactContext) {
+      (exactContext.shouldProceed, boundaries.liveExactTokenCount)
+    }
   }
 
   @Test("Cancellation state does not cross sequence scopes")

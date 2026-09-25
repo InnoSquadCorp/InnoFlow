@@ -8,6 +8,7 @@ import Foundation
 package final class TestStoreFinishActivity {
   package enum Kind: Hashable, Sendable {
     case run
+    case scheduled
     case composite
     case debounce
     case throttle
@@ -16,12 +17,13 @@ package final class TestStoreFinishActivity {
   package struct Snapshot: Equatable, Sendable {
     package let revision: UInt64
     package let runCount: Int
+    package let scheduledCount: Int
     package let compositeCount: Int
     package let debounceCount: Int
     package let throttleCount: Int
 
     package var activeCount: Int {
-      runCount + compositeCount + debounceCount + throttleCount
+      runCount + scheduledCount + compositeCount + debounceCount + throttleCount
     }
   }
 
@@ -55,6 +57,7 @@ package final class TestStoreFinishActivity {
     Snapshot(
       revision: revision,
       runCount: count(.run),
+      scheduledCount: count(.scheduled),
       compositeCount: count(.composite),
       debounceCount: count(.debounce),
       throttleCount: count(.throttle)
@@ -122,6 +125,7 @@ package final class TestStoreFinishActivity {
 package enum TestStoreFinishResult: Equatable, Sendable {
   case success
   case unhandledActions([String])
+  case unhandledOutputs([String])
   case timedOut(TestStoreFinishActivity.Snapshot)
   case cancelled
 }
@@ -196,6 +200,19 @@ extension TestStore {
         line
       )
 
+    case .unhandledOutputs(let outputs):
+      let outputList = outputs.map { "- \($0)" }.joined(separator: "\n")
+      assertionFailureReporter(
+        """
+        TestStore finished with \(outputs.count) unhandled output(s):
+        \(outputList)
+
+        Every reducer output must be verified with `receiveOutput(_:)` before the test finishes.
+        """,
+        file,
+        line
+      )
+
     case .timedOut(let snapshot):
       assertionFailureReporter(
         """
@@ -203,6 +220,7 @@ extension TestStore {
 
         Active effects at timeout:
         - run: \(snapshot.runCount)
+        - scheduled: \(snapshot.scheduledCount)
         - composite: \(snapshot.compositeCount)
         - debounce: \(snapshot.debounceCount)
         - throttle: \(snapshot.throttleCount)
@@ -223,7 +241,7 @@ extension TestStore {
     let terminalRevision = beginTerminalVerification(file: file, line: line)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
-    var didDrainAction = false
+    var didDrainWork = false
 
     while true {
       if Task.isCancelled {
@@ -239,11 +257,17 @@ extension TestStore {
           markTerminalVerificationHandled(terminalRevision)
           return .unhandledActions(actions)
         }
+        let outputs = await takeAllBufferedOutputDescriptions()
+        if outputs.isEmpty == false {
+          cancelRemainingEffectsForFinish()
+          markTerminalVerificationHandled(terminalRevision)
+          return .unhandledOutputs(outputs)
+        }
       } else if let action = await popBufferedAction() {
         // Always allow one already-buffered action to be reduced, even for a
         // zero timeout. Subsequent actions remain bounded by the total
         // deadline so a self-reenqueuing reducer cannot trap finish forever.
-        if didDrainAction, wallClock.now >= deadline {
+        if didDrainWork, wallClock.now >= deadline {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
           markTerminalVerificationHandled(terminalRevision)
@@ -256,7 +280,25 @@ extension TestStore {
           line: line
         )
         await applyUnassertedAction(action, file: file, line: line)
-        didDrainAction = true
+        didDrainWork = true
+        continue
+      } else if let output = await popBufferedOutput() {
+        // Match action draining: allow one already-buffered value even for a
+        // zero timeout, then enforce the same total deadline for the rest.
+        if didDrainWork, wallClock.now >= deadline {
+          let snapshot = finishActivity.snapshot
+          cancelRemainingEffectsForFinish()
+          markTerminalVerificationHandled(terminalRevision)
+          return .timedOut(snapshot)
+        }
+        if exhaustivity.showsSkippedAssertions {
+          skippedAssertionReporter(
+            "TestStore skipped reducer output while finishing:\n\(output)",
+            file,
+            line
+          )
+        }
+        didDrainWork = true
         continue
       }
 
@@ -285,6 +327,14 @@ extension TestStore {
       actions.append(String(describing: action))
     }
     return actions
+  }
+
+  private func takeAllBufferedOutputDescriptions() async -> [String] {
+    var outputs: [String] = []
+    while let output = await popBufferedOutput() {
+      outputs.append(String(describing: output))
+    }
+    return outputs
   }
 
   private func cancelRemainingEffectsForFinish() {
@@ -351,8 +401,18 @@ extension TestStore {
       }
     }
 
+    var outputCount = 0
+    var outputDescriptions: [String] = []
+    outputQueue.forEachBuffered { queuedOutput in
+      guard shouldProceed(context: queuedOutput.context) else { return }
+      outputCount += 1
+      if outputDescriptions.count < 20 {
+        outputDescriptions.append(String(describing: queuedOutput.action))
+      }
+    }
+
     let activity = finishActivity.snapshot
-    guard actionCount > 0 || activity.activeCount > 0 else { return nil }
+    guard actionCount > 0 || outputCount > 0 || activity.activeCount > 0 else { return nil }
 
     let severity: TestStoreTerminalVerificationDiagnostic.Severity
     let header: String
@@ -387,6 +447,16 @@ extension TestStore {
       }
       sections.append(
         "\(actionLabel) (\(actionCount)):\n\(actionLines.joined(separator: "\n"))"
+      )
+    }
+    if outputCount > 0 {
+      var outputLines = outputDescriptions.map { "- \($0)" }
+      let omittedCount = outputCount - outputDescriptions.count
+      if omittedCount > 0 {
+        outputLines.append("- ... \(omittedCount) more output(s)")
+      }
+      sections.append(
+        "Unhandled reducer outputs (\(outputCount)):\n\(outputLines.joined(separator: "\n"))"
       )
     }
     if activity.activeCount > 0 {

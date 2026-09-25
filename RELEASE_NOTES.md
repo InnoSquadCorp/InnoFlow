@@ -1,5 +1,105 @@
 # InnoFlow Release Notes
 
+## 6.0.0 Release
+
+This section describes the 6.0.0 target changes; its presence does not mean
+the tag or GitHub Release has been published. Check the public release state
+separately.
+
+InnoFlow 6.0.0 adds caller-owned action lifetimes and a typed reducer output
+channel while keeping the core boundary focused on domain state transitions.
+It also rounds out common effect, state-observation, presentation, and phase
+validation workflows that previously required application-level adapters.
+
+### Added
+
+1. `FlowTask` from `Store.send(_:)` / `ScopedStore.send(_:)`, with scoped
+   `finish()` and `cancel()` over the complete descendant effect tree.
+2. Reducer `Output`, `Self.output(_:)`, `mapOutput(_:)`, live
+   `Store.outputs()`, and exhaustive `TestStore.receiveOutput(_:)` support.
+3. Atomic dispatch-scoped output through
+   `Store.send(_:capturingOutputs:)` and `OutputFlowTask`.
+4. Payload-free output delivery instrumentation and metrics for missing
+   subscribers, buffer drops, termination, dispatch capture, and suppression.
+5. `EffectTask.perform(operation:success:failure:)` and
+   `Reducer.onChange(of:perform:)`.
+6. Optional-state popover (on supported platforms), alert, and confirmation-dialog SwiftUI adapters,
+   plus public `Store.presentationBinding(state:onDismiss:)`.
+7. Strict compile-time phase declaration coverage, throwing
+   `PhaseMap.requireComplete(...)` trigger validation, and deterministic
+   Mermaid / Graphviz DOT graph export.
+8. Safe `Never` output promotion for reusable children/effect helpers and
+   predicate/case-path output assertions for non-equatable payloads.
+9. Store-local execution admission with latest, busy rejection, and bounded
+   FIFO serial policies for independent async runs.
+10. `FlowScope` for lexical ownership of multiple `FlowTask` and
+    `OutputFlowTask` dispatch trees.
+11. Public `DispatchID` plus opt-in, bounded, payload-free
+    `StoreDiagnostics` snapshots and correlated timing records.
+12. `TestStoreInvariant` and `TestStoreScenario` for uniform post-reduction
+    checks and deterministic reusable scenarios.
+13. Macro-synthesized `Output` case paths and scoped root-output matching.
+
+### Release hardening
+
+The tag workflow now makes package builds for macOS, iOS, tvOS, watchOS, and
+visionOS plus thread/address sanitizer suites independent prerequisites of
+release publication. Macro expansion assertions also fail through Swift
+Testing's native issue channel, preventing diagnostic drift from being reported
+as a non-failing XCTest warning. Built-in Console and Instruments adapters now
+redact dynamic cancellation-ID descriptions by default; exposing them requires
+the explicit `includeCancellationIDs: true` opt-in.
+
+`FlowTask` cancellation isolation is enforced through runtime-owned shared
+throttle timers, and completed descendant cancellation scopes are released
+while unrelated long-running work remains active. `TestStore` also applies its
+total finish deadline to output draining. The sample router demonstrates that
+buffered output is not authorization by rechecking current login state. Finally,
+`STABLE_VERSION` makes the post-release API baseline fail closed when its tag is
+missing.
+
+Captured-output consumers now propagate task cancellation to their own dispatch
+tree without affecting unrelated dispatches or store-wide subscribers. Output
+assertions consistently enforce exhaustivity and a total timeout, including
+invalidated buffers, and do not mistake caller cancellation for a timeout.
+Queued descendants now recheck dispatch cancellation before mutating state;
+immediate outputs also honor cancellation accepted during state observation.
+Cancellation suppresses subsequent work without rolling back applied state.
+Scheduled serial lanes advance only after the current run closure physically
+returns; cancellation is cooperative and cannot promise rollback or stop an
+uncooperative external operation. Negative capacities, full queues, busy
+lanes, and live-policy conflicts are explicit admission rejections.
+
+The final release-candidate hardening also closes same-dispatch scheduling and
+teardown races. A `.latest` replacement now cancels the physical run as well as
+its admission owner, and a request-local boundary suppresses late emissions
+from cancellation-insensitive operations. Concurrent `FlowScope` close callers
+join the same cleanup. Effect-ID diagnostics identify only dispatches actually
+affected by cancellation, while the first `.latest` request is no longer
+misclassified. Cancelled `TestStoreScenario` runs stop at the interrupted step,
+clean up owned effects, and report cancellation separately from completion.
+Macro-generated Action and Output paths also normalize escaped keyword case
+names while retaining the escaped spelling in embed/extract code.
+
+### Removed
+
+1. `assertNoMoreActions()` after its 5.x deprecation window. Use `finish()` or
+   `assertNoBufferedActions()` according to lifecycle intent.
+
+### Migration
+
+Feature bodies add a third reducer generic:
+`some Reducer<State, Action, Never>` without outputs and
+`some Reducer<State, Action, Output>` with them. Output-producing manual
+reducers return `ReducerEffect<Action, Output>`; `EffectTask<Action>` remains
+the no-output alias. Ordinary statement-style sends remain source-compatible.
+Stored `Void`-returning `send` method values and the removed test API require
+small call-site changes. Output subscribers must be active before emission
+because the stream intentionally has no replay; default buffering is lossless
+and unbounded. For one dispatch, `send(_:capturingOutputs:)` installs the
+capture before enqueue and avoids that subscription race. See
+[`MIGRATION.md`](MIGRATION.md).
+
 ## 5.1.1 Release
 
 InnoFlow 5.1.1 is a focused macro-diagnostics patch for the 5.1 line. Action
@@ -499,6 +599,10 @@ See [API_DESIGN_EVALUATION.md](API_DESIGN_EVALUATION.md) for full migration and 
 ---
 
 ## InnoFlow 1.0.0 Release Notes (Legacy v1 API)
+
+Historical archive only: the installation URL and Swift examples in this
+section describe the 1.0.0 API. They are not copyable guidance for 6.0.0;
+use the current README and [MIGRATION.md](MIGRATION.md) instead.
 
 We're excited to announce the initial release of **InnoFlow** - a lightweight, hybrid architecture framework for SwiftUI that combines the best of Elm Architecture with SwiftUI's native `@Observable` pattern.
 

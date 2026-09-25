@@ -75,7 +75,7 @@ struct ReducerCompositionTests {
 
   @Test("CombineReducers runs children in declaration order on the same state")
   func combineReducersCumulativeMutation() {
-    let reducer = CombineReducers<ChildFeature.State, ChildFeature.Action> {
+    let reducer = CombineReducers<ChildFeature.State, ChildFeature.Action, Never> {
       Reduce { state, action in
         if case .add(let amount) = action {
           state.value += amount
@@ -104,7 +104,7 @@ struct ReducerCompositionTests {
       typealias Action = ParentAction
 
       func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-        CombineReducers<State, Action> {
+        CombineReducers<State, Action, Never> {
           Reduce { state, action in
             guard case .unrelated = action else { return .none }
             state.log.append("first")
@@ -145,15 +145,16 @@ struct ReducerCompositionTests {
 
   @Test("ReducerBuilder buildEither evaluates only the selected branch")
   func builderEitherBranches() {
-    func makeReducer(flag: Bool) -> CombineReducers<ChildFeature.State, ChildFeature.Action> {
+    func makeReducer(flag: Bool) -> CombineReducers<ChildFeature.State, ChildFeature.Action, Never>
+    {
       CombineReducers {
         if flag {
-          Reduce<ChildFeature.State, ChildFeature.Action> { state, _ in
+          Reduce<ChildFeature.State, ChildFeature.Action, Never> { state, _ in
             state.value += 1
             return .none
           }
         } else {
-          Reduce<ChildFeature.State, ChildFeature.Action> { state, _ in
+          Reduce<ChildFeature.State, ChildFeature.Action, Never> { state, _ in
             state.value += 100
             return .none
           }
@@ -171,10 +172,12 @@ struct ReducerCompositionTests {
 
   @Test("ReducerBuilder buildOptional treats an absent branch as a no-op")
   func builderOptionalNil() {
-    func makeReducer(enabled: Bool) -> CombineReducers<ChildFeature.State, ChildFeature.Action> {
+    func makeReducer(enabled: Bool) -> CombineReducers<
+      ChildFeature.State, ChildFeature.Action, Never
+    > {
       CombineReducers {
         if enabled {
-          Reduce<ChildFeature.State, ChildFeature.Action> { state, _ in
+          Reduce<ChildFeature.State, ChildFeature.Action, Never> { state, _ in
             state.value += 1
             return .none
           }

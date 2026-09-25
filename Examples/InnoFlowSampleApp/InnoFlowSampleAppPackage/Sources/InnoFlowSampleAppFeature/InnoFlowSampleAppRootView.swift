@@ -51,37 +51,38 @@ public struct InnoFlowSampleAppRootView: View {
 
   private var sampleHubView: some View {
     NavigationStack {
-      List(SampleDemo.catalog) { metadata in
-        let demo = metadata.demo
-        if metadata.prefersModalPresentation {
-          Button {
-            presentedModalDemo = demo
-          } label: {
-            sampleRow(for: metadata)
-          }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier(metadata.accessibilityIdentifier)
-          .accessibilityLabel(metadata.accessibilityLabel)
-          .accessibilityHint(metadata.accessibilityHint)
-        } else {
-          NavigationLink(value: demo) {
-            sampleRow(for: metadata)
-          }
-          .accessibilityIdentifier(metadata.accessibilityIdentifier)
-          .accessibilityLabel(metadata.accessibilityLabel)
-          .accessibilityHint(metadata.accessibilityHint)
-        }
-      }
-      .navigationTitle("InnoFlow Samples")
-      .safeAreaInset(edge: .top) {
+      List {
         DemoCard(
           title: "Canonical Reference App",
           summary:
             "Explore queue-based dispatch, orchestration, phase-driven state, app-boundary navigation, form-heavy bindings, and explicit cross-framework transport composition in one place."
         )
-        .padding(.horizontal)
-        .padding(.top, 8)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+
+        ForEach(SampleDemo.catalog) { metadata in
+          let demo = metadata.demo
+          if metadata.prefersModalPresentation {
+            Button {
+              presentedModalDemo = demo
+            } label: {
+              sampleRow(for: metadata)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(metadata.accessibilityIdentifier)
+            .accessibilityLabel(metadata.accessibilityLabel)
+            .accessibilityHint(metadata.accessibilityHint)
+          } else {
+            NavigationLink(value: demo) {
+              sampleRow(for: metadata)
+            }
+            .accessibilityIdentifier(metadata.accessibilityIdentifier)
+            .accessibilityLabel(metadata.accessibilityLabel)
+            .accessibilityHint(metadata.accessibilityHint)
+          }
+        }
       }
+      .navigationTitle("InnoFlow Samples")
       .navigationDestination(for: SampleDemo.self) { demo in
         sampleDemoView(for: demo)
       }

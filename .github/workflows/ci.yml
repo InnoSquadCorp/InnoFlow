@@ -5,18 +5,32 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
+
+# Keep only the newest run for a branch or pull request. This is especially
+# important for macOS jobs, where stale runs otherwise occupy scarce runners
+# long after a newer commit has superseded their evidence.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  coverage:
+    name: Coverage Gate
+    uses: ./.github/workflows/coverage.yml
+
   lint:
     name: Lint
     runs-on: macos-26
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -42,13 +56,22 @@ jobs:
           esac
           swift format lint --strict --recursive Sources Tests Examples
 
+      - name: Check Swift documentation fence syntax
+        run: '"$GITHUB_WORKSPACE/scripts/check-doc-swift-syntax.rb"'
+
+      - name: Compile copyable documentation examples as external consumers
+        run: '"$GITHUB_WORKSPACE/scripts/check-doc-copyable-examples.rb"'
+
   tests:
     name: Package Tests (Core)
     runs-on: macos-26
+    timeout-minutes: 60
     needs: lint
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -63,24 +86,68 @@ jobs:
             --jobs 1 \
             -Xswiftc -warnings-as-errors
 
-      - name: Run package tests
+      - name: Run package tests including output lifetime and composition contracts
         run: |
           set -eo pipefail
           # Randomized effect suites can otherwise starve unrelated
           # MainActor-bound timeout tests on shared macOS runners.
+          # Keep the full suite: captured-output cancellation, Never promotion,
+          # and non-equatable output matching are required release contracts.
+          # Include cancellation between emission, reduction, and observation.
           swift test \
             --package-path "$GITHUB_WORKSPACE" \
             --jobs 1 \
             --no-parallel \
             -Xswiftc -warnings-as-errors
 
-  thread-sanitizer:
-    name: Package Tests (ThreadSanitizer)
+  release-tests:
+    name: Package Tests (Release)
     runs-on: macos-26
+    timeout-minutes: 90
     needs: lint
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Run release configuration checks
+        run: '"$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"'
+
+  api-compatibility:
+    name: Public API Compatibility
+    runs-on: macos-26
+    timeout-minutes: 45
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Check compatibility with the 6.0 public baseline
+        run: '"$GITHUB_WORKSPACE/scripts/check-api-compatibility.sh"'
+
+      - name: Run 5.1.1 to 6.0 external migration consumer
+        run: '"$GITHUB_WORKSPACE/scripts/check-migration-consumer.sh"'
+
+  thread-sanitizer:
+    name: Package Tests (ThreadSanitizer)
+    runs-on: macos-26
+    timeout-minutes: 60
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -97,10 +164,13 @@ jobs:
   sample-tests:
     name: Package Tests (Sample)
     runs-on: macos-26
+    timeout-minutes: 30
     needs: lint
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -108,12 +178,13 @@ jobs:
       - name: Run sample package tests
         run: |
           set -eo pipefail
-          swift test --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" --jobs 1 -Xswiftc -warnings-as-errors
+          swift test --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" --disable-automatic-resolution --jobs 1 -Xswiftc -warnings-as-errors
 
   package-builds:
     name: Package Build (${{ matrix.platform }})
     runs-on: macos-26
-    needs: tests
+    timeout-minutes: 30
+    needs: lint
     strategy:
       fail-fast: false
       matrix:
@@ -121,6 +192,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -132,44 +205,84 @@ jobs:
             -scheme InnoFlow-Package \
             -destination "generic/platform=${{ matrix.platform }}" \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            build
+          CODE_SIGNING_REQUIRED=NO \
+          build
 
-  principle-gates:
-    name: Principle Gates
+  focused-runtime-tests:
+    name: Focused Runtime Tests (${{ matrix.platform }})
     runs-on: macos-26
-    needs: [tests, thread-sanitizer, sample-tests, package-builds]
+    timeout-minutes: 60
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [iOS, tvOS, watchOS, visionOS]
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
-        run: xcodebuild -version
+        run: |
+          xcodebuild -version
+          swift --version
 
-      - name: Run principle gates
+      - name: Run focused scheduler, scope, diagnostics, and Output tests
         run: |
           set -eo pipefail
-          "$GITHUB_WORKSPACE/scripts/principle-gates.sh"
+          "$GITHUB_WORKSPACE/scripts/run-focused-platform-runtime-matrix.sh" \
+            --platform "${{ matrix.platform }}"
 
-  sample-package-builds:
-    name: Sample Package Build (visionOS)
+  principle-gates:
+    name: Principle Gates (Static)
     runs-on: macos-26
-    needs: sample-tests
+    timeout-minutes: 30
+    needs: [lint, coverage]
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Build sample package for visionOS
+      - name: Run static principle gates
+        run: |
+          set -eo pipefail
+          "$GITHUB_WORKSPACE/scripts/principle-gates.sh" --static
+
+      - name: Verify gate negative controls
+        run: '"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'
+
+  sample-package-builds:
+    name: Sample Package Build (${{ matrix.platform }})
+    runs-on: macos-26
+    timeout-minutes: 30
+    needs: sample-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [tvOS, watchOS, visionOS]
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build sample package for ${{ matrix.platform }}
         run: |
           set -eo pipefail
           cd "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
           xcodebuild \
             -jobs 1 \
             -scheme InnoFlowSampleAppFeature \
-            -destination 'generic/platform=visionOS' \
+            -disableAutomaticPackageResolution \
+            -destination 'generic/platform=${{ matrix.platform }}' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
@@ -177,10 +290,13 @@ jobs:
   sample-build:
     name: Canonical Sample Build
     runs-on: macos-26
-    needs: principle-gates
+    timeout-minutes: 30
+    needs: lint
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -192,6 +308,7 @@ jobs:
             -jobs 1 \
             -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
             -scheme InnoFlowSampleApp \
+            -disableAutomaticPackageResolution \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -200,14 +317,14 @@ jobs:
   address-sanitizer:
     name: Package Tests (AddressSanitizer)
     runs-on: macos-26
+    timeout-minutes: 60
     needs: lint
-    if: >-
-      github.event_name == 'push' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-asan'))
+    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -224,10 +341,13 @@ jobs:
   sample-ui-tests:
     name: Canonical Sample UI Smoke Tests
     runs-on: macos-26
+    timeout-minutes: 60
     needs: sample-build
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -281,8 +401,55 @@ jobs:
             -parallel-testing-enabled NO \
             -project "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj" \
             -scheme InnoFlowSampleApp \
+            -disableAutomaticPackageResolution \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.udid }}" \
             -only-testing:InnoFlowSampleAppUITests \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test
+
+  ci-required:
+    name: CI Required
+    if: always()
+    needs:
+      - coverage
+      - lint
+      - tests
+      - release-tests
+      - api-compatibility
+      - thread-sanitizer
+      - sample-tests
+      - package-builds
+      - focused-runtime-tests
+      - principle-gates
+      - sample-package-builds
+      - sample-build
+      - address-sanitizer
+      - sample-ui-tests
+    runs-on: macos-26
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Require every mandatory CI result
+        run: |
+          set -euo pipefail
+          ruby "$GITHUB_WORKSPACE/scripts/check-required-ci-results.rb" \
+            "${{ github.event_name }}" \
+            "coverage=${{ needs.coverage.result }}" \
+            "lint=${{ needs.lint.result }}" \
+            "tests=${{ needs.tests.result }}" \
+            "release-tests=${{ needs.release-tests.result }}" \
+            "api-compatibility=${{ needs.api-compatibility.result }}" \
+            "thread-sanitizer=${{ needs.thread-sanitizer.result }}" \
+            "sample-tests=${{ needs.sample-tests.result }}" \
+            "package-builds=${{ needs.package-builds.result }}" \
+            "focused-runtime-tests=${{ needs.focused-runtime-tests.result }}" \
+            "principle-gates=${{ needs.principle-gates.result }}" \
+            "sample-package-builds=${{ needs.sample-package-builds.result }}" \
+            "sample-build=${{ needs.sample-build.result }}" \
+            "address-sanitizer=${{ needs.address-sanitizer.result }}" \
+            "sample-ui-tests=${{ needs.sample-ui-tests.result }}"

@@ -31,7 +31,7 @@ Changes to public API, concurrency semantics, macro authoring, effect ordering,
 or framework ownership require explicit rationale plus aligned source, tests,
 documentation, migration notes, and repository gates. Durable policy decisions
 should be captured in `docs/adr`. Breaking changes are reserved for a major
-release line; `main` currently represents 5.0 development.
+release line; the current staged branch represents 6.0 development.
 
 When consensus is not immediate, the maintainer records the alternatives and
 the deciding constraint in the issue, pull request, or ADR. The active

@@ -196,7 +196,7 @@ struct AuthenticationFlowFeature {
     .cancellable("auth-submit", cancelInFlight: true)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
     return Reduce { state, action in
@@ -303,7 +303,7 @@ struct AuthenticationFlowDemoView: View {
             "Email",
             text: store.binding(\.$username, to: AuthenticationFlowFeature.Action.setUsername)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .accessibilityLabel(Text("Email"))
           .accessibilityIdentifier("auth.username")
 
@@ -311,7 +311,7 @@ struct AuthenticationFlowDemoView: View {
             "Password",
             text: store.binding(\.$password, to: AuthenticationFlowFeature.Action.setPassword)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .accessibilityLabel(Text("Password"))
           .accessibilityIdentifier("auth.password")
 
@@ -320,7 +320,7 @@ struct AuthenticationFlowDemoView: View {
               "MFA code",
               text: store.binding(\.$mfaCode, to: AuthenticationFlowFeature.Action.setMFACode)
             )
-            .textFieldStyle(.roundedBorder)
+            .sampleTextFieldStyle()
             .accessibilityLabel(Text("MFA code"))
             .accessibilityIdentifier("auth.mfa-code")
           }
@@ -419,8 +419,11 @@ struct AuthenticationFlowDemoView: View {
   }
 }
 
-#Preview("Authentication Flow") {
-  NavigationStack {
-    AuthenticationFlowDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Authentication Flow") {
+    NavigationStack {
+      AuthenticationFlowDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif
