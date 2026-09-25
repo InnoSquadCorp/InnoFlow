@@ -73,7 +73,7 @@ public actor ManualTestClock {
     successfulSleepRegistrationCount
   }
 
-  /// The number of scheduling-time reads made through ``StoreClock/manual(_:)``.
+  /// The number of scheduling-time reads made through `StoreClock.manual(_:)`.
   ///
   /// Capture this value before sending a throttle action and wait for
   /// ``waitForNowReads(toReach:)`` to ensure the effect has observed the
@@ -150,7 +150,7 @@ public actor ManualTestClock {
   }
 
   /// Suspends until scheduling code has read this clock at least `threshold`
-  /// times through the ``StoreClock/manual(_:)`` adapter.
+  /// times through the `StoreClock.manual(_:)` adapter.
   ///
   /// This is useful for throttle tests whose active-window updates do not
   /// register a new sleeper. It prevents a test from advancing manual time
