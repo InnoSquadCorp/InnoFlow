@@ -16,6 +16,13 @@ examples = {
   "ReadmeDependencyInjection" => [
     ["README.md", "d6799f402603bfa90bfa249d399e7821517b7e91a74929bd28d2d98321e8242f"],
   ],
+  "ReadmeSelection" => [
+    ["README.md", "b0cfdb0069f6c60d4717e805bcb93f7a476600dfc4376d1769fee7c40d942c84"],
+    ["README.md", "e0007ef8f348acf754f9cd91b8c9af135c63f5d037dc5b628d91347a73aa0bc9"],
+    ["README.md", "2d69a1029cbb91f30cf0cb4a82a5f5e2e5389db7c9c5f2536aca3720cc08d1ac"],
+    ["README.md", "035488092619f0f3049835027c4ecb7ca7c7ea3453de98f6332e58bef7e12fe9"],
+    ["README.md", "370136f1aefef6b5e0b64b3b299b4321f71203bd251f56c39999d1b8713486f2"],
+  ],
   "PhaseGuideFeature" => [
     ["PHASE_DRIVEN_MODELING.md", "5a1c5fa991819e6afab1e975945498539caf63634d0f610a9219374d1023b85c"],
   ],
@@ -176,6 +183,68 @@ begin
       SWIFT
         @Test @MainActor func eventBufferExample() async throws {
       #{("let buffer = " + usage).lines.map { |line| "  #{line}" }.join.rstrip}
+        }
+      SWIFT
+    when "ReadmeSelection"
+      view, single, pair, many, row = sources
+      sources = [<<~SWIFT]
+        import InnoFlow
+        import InnoFlowSwiftUI
+        import SwiftUI
+        import Foundation
+
+        struct Profile: Equatable, Sendable {
+          var name = "Ada"
+          var isReady = true
+          var isAdmin = true
+        }
+        struct Permissions: Equatable, Sendable { var isReady = true; var canEdit = true }
+        struct Row: Equatable, Sendable { var id = UUID(); var summary = "Ready" }
+        struct DashboardSummary: Equatable, Sendable { let title: String; let isReady: Bool }
+        struct ProfileSummary: Equatable, Sendable { let name: String; let canEdit: Bool }
+        struct DashboardBadge: Equatable, Sendable { let title: String; let isReady: Bool }
+        struct Summary: Equatable, Sendable {
+          init(_ a: Int, _ b: Int, _ c: Int, _ d: Int, _ e: Int, _ f: Int, _ g: Int) {}
+        }
+
+        @InnoFlow
+        struct SelectionFeature {
+          struct State: Equatable, Sendable, DefaultInitializable {
+            var profile = Profile()
+            var permissions = Permissions()
+            var rows: [Row] = []
+            var a = 0; var b = 0; var c = 0; var d = 0
+            var e = 0; var f = 0; var g = 0
+          }
+          enum Action: Equatable, Sendable { case noop }
+          var body: some Reducer<State, Action, Never> {
+            Reduce { _, _ in .none }
+          }
+        }
+
+        @MainActor
+        struct SelectionView: View {
+          let store: Store<SelectionFeature>
+          var body: some View {
+        #{view.lines.map { |line| "    #{line}" }.join.rstrip}
+          }
+        }
+
+        @MainActor func singleSelection(_ store: Store<SelectionFeature>) {
+        #{single.lines.map { |line| "  #{line}" }.join.rstrip}
+          _ = summary
+        }
+        @MainActor func pairSelection(_ store: Store<SelectionFeature>) {
+        #{pair.lines.map { |line| "  #{line}" }.join.rstrip}
+          _ = badge
+        }
+        @MainActor func manySelection(_ store: Store<SelectionFeature>) {
+        #{many.lines.map { |line| "  #{line}" }.join.rstrip}
+          _ = summary
+        }
+        @MainActor func rowSelection(_ store: Store<SelectionFeature>, rowID: UUID) {
+        #{row.lines.map { |line| "  #{line}" }.join.rstrip}
+          _ = rowSummary
         }
       SWIFT
     end
