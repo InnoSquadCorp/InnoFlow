@@ -392,7 +392,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
 
   /// Schedules one asynchronous run in a Store-local execution lane.
   ///
-  /// Unlike ``concatenate(_:)-([])``, this policy applies across independent
+  /// Unlike `concatenate(_:)`, this policy applies across independent
   /// dispatches that use the same typed effect ID. Cancellation remains
   /// cooperative; only `serial` waits for physical operation completion before
   /// starting its successor.

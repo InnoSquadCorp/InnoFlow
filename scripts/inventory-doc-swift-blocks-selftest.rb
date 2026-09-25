@@ -19,5 +19,22 @@ Dir.mktmpdir("innoflow-doc-swift-") do |root|
   File.write(File.join(root, "README.md"), "```swift\nlet value = 1\n")
   _output, _error, status = Open3.capture3(File.join(__dir__, "inventory-doc-swift-blocks.rb"), root)
   abort "Unterminated fence was accepted" if status.success?
-  puts "[doc-swift-block-inventory-selftest] discovery and unterminated-fence controls passed"
+
+  File.write(File.join(root, "README.md"), "# Fixture\n```swift\nlet value = 1\n```\n")
+  File.write(File.join(root, "GUIDE.md"), "```swift\nlet value = 2\n```\n")
+  File.write(File.join(root, ".gitignore"), ".build/\n")
+  FileUtils.mkdir_p(File.join(root, ".build"))
+  File.write(File.join(root, ".build", "ignored.md"), "```swift\nlet ignored = 3\n```\n")
+  _output, error, status = Open3.capture3("git", "-C", root, "init", "-q")
+  abort error unless status.success?
+  _output, error, status = Open3.capture3("git", "-C", root, "add", "README.md", ".gitignore")
+  abort error unless status.success?
+  output, error, status = Open3.capture3(File.join(__dir__, "inventory-doc-swift-blocks.rb"), root)
+  abort error unless status.success?
+  result = JSON.parse(output)
+  abort "Git inventory omitted untracked docs or included ignored build output" unless
+    result.fetch("blockCount") == 2 && result.fetch("fileCount") == 2 &&
+    result.fetch("blocks").map { |block| block.fetch("file") } == ["GUIDE.md", "README.md"]
+
+  puts "[doc-swift-block-inventory-selftest] standalone, Git, ignore, and unterminated-fence controls passed"
 end

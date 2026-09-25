@@ -7,10 +7,21 @@ require "open3"
 
 root = ARGV.shift || File.expand_path("..", __dir__)
 abort "Usage: inventory-doc-swift-blocks.rb [repository-root]" unless ARGV.empty?
-files, error, status = Open3.capture3("rg", "--files", "-g", "*.md", "-g", "*.mdx", chdir: root)
-abort "Markdown inventory failed: #{error}" unless status.success?
+files = if File.exist?(File.join(root, ".git"))
+          output, error, status = Open3.capture3(
+            "git", "-C", root, "ls-files", "-z", "--cached", "--others",
+            "--exclude-standard", "--", "*.md", "*.mdx"
+          )
+          abort "Markdown inventory failed: #{error}" unless status.success?
+          output.split("\0")
+        else
+          # Standalone fixture roots have no Git index. The production inventory
+          # uses Git so ignored build artifacts never enter the release corpus.
+          Dir.glob("**/*.{md,mdx}", base: root)
+        end
 blocks = []
-files.lines.map(&:strip).sort.each do |relative|
+files.uniq.sort.each do |relative|
+  next unless File.file?(File.join(root, relative))
   lines = File.readlines(File.join(root, relative))
   index = 0
   while index < lines.length
