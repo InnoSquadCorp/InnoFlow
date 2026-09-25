@@ -166,19 +166,22 @@ When targeting iOS 26+, consider using these new APIs:
 - **Modern aesthetics**: Leverage Liquid Glass effects for cutting-edge UI design
 
 ```swift
+import SwiftUI
+
 // Example: Using iOS 26 features with availability checks
 struct ModernButton: View {
     var body: some View {
-        Button("Tap me") {
-            // Action
-        }
-        .buttonStyle({
-            if #available(iOS 26.0, *) {
-                .glass
-            } else {
-                .bordered
+        if #available(iOS 26.0, *) {
+            Button("Tap me") {
+                // Action
             }
-        }())
+            .buttonStyle(.glass)
+        } else {
+            Button("Tap me") {
+                // Action
+            }
+            .buttonStyle(.bordered)
+        }
     }
 }
 ```
@@ -195,6 +198,13 @@ struct ModernButton: View {
 
 Example with @Observable:
 ```swift
+import Observation
+import SwiftUI
+
+enum Theme: String {
+    case light, dark
+}
+
 @MainActor
 @Observable
 class UserSettings {
@@ -236,13 +246,28 @@ struct MainView: View {
     @Environment(UserSettings.self) private var settings
     
     var body: some View {
-        Text("Current theme: \(settings.theme)")
+        Text("Current theme: \(settings.theme.rawValue)")
     }
 }
 ```
 
 Example with .task modifier for async operations:
 ```swift
+import Foundation
+import Observation
+import SwiftUI
+
+struct Item: Identifiable {
+    let id: UUID
+    let name: String
+}
+
+@MainActor
+func fetchItems() async throws -> [Item] {
+    // Replace with the app's repository call.
+    []
+}
+
 @MainActor
 @Observable
 class DataModel {
@@ -308,6 +333,9 @@ Swift 6 enforces strict concurrency checking. All types that cross concurrency b
 - **Closures:** Mark as `@Sendable` when captured by concurrent contexts
 
 ```swift
+import Foundation
+import Observation
+
 // Sendable struct - automatic conformance
 struct UserData: Sendable {
     let id: UUID
@@ -345,7 +373,7 @@ final class Cache: @unchecked Sendable {
 }
 
 // @Sendable closures
-func processInBackground(completion: @Sendable @escaping (Result<Data, Error>) -> Void) {
+func processInBackground(data: Data, completion: @Sendable @escaping (Result<Data, Error>) -> Void) {
     Task {
         // Processing...
         completion(.success(data))
