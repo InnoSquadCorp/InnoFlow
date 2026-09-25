@@ -24,7 +24,13 @@ builder, composition, and package-internal diagnostics.
 The separate public-only symbol-graph inventory for this local candidate
 filters declarations to the four products' own `Sources/<module>/` files and
 compares precise identifiers, declarations, generic constraints, signatures,
-availability, and access level. It is not the final frozen-candidate report:
+availability, and access level. Generate both exact `5.1.1` and candidate
+graphs with `swift package dump-symbol-graph --skip-synthesized-members --minimum-access-level public`, then run
+`scripts/report-public-api-inventory.rb` against the two `symbolgraph`
+directories. Skipping synthesized members avoids counting inherited/default
+implementation copies as independent source declarations; a graph dump without
+that flag produces different totals. The table below was reproduced on Xcode
+27 for the local candidate but is not the final frozen-candidate report:
 
 | Product | 5.1.1 → candidate declarations | Added | Removed | Same-identifier changed |
 | --- | ---: | ---: | ---: | ---: |
