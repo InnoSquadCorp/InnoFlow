@@ -1247,13 +1247,13 @@ run_release_configuration_checks() {
   # enumerate .build/**/InnoFlow.build/*.o to link probe binaries; mixing
   # debug and release artifacts there causes duplicate-symbol failures.
   RELEASE_GATE_BUILD_PATH="${ROOT_DIR}/.build-principle-gates-release"
-  if ! run_low_priority swift build \
+  if ! run_logged_gate_command "release build" run_low_priority swift build \
       --package-path "$ROOT_DIR" \
       --build-path "$RELEASE_GATE_BUILD_PATH" \
       -c release \
       --jobs "$SWIFTPM_JOBS" \
-      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}" >/dev/null 2>&1; then
-    echo "[principle-gates] Failed: 'swift build -c release' crashed or failed — SIL inliner regression suspected"
+      "${SWIFT_FRONTEND_THREAD_FLAGS[@]}"; then
+    echo "[principle-gates] Failed: 'swift build -c release' failed; inspect the build diagnostic above"
     swift --version || true
     rm -rf "$RELEASE_GATE_BUILD_PATH"
     exit 1
