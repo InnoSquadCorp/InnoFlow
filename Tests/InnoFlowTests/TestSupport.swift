@@ -729,6 +729,24 @@ func typecheckSource(
       compilerArguments += ["-I", testingModules.path]
     }
   }
+  // Swift Testing is provided as a developer framework on some Xcode
+  // toolchains. A direct swiftc invocation does not inherit SwiftPM's
+  // framework search path, so importing InnoFlowTesting can otherwise fail
+  // while resolving its transitive _Testing_Foundation module.
+  let platformLookup = try runCapturedProcess(
+    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+    arguments: ["--sdk", "macosx", "--show-sdk-platform-path"]
+  )
+  if platformLookup.terminationStatus == 0 {
+    let platformPath = platformLookup.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    let testingFrameworks = URL(fileURLWithPath: platformPath)
+      .appendingPathComponent("Developer/Library/Frameworks", isDirectory: true)
+    if FileManager.default.fileExists(
+      atPath: testingFrameworks.appendingPathComponent("_Testing_Foundation.framework").path
+    ) {
+      compilerArguments += ["-F", testingFrameworks.path]
+    }
+  }
   let result = try runCapturedProcess(
     executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
     arguments: compilerArguments
