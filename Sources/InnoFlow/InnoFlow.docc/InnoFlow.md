@@ -29,8 +29,8 @@ attached macro cannot inspect.
 `Store` executes actions through a single FIFO dispatch queue. Immediate follow-up actions from
 ``/InnoFlowCore/ReducerEffect/send(_:)`` are queued rather than reducer-reentrant, async emissions from
 ``/InnoFlowCore/ReducerEffect/run(priority:_:)-(_,(Send<Action>)->Void)`` re-enter the same queue after their suspension boundary,
-``/InnoFlowCore/ReducerEffect/concatenate(_:)-(...)`` preserves declaration order, and
-``/InnoFlowCore/ReducerEffect/merge(_:)-(...)`` emits in
+`ReducerEffect.concatenate(_:)` preserves declaration order, and
+`ReducerEffect.merge(_:)` emits in
 child completion order.
 
 Every ``/InnoFlowCore/Store/send(_:)`` returns a
@@ -56,7 +56,7 @@ policies explicitly opt into loss.
 
 For larger features, model orchestration explicitly: parent actions coordinate child actions,
 long-running progress pipelines are composed with
-``/InnoFlowCore/ReducerEffect/concatenate(_:)-(...)``, and batch work
+`ReducerEffect.concatenate(_:)`, and batch work
 shares cancellation IDs for fan-out cancellation from the store boundary.
 
 When independent dispatches contend for one Store-local resource, use a

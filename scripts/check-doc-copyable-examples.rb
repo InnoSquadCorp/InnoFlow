@@ -240,7 +240,8 @@ begin
   warn error unless error.empty?
   abort "[doc-copyable] External phase example tests failed" unless status.success?
   test_result = ReleaseEvidenceOutputParser.parse({
-    "expectedTestRunCount" => 2,
+    # SwiftPM may group both test targets into one run (Xcode 26) or emit two
+    # runs (Xcode 27). The exact two test identities and total remain required.
     "minimumTestCount" => 2,
     "maximumTestCount" => 2,
     "expectedTestNames" => ["loadFlow()", "validatesItemsPhaseTransitions()"],
