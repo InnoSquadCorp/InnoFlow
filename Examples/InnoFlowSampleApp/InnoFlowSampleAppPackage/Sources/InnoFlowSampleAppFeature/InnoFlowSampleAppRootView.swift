@@ -59,7 +59,7 @@ public struct InnoFlowSampleAppRootView: View {
         )
         .listRowBackground(Color.clear)
         #if os(iOS) || os(macOS) || os(visionOS)
-        .listRowSeparator(.hidden)
+          .listRowSeparator(.hidden)
         #endif
 
         ForEach(SampleDemo.catalog) { metadata in

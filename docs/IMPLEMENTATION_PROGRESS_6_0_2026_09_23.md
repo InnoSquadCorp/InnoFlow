@@ -313,3 +313,11 @@ required. Sample UI regression is being refreshed on dedicated iPhone/iPad
 simulators. API-owner approval, effective branch/tag protection, dedicated
 release-runner proof, and separate public-tag/Release authorization remain
 external gates. Mulbyul validation remains excluded.
+
+The first clean follow-up candidate `801a2c4` failed `static-format`:
+Swift format requires an additional two-space indent for the modifier inside
+the platform `#if`. The earlier shell sequence had allowed a later successful
+command to mask lint's failure exit. The single whitespace correction now
+passes standalone strict format lint; the failed attempt is preserved in
+`/tmp/innoflow-evidence-r65.jSkzwm`. The replacement commit starts a new
+candidate/evidence root rather than reusing that snapshot.
