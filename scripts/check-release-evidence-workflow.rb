@@ -76,6 +76,7 @@ end
 begin
   cd_path = ARGV.fetch(0) { abort "Usage: check-release-evidence-workflow.rb <cd.yml> <release-evidence.yml>" }
   producer_path = ARGV.fetch(1) { abort "Usage: check-release-evidence-workflow.rb <cd.yml> <release-evidence.yml>" }
+  preflight_path = ARGV.fetch(2) { abort "Missing release-preflight.yml" }
 
   cd = load_workflow(cd_path)
   jobs = cd.fetch("jobs")
@@ -146,8 +147,8 @@ begin
   producer_trigger = producer["on"] || producer[true]
   fail_contract("producer must only expose workflow_dispatch") unless producer_trigger.is_a?(Hash) && producer_trigger.keys == ["workflow_dispatch"]
   inputs = producer_trigger.dig("workflow_dispatch", "inputs")
-  fail_contract("producer inputs are incomplete or contain retired inputs") unless inputs.is_a?(Hash) && inputs.keys.sort == %w[intake_name release_approval]
-  fail_contract("producer permissions must be read-only") unless producer["permissions"] == { "contents" => "read" }
+  fail_contract("producer inputs are incomplete or contain retired inputs") unless inputs.is_a?(Hash) && inputs.keys.sort == %w[preflight_run_id release_approval]
+  fail_contract("producer permissions must be read-only") unless producer["permissions"] == { "contents" => "read", "actions" => "read" }
   producer_jobs = producer.fetch("jobs")
   fail_contract("producer must define exactly one non-deploy job") unless producer_jobs.keys == ["produce-release-evidence"]
   producer_job = job!(producer_jobs, "produce-release-evidence")
@@ -155,6 +156,17 @@ begin
   fail_contract("producer must require a tag and explicit approval") unless producer_if.include?("github.ref_type == 'tag'") && producer_if.include?("inputs.release_approval")
   fail_contract("producer must use the dedicated self-hosted labels") unless Array(producer_job["runs-on"]) == %w[self-hosted macOS innoflow-release-evidence]
   producer_steps = steps!(producer_job, "produce-release-evidence")
+  strict_script_step!(producer_steps, "scripts/write-github-evidence-provenance.sh",
+    ["--preflight", '--run-id "$PREFLIGHT_RUN_ID"', '--artifact-name "innoflow-release-preflight-$GITHUB_SHA"', "--output"])
+  imports = producer_steps.select { |step| step.fetch("run", "").include?("gh run download") }
+  fail_contract("producer must import exactly one verified CI bundle") unless imports.one?
+  import_run = imports.first.fetch("run")
+  fail_contract("CI provenance must precede download") unless import_run.index("scripts/write-github-evidence-provenance.sh") &&
+    import_run.index("scripts/write-github-evidence-provenance.sh") < import_run.index("gh run download")
+  fail_contract("producer download must bind run, repository and SHA") unless
+    ['gh run download "$PREFLIGHT_RUN_ID"', '--repo "$GITHUB_REPOSITORY"',
+      '--name "innoflow-release-preflight-$GITHUB_SHA"', '--dir "$evidence_root"'].all? { |part| import_run.include?(part) }
+  fail_contract("producer may not import local intake") if File.read(producer_path).match?(/intake_name|INTAKE_NAME|\bditto\b/)
   producer_checkouts = checkout_steps(producer_steps)
   fail_contract("producer must checkout only InnoFlow") unless producer_checkouts.length == 1
   producer_innoflow, = producer_checkouts.find { |step, _| step.dig("with", "path") == "components/InnoFlow" }
@@ -169,7 +181,39 @@ begin
   fail_contract("producer artifact name is not candidate-bound") unless upload["name"] == "innoflow-release-evidence-${{ github.sha }}"
   fail_contract("producer artifact must fail closed") unless upload["if-no-files-found"] == "error" && upload["overwrite"] == false
   fail_contract("producer may not contain deployment commands") if File.read(producer_path).match?(/\b(?:gh release create|swift package publish|npm publish|deploy)\b/i)
-  [File.read(cd_path), File.read(producer_path)].each do |source|
+
+  preflight = load_workflow(preflight_path)
+  preflight_trigger = preflight["on"] || preflight[true]
+  fail_contract("preflight must only expose input-free workflow_dispatch") unless preflight_trigger == { "workflow_dispatch" => nil }
+  fail_contract("preflight permissions must be read-only") unless preflight["permissions"] == { "contents" => "read" }
+  fail_contract("preflight job inventory changed") unless preflight.fetch("jobs").keys == ["preflight"]
+  preflight_job = job!(preflight.fetch("jobs"), "preflight")
+  fail_contract("preflight must run only on main") unless preflight_job["if"] == "github.ref == 'refs/heads/main'"
+  fail_contract("preflight must use dedicated runner") unless preflight_job["runs-on"] == %w[self-hosted macOS innoflow-release-evidence]
+  fail_contract("preflight may not skip failures") if preflight_job["continue-on-error"] || preflight_job.key?("strategy")
+  fail_contract("preflight needs a bounded full-suite timeout") unless preflight_job["timeout-minutes"] == 360
+  preflight_steps = steps!(preflight_job, "preflight")
+  preflight_checkouts = checkout_steps(preflight_steps)
+  fail_contract("preflight must checkout only InnoFlow") unless preflight_checkouts.one?
+  assert_checkout!(preflight_checkouts.first.first, label: "preflight", path: "components/InnoFlow", ref: "${{ github.sha }}")
+  strict_script_step!(preflight_steps, "scripts/run-release-preflight.sh", ['execute --evidence-root "$EVIDENCE_ROOT"'])
+  execution = preflight_steps.find { |step| step.fetch("run", "").include?("scripts/run-release-preflight.sh") }
+  fail_contract("preflight cannot select a subset or skip execution") if execution.key?("if") || execution.fetch("run").include?("--check-id")
+  fail_contract("preflight execution must use exact component") unless execution["working-directory"] == "components/InnoFlow"
+  uploads = preflight_steps.select { |step| step["uses"].to_s.start_with?("actions/upload-artifact@") }
+  fail_contract("preflight needs separate complete and diagnostic artifacts") unless uploads.length == 2
+  complete = uploads.find { |step| step.dig("with", "name") == "innoflow-release-preflight-${{ github.sha }}" }
+  fail_contract("preflight success artifact must follow successful execution") unless complete && !complete.key?("if") &&
+    preflight_steps.index(complete) > preflight_steps.index(execution)
+  fail_contract("preflight complete artifact must fail closed") unless complete.dig("with", "if-no-files-found") == "error" &&
+    complete.dig("with", "overwrite") == false && complete.dig("with", "include-hidden-files") == true &&
+    complete.dig("with", "path") == "${{ steps.evidence.outputs.root }}"
+  diagnostic = uploads.find { |step| step != complete }
+  fail_contract("preflight failure artifact must not impersonate success") unless
+    diagnostic.dig("with", "name") == "innoflow-preflight-diagnostics-${{ github.sha }}-${{ github.run_attempt }}" &&
+    diagnostic["if"] == "${{ failure() || cancelled() }}"
+  fail_contract("preflight may not publish") if File.read(preflight_path).match?(/\b(?:gh release create|swift package publish|npm publish)\b/)
+  [File.read(cd_path), File.read(producer_path), File.read(preflight_path)].each do |source|
     fail_contract("release workflows retain retired Mulbyul dependencies") if source.match?(/mulbyul|MULBYUL/i)
   end
 

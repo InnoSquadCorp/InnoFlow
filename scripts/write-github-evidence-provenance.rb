@@ -5,8 +5,17 @@ require "json"
 require "time"
 
 begin
-  run_path, artifacts_path, artifact_name, expected_repository, expected_sha, expected_ref, output = ARGV
-  abort "Usage: write-github-evidence-provenance.rb <run-json> <artifacts-json> <artifact-name> <repository> <head-sha> <ref> <output>" if ARGV.length != 7
+  run_path, artifacts_path, artifact_name, expected_repository, expected_sha, expected_ref, output, kind = ARGV
+  abort "Usage: write-github-evidence-provenance.rb <run-json> <artifacts-json> <artifact-name> <repository> <head-sha> <ref> <output> [producer|preflight]" unless [7, 8].include?(ARGV.length)
+  kind ||= "producer"
+  approved_workflow = {
+    "producer" => ".github/workflows/release-evidence.yml",
+    "preflight" => ".github/workflows/release-preflight.yml",
+  }.fetch(kind) { abort "Unknown evidence provenance kind" }
+  if kind == "preflight"
+    abort "CI preflight must run on main" unless expected_ref == "refs/heads/main"
+    abort "CI preflight artifact must bind the candidate SHA" unless artifact_name == "innoflow-release-preflight-#{expected_sha}"
+  end
   run = JSON.parse(File.read(run_path))
   artifacts = JSON.parse(File.read(artifacts_path)).fetch("artifacts")
   named_artifacts = artifacts.select { |item| item["name"] == artifact_name }
@@ -19,7 +28,7 @@ begin
   abort "Trusted evidence workflow did not succeed" unless run["conclusion"] == "success"
   abort "Trusted evidence event must be workflow_dispatch" unless run["event"] == "workflow_dispatch"
   workflow_path, workflow_ref = run.fetch("path").split("@", 2)
-  abort "Unapproved evidence producer workflow: #{workflow_path}" unless workflow_path == ".github/workflows/release-evidence.yml"
+  abort "Unapproved evidence producer workflow: #{workflow_path}" unless workflow_path == approved_workflow
   abort "Trusted evidence ref is invalid" unless expected_ref.match?(%r{\Arefs/(?:heads|tags)/[^[:space:]]+\z})
   abort "Trusted evidence workflow ref mismatch" if workflow_ref && workflow_ref != expected_ref
   expected_head_branch = expected_ref.sub(%r{\Arefs/(?:heads|tags)/}, "")

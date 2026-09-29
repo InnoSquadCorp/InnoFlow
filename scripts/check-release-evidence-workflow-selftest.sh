@@ -5,6 +5,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 checker="$script_dir/check-release-evidence-workflow.sh"
 source_workflow="$script_dir/../.github/workflows/cd.yml"
 source_producer="$script_dir/../.github/workflows/release-evidence.yml"
+source_preflight="$script_dir/../.github/workflows/release-preflight.yml"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 
@@ -74,7 +75,33 @@ expect_producer_mutation_failure overwrite-artifact \
 expect_producer_mutation_failure deploy-command \
   's=File.read(ARGV[0]); s.sub!("set -euo pipefail", "set -euo pipefail\n          gh release create 6.0.0"); File.write(ARGV[1],s)'
 expect_producer_mutation_failure retired-consumer-input \
-  's=File.read(ARGV[0]); marker="      intake_name:\n"; block="      mulbyul_sha:\n        description: retired\n        required: true\n        type: string\n"; s.sub!(marker, block+marker); File.write(ARGV[1],s)'
+  's=File.read(ARGV[0]); marker="      preflight_run_id:\n"; block="      mulbyul_sha:\n        description: retired\n        required: true\n        type: string\n"; s.sub!(marker, block+marker); File.write(ARGV[1],s)'
+expect_producer_mutation_failure skip-ci-provenance \
+  's=File.read(ARGV[0]); s.sub!("--preflight \\\n", "--no-preflight \\\n"); File.write(ARGV[1],s)'
+expect_producer_mutation_failure import-local-intake \
+  's=File.read(ARGV[0]); s.sub!("gh run download", "ditto"); File.write(ARGV[1],s)'
+expect_producer_mutation_failure download-wrong-sha \
+  's=File.read(ARGV[0]); s.sub!("--name \"innoflow-release-preflight-$GITHUB_SHA\"", "--name \"unrelated\""); File.write(ARGV[1],s)'
+
+expect_preflight_mutation_failure() {
+  local name="$1" expression="$2"
+  local fixture="$fixture_root/preflight-$name.yml"
+  ruby -e "$expression" "$source_preflight" "$fixture"
+  if "$checker" "$source_workflow" "$source_producer" "$fixture" >/dev/null 2>&1; then
+    echo "Preflight workflow mutation was not rejected: $name" >&2
+    exit 1
+  fi
+}
+expect_preflight_mutation_failure untrusted-branch \
+  's=File.read(ARGV[0]); s.sub!("refs/heads/main", "refs/heads/feature"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure subset \
+  's=File.read(ARGV[0]); s.sub!("execute --evidence-root", "execute --check-id static-format --evidence-root"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure plan-not-execute \
+  's=File.read(ARGV[0]); s.sub!("execute --evidence-root", "plan --evidence-root"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure failed-pass-artifact \
+  's=File.read(ARGV[0]); s.sub!("      - name: Upload complete candidate-bound preflight", "      - if: always()\n        name: Upload complete candidate-bound preflight"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure job-continue-on-error \
+  's=File.read(ARGV[0]); s.sub!("    timeout-minutes: 360", "    continue-on-error: true\n    timeout-minutes: 360"); File.write(ARGV[1],s)'
 
 RELEASE_GATE_RESULT=success RELEASE_PLATFORM_BUILDS_RESULT=success \
   RELEASE_RUNTIME_TESTS_RESULT=success RELEASE_SANITIZERS_RESULT=success RELEASE_COVERAGE_RESULT=success \

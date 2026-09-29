@@ -64,4 +64,63 @@ jq 'del(.artifacts[0].id)' "$artifacts" >"$fixture_root/no-id.json"
 mv "$fixture_root/no-id.json" "$artifacts"
 expect_failure missing-artifact-id
 
+preflight_name="innoflow-release-preflight-$sha"
+write_run success .github/workflows/release-preflight.yml
+ruby -rjson -e 'p=ARGV[0]; j=JSON.parse(File.read(p)); j["path"]=".github/workflows/release-preflight.yml@refs/heads/main"; j["head_branch"]="main"; File.write(p,JSON.generate(j))' "$run"
+write_artifact "$preflight_name" "$digest"
+cp "$run" "$fixture_root/preflight-valid.json"
+cp "$artifacts" "$fixture_root/preflight-artifacts-valid.json"
+verify_preflight() {
+  "$script_dir/write-github-evidence-provenance.rb" "$run" "$artifacts" "$preflight_name" \
+    InnoSquad/InnoFlow "$sha" refs/heads/main "$output" preflight
+}
+verify_preflight >/dev/null
+jq -e '.workflowPath == ".github/workflows/release-preflight.yml" and .ref == "refs/heads/main"' "$output" >/dev/null
+for mutation in \
+  '.conclusion="failure"' '.status="in_progress"' '.event="pull_request"' \
+  '.head_sha="ffffffffffffffffffffffffffffffffffffffff"' \
+  '.repository.full_name="Other/InnoFlow"' '.head_branch="feature"' \
+  '.path=".github/workflows/release-evidence.yml@refs/heads/main"' \
+  '.path=".github/workflows/release-preflight.yml@refs/heads/feature"'; do
+  jq "$mutation" "$fixture_root/preflight-valid.json" >"$run"
+  if verify_preflight >/dev/null 2>&1; then
+    echo "Invalid CI preflight provenance accepted: $mutation" >&2
+    exit 1
+  fi
+done
+cp "$fixture_root/preflight-valid.json" "$run"
+for mutation in '.artifacts[0].expired=true' '.artifacts[0].digest="unavailable"' \
+  '.artifacts[0].name="unrelated"' '.artifacts += [.artifacts[0]]'; do
+  jq "$mutation" "$fixture_root/preflight-artifacts-valid.json" >"$artifacts"
+  if verify_preflight >/dev/null 2>&1; then
+    echo "Invalid CI preflight artifact accepted: $mutation" >&2
+    exit 1
+  fi
+done
+cp "$fixture_root/preflight-artifacts-valid.json" "$artifacts"
+if "$script_dir/write-github-evidence-provenance.rb" "$run" "$artifacts" "$preflight_name" \
+  InnoSquad/InnoFlow "$sha" refs/heads/main "$output" >/dev/null 2>&1; then
+  echo "Preflight run incorrectly accepted as tag evidence producer" >&2
+  exit 1
+fi
+verify_preflight >/dev/null
+
+mkdir -p "$fixture_root/bin"
+cat >"$fixture_root/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == api ]] || exit 64
+case "$2" in
+  repos/InnoSquad/InnoFlow/actions/runs/42) cat "$INNOFLOW_PROVENANCE_FIXTURE/run.json" ;;
+  'repos/InnoSquad/InnoFlow/actions/runs/42/artifacts?per_page=100') cat "$INNOFLOW_PROVENANCE_FIXTURE/artifacts.json" ;;
+  *) exit 64 ;;
+esac
+SH
+chmod +x "$fixture_root/bin/gh"
+INNOFLOW_PROVENANCE_FIXTURE="$fixture_root" PATH="$fixture_root/bin:$PATH" \
+  GITHUB_REPOSITORY=InnoSquad/InnoFlow GITHUB_SHA="$sha" GITHUB_REF=refs/tags/6.0.0 \
+  "$script_dir/write-github-evidence-provenance.sh" --preflight --run-id 42 \
+    --artifact-name "$preflight_name" --output "$fixture_root/shell-preflight.json" >/dev/null
+jq -e '.ref == "refs/heads/main" and .runId == "42"' "$fixture_root/shell-preflight.json" >/dev/null
+
 echo "[write-github-evidence-provenance-selftest] All checks passed"

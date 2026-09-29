@@ -48,6 +48,24 @@ evidence-ledger example, not as reusable proof for a later revision.
 
 ## InnoFlow 6.0.0 development rules
 
+### CI-only release validation
+
+The complete 32-check release preflight runs only in the `Release Preflight`
+GitHub Actions workflow on `main`, including tvOS 18.5 and watchOS 11.5.
+Do not install matrix runtimes on the user's Mac or run release-preflight
+`execute`/`resume` locally. Local `plan`/`report`, static validation, focused
+diagnostics and isolated tooling selftests remain allowed, but do not replace
+CI evidence. The serialized policy stage retains its historical name
+`local-preflight`; it now describes CI-produced evidence, not a local task.
+
+Keep all 32 checks and exact-SHA/raw-artifact verification. Missing CI runners,
+toolchains or runtimes block the CI gate; never waive them or fall back to local
+execution. The tag producer accepts only a successful main CI preflight run
+for that exact SHA, not a manually preloaded local bundle. Tag and Release
+publication still require separate user authorization. See RELEASING.md.
+
+### Framework contracts
+
 These rules are source-of-truth and are enforced by macro diagnostics, tests, and principle gates.
 
 1. `@InnoFlow` features must declare the third reducer generic explicitly:

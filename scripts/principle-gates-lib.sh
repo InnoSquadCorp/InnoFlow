@@ -1456,7 +1456,7 @@ run_principle_gates_impl() {
   run_community_health_checks
 
   if [[ "$gate_mode" == "static" ]]; then
-    echo "[principle-gates] Static checks passed (skipped release-build and sample-runtime gates; run without --static before pushing a release)"
+    echo "[principle-gates] Static checks passed (release-build and sample-runtime evidence is collected by Release Preflight CI, not locally)"
     return 0
   fi
 

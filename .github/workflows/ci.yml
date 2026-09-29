@@ -35,6 +35,13 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Verify CI-only release evidence contracts
+        run: |
+          set -euo pipefail
+          scripts/check-release-evidence-workflow-selftest.sh
+          scripts/write-github-evidence-provenance-selftest.sh
+          scripts/run-release-preflight-selftest.sh
+
       - name: Lint sources
         run: |
           set -eo pipefail
