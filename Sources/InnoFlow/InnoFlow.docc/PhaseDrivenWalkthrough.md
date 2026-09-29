@@ -46,38 +46,46 @@ declared phase is omitted from the directly authored map:
 
 ```swift
 var body: some Reducer<State, Action, Never> {
-  Reduce { state, action in
-    switch action {
-    case .loadTodos:
-      state.errorMessage = nil
-      let shouldFail = state.shouldFail
-      let todoService = self.todoService
-      return .run { send, context in
-        do {
-          try await context.sleep(for: .milliseconds(120))
-          try await context.checkCancellation()
-          let todos = try await todoService.loadTodos(shouldFail: shouldFail)
-          await send(._loaded(todos))
-        } catch is CancellationError {
-          return
-        } catch {
-          await send(._failed(error.localizedDescription))
+  CombineReducers {
+    Reduce { state, action in
+      switch action {
+      case .loadTodos:
+        state.errorMessage = nil
+        let shouldFail = state.shouldFail
+        let todoService = dependencies.todoService
+        return .run { send, context in
+          do {
+            try await context.sleep(for: .milliseconds(120))
+            try await context.checkCancellation()
+            let todos = try await todoService.loadTodos(shouldFail: shouldFail)
+            await send(._loaded(todos))
+          } catch is CancellationError {
+            return
+          } catch {
+            await send(._failed(error.localizedDescription))
+          }
         }
+        .cancellable("phase-load", cancelInFlight: true)
+
+      case ._loaded(let todos):
+        state.todos = todos
+        state.errorMessage = nil
+        return .none
+
+      case ._failed(let message):
+        state.errorMessage = message
+        return .none
+
+      default:
+        return .none
       }
-      .cancellable("phase-load", cancelInFlight: true)
-
-    case ._loaded(let todos):
-      state.todos = todos
-      state.errorMessage = nil
-      return .none
-
-    case ._failed(let message):
-      state.errorMessage = message
-      return .none
-
-    default:
-      return .none
     }
+
+    ForEachReducer(
+      state: \.todos,
+      action: Action.todoActionPath,
+      reducer: PhaseDrivenTodoRowFeature()
+    )
   }
 }
 ```

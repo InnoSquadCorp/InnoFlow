@@ -17,16 +17,8 @@ work is discarded instead of firing `didFailRun`.
 ```swift
 let instrumentation: StoreInstrumentation<Feature.Action> = .init(
   didFailRun: { event in
-    metrics.increment(
-      "feature.effect.failed",
-      tags: [
-        "errorType": event.errorTypeName,
-        "cancellationID": event.cancellationID?.description ?? "<none>"
-      ]
-    )
-    logger.error(
-      "effect failed: \(event.errorTypeName) — \(event.errorDescription)"
-    )
+    metrics.increment("feature.effect.failed")
+    logger.error("effect failed: \(event.errorTypeName)")
   }
 )
 ```
@@ -36,6 +28,9 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .init(
 the Swift 6 `Sendable` boundary by capturing the original error reference.
 The cancellation check and `didFailRun` invocation share one non-suspending
 MainActor turn; keep instrumentation callbacks short and non-blocking.
+This custom adapter deliberately omits `errorDescription` and dynamic
+`cancellationID` values: either may contain private data or create unbounded
+metrics cardinality. Audit and redact them before an app opts into recording.
 
 ## Built-in Metrics Counter
 
@@ -112,11 +107,8 @@ choice in production. Pick one of the supplied adapters or compose them:
 let diagnostics: PhaseMapDiagnostics<Feature.Action, Feature.State.Phase> = .combined(
   .osLog(logger: Logger(subsystem: "app", category: "phaseMap")),
   .signpost(signposter: OSSignposter(subsystem: "app", category: "phaseMap")),
-  .sink { violation in
-    metrics.increment(
-      "feature.phaseMap.violation",
-      tags: ["case": "\(violation)"]
-    )
+  .sink { _ in
+    metrics.increment("feature.phaseMap.violation")
   }
 )
 
@@ -144,11 +136,8 @@ using explicit `PhaseTransitionGraph` guards instead of `PhaseMap`:
 let diagnostics: PhaseValidationDiagnostics<Feature.Action, Feature.State.Phase> = .combined(
   .osLog(logger: Logger(subsystem: "app", category: "phaseValidation")),
   .signpost(signposter: OSSignposter(subsystem: "app", category: "phaseValidation")),
-  .sink { violation in
-    metrics.increment(
-      "feature.phaseValidation.violation",
-      tags: ["case": "\(violation)"]
-    )
+  .sink { _ in
+    metrics.increment("feature.phaseValidation.violation")
   }
 )
 
@@ -162,6 +151,8 @@ let reducer = Feature()
 
 As with `PhaseMapDiagnostics`, action payloads are redacted by default and
 `includeActionPayload: true` should stay limited to local debugging sessions.
+The custom metrics sinks also omit violation descriptions: these may contain
+action payloads or domain phase labels and create unbounded tag cardinality.
 Phase labels are also redacted by default in the standard logging adapters; pass
 `includePhaseInfo: true` only when those enum values are safe to show in Console
 or Instruments traces.

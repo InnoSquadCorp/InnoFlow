@@ -279,6 +279,9 @@ def command_matches?(check, command)
   arguments = actual.drop(1)
   return arguments == contract.fetch("exactArguments") if contract.key?("exactArguments")
   return false if check.fetch("id").start_with?("sdk-") && !sdk_build_arguments?(arguments)
+  if check.fetch("id").start_with?("sample-sdk-")
+    return false unless arguments.first == "--sample" && sdk_build_arguments?(arguments.drop(1))
+  end
   return false if check.fetch("id").start_with?("runtime-") && !focused_runtime_arguments?(arguments)
   return false unless Array(contract["requiredArguments"]).all? { |argument| arguments.include?(argument) }
   return false if Array(contract["forbiddenArguments"]).any? { |argument| arguments.include?(argument) }

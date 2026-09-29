@@ -2,10 +2,15 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 --platform <macOS|iOS|tvOS|watchOS|visionOS> --derived-data <absolute-dir> --result-bundle <absolute-xcresult>" >&2
+  echo "Usage: $0 [--sample] --platform <macOS|iOS|tvOS|watchOS|visionOS> --derived-data <absolute-dir> --result-bundle <absolute-xcresult>" >&2
   exit 64
 }
 
+sample_mode=false
+if [[ $# -gt 0 && "$1" == "--sample" ]]; then
+  sample_mode=true
+  shift
+fi
 [[ $# -eq 6 && "$1" == "--platform" && "$3" == "--derived-data" && "$5" == "--result-bundle" ]] || usage
 platform="$2"
 derived_data="$4"
@@ -19,6 +24,18 @@ case "$platform" in macOS|iOS|tvOS|watchOS|visionOS) ;; *) usage ;; esac
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package_root="$(cd "$script_dir/.." && pwd -P)"
+scheme="InnoFlow-Package"
+if [[ "$sample_mode" == true ]]; then
+  for segment in "$package_root/Examples" "$package_root/Examples/InnoFlowSampleApp" \
+    "$package_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"; do
+    [[ -d "$segment" && ! -L "$segment" ]] || {
+      echo "Sample package path is missing or redirected: $segment" >&2
+      exit 65
+    }
+  done
+  package_root="$package_root/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
+  scheme="InnoFlowSampleAppFeature"
+fi
 [[ -f "$package_root/Package.swift" ]] || {
   echo "InnoFlow package is missing" >&2
   exit 65
@@ -66,7 +83,8 @@ xcodebuild \
   -quiet \
   -jobs 1 \
   -workspace "$workspace" \
-  -scheme InnoFlow-Package \
+  -scheme "$scheme" \
+  -disableAutomaticPackageResolution \
   -destination "generic/platform=$platform" \
   -derivedDataPath "$derived_data" \
   -resultBundlePath "$result_bundle" \

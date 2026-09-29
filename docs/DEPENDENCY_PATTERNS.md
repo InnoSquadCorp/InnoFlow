@@ -180,6 +180,9 @@ case .subscribe:
         await send(._tick(counter))
       } catch is CancellationError {
         return
+      } catch {
+        // A host may send its own failure action before terminating.
+        return
       }
     }
   }
@@ -267,6 +270,7 @@ try await clock.advance(by: .milliseconds(100), onceSleepersReach: 1)
 
 await store.receive(._tick(1)) {
   $0.ticks = [1]
+  $0.totalTicksReceived = 1
 }
 await store.send(.unsubscribe) {
   $0.isSubscribed = false

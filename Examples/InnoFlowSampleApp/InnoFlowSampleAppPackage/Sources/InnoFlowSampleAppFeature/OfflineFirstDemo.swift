@@ -212,8 +212,13 @@ struct OfflineFirstFeature {
 
 // MARK: - View
 
+@MainActor
 struct OfflineFirstDemoView: View {
-  @State private var store = Store(reducer: OfflineFirstFeature())
+  @State private var store: Store<OfflineFirstFeature>
+
+  init(store: Store<OfflineFirstFeature> = Store(reducer: OfflineFirstFeature())) {
+    self._store = State(initialValue: store)
+  }
 
   var body: some View {
     ScrollView {

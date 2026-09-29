@@ -31,9 +31,11 @@ Use `@InnoFlow` from the start; the macro both synthesizes `reduce(into:action:)
 ```swift
 @InnoFlow
 struct Feature {
-  struct State: Equatable, Sendable, DefaultInitializable { /* ... */ }
-  enum Action: Equatable, Sendable { /* ... */ }
-  var body: some Reducer<State, Action, Never> { /* ... */ }
+  struct State: Equatable, Sendable, DefaultInitializable {}
+  enum Action: Equatable, Sendable { case load }
+  var body: some Reducer<State, Action, Never> {
+    Reduce { _, _ in .none }
+  }
 }
 ```
 

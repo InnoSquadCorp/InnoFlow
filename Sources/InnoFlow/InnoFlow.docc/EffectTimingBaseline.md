@@ -47,6 +47,11 @@ For reducer-construction and dispatch microbenchmarks, use the local-only
 with any other instrumentation, then pass that instrumentation into the `Store`
 initializer.
 
+This maintainer recipe uses the repository's probe feature and witness from
+`Tests/InnoFlowTests`, plus a caller-owned `outputURL`. They are contextual test
+helpers, not public InnoFlow APIs. Wait for the dispatch tree before reading or
+exporting a complete capture.
+
 ```swift
 import InnoFlow
 import InnoFlowTesting
@@ -62,7 +67,7 @@ let store = Store(
   )
 )
 
-store.send(.start)
+await store.send(.start).finish()
 let entries = await recorder.entries()
 try await recorder.dumpJSONL(to: outputURL)
 ```

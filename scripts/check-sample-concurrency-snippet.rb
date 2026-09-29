@@ -4,11 +4,15 @@
 require "fileutils"
 require "open3"
 require "tmpdir"
+require "digest"
 require_relative "release-evidence-output-parser"
+require_relative "doc-example-contexts"
 
 root = File.expand_path("..", __dir__)
 document = File.read(File.join(root, "Examples/InnoFlowSampleApp/CLAUDE.md"))
 blocks = document.scan(/^```swift\n(.*?)\n```$/m).flatten
+abort "[sample-concurrency] Sample guide fence inventory changed" unless
+  blocks.map { |source| Digest::SHA256.hexdigest(source + "\n") }.sort == DocExampleContexts::SAMPLE_FENCES.sort
 block = blocks.find { |candidate| candidate.include?("final class UserModel: Sendable") }
 abort "[sample-concurrency] UserModel guidance is missing" unless block
 abort "[sample-concurrency] UserModel must be explicitly main-actor isolated" unless

@@ -16,6 +16,7 @@ cp "$root_dir/scripts/run-release-preflight.sh" "$root_dir/scripts/run-release-p
 cp "$root_dir/scripts/check-sample-swift63.sh" "$fixture_root/scripts/"
 cp "$root_dir/scripts/check-doc-swift-syntax.rb" "$fixture_root/scripts/"
 cp "$root_dir/scripts/check-doc-copyable-examples.rb" "$fixture_root/scripts/"
+cp "$root_dir/scripts/report-doc-fence-review.rb" "$fixture_root/scripts/"
 
 ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
 
@@ -57,6 +58,10 @@ expect_mutation_failure doc-syntax-bypass \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="doc-swift-syntax" }; c.fetch("commandContract")["executable"]="true"; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure doc-copyable-bypass \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="doc-copyable-examples" }; c.fetch("commandContract")["executable"]="true"; File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure incomplete-doc-review \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="doc-fence-review" }; c.fetch("commandContract")["exactArguments"]=[]; File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure sample-sdk-bypass \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="sample-sdk-tvos" }; c.fetch("commandContract")["requiredArguments"].delete("--sample"); File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure unpinned-runtime-inventory \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="runtime-ios-18.5" }; c.delete("testIdentifierInventorySha256"); File.write(p,JSON.generate(j)+"\n")'
 
@@ -124,6 +129,25 @@ if validate_sdk_command scripts/run-sdk-platform-build.sh --platform macOS --der
 fi
 if validate_sdk_command "${sdk_command[@]}" --project "$fixture_root/Foreign.xcodeproj" >/dev/null 2>&1; then
   echo "Project redirection command passed" >&2
+  exit 1
+fi
+
+validate_sample_sdk_command() {
+  "$script_dir/release-evidence-tool.rb" validate-command \
+    --policy "$command_repository/docs/contracts/release-evidence-policy.json" \
+    --check-id sample-sdk-tvos \
+    --candidate "$command_candidate" \
+    --candidate-snapshot "$command_snapshot" \
+    --component-label innoflow -- "$@"
+}
+sample_sdk_command=(scripts/run-sdk-platform-build.sh --sample --platform tvOS --derived-data "$fixture_root/SampleDerived" --result-bundle "$fixture_root/sample.xcresult")
+validate_sample_sdk_command "${sample_sdk_command[@]}" >/dev/null
+if validate_sample_sdk_command scripts/run-sdk-platform-build.sh --platform tvOS --derived-data "$fixture_root/SampleDerived" --result-bundle "$fixture_root/sample.xcresult" >/dev/null 2>&1; then
+  echo "Sample SDK command without sample mode passed" >&2
+  exit 1
+fi
+if validate_sample_sdk_command "${sample_sdk_command[@]}" --workspace "$fixture_root/Foreign.xcworkspace" >/dev/null 2>&1; then
+  echo "Sample SDK workspace redirection passed" >&2
   exit 1
 fi
 
