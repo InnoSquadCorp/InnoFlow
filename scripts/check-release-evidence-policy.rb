@@ -76,7 +76,7 @@ begin
 
   # Swift 6.3 aggregates the Core and macro suites into one run, while the
   # Xcode 27 Swift 6.4 runner emits two. These counts were measured from the
-  # complete 784-test outputs, not inferred from the number of test targets.
+  # complete baseline outputs, not inferred from the number of test targets.
   { "swift-6.3-toolchain" => 1, "swift-6.4-toolchain" => 2 }.each do |id, expected_runs|
     toolchain_check = policy.fetch("checks").find { |entry| entry.fetch("id") == id }
     abort "[release-evidence-policy] #{id} is missing" unless toolchain_check
@@ -124,7 +124,8 @@ begin
   inventory = JSON.parse(File.read(inventory_path))
   expected_suites = %w[
     CollectionScopeCacheTests DispatchDiagnosticsTests EffectRunSchedulerTests
-    FlowScopeTests OutputCasePathTests SingleScopeCacheTests StoreScopeSelectionTests
+    FlowScopeTests IdentifiedArrayTests ManualTestClockTests OutputCasePathTests
+    SingleScopeCacheTests StoreScopeSelectionTests
   ]
   identifiers = inventory.fetch("expectedTestIdentifiers")
   abort "[release-evidence-policy] runtime inventory suites changed" unless inventory.fetch("suites") == expected_suites

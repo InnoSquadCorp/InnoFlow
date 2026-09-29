@@ -86,6 +86,11 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Fixed
 
+- `IdentifiedArray` equality and hashing now include the stored ID-to-position
+  mapping, so replacing equal element values with different identities refreshes
+  root/scoped selections and keeps distinct collection keys in sets and dictionaries.
+- `ManualTestClock.sleep(for:)` now throws for pre-cancelled zero and negative
+  durations, matching the continuous clock without registering a sleeper.
 - Scheduled `.latest` replacement now owns and cancels the physical run task,
   and a request-local boundary drops late actions from an uncooperative
   displaced operation in both `Store` and `TestStore`.

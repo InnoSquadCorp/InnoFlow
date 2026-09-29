@@ -15,6 +15,125 @@ struct IdentifiedArrayTests {
     var title: String
   }
 
+  private struct ProjectedRow: Hashable, Sendable {
+    var primary: Int
+    var alternate: Int
+    var title: String
+  }
+
+  // Core-only fixture: the regression exercises runtime identity, not macros.
+  private struct IdentityFeature: Reducer {
+    struct State: Equatable, Sendable {
+      var rows: IdentifiedArray<Int, ProjectedRow>
+      var revision = 0
+    }
+    enum Action: Sendable {
+      case replace(IdentifiedArray<Int, ProjectedRow>)
+    }
+    func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+      switch action {
+      case .replace(let rows): state.rows = rows
+      }
+      return .none
+    }
+  }
+
+  @Test("Equal element values with different identities remain distinct collection keys")
+  func equalityIncludesCustomIdentity() {
+    let rows = [ProjectedRow(primary: 1, alternate: 101, title: "same")]
+    let primary = IdentifiedArray(uniqueElements: rows, id: { $0.primary })
+    let alternate = IdentifiedArray(uniqueElements: rows, id: { $0.alternate })
+
+    #expect(primary.values == alternate.values)
+    #expect(primary[id: 101] == nil)
+    #expect(alternate[id: 101] == rows[0])
+    #expect(primary != alternate)
+    #expect(Set([primary, alternate]).count == 2)
+    var labels = [primary: "primary"]
+    labels[alternate] = "alternate"
+    #expect(labels[primary] == "primary")
+    #expect(labels[alternate] == "alternate")
+  }
+
+  @Test("Identity equality includes positions, not just the set of IDs")
+  func equalityIncludesIdentityPositions() {
+    let rows = [
+      ProjectedRow(primary: 1, alternate: 2, title: "a"),
+      ProjectedRow(primary: 2, alternate: 1, title: "b"),
+    ]
+    let primary = IdentifiedArray(uniqueElements: rows, id: { $0.primary })
+    let alternate = IdentifiedArray(uniqueElements: rows, id: { $0.alternate })
+
+    #expect(Set(primary.ids) == Set(alternate.ids))
+    #expect(primary.values == alternate.values)
+    #expect(primary[id: 1]?.title == "a")
+    #expect(alternate[id: 1]?.title == "b")
+    #expect(primary != alternate)
+  }
+
+  @Test("Equivalent projections and mutation histories preserve equality and hashing")
+  func equivalentIdentityProjectionsAndMutations() {
+    let rows = [
+      ProjectedRow(primary: 1, alternate: 1, title: "a"),
+      ProjectedRow(primary: 2, alternate: 2, title: "b"),
+    ]
+    let original = IdentifiedArray(uniqueElements: rows, id: { $0.primary })
+    var rebuilt = IdentifiedArray(uniqueElements: rows.reversed(), id: { $0.alternate })
+    rebuilt.remove(id: 1)
+    rebuilt.insert(rows[0], at: 0)
+    #expect(original == rebuilt)
+    #expect(original.hashValue == rebuilt.hashValue)
+    #expect(Set([original, rebuilt]).count == 1)
+
+    rebuilt[id: 1]?.title = "changed"
+    #expect(original != rebuilt)
+    #expect(original[id: 1]?.title == "a")
+    rebuilt.removeAll()
+    let empty = IdentifiedArray<Int, ProjectedRow>(id: { $0.primary })
+    #expect(rebuilt == empty)
+    #expect(rebuilt.hashValue == empty.hashValue)
+  }
+
+  @Test("ID-only replacement refreshes root and scoped selections")
+  @MainActor
+  func identityReplacementRefreshesSelections() {
+    let rows = [ProjectedRow(primary: 1, alternate: 101, title: "same")]
+    let original = IdentifiedArray(uniqueElements: rows, id: { $0.primary })
+    let replacement = IdentifiedArray(uniqueElements: rows, id: { $0.alternate })
+    let store = Store(reducer: IdentityFeature(), initialState: .init(rows: original))
+    let scoped = store.scope(
+      state: \.self,
+      action: CasePath<IdentityFeature.Action, IdentityFeature.Action>(
+        embed: { $0 }, extract: { $0 })
+    )
+    let keyPath = store.select(\.rows)
+    let scopedKeyPath = scoped.select(\.rows)
+    let selections = [
+      store.select { $0.rows.ids },
+      store.select(memoize: true) { $0.rows.ids },
+      store.select(dependingOn: \.rows) { $0.ids },
+      store.select(dependingOnAll: \.rows, \.revision) { rows, _ in rows.ids },
+      scoped.select { $0.rows.ids },
+      scoped.select(memoize: true) { $0.rows.ids },
+      scoped.select(dependingOn: \.rows) { $0.ids },
+      scoped.select(dependingOnAll: \.rows, \.revision) { rows, _ in rows.ids },
+    ]
+    for selection in selections { #expect(selection.requireAlive() == [1]) }
+
+    // Also exercise a normal value change and restoration of the original IDs.
+    let changed = IdentifiedArray(
+      uniqueElements: [ProjectedRow(primary: 2, alternate: 102, title: "changed")],
+      id: { $0.primary })
+    for next in [replacement, changed, original, original] {
+      scoped.send(.replace(next))
+      #expect(store.state.rows.ids == next.ids)
+      #expect(scoped.requireAlive().rows.ids == next.ids)
+      #expect(keyPath.requireAlive().ids == next.ids)
+      #expect(scopedKeyPath.requireAlive().ids == next.ids)
+      for selection in selections { #expect(selection.requireAlive() == next.ids) }
+    }
+  }
+
   @Test("uniqueElements preserves insertion order and rejects duplicates in debug")
   func uniqueElementsOrderAndDuplicates() {
     let array = IdentifiedArrayOf<Row>(uniqueElements: [

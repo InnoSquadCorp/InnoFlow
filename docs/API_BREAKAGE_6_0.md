@@ -39,6 +39,14 @@ that flag produces different totals. The table below was reproduced on Xcode
 | InnoFlowSwiftUI | 9 → 10 | 2 | 1 | 0 |
 | InnoFlowTesting | 75 → 108 | 36 | 3 | 0 |
 
+Local preparation recheck, 2026-09-30: both graphs were regenerated with Swift
+6.4 from an archive of exact `5.1.1` (`00a73ed2d2cb94114b0be5c9fbd59c187a4b67c7`)
+and the revised 6.0 working tree based on `30259e8`. All declaration-level
+inventory entries, not just these counts, match the previously classified
+inventory. The two identity/test-clock corrections below change behavior but
+not signatures. This is a local review result for an uncommitted candidate;
+final-SHA evidence and the owner's API approval are still required.
+
 The 63 removed Core identifiers group by owner as: `EffectTask` 18,
 `Store`/`ScopedStore` 12, reducer/composition types 19, and
 instrumentation/metrics 14. The six changed same-identifier declarations are
@@ -100,6 +108,19 @@ continues to apply until a consumer opts into the new APIs.
 These changes are intentional and are covered by [MIGRATION.md](../MIGRATION.md).
 
 ## Diagnostics that are not additional source migrations
+
+### Behavioral corrections without signature changes
+
+The final hardening also changes two observable contracts that symbol graphs
+cannot describe. `IdentifiedArray` equality/hash includes stored identity
+positions as well as values, so different custom identities no longer compare
+as the same state or collection key. `ManualTestClock.sleep(for:)` propagates
+pre-existing cancellation for nonpositive durations, matching the continuous
+clock. See the collection-identity/test-clock section in [MIGRATION.md](../MIGRATION.md).
+Their signatures are unchanged; the existing declaration counts above are
+historical evidence, not a regenerated final-candidate inventory or approval.
+
+### Existing digester classification
 
 - Most `EffectDriver`, `StoreEffectBridge`, queue, throttle, and walker entries
   describe `package` implementation details inheriting the new `Output` type.

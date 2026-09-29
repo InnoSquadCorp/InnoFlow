@@ -42,6 +42,13 @@ validation workflows that previously required application-level adapters.
 
 ### Release hardening
 
+`IdentifiedArray` equality and hashing include stored identities and their
+positions, not just element values. Identity-only replacement now refreshes
+root and scoped selections. Custom identity projections must stay stable for
+stored elements. `ManualTestClock.sleep(for:)` also honors pre-existing task
+cancellation for zero and negative durations, matching the continuous clock;
+uncancelled nonpositive sleeps still return without registering a sleeper.
+
 The tag workflow now makes package builds for macOS, iOS, tvOS, watchOS, and
 visionOS plus thread/address sanitizer suites independent prerequisites of
 release publication. Macro expansion assertions also fail through Swift

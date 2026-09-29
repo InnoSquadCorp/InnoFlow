@@ -160,6 +160,8 @@ command+=(
   -only-testing:InnoFlowTests/StoreScopeSelectionTests
   -only-testing:InnoFlowTests/CollectionScopeCacheTests
   -only-testing:InnoFlowTests/SingleScopeCacheTests
+  -only-testing:InnoFlowTests/IdentifiedArrayTests
+  -only-testing:InnoFlowTests/ManualTestClockTests
 )
 if [[ -n "$derived_data" ]]; then
   command+=( -derivedDataPath "$derived_data" )

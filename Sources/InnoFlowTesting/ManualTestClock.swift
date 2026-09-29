@@ -165,7 +165,12 @@ public actor ManualTestClock {
   }
 
   /// Suspends until the clock has been advanced by at least `duration`.
+  /// Nonpositive durations return immediately unless the task is cancelled.
+  ///
+  /// - Throws: `CancellationError` if the task is already cancelled, including
+  ///   for zero or negative durations, or is cancelled while suspended.
   public func sleep(for duration: Duration) async throws {
+    try Task.checkCancellation()
     guard duration > .zero else {
       return
     }
@@ -176,7 +181,6 @@ public actor ManualTestClock {
     }
 
     let sleeperID = UUID()
-    try Task.checkCancellation()
     try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
         guard registerSleep(id: sleeperID, deadline: deadline, continuation: continuation) else {
