@@ -229,6 +229,78 @@ extension PhaseTransitionGraph {
 }
 
 extension PhaseTransitionGraph {
+  /// Exports this graph as a deterministic Mermaid state diagram.
+  public func mermaidDiagram() -> String {
+    let phases = diagramPhases
+    let identifiers = Dictionary(
+      uniqueKeysWithValues: phases.enumerated().map { ($0.element, phaseID($0.offset)) }
+    )
+    var lines = ["stateDiagram-v2"]
+    for phase in phases {
+      guard let identifier = identifiers[phase] else { continue }
+      lines.append("  state \"\(diagramLabel(phase))\" as \(identifier)")
+    }
+    for transition in sortedTransitions {
+      guard
+        let source = identifiers[transition.from],
+        let target = identifiers[transition.to]
+      else { continue }
+      lines.append("  \(source) --> \(target)")
+    }
+    return lines.joined(separator: "\n")
+  }
+
+  /// Exports this graph as deterministic Graphviz DOT source.
+  public func dotGraph(name: String = "PhaseMap") -> String {
+    let phases = diagramPhases
+    let identifiers = Dictionary(
+      uniqueKeysWithValues: phases.enumerated().map { ($0.element, phaseID($0.offset)) }
+    )
+    var lines = ["digraph \"\(escapeDiagramText(name))\" {"]
+    for phase in phases {
+      guard let identifier = identifiers[phase] else { continue }
+      lines.append("  \(identifier) [label=\"\(diagramLabel(phase))\"];")
+    }
+    for transition in sortedTransitions {
+      guard
+        let source = identifiers[transition.from],
+        let target = identifiers[transition.to]
+      else { continue }
+      lines.append("  \(source) -> \(target);")
+    }
+    lines.append("}")
+    return lines.joined(separator: "\n")
+  }
+
+  private var diagramPhases: [Phase] {
+    Set(adjacency.keys).union(adjacency.values.flatMap { $0 })
+      .sorted { String(reflecting: $0) < String(reflecting: $1) }
+  }
+
+  private var sortedTransitions: [PhaseTransition<Phase>] {
+    transitions.sorted {
+      let lhs = "\(String(reflecting: $0.from))->\(String(reflecting: $0.to))"
+      let rhs = "\(String(reflecting: $1.from))->\(String(reflecting: $1.to))"
+      return lhs < rhs
+    }
+  }
+
+  private func phaseID(_ index: Int) -> String {
+    "phase\(index)"
+  }
+
+  private func diagramLabel(_ phase: Phase) -> String {
+    escapeDiagramText(String(describing: phase))
+  }
+
+  private func escapeDiagramText(_ value: String) -> String {
+    value.replacingOccurrences(of: "\\", with: "\\\\")
+      .replacingOccurrences(of: "\"", with: "\\\"")
+      .replacingOccurrences(of: "\n", with: "\\n")
+  }
+}
+
+extension PhaseTransitionGraph {
   internal init(_ adjacency: [Phase: Set<Phase>], suggestedRoot: Phase?) {
     self.adjacency = adjacency
     self.suggestedRoot = suggestedRoot

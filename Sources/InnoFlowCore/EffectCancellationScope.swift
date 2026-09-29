@@ -203,7 +203,7 @@ package final class EffectCancellationScope: Sendable {
     token?.cancel()
   }
 
-  fileprivate func cancelAll() {
+  package func cancelAll() {
     let tokens = state.withLock { state -> [EffectCancellationToken] in
       removeReleasedTokens(from: &state)
       state.isGloballyCancelled = true

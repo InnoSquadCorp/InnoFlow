@@ -12,6 +12,7 @@ package protocol ProjectionObserver: AnyObject {
 package enum ProjectionDependencyKey: Hashable {
   case keyPath(AnyKeyPath)
   case custom(SelectionCallsite)
+  case memoizedCustom(SelectionCallsite)
 }
 
 package struct ProjectionDependencyRegistration<Snapshot> {
@@ -69,6 +70,7 @@ package final class ProjectionObserverRegistry<Snapshot> {
   private var prunedObservers: UInt64 = 0
   private var compactionPassCount: UInt64 = 0
   private var staleObserverHints: Int = 0
+  private var registrationCount: UInt64 = 0
 
   package init(
     compactionDeadObserverThreshold: Int = projectionObserverCompactionDeadObserverThresholdDefault,
@@ -93,6 +95,13 @@ package final class ProjectionObserverRegistry<Snapshot> {
     _ observer: any ProjectionObserver,
     registration: ProjectionObserverRegistration<Snapshot> = .alwaysRefresh
   ) {
+    registrationCount &+= 1
+    // A read-only view can create and release many independent selections
+    // without ever dispatching an action. Refresh-only maintenance would keep
+    // their weak registry metadata until the Store itself was released.
+    if registrationCount.isMultiple(of: periodicCompactionInterval) {
+      compactDeadObservers()
+    }
     let observerID = ObjectIdentifier(observer)
     removeObserver(observerID)
     let weakObserver = WeakProjectionObserver(observer: observer)
@@ -341,11 +350,10 @@ package final class ProjectionObserverRegistry<Snapshot> {
     dependencyKey: ProjectionDependencyKey,
     hasChanged: @escaping (Snapshot, Snapshot) -> Bool
   ) {
-    // Both `.keyPath` and `.custom` keys route through dependency buckets so
-    // their `hasChanged` predicate is honored. A `.custom` key paired with
-    // `{ _, _ in true }` remains semantically "always refresh", while a
-    // `.custom` key paired with `{ $0 != $1 }` opts into snapshot-level
-    // memoization for closure-only selections.
+    // Every dependency key routes through a bucket so its `hasChanged`
+    // predicate is honored. Always-refresh and memoized selectors must use
+    // separate keys: they can originate at the same dynamic call site but
+    // cannot share the first-registered bucket predicate.
     if var bucket = dependencyBuckets[dependencyKey] {
       bucket.observers[observerID] = weakObserver
       dependencyBuckets[dependencyKey] = bucket
@@ -364,6 +372,10 @@ package final class ProjectionObserverRegistry<Snapshot> {
 
     guard shouldCompactForStaleObservers || shouldCompactForPeriodicMaintenance else { return }
 
+    compactDeadObservers()
+  }
+
+  private func compactDeadObservers() {
     compactionPassCount &+= 1
     compact(observers: &alwaysObservers)
     for dependencyKey in Array(dependencyBuckets.keys) {

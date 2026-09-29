@@ -106,7 +106,7 @@ struct OfflineFirstFeature {
     )
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .titleChanged(let newTitle):
@@ -232,7 +232,7 @@ struct OfflineFirstDemoView: View {
               set: { store.send(.titleChanged($0)) }
             )
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .accessibilityIdentifier("offline.title")
 
           HStack {
@@ -284,8 +284,11 @@ struct OfflineFirstDemoView: View {
   }
 }
 
-#Preview("Offline-First") {
-  NavigationStack {
-    OfflineFirstDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Offline-First") {
+    NavigationStack {
+      OfflineFirstDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

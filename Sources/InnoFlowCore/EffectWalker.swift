@@ -25,7 +25,7 @@ package struct EffectWalker<D: EffectDriver> {
 
   /// Walk the effect tree, interpreting each node via the driver.
   package func walk(
-    _ effect: EffectTask<D.Action>,
+    _ effect: ReducerEffect<D.Action, D.Output>,
     context: EffectExecutionContext? = nil,
     awaited: Bool = false
   ) async {
@@ -37,9 +37,26 @@ package struct EffectWalker<D: EffectDriver> {
       guard let driver else { return }
       driver.deliverAction(action, context: context)
 
+    case .output(let output):
+      guard let driver else { return }
+      driver.deliverOutput(output, context: context)
+
     case .run(let priority, let operation):
       let task = await prepareRun(
         priority: priority,
+        operation: operation,
+        context: context
+      )
+      if awaited, let task {
+        _ = await task.result
+      }
+
+    case .scheduledRun(let id, let policy, let priority, let onAdmission, let operation):
+      let task = await prepareScheduledRun(
+        id: id,
+        policy: policy,
+        priority: priority,
+        onAdmission: onAdmission,
         operation: operation,
         context: context
       )
@@ -170,6 +187,27 @@ package struct EffectWalker<D: EffectDriver> {
     )
   }
 
+  private func prepareScheduledRun(
+    id: AnyEffectID,
+    policy: EffectExecutionPolicy,
+    priority: TaskPriority?,
+    onAdmission: (@Sendable (EffectAdmission) -> D.Action)?,
+    operation: @escaping @Sendable (Send<D.Action>, EffectContext) async -> Void,
+    context: EffectExecutionContext?
+  ) async -> Task<Void, Never>? {
+    guard let driver else { return nil }
+    guard driver.shouldProceed(context: context) else { return nil }
+    let scheduledContext = EffectExecutionContext.withCancellation(id, on: context)
+    return await driver.scheduleRun(
+      id: id,
+      policy: policy,
+      priority: priority,
+      onAdmission: onAdmission,
+      operation: operation,
+      context: scheduledContext
+    )
+  }
+
   /// Applies a cancellation boundary in a short-lived frame so an enclosing
   /// cancellable wrapper does not retain the driver while its nested effect
   /// performs delayed awaited work.
@@ -185,7 +223,7 @@ package struct EffectWalker<D: EffectDriver> {
   /// suspended. An enclosing unawaited composite is owned by the driver, so a
   /// strong driver reference across the delay would otherwise form a cycle.
   private func prepareDebounce(
-    nested: EffectTask<D.Action>,
+    nested: ReducerEffect<D.Action, D.Output>,
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
@@ -220,7 +258,7 @@ package struct EffectWalker<D: EffectDriver> {
   }
 
   private func walkThrottle(
-    nested: EffectTask<D.Action>,
+    nested: ReducerEffect<D.Action, D.Output>,
     id: AnyEffectID,
     interval: Duration,
     leading: Bool,
@@ -257,7 +295,7 @@ package struct EffectWalker<D: EffectDriver> {
   /// the Store strongly while waiting for its timer, that ownership would form
   /// a cycle and prevent Store deinitialization from cancelling the timer.
   private func prepareThrottle(
-    nested: EffectTask<D.Action>,
+    nested: ReducerEffect<D.Action, D.Output>,
     id: AnyEffectID,
     interval: Duration,
     leading: Bool,
@@ -356,7 +394,7 @@ package struct EffectWalker<D: EffectDriver> {
 
   private var recurse:
     @MainActor @Sendable (
-      EffectTask<D.Action>, EffectExecutionContext?, Bool
+      ReducerEffect<D.Action, D.Output>, EffectExecutionContext?, Bool
     ) async -> Void
   {
     { [self] effect, context, awaited in

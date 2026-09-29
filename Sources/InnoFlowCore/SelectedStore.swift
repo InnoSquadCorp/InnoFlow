@@ -29,7 +29,7 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   @ObservationIgnored private let valueResolver: @MainActor () -> Value?
   @ObservationIgnored private let inactiveMessage: @MainActor () -> String
   @ObservationIgnored private let parentReleasedMessage: @MainActor () -> String
-  @ObservationIgnored private var isActive = true
+  private var isActive = true
 
   /// Whether this selection is still backed by a live source projection.
   ///
@@ -181,23 +181,17 @@ private func memoizedCustomSelectionRegistration<Snapshot: Equatable>(
   // `select(_:memoize:)` for closure-only selections whose selector
   // body is expensive enough that always-rerun pays a real cost.
   .dependency(
-    .custom(callsite),
+    .memoizedCustom(callsite),
     hasChanged: { $0 != $1 }
   )
 }
 
 private func selectionCacheKey(
   callsite: SelectionCallsite,
-  signature: SelectionSignature
+  signature: SelectionSignature,
+  semanticID: String? = nil
 ) -> SelectionCacheKey {
-  .init(callsite: callsite, signature: signature)
-}
-
-private func selectionCacheKey(
-  callsite: SelectionCallsite,
-  dependencyKeyPaths: [AnyKeyPath]
-) -> SelectionCacheKey {
-  selectionCacheKey(callsite: callsite, signature: .dependencies(dependencyKeyPaths))
+  .init(callsite: callsite, signature: signature, semanticID: semanticID)
 }
 
 private func scopedSelectionCallsite(
@@ -210,22 +204,25 @@ private func scopedSelectionCallsite(
 
 extension Store {
   private func cachedSelectedStore<Value: Equatable & Sendable>(
-    cacheKey: SelectionCacheKey,
+    cacheKey: SelectionCacheKey?,
     initialValue: @autoclosure () -> Value,
     registration: ProjectionObserverRegistration<R.State>,
     valueResolver: @escaping @MainActor () -> Value?
   ) -> SelectedStore<Value> {
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: cacheKey, valueType: Value.self)
+    let cacheKey = cacheKey?.forValueType(Value.self)
+    if let cacheKey,
+      let cached: SelectedStore<Value> = selectionCache.cached(
+        for: cacheKey, valueType: Value.self)
     {
       return cached
     }
 
+    let lifetime = self.lifetime
     let selectedStore = SelectedStore(
       initialValue: initialValue(),
       parentObject: self,
-      sourceIsAlive: { @MainActor [weak self] in
-        self != nil
+      sourceIsAlive: { @MainActor in
+        !lifetime.isReleased
       },
       valueResolver: valueResolver,
       inactiveMessage: { @MainActor @Sendable in
@@ -245,7 +242,9 @@ extension Store {
         )
       }
     )
-    selectionCache.store(selectedStore, for: cacheKey, valueType: Value.self)
+    if let cacheKey {
+      selectionCache.store(selectedStore, for: cacheKey, valueType: Value.self)
+    }
     registerProjectionObserver(selectedStore, registration: registration)
     return selectedStore
   }
@@ -273,8 +272,14 @@ extension Store {
     )
   }
 
+  /// Creates a derived selection. Each call without `id` owns an independent
+  /// selector, even when the source location and dependency are identical.
+  /// Supply a stable `id` only when repeated calls have the same captured
+  /// inputs and meaning. Live matching handles are reused; the cache keeps
+  /// them weakly, so callers that require persistent identity must retain one.
   public func select<Dependency: Equatable & Sendable, Value: Equatable & Sendable>(
     dependingOn dependency: KeyPath<R.State, Dependency>,
+    id: String? = nil,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column,
@@ -282,10 +287,13 @@ extension Store {
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(
-        callsite: callsite,
-        dependencyKeyPaths: [dependency as AnyKeyPath]
-      ),
+      cacheKey: id.map {
+        selectionCacheKey(
+          callsite: callsite,
+          signature: .singleDependency(dependency as AnyKeyPath),
+          semanticID: $0
+        )
+      },
       initialValue: transform(state[keyPath: dependency]),
       registration: selectionDependencyRegistrations(
         selectionDependencyRegistration(dependency)
@@ -308,6 +316,7 @@ extension Store {
   /// their dependencies and intentionally fall back to `.alwaysRefresh`.
   public func select<each Dep: Equatable & Sendable, Value: Equatable & Sendable>(
     dependingOnAll dependencies: repeat KeyPath<R.State, each Dep>,
+    id: String? = nil,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column,
@@ -323,10 +332,13 @@ extension Store {
     }
 
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(
-        callsite: callsite,
-        dependencyKeyPaths: dependencyKeyPaths
-      ),
+      cacheKey: id.map {
+        selectionCacheKey(
+          callsite: callsite,
+          signature: .dependencies(dependencyKeyPaths),
+          semanticID: $0
+        )
+      },
       initialValue: transform(repeat state[keyPath: each dependencies]),
       registration: selectionDependencyRegistrations(fromArray: registrations),
       valueResolver: { [weak self] in
@@ -337,6 +349,7 @@ extension Store {
   }
 
   public func select<Value: Equatable & Sendable>(
+    id: String? = nil,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column,
@@ -344,7 +357,13 @@ extension Store {
   ) -> SelectedStore<Value> {
     let callsite = selectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .closureSelector(memoized: false)),
+      cacheKey: id.map {
+        selectionCacheKey(
+          callsite: callsite,
+          signature: .closureSelector(memoized: false),
+          semanticID: $0
+        )
+      },
       initialValue: selector(state),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
@@ -359,6 +378,7 @@ extension Store {
   /// snapshot is unchanged. Pass `memoize: false` to retain the legacy
   /// always-refresh contract.
   public func select<Value: Equatable & Sendable>(
+    id: String? = nil,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column,
@@ -371,10 +391,13 @@ extension Store {
       ? memoizedCustomSelectionRegistration(callsite: callsite)
       : alwaysRefreshSelectionRegistration(callsite: callsite)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(
-        callsite: callsite,
-        signature: .closureSelector(memoized: memoize)
-      ),
+      cacheKey: id.map {
+        selectionCacheKey(
+          callsite: callsite,
+          signature: .closureSelector(memoized: memoize),
+          semanticID: $0
+        )
+      },
       initialValue: selector(state),
       registration: registration,
       valueResolver: { [weak self] in
@@ -387,13 +410,15 @@ extension Store {
 
 extension ScopedStore {
   private func cachedSelectedStore<Value: Equatable & Sendable>(
-    cacheKey: SelectionCacheKey,
+    cacheKey: SelectionCacheKey?,
     initialValue: @autoclosure () -> Value,
     registration: ProjectionObserverRegistration<ChildState>,
     valueResolver: @escaping @MainActor () -> Value?
   ) -> SelectedStore<Value> {
-    if let cached: SelectedStore<Value> = selectionCache.cached(
-      for: cacheKey, valueType: Value.self)
+    let cacheKey = cacheKey?.forValueType(Value.self)
+    if let cacheKey,
+      let cached: SelectedStore<Value> = selectionCache.cached(
+        for: cacheKey, valueType: Value.self)
     {
       return cached
     }
@@ -432,7 +457,9 @@ extension ScopedStore {
         )
       }
     )
-    selectionCache.store(selectedStore, for: cacheKey, valueType: Value.self)
+    if let cacheKey {
+      selectionCache.store(selectedStore, for: cacheKey, valueType: Value.self)
+    }
     observerRegistry.register(selectedStore, registration: registration)
     return selectedStore
   }
@@ -460,8 +487,11 @@ extension ScopedStore {
     )
   }
 
+  /// Closure selections are independent unless a stable semantic `id` is
+  /// supplied. Include every captured input that can change the result in it.
   public func select<Dependency: Equatable & Sendable, Value: Equatable & Sendable>(
     dependingOn dependency: KeyPath<ChildState, Dependency>,
+    id: String? = nil,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column,
@@ -469,10 +499,13 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(
-        callsite: callsite,
-        dependencyKeyPaths: [dependency as AnyKeyPath]
-      ),
+      cacheKey: id.map {
+        selectionCacheKey(
+          callsite: callsite,
+          signature: .singleDependency(dependency as AnyKeyPath),
+          semanticID: $0
+        )
+      },
       initialValue: transform(state[keyPath: dependency]),
       registration: selectionDependencyRegistrations(
         selectionDependencyRegistration(dependency)
@@ -496,6 +529,7 @@ extension ScopedStore {
   /// intentionally fall back to `.alwaysRefresh`.
   public func select<each Dep: Equatable & Sendable, Value: Equatable & Sendable>(
     dependingOnAll dependencies: repeat KeyPath<ChildState, each Dep>,
+    id: String? = nil,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column,
@@ -511,10 +545,13 @@ extension ScopedStore {
     }
 
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(
-        callsite: callsite,
-        dependencyKeyPaths: dependencyKeyPaths
-      ),
+      cacheKey: id.map {
+        selectionCacheKey(
+          callsite: callsite,
+          signature: .dependencies(dependencyKeyPaths),
+          semanticID: $0
+        )
+      },
       initialValue: transform(repeat state[keyPath: each dependencies]),
       registration: selectionDependencyRegistrations(fromArray: registrations),
       valueResolver: { [weak self] in
@@ -525,6 +562,7 @@ extension ScopedStore {
   }
 
   public func select<Value: Equatable & Sendable>(
+    id: String? = nil,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column,
@@ -532,7 +570,13 @@ extension ScopedStore {
   ) -> SelectedStore<Value> {
     let callsite = scopedSelectionCallsite(fileID: fileID, line: line, column: column)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(callsite: callsite, signature: .closureSelector(memoized: false)),
+      cacheKey: id.map {
+        selectionCacheKey(
+          callsite: callsite,
+          signature: .closureSelector(memoized: false),
+          semanticID: $0
+        )
+      },
       initialValue: selector(state),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
@@ -547,6 +591,7 @@ extension ScopedStore {
   /// child snapshot is unchanged. Pass `memoize: false` to retain the
   /// legacy always-refresh contract.
   public func select<Value: Equatable & Sendable>(
+    id: String? = nil,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column,
@@ -559,10 +604,13 @@ extension ScopedStore {
       ? memoizedCustomSelectionRegistration(callsite: callsite)
       : alwaysRefreshSelectionRegistration(callsite: callsite)
     return cachedSelectedStore(
-      cacheKey: selectionCacheKey(
-        callsite: callsite,
-        signature: .closureSelector(memoized: memoize)
-      ),
+      cacheKey: id.map {
+        selectionCacheKey(
+          callsite: callsite,
+          signature: .closureSelector(memoized: memoize),
+          semanticID: $0
+        )
+      },
       initialValue: selector(state),
       registration: registration,
       valueResolver: { [weak self] in

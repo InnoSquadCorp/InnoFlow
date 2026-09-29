@@ -475,7 +475,8 @@ struct EffectTaskTests {
       trigger: ThrottleFeature.Action.trigger,
       emitted: \.emitted,
       expectedCount: expected.outputs.count,
-      expectedCountAfterEachStep: expected.emissionCountsAfterSteps
+      expectedCountAfterEachStep: expected.emissionCountsAfterSteps,
+      awaitNowReadAfterTrigger: true
     )
 
     #expect(actual == expected.outputs)
@@ -499,7 +500,8 @@ struct EffectTaskTests {
       trigger: ThrottleTrailingFeature.Action.trigger,
       emitted: \.emitted,
       expectedCount: expected.outputs.count,
-      expectedCountAfterEachStep: expected.emissionCountsAfterSteps
+      expectedCountAfterEachStep: expected.emissionCountsAfterSteps,
+      awaitNowReadAfterTrigger: true
     )
 
     #expect(actual == expected.outputs)
@@ -523,7 +525,8 @@ struct EffectTaskTests {
       trigger: ThrottleLeadingTrailingFeature.Action.trigger,
       emitted: \.emitted,
       expectedCount: expected.outputs.count,
-      expectedCountAfterEachStep: expected.emissionCountsAfterSteps
+      expectedCountAfterEachStep: expected.emissionCountsAfterSteps,
+      awaitNowReadAfterTrigger: true
     )
 
     #expect(actual == expected.outputs)

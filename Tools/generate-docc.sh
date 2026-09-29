@@ -8,6 +8,12 @@ OUTPUT_DIR="${1:-$ROOT_DIR/.build/docc/InnoFlow}"
 TARGET="${2:-InnoFlow}"
 HOSTING_BASE_PATH="${3:-InnoFlow}"
 DOCC_PLUGIN_VERSION="1.5.0"
+DOCC_PLUGIN_REVISION="647c708be89f834fa6a6d4945442793a77ddf5b6"
+DOCC_SYMBOLKIT_VERSION="1.0.0"
+DOCC_SYMBOLKIT_REVISION="b45d1f2ed151d057b54504d653e0da5552844e34"
+DOCC_SWIFT_SYNTAX_VERSION="603.0.1"
+DOCC_SWIFT_SYNTAX_REVISION="9de99a78f099e59caf2b2beec65a4c45d54b2081"
+DOCC_LOCKFILE="$ROOT_DIR/Tools/docc-package.resolved"
 DOCS_WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/innoflow-docc.XXXXXX")"
 DOCS_PACKAGE_DIR="$DOCS_WORK_DIR/package"
 DOCS_MANIFEST_PATH="$DOCS_PACKAGE_DIR/Package.swift"
@@ -26,15 +32,16 @@ rsync -a \
   --exclude '.git' \
   "$ROOT_DIR/" "$DOCS_PACKAGE_DIR/"
 
-python3 - "$DOCS_MANIFEST_PATH" "$DOCC_PLUGIN_VERSION" <<'PY'
+python3 - "$DOCS_MANIFEST_PATH" "$DOCC_PLUGIN_VERSION" "$DOCC_PLUGIN_REVISION" <<'PY'
 import pathlib
 import re
 import sys
 
 manifest_path = pathlib.Path(sys.argv[1])
 plugin_version = sys.argv[2]
+plugin_revision = sys.argv[3]
 text = manifest_path.read_text()
-dependency_line = f'        .package(url: "https://github.com/swiftlang/swift-docc-plugin", exact: "{plugin_version}"),\n'
+dependency_line = f'        .package(url: "https://github.com/swiftlang/swift-docc-plugin", revision: "{plugin_revision}"),\n'
 
 if "swift-docc-plugin" in text:
     raise SystemExit(0)
@@ -51,7 +58,12 @@ replacement = match.group(1) + dependency_line
 manifest_path.write_text(text[:match.start(1)] + replacement + text[match.end(1):])
 PY
 
-echo "[docc] Using swift-docc-plugin $DOCC_PLUGIN_VERSION (exact)"
+cp "$DOCC_LOCKFILE" "$DOCS_PACKAGE_DIR/Package.resolved"
+
+echo "[docc] Using an immutable documentation tool graph:"
+echo "[docc]   swift-docc-plugin $DOCC_PLUGIN_VERSION at revision $DOCC_PLUGIN_REVISION"
+echo "[docc]   swift-docc-symbolkit $DOCC_SYMBOLKIT_VERSION at revision $DOCC_SYMBOLKIT_REVISION"
+echo "[docc]   swift-syntax $DOCC_SWIFT_SYNTAX_VERSION at revision $DOCC_SWIFT_SYNTAX_REVISION"
 
 generate_documentation() {
   local target="$1"
@@ -62,6 +74,7 @@ generate_documentation() {
   echo "[docc] Generating DocC for target '$target' -> $output_dir"
   swift package \
     --package-path "$DOCS_PACKAGE_DIR" \
+    --disable-automatic-resolution \
     --allow-writing-to-directory "$output_dir" \
     generate-documentation \
     --target "$target" \
@@ -87,6 +100,7 @@ generate_combined_documentation() {
   echo "[docc] Generating combined DocC for targets '$*' -> $output_dir"
   swift package \
     --package-path "$DOCS_PACKAGE_DIR" \
+    --disable-automatic-resolution \
     --allow-writing-to-directory "$output_dir" \
     generate-documentation \
     "${target_arguments[@]}" \

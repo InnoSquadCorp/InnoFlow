@@ -30,7 +30,7 @@ struct FormValidationFeature {
     case reset
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .setFullName(let value):
@@ -146,14 +146,14 @@ struct FormValidationDemoView: View {
             "Full name",
             text: store.binding(\.$fullName, to: FormValidationFeature.Action.setFullName)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .accessibilityIdentifier("form.full-name")
 
           TextField(
             "Email",
             text: store.binding(\.$email, to: FormValidationFeature.Action.setEmail)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .autocorrectionDisabled()
           .accessibilityIdentifier("form.email")
 
@@ -161,7 +161,7 @@ struct FormValidationDemoView: View {
             "Confirm email",
             text: store.binding(\.$confirmEmail, to: FormValidationFeature.Action.setConfirmEmail)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .autocorrectionDisabled()
           .accessibilityIdentifier("form.confirm-email")
 
@@ -226,8 +226,11 @@ struct FormValidationDemoView: View {
   }
 }
 
-#Preview("Form Validation") {
-  NavigationStack {
-    FormValidationDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Form Validation") {
+    NavigationStack {
+      FormValidationDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

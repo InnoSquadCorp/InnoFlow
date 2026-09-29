@@ -14,7 +14,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
   @Test("@InnoFlow warns when State declares BindableProperty<T> directly")
   func directBindablePropertyDeclarationWarns() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
@@ -25,7 +25,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
                 case setStep(Int)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -39,9 +39,21 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setStep(Int)
+
+                  static let setStepCasePath = CasePath<Self, Int>(
+                    embed: { childAction in
+                      .setStep(childAction)
+                    },
+                    extract: { action in
+                      guard case .setStep(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -60,7 +72,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
             message:
               "state field `step` declares `BindableProperty<Int>` directly; use `@BindableField var step: Int` instead — `BindableProperty` is a low-level storage type that must not be authored directly in feature State",
             line: 4,
-            column: 18,
+            column: 17,
             severity: .warning,
             fixIts: [
               FixItSpec(message: "Replace with `@BindableField var step: Int`")
@@ -77,7 +89,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
   @Test("@InnoFlow accepts @BindableField wrapped declarations without warning")
   func bindableFieldWrappedDeclarationPassesCleanly() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
@@ -88,7 +100,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
                 case setStep(Int)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -102,9 +114,21 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setStep(Int)
+
+                  static let setStepCasePath = CasePath<Self, Int>(
+                    embed: { childAction in
+                      .setStep(childAction)
+                    },
+                    extract: { action in
+                      guard case .setStep(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -128,7 +152,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
   @Test("@InnoFlow recognizes the qualified InnoFlow.BindableProperty spelling")
   func qualifiedBindablePropertySpellingWarns() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
@@ -139,7 +163,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
                 case setStep(Int)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -153,9 +177,21 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setStep(Int)
+
+                  static let setStepCasePath = CasePath<Self, Int>(
+                    embed: { childAction in
+                      .setStep(childAction)
+                    },
+                    extract: { action in
+                      guard case .setStep(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -174,7 +210,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
             message:
               "state field `step` declares `BindableProperty<Int>` directly; use `@BindableField var step: Int` instead — `BindableProperty` is a low-level storage type that must not be authored directly in feature State",
             line: 4,
-            column: 18,
+            column: 17,
             severity: .warning,
             fixIts: [
               FixItSpec(message: "Replace with `@BindableField var step: Int`")
@@ -191,7 +227,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
   @Test("@InnoFlow ignores unrelated qualified BindableProperty spellings")
   func unrelatedQualifiedBindablePropertySpellingDoesNotWarn() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
@@ -202,7 +238,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
                 case setStep(Int)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -216,9 +252,21 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setStep(Int)
+
+                  static let setStepCasePath = CasePath<Self, Int>(
+                    embed: { childAction in
+                      .setStep(childAction)
+                    },
+                    extract: { action in
+                      guard case .setStep(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -242,7 +290,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
   @Test("@InnoFlow omits unsafe BindableProperty Fix-Its")
   func unsafeBindablePropertyFixItsAreOmitted() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
@@ -254,7 +302,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
                 case setStep(Int)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -269,9 +317,21 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setStep(Int)
+
+                  static let setStepCasePath = CasePath<Self, Int>(
+                    embed: { childAction in
+                      .setStep(childAction)
+                    },
+                    extract: { action in
+                      guard case .setStep(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -290,7 +350,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
             message:
               "state field `step` declares `BindableProperty<Int>` directly; use `@BindableField var step: Int` instead — `BindableProperty` is a low-level storage type that must not be authored directly in feature State",
             line: 5,
-            column: 23,
+            column: 25,
             severity: .warning
           )
         ],
@@ -304,7 +364,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
   @Test("@InnoFlow skips BindableProperty diagnostics when State is a typealias")
   func typealiasedStateSkipsBindablePropertyDiagnostic() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct ChildFeature {
@@ -313,7 +373,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
                 case noop
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -327,7 +387,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
                   case noop
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -341,6 +401,15 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
           extension ChildFeature: Reducer {
           }
           """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "@InnoFlow skips `@BindableField` and `BindableProperty` diagnostics for `State` because it is declared as a `typealias`. Define `State` as a nested `struct` directly inside this type to enable those diagnostics.",
+            line: 3,
+            column: 5,
+            severity: .note
+          )
+        ],
         macros: testMacros
       )
     #else
@@ -351,7 +420,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
   @Test("@InnoFlow warns once per BindableProperty field even with multiple offenders")
   func multipleDirectBindablePropertyFieldsAllWarn() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct FormFeature {
@@ -364,7 +433,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
                 case setAge(Int)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -380,9 +449,33 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
               enum Action: Sendable {
                   case setName(String)
                   case setAge(Int)
+
+                  static let setNameCasePath = CasePath<Self, String>(
+                    embed: { childAction in
+                      .setName(childAction)
+                    },
+                    extract: { action in
+                      guard case .setName(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
+
+                  static let setAgeCasePath = CasePath<Self, Int>(
+                    embed: { childAction in
+                      .setAge(childAction)
+                    },
+                    extract: { action in
+                      guard case .setAge(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -401,7 +494,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
             message:
               "state field `name` declares `BindableProperty<String>` directly; use `@BindableField var name: String` instead — `BindableProperty` is a low-level storage type that must not be authored directly in feature State",
             line: 4,
-            column: 18,
+            column: 17,
             severity: .warning,
             fixIts: [
               FixItSpec(message: "Replace with `@BindableField var name: String`")
@@ -411,7 +504,7 @@ struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
             message:
               "state field `age` declares `BindableProperty<Int>` directly; use `@BindableField var age: Int` instead — `BindableProperty` is a low-level storage type that must not be authored directly in feature State",
             line: 5,
-            column: 17,
+            column: 16,
             severity: .warning,
             fixIts: [
               FixItSpec(message: "Replace with `@BindableField var age: Int`")

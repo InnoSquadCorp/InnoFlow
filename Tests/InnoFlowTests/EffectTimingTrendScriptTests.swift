@@ -7,7 +7,10 @@ import InnoFlow
 import InnoFlowTesting
 import Testing
 
-@Suite("EffectTiming trend script")
+@Suite(
+  "EffectTiming trend script",
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct EffectTimingTrendScriptTests {
 
   @Test("Trend script reports mean and p95 for an existing capture")
@@ -63,7 +66,8 @@ struct EffectTimingTrendScriptTests {
     #expect(result.stdout.contains("mean"))
     #expect(result.stdout.contains("p95"))
     #expect(result.stdout.contains("non-blocking"))
-    #expect(result.stdout.contains("2  usage error, capture failure, or malformed/incomplete data"))
+    #expect(
+      result.stdout.contains("2  usage error, capture failure, or malformed/incomplete data"))
   }
 
   // MARK: - Helpers
@@ -73,7 +77,8 @@ struct EffectTimingTrendScriptTests {
     currentEntries: [[String: Any]]
   ) throws -> CapturedProcessResult {
     let temporaryDirectory = FileManager.default.temporaryDirectory
-      .appendingPathComponent("effect-timing-trend-script-\(UUID().uuidString)", isDirectory: true)
+      .appendingPathComponent(
+        "effect-timing-trend-script-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(
       at: temporaryDirectory,
       withIntermediateDirectories: true

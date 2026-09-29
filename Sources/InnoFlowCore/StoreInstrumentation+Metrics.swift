@@ -17,6 +17,11 @@ public struct StoreInstrumentationMetricsSnapshot: Sendable, Equatable {
   public var runFailed: Int = 0
   public var actionEmitted: Int = 0
   public var actionDropped: Int = 0
+  public var outputDelivered: Int = 0
+  public var outputWithoutSubscribers: Int = 0
+  public var outputSubscriberDrops: Int = 0
+  public var outputDispatchCaptureDrops: Int = 0
+  public var outputSuppressedByCancellation: Int = 0
   public var actionQueueDrains: Int = 0
   public var actionQueueActionsProcessed: Int = 0
   public var actionQueuePendingHighWaterMark: Int = 0
@@ -33,6 +38,11 @@ public struct StoreInstrumentationMetricsSnapshot: Sendable, Equatable {
     runFailed: Int = 0,
     actionEmitted: Int = 0,
     actionDropped: Int = 0,
+    outputDelivered: Int = 0,
+    outputWithoutSubscribers: Int = 0,
+    outputSubscriberDrops: Int = 0,
+    outputDispatchCaptureDrops: Int = 0,
+    outputSuppressedByCancellation: Int = 0,
     actionQueueDrains: Int = 0,
     actionQueueActionsProcessed: Int = 0,
     actionQueuePendingHighWaterMark: Int = 0,
@@ -46,6 +56,11 @@ public struct StoreInstrumentationMetricsSnapshot: Sendable, Equatable {
     self.runFailed = runFailed
     self.actionEmitted = actionEmitted
     self.actionDropped = actionDropped
+    self.outputDelivered = outputDelivered
+    self.outputWithoutSubscribers = outputWithoutSubscribers
+    self.outputSubscriberDrops = outputSubscriberDrops
+    self.outputDispatchCaptureDrops = outputDispatchCaptureDrops
+    self.outputSuppressedByCancellation = outputSuppressedByCancellation
     self.actionQueueDrains = actionQueueDrains
     self.actionQueueActionsProcessed = actionQueueActionsProcessed
     self.actionQueuePendingHighWaterMark = actionQueuePendingHighWaterMark
@@ -117,6 +132,13 @@ public final class StoreInstrumentationMetricsCollector<Action: Sendable>: Senda
           snapshot.actionEmitted += 1
         case .actionDropped:
           snapshot.actionDropped += 1
+        case .outputDelivered(let event):
+          snapshot.outputDelivered += 1
+          snapshot.outputWithoutSubscribers += event.subscriberCount == 0 ? 1 : 0
+          snapshot.outputSubscriberDrops += event.droppedCount
+          snapshot.outputDispatchCaptureDrops +=
+            event.dispatchCaptureDisposition == .dropped ? 1 : 0
+          snapshot.outputSuppressedByCancellation += event.wasSuppressedByCancellation ? 1 : 0
         case .actionQueueDrained(let event):
           snapshot.actionQueueDrains += 1
           snapshot.actionQueueActionsProcessed += event.processedActionCount

@@ -5,7 +5,10 @@
 import Foundation
 import Testing
 
-@Suite("Captured process")
+@Suite(
+  "Captured process",
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct CapturedProcessTests {
 
   @Test("Captures stdout and stderr beyond pipe capacity")

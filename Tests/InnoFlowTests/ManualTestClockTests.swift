@@ -85,6 +85,23 @@ struct ManualTestClockTests {
     try await second.value
   }
 
+  @Test("waitForNowReads observes scheduling reads without counting direct inspection")
+  func waitForNowReadsObservesStoreClockAdapter() async throws {
+    let clock = ManualTestClock()
+    let storeClock = StoreClock.manual(clock)
+
+    _ = await clock.now
+    #expect(await clock.nowReadCount == 0)
+
+    let waiter = Task {
+      try await clock.waitForNowReads(toReach: 1)
+    }
+    _ = await storeClock.now()
+    try await waiter.value
+
+    #expect(await clock.nowReadCount == 1)
+  }
+
   @Test("waiting task cancellation propagates as CancellationError")
   func waiterCancellationThrows() async throws {
     let clock = ManualTestClock()

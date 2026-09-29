@@ -29,7 +29,7 @@ extension GenericExtensionNamespace {
       case child(id: Int, action: Value)
     }
 
-    var body: some Reducer<State, Action> {
+    var body: some Reducer<State, Action, Never> {
       Reduce { state, action in
         switch action {
         case .replace(let value), .child(_, let value):
@@ -56,7 +56,7 @@ struct GenericCollectionScopeFeature<Value: Equatable & Sendable> {
     case row(id: Int, action: Value)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .row(let id, let value):
@@ -1250,7 +1250,7 @@ struct ScopedBindableChildFeature {
     )
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .child(.setStep(let step)):
@@ -1355,7 +1355,7 @@ struct ScopedCollectionFeature {
     }
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     CombineReducers {
       Reduce { state, action in
         switch action {
@@ -1405,7 +1405,7 @@ struct ScopedTestHarnessFeature {
     case finished
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .child(.start):
@@ -1458,7 +1458,7 @@ struct DependencyBundleFeature {
     self.dependencies = .init(service: service)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .load:
@@ -1515,7 +1515,7 @@ struct IfLetFeature {
     }
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     CombineReducers {
       Reduce { state, action in
         switch action {
@@ -1596,7 +1596,7 @@ struct IfCaseLetFeature {
     }
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     CombineReducers {
       Reduce { state, action in
         switch action {
@@ -1660,7 +1660,7 @@ struct IfLetIgnoreFeature {
     }
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     IfLet(
       state: \.child,
       action: Action.childCasePath,
@@ -1712,7 +1712,7 @@ struct IfCaseLetIgnoreFeature {
     }
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     IfCaseLet(
       state: Self.childStateCasePath,
       action: Action.childCasePath,
@@ -1755,7 +1755,7 @@ struct PhaseManagedFeature {
     }
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .load:
@@ -2367,7 +2367,7 @@ struct ComposedReducerFeature: Reducer {
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     CombineReducers {
-      Reduce<State, Action> { state, action in
+      Reduce<State, Action, Never> { state, action in
         switch action {
         case .start:
           state.events.append("start")
@@ -2400,7 +2400,7 @@ struct BuilderCompositionFeature {
     case run
   }
 
-  static func append(_ label: String) -> Reduce<State, Action> {
+  static func append(_ label: String) -> Reduce<State, Action, Never> {
     Reduce { state, action in
       guard case .run = action else { return .none }
       state.log.append(label)
@@ -2408,18 +2408,18 @@ struct BuilderCompositionFeature {
     }
   }
 
-  @ReducerBuilder<State, Action>
-  static func emptyBuilder() -> some Reducer<State, Action> {}
+  @ReducerBuilder<State, Action, Never>
+  static func emptyBuilder() -> some Reducer<State, Action, Never> {}
 
-  @ReducerBuilder<State, Action>
-  static func optionalBuilder(includeReducer: Bool) -> some Reducer<State, Action> {
+  @ReducerBuilder<State, Action, Never>
+  static func optionalBuilder(includeReducer: Bool) -> some Reducer<State, Action, Never> {
     if includeReducer {
       append("optional")
     }
   }
 
-  @ReducerBuilder<State, Action>
-  static func eitherBuilder(chooseFirst: Bool) -> some Reducer<State, Action> {
+  @ReducerBuilder<State, Action, Never>
+  static func eitherBuilder(chooseFirst: Bool) -> some Reducer<State, Action, Never> {
     if chooseFirst {
       append("first")
     } else {
@@ -2427,15 +2427,15 @@ struct BuilderCompositionFeature {
     }
   }
 
-  @ReducerBuilder<State, Action>
-  static func arrayBuilder(labels: [String]) -> some Reducer<State, Action> {
+  @ReducerBuilder<State, Action, Never>
+  static func arrayBuilder(labels: [String]) -> some Reducer<State, Action, Never> {
     for label in labels {
       append(label)
     }
   }
 
-  @ReducerBuilder<State, Action>
-  static func straightLineBuilder() -> some Reducer<State, Action> {
+  @ReducerBuilder<State, Action, Never>
+  static func straightLineBuilder() -> some Reducer<State, Action, Never> {
     append("first")
     append("second")
   }
@@ -2465,7 +2465,7 @@ struct ValidatedPhaseReducer: Reducer {
   ]
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    Reduce<State, Action> { state, action in
+    Reduce<State, Action, Never> { state, action in
       switch action {
       case .noop:
         return .none
@@ -2568,7 +2568,7 @@ struct PhaseMapHarness: Reducer {
     let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
     return CombineReducers {
-      Reduce<State, Action> { state, action in
+      Reduce<State, Action, Never> { state, action in
         switch action {
         case .load:
           state.errorMessage = nil
@@ -2621,7 +2621,7 @@ struct PhaseMapOrderingHarness: Reducer {
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
-    return Reduce<State, Action> { _, _ in .none }
+    return Reduce<State, Action, Never> { _, _ in .none }
       .phaseMap(map)
       .reduce(into: &state, action: action)
   }
@@ -2666,7 +2666,7 @@ struct PhaseMapDirectMutationHarness: Reducer {
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
-    return Reduce<State, Action> { state, action in
+    return Reduce<State, Action, Never> { state, action in
       switch action {
       case .load:
         state.phase = .loaded
@@ -2720,7 +2720,7 @@ struct PhaseMapInvalidTargetHarness: Reducer {
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
-    return Reduce<State, Action> { state, action in
+    return Reduce<State, Action, Never> { state, action in
       switch action {
       case .attemptRecover(let shouldRecover):
         state.log.append(shouldRecover ? "recover" : "skip")
@@ -2766,7 +2766,7 @@ struct PhaseMapPredicateHarness: Reducer {
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     let map: PhaseMap<State, Action, State.Phase> = Self.phaseMap
 
-    return Reduce<State, Action> { state, action in
+    return Reduce<State, Action, Never> { state, action in
       switch action {
       case .configure(let value):
         state.shouldAdvance = value

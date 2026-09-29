@@ -48,6 +48,7 @@ public enum StoreInstrumentationEvent<Action: Sendable>: Sendable {
   case runFailed(StoreInstrumentation<Action>.RunFailedEvent)
   case actionEmitted(StoreInstrumentation<Action>.ActionEvent)
   case actionDropped(StoreInstrumentation<Action>.ActionDropEvent)
+  case outputDelivered(StoreInstrumentation<Action>.OutputDeliveryEvent)
   case actionQueueDrained(StoreInstrumentation<Action>.ActionQueueEvent)
   case effectsCancelled(StoreInstrumentation<Action>.CancellationEvent)
 }
@@ -58,22 +59,31 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     public let token: UUID
     public let cancellationID: AnyEffectID?
     public let sequence: UInt64?
+    public let dispatchID: DispatchID?
 
-    public init(token: UUID, cancellationID: AnyEffectID?, sequence: UInt64?) {
+    public init(
+      token: UUID,
+      cancellationID: AnyEffectID?,
+      sequence: UInt64?,
+      dispatchID: DispatchID? = nil
+    ) {
       self.token = token
       self.cancellationID = cancellationID
       self.sequence = sequence
+      self.dispatchID = dispatchID
     }
 
     public init<ID: Hashable & Sendable>(
       token: UUID,
       cancellationID: EffectID<ID>?,
-      sequence: UInt64?
+      sequence: UInt64?,
+      dispatchID: DispatchID? = nil
     ) {
       self.init(
         token: token,
         cancellationID: cancellationID.map(AnyEffectID.init),
-        sequence: sequence
+        sequence: sequence,
+        dispatchID: dispatchID
       )
     }
   }
@@ -82,22 +92,31 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     public let action: Action
     public let cancellationID: AnyEffectID?
     public let sequence: UInt64?
+    public let dispatchID: DispatchID?
 
-    public init(action: Action, cancellationID: AnyEffectID?, sequence: UInt64?) {
+    public init(
+      action: Action,
+      cancellationID: AnyEffectID?,
+      sequence: UInt64?,
+      dispatchID: DispatchID? = nil
+    ) {
       self.action = action
       self.cancellationID = cancellationID
       self.sequence = sequence
+      self.dispatchID = dispatchID
     }
 
     public init<ID: Hashable & Sendable>(
       action: Action,
       cancellationID: EffectID<ID>?,
-      sequence: UInt64?
+      sequence: UInt64?,
+      dispatchID: DispatchID? = nil
     ) {
       self.init(
         action: action,
         cancellationID: cancellationID.map(AnyEffectID.init),
-        sequence: sequence
+        sequence: sequence,
+        dispatchID: dispatchID
       )
     }
   }
@@ -107,30 +126,35 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     public let reason: ActionDropReason
     public let cancellationID: AnyEffectID?
     public let sequence: UInt64?
+    public let dispatchID: DispatchID?
 
     public init(
       action: Action?,
       reason: ActionDropReason,
       cancellationID: AnyEffectID?,
-      sequence: UInt64?
+      sequence: UInt64?,
+      dispatchID: DispatchID? = nil
     ) {
       self.action = action
       self.reason = reason
       self.cancellationID = cancellationID
       self.sequence = sequence
+      self.dispatchID = dispatchID
     }
 
     public init<ID: Hashable & Sendable>(
       action: Action?,
       reason: ActionDropReason,
       cancellationID: EffectID<ID>?,
-      sequence: UInt64?
+      sequence: UInt64?,
+      dispatchID: DispatchID? = nil
     ) {
       self.init(
         action: action,
         reason: reason,
         cancellationID: cancellationID.map(AnyEffectID.init),
-        sequence: sequence
+        sequence: sequence,
+        dispatchID: dispatchID
       )
     }
   }
@@ -146,6 +170,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     public let token: UUID
     public let cancellationID: AnyEffectID?
     public let sequence: UInt64?
+    public let dispatchID: DispatchID?
     public let errorDescription: String
     public let errorTypeName: String
 
@@ -154,13 +179,15 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       cancellationID: AnyEffectID?,
       sequence: UInt64?,
       errorDescription: String,
-      errorTypeName: String
+      errorTypeName: String,
+      dispatchID: DispatchID? = nil
     ) {
       self.token = token
       self.cancellationID = cancellationID
       self.sequence = sequence
       self.errorDescription = errorDescription
       self.errorTypeName = errorTypeName
+      self.dispatchID = dispatchID
     }
 
     public init<ID: Hashable & Sendable>(
@@ -168,14 +195,16 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       cancellationID: EffectID<ID>?,
       sequence: UInt64?,
       errorDescription: String,
-      errorTypeName: String
+      errorTypeName: String,
+      dispatchID: DispatchID? = nil
     ) {
       self.init(
         token: token,
         cancellationID: cancellationID.map(AnyEffectID.init),
         sequence: sequence,
         errorDescription: errorDescription,
-        errorTypeName: errorTypeName
+        errorTypeName: errorTypeName,
+        dispatchID: dispatchID
       )
     }
   }
@@ -183,14 +212,62 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   public struct CancellationEvent: Sendable {
     public let id: AnyEffectID?
     public let sequence: UInt64
+    public let dispatchID: DispatchID?
 
-    public init(id: AnyEffectID?, sequence: UInt64) {
+    public init(id: AnyEffectID?, sequence: UInt64, dispatchID: DispatchID? = nil) {
       self.id = id
       self.sequence = sequence
+      self.dispatchID = dispatchID
     }
 
-    public init<ID: Hashable & Sendable>(id: EffectID<ID>?, sequence: UInt64) {
-      self.init(id: id.map(AnyEffectID.init), sequence: sequence)
+    public init<ID: Hashable & Sendable>(
+      id: EffectID<ID>?,
+      sequence: UInt64,
+      dispatchID: DispatchID? = nil
+    ) {
+      self.init(id: id.map(AnyEffectID.init), sequence: sequence, dispatchID: dispatchID)
+    }
+  }
+
+  /// Result of delivering one reducer output to a dispatch-scoped capture.
+  public enum OutputDeliveryDisposition: Sendable, Equatable {
+    case enqueued
+    case dropped
+    case terminated
+  }
+
+  /// Payload-free delivery metrics for one reducer output.
+  ///
+  /// Output values are intentionally omitted so instrumentation stays safe by
+  /// default for coordinator commands that may carry identifiers or user data.
+  public struct OutputDeliveryEvent: Sendable, Equatable {
+    public let sequence: UInt64?
+    public let dispatchID: DispatchID?
+    public let subscriberCount: Int
+    public let enqueuedCount: Int
+    public let droppedCount: Int
+    public let terminatedCount: Int
+    public let dispatchCaptureDisposition: OutputDeliveryDisposition?
+    public let wasSuppressedByCancellation: Bool
+
+    public init(
+      sequence: UInt64?,
+      subscriberCount: Int,
+      enqueuedCount: Int,
+      droppedCount: Int,
+      terminatedCount: Int,
+      dispatchCaptureDisposition: OutputDeliveryDisposition?,
+      wasSuppressedByCancellation: Bool,
+      dispatchID: DispatchID? = nil
+    ) {
+      self.sequence = sequence
+      self.subscriberCount = subscriberCount
+      self.enqueuedCount = enqueuedCount
+      self.droppedCount = droppedCount
+      self.terminatedCount = terminatedCount
+      self.dispatchCaptureDisposition = dispatchCaptureDisposition
+      self.wasSuppressedByCancellation = wasSuppressedByCancellation
+      self.dispatchID = dispatchID
     }
   }
 
@@ -200,6 +277,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   /// `storageHighWaterMark` includes already-processed elements that had not
   /// yet been compacted out of the queue's contiguous storage.
   public struct ActionQueueEvent: Sendable, Equatable {
+    /// Dequeued entries, including descendants discarded at the cancellation boundary.
     public let processedActionCount: Int
     public let pendingActionHighWaterMark: Int
     public let storageHighWaterMark: Int
@@ -232,6 +310,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   public var didFailRun: @Sendable (RunFailedEvent) -> Void
   public var didEmitAction: @Sendable (ActionEvent) -> Void
   public var didDropAction: @Sendable (ActionDropEvent) -> Void
+  public var didDeliverOutput: @Sendable (OutputDeliveryEvent) -> Void
   public var didDrainActionQueue: @Sendable (ActionQueueEvent) -> Void
   public var didCancelEffects: @Sendable (CancellationEvent) -> Void
 
@@ -241,6 +320,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     didFailRun: @escaping @Sendable (RunFailedEvent) -> Void = { _ in },
     didEmitAction: @escaping @Sendable (ActionEvent) -> Void = { _ in },
     didDropAction: @escaping @Sendable (ActionDropEvent) -> Void = { _ in },
+    didDeliverOutput: @escaping @Sendable (OutputDeliveryEvent) -> Void = { _ in },
     didDrainActionQueue: @escaping @Sendable (ActionQueueEvent) -> Void = { _ in },
     didCancelEffects: @escaping @Sendable (CancellationEvent) -> Void = { _ in }
   ) {
@@ -249,6 +329,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     self.didFailRun = didFailRun
     self.didEmitAction = didEmitAction
     self.didDropAction = didDropAction
+    self.didDeliverOutput = didDeliverOutput
     self.didDrainActionQueue = didDrainActionQueue
     self.didCancelEffects = didCancelEffects
   }
@@ -266,6 +347,7 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       didFailRun: { receive(.runFailed($0)) },
       didEmitAction: { receive(.actionEmitted($0)) },
       didDropAction: { receive(.actionDropped($0)) },
+      didDeliverOutput: { receive(.outputDelivered($0)) },
       didDrainActionQueue: { receive(.actionQueueDrained($0)) },
       didCancelEffects: { receive(.effectsCancelled($0)) }
     )
@@ -306,6 +388,11 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
           instrumentation.didDropAction(event)
         }
       },
+      didDeliverOutput: { event in
+        for instrumentation in instrumentations {
+          instrumentation.didDeliverOutput(event)
+        }
+      },
       didDrainActionQueue: { event in
         for instrumentation in instrumentations {
           instrumentation.didDrainActionQueue(event)
@@ -332,44 +419,51 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   /// when you want both Console-readable output and signpost-driven Instruments
   /// traces from the same store.
   ///
-  /// Action and error payloads are redacted by default because
+  /// Action, error, and cancellation-ID payloads are redacted by default because
   /// `String(describing:)` and error descriptions can expose user data in
   /// Instruments traces. Opt in with `includeActions: true` and
-  /// `includeErrorPayload: true` only for local debugging sessions where payload
-  /// visibility is intentional.
+  /// `includeErrorPayload: true` and `includeCancellationIDs: true` only for local
+  /// debugging sessions where payload visibility is intentional.
   public static func signpost(
     signposter: OSSignposter,
     name: StaticString = "InnoFlow.run",
     includeActions: Bool = false,
-    includeErrorPayload: Bool = false
+    includeErrorPayload: Bool = false,
+    includeCancellationIDs: Bool = false
   ) -> Self {
     let intervalStates = OSSignpostIntervalStateRegistry()
 
     return .init(
       didStartRun: { event in
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
         let state = signposter.beginInterval(
           name,
           id: signposter.makeSignpostID(),
-          "token=\(event.token.uuidString) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+          "token=\(event.token.uuidString) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
         )
         intervalStates.store(state, for: event.token)
       },
       didFinishRun: { event in
         guard let state = intervalStates.take(token: event.token) else { return }
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
         signposter.endInterval(
           name,
           state,
-          "token=\(event.token.uuidString) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+          "token=\(event.token.uuidString) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
         )
       },
       didFailRun: { event in
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
         // Close the interval so signposter pairing remains balanced even when
         // the run terminates abnormally, then surface the failure as an event.
         if let state = intervalStates.take(token: event.token) {
           signposter.endInterval(
             name,
             state,
-            "token=\(event.token.uuidString) failed cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+            "token=\(event.token.uuidString) failed cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
           )
         }
         let renderedErrorDescription =
@@ -377,25 +471,36 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
         signposter.emitEvent(
           name,
           id: .exclusive,
-          "fail token=\(event.token.uuidString) errorType=\(event.errorTypeName) errorDescription=\(renderedErrorDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+          "fail token=\(event.token.uuidString) errorType=\(event.errorTypeName) errorDescription=\(renderedErrorDescription) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
         )
       },
       didEmitAction: { event in
         let actionDescription =
           includeActions ? String(describing: event.action) : "<redacted>"
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
         signposter.emitEvent(
           name,
           id: .exclusive,
-          "emit action=\(actionDescription) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+          "emit action=\(actionDescription) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
         )
       },
       didDropAction: { event in
         let renderedAction =
           includeActions ? event.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
         signposter.emitEvent(
           name,
           id: .exclusive,
-          "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(String(describing: event.cancellationID)) sequence=\(String(describing: event.sequence))"
+          "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
+        )
+      },
+      didDeliverOutput: { event in
+        signposter.emitEvent(
+          name,
+          id: .exclusive,
+          "output subscribers=\(event.subscriberCount) enqueued=\(event.enqueuedCount) dropped=\(event.droppedCount) terminated=\(event.terminatedCount) dispatchCapture=\(String(describing: event.dispatchCaptureDisposition)) suppressed=\(event.wasSuppressedByCancellation) sequence=\(String(describing: event.sequence))"
         )
       },
       didDrainActionQueue: { event in
@@ -406,10 +511,12 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
         )
       },
       didCancelEffects: { event in
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: event.id) : "<redacted>"
         signposter.emitEvent(
           name,
           id: .exclusive,
-          "cancel id=\(String(describing: event.id)) sequence=\(event.sequence)"
+          "cancel id=\(renderedCancellationID) sequence=\(event.sequence)"
         )
       }
     )
@@ -418,41 +525,58 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   /// Bridges store instrumentation to `Logger` for Console-readable runtime
   /// events.
   ///
-  /// Action payloads are redacted by default. Set `includeActions` to `true`
-  /// only when action descriptions are safe to expose in public Console output.
+  /// Action and cancellation-ID payloads are redacted by default. Set the
+  /// corresponding opt-in only when those descriptions are safe to expose in
+  /// public Console output.
   public static func osLog(
     logger: Logger,
-    includeActions: Bool = false
+    includeActions: Bool = false,
+    includeCancellationIDs: Bool = false
   ) -> Self {
     .sink { event in
       switch event {
       case .runStarted(let runEvent):
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: runEvent.cancellationID) : "<redacted>"
         logger.debug(
-          "InnoFlow run started token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(String(describing: runEvent.cancellationID), privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
+          "InnoFlow run started token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
         )
 
       case .runFinished(let runEvent):
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: runEvent.cancellationID) : "<redacted>"
         logger.debug(
-          "InnoFlow run finished token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(String(describing: runEvent.cancellationID), privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
+          "InnoFlow run finished token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
         )
 
       case .runFailed(let failedEvent):
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: failedEvent.cancellationID) : "<redacted>"
         logger.error(
-          "InnoFlow run failed token=\(failedEvent.token.uuidString, privacy: .public) errorType=\(failedEvent.errorTypeName, privacy: .public) errorDescription=\(failedEvent.errorDescription, privacy: .private) cancellationID=\(String(describing: failedEvent.cancellationID), privacy: .public) sequence=\(String(describing: failedEvent.sequence), privacy: .public)"
+          "InnoFlow run failed token=\(failedEvent.token.uuidString, privacy: .public) errorType=\(failedEvent.errorTypeName, privacy: .public) errorDescription=\(failedEvent.errorDescription, privacy: .private) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: failedEvent.sequence), privacy: .public)"
         )
 
       case .actionEmitted(let actionEvent):
         let actionDescription =
           includeActions ? String(describing: actionEvent.action) : "<redacted>"
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: actionEvent.cancellationID) : "<redacted>"
         logger.debug(
-          "InnoFlow emitted action=\(actionDescription, privacy: .public) cancellationID=\(String(describing: actionEvent.cancellationID), privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
+          "InnoFlow emitted action=\(actionDescription, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
         )
 
       case .actionDropped(let dropEvent):
         let renderedAction =
           includeActions ? dropEvent.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: dropEvent.cancellationID) : "<redacted>"
         logger.debug(
-          "InnoFlow dropped action=\(renderedAction, privacy: .public) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(String(describing: dropEvent.cancellationID), privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
+          "InnoFlow dropped action=\(renderedAction, privacy: .public) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
+        )
+
+      case .outputDelivered(let outputEvent):
+        logger.debug(
+          "InnoFlow delivered output subscribers=\(outputEvent.subscriberCount, privacy: .public) enqueued=\(outputEvent.enqueuedCount, privacy: .public) dropped=\(outputEvent.droppedCount, privacy: .public) terminated=\(outputEvent.terminatedCount, privacy: .public) dispatchCapture=\(String(describing: outputEvent.dispatchCaptureDisposition), privacy: .public) suppressed=\(outputEvent.wasSuppressedByCancellation, privacy: .public) sequence=\(String(describing: outputEvent.sequence), privacy: .public)"
         )
 
       case .actionQueueDrained(let queueEvent):
@@ -461,8 +585,10 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
         )
 
       case .effectsCancelled(let cancellationEvent):
+        let renderedCancellationID =
+          includeCancellationIDs ? String(describing: cancellationEvent.id) : "<redacted>"
         logger.debug(
-          "InnoFlow cancelled effects id=\(String(describing: cancellationEvent.id), privacy: .public) sequence=\(cancellationEvent.sequence, privacy: .public)"
+          "InnoFlow cancelled effects id=\(renderedCancellationID, privacy: .public) sequence=\(cancellationEvent.sequence, privacy: .public)"
         )
       }
     }

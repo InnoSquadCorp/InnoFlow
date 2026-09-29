@@ -50,7 +50,10 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     // `.missingBodyProperty` / `.invalidBodySignature` throws.
     guard findReduceFunction(in: structDecl) == nil,
       let bodyProperty = findBodyProperty(in: structDecl),
-      bodySignatureIssues(bodyProperty).isEmpty
+      bodySignatureIssues(
+        bodyProperty,
+        hasOutput: hasNestedType(named: "Output", in: structDecl)
+      ).isEmpty
     else {
       return []
     }
@@ -60,6 +63,10 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       declaration: structDecl,
       in: context
     )
+    let effectReturnType =
+      hasNestedType(named: "Output", in: structDecl)
+      ? "ReducerEffect<Action, Output>"
+      : "EffectTask<Action>"
 
     if isPhaseManaged(node: node) {
       // Mirrored by `diagnosePhaseManagedContractIssueIfNeeded` in the
@@ -72,7 +79,7 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
         DeclSyntax(
           stringLiteral:
             """
-            \(accessPrefix)func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+            \(accessPrefix)func reduce(into state: inout State, action: Action) -> \(effectReturnType) {
               body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
             }
             """
@@ -84,59 +91,12 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       DeclSyntax(
         stringLiteral:
           """
-          \(accessPrefix)func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+          \(accessPrefix)func reduce(into state: inout State, action: Action) -> \(effectReturnType) {
             body.reduce(into: &state, action: action)
           }
           """
       )
     ]
-  }
-
-  /// Returns `true` when the `@InnoFlow` attribute carries
-  /// `phaseManaged: true`. The argument turns the macro into the
-  /// phase-managed form, where the synthesized `reduce(into:action:)`
-  /// automatically wraps the declared `body` in `.phaseMap(Self.phaseMap)`.
-  ///
-  /// A non-literal expression silently evaluates to `false` here so the
-  /// MemberMacro pass mirrors the silent fallthrough that the ExtensionMacro
-  /// pass diagnoses canonically via `diagnoseInvalidPhaseManagedArgumentIfNeeded`.
-  fileprivate static func isPhaseManaged(node: AttributeSyntax) -> Bool {
-    guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else {
-      return false
-    }
-    for argument in arguments where argument.label?.text == "phaseManaged" {
-      if let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-        return boolLiteral.literal.text == "true"
-      }
-    }
-    return false
-  }
-
-  /// Emits an error diagnostic when `phaseManaged:` is present but not a
-  /// boolean literal. Returns `true` if a diagnostic was emitted so callers
-  /// can stop further expansion. Without this, an expression like
-  /// `phaseManaged: someFlag` silently disables phase management at
-  /// compile time and the resulting reducer never wraps `.phaseMap(...)`
-  /// even though the author plainly intended it to.
-  fileprivate static func diagnoseInvalidPhaseManagedArgumentIfNeeded(
-    node: AttributeSyntax,
-    context: some MacroExpansionContext
-  ) -> Bool {
-    guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else {
-      return false
-    }
-    for argument in arguments where argument.label?.text == "phaseManaged" {
-      if argument.expression.as(BooleanLiteralExprSyntax.self) == nil {
-        context.diagnose(
-          Diagnostic(
-            node: Syntax(argument.expression),
-            message: InvalidPhaseManagedArgumentDiagnosticMessage.nonLiteral
-          )
-        )
-        return true
-      }
-    }
-    return false
   }
 
   public static func expansion(
@@ -170,7 +130,10 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       throw MacroError.missingBodyProperty
     }
 
-    let signatureIssues = bodySignatureIssues(bodyProperty)
+    let signatureIssues = bodySignatureIssues(
+      bodyProperty,
+      hasOutput: hasNestedType(named: "Output", in: structDecl)
+    )
     guard signatureIssues.isEmpty else {
       throw MacroError.invalidBodySignature(details: signatureIssues)
     }
@@ -178,6 +141,20 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     emitMacroEntryDiagnostics(for: structDecl, context: context)
 
     if diagnoseInvalidPhaseManagedArgumentIfNeeded(node: node, context: context) {
+      return []
+    }
+
+    if diagnoseInvalidStrictPhaseTotalityArgumentIfNeeded(node: node, context: context) {
+      return []
+    }
+
+    if isStrictPhaseTotality(node: node), !isPhaseManaged(node: node) {
+      context.diagnose(
+        Diagnostic(
+          node: Syntax(node),
+          message: StrictPhaseTotalityArgumentDiagnosticMessage.requiresPhaseManagement
+        )
+      )
       return []
     }
 
@@ -192,7 +169,11 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       else {
         return []
       }
-      diagnosePhaseTotalityIfNeeded(in: structDecl, context: context)
+      diagnosePhaseTotalityIfNeeded(
+        in: structDecl,
+        strict: isStrictPhaseTotality(node: node),
+        context: context
+      )
     }
 
     let extendedType = type.trimmedDescription
@@ -207,13 +188,19 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     in context: some MacroExpansionContext
   ) throws -> [AttributeSyntax] {
     guard declaration.as(StructDeclSyntax.self) != nil,
-      let actionEnum = member.as(EnumDeclSyntax.self),
-      actionEnum.name.text == "Action"
+      let nestedEnum = member.as(EnumDeclSyntax.self)
     else {
       return []
     }
 
-    return ["@_InnoFlowActionPaths"]
+    switch nestedEnum.name.text {
+    case "Action":
+      return ["@_InnoFlowActionPaths"]
+    case "Output":
+      return ["@_InnoFlowOutputPaths"]
+    default:
+      return []
+    }
   }
 }
 
@@ -240,23 +227,26 @@ public struct InnoFlowActionPathsMacro: MemberMacro {
   }
 }
 
-enum InvalidPhaseManagedArgumentDiagnosticMessage: DiagnosticMessage {
-  case nonLiteral
+public struct InnoFlowOutputPathsMacro: MemberMacro {
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingMembersOf declaration: some DeclGroupSyntax,
+    conformingTo protocols: [TypeSyntax],
+    in context: some MacroExpansionContext
+  ) throws -> [DeclSyntax] {
+    try expansion(of: node, providingMembersOf: declaration, in: context)
+  }
 
-  var message: String {
-    switch self {
-    case .nonLiteral:
-      return
-        "@InnoFlow(phaseManaged:) requires a boolean literal (`true` or `false`); non-literal expressions are rejected because they cannot be evaluated at macro-expansion time and would silently disable phase management"
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingMembersOf declaration: some DeclGroupSyntax,
+    in context: some MacroExpansionContext
+  ) throws -> [DeclSyntax] {
+    guard let outputEnum = declaration.as(EnumDeclSyntax.self) else {
+      return []
     }
-  }
 
-  var diagnosticID: MessageID {
-    .init(domain: "InnoFlowMacro", id: "PhaseManagedArgumentMustBeLiteral")
-  }
-
-  var severity: DiagnosticSeverity {
-    .error
+    return InnoFlowMacro.synthesizedOutputPathDeclarations(in: outputEnum, context: context)
   }
 }
 
@@ -265,6 +255,7 @@ struct InnoFlowMacrosPlugin: CompilerPlugin {
   let providingMacros: [any Macro.Type] = [
     InnoFlowMacro.self,
     InnoFlowActionPathsMacro.self,
+    InnoFlowOutputPathsMacro.self,
     InnoFlowCasePathIgnoredMacro.self,
   ]
 }

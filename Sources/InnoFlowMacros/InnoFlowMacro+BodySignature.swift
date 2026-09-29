@@ -7,7 +7,10 @@ import SwiftSyntax
 import SwiftSyntaxMacros
 
 extension InnoFlowMacro {
-  static func bodySignatureIssues(_ variable: VariableDeclSyntax) -> [String] {
+  static func bodySignatureIssues(
+    _ variable: VariableDeclSyntax,
+    hasOutput: Bool
+  ) -> [String] {
     var issues: [String] = []
     guard let binding = variable.bindings.first else {
       issues.append("missing `body` binding")
@@ -15,7 +18,9 @@ extension InnoFlowMacro {
     }
 
     guard let typeAnnotation = binding.typeAnnotation else {
-      issues.append("`body` must declare an explicit `some Reducer<State, Action>` type")
+      issues.append(
+        "`body` must declare an explicit `some Reducer<State, Action, Never>` or `some Reducer<State, Action, Output>` type"
+      )
       return issues
     }
 
@@ -23,7 +28,7 @@ extension InnoFlowMacro {
 
     guard let someOrAny = type.as(SomeOrAnyTypeSyntax.self) else {
       issues.append(
-        "`body` type `\(type.trimmedDescription)` must be an opaque type (`some Reducer<State, Action>`)"
+        "`body` type `\(type.trimmedDescription)` must be an opaque `some Reducer<State, Action, Output>` type"
       )
       return issues
     }
@@ -60,14 +65,15 @@ extension InnoFlowMacro {
     }
 
     guard let genericArgs = genericArgumentClause else {
-      issues.append("`body` type must specify `Reducer<State, Action>`")
+      issues.append("`body` type must specify `Reducer<State, Action, Output>`")
       return issues
     }
 
     let args = Array(genericArgs.arguments)
-    guard args.count == 2 else {
+    guard args.count == 3 else {
       issues.append(
-        "`body` must have exactly 2 generic parameters (State, Action), found \(args.count)")
+        "`body` must have exactly 3 generic parameters (State, Action, Output), found \(args.count)"
+      )
       return issues
     }
 
@@ -80,6 +86,19 @@ extension InnoFlowMacro {
     if !isNestedTypeReference(args[1].argument, named: "Action") {
       issues.append(
         "second generic parameter must be `Action` (or `Self.Action`), found `\(args[1].argument.trimmedDescription)`"
+      )
+    }
+
+    let outputArgument = args[2].argument
+    if hasOutput {
+      if !isNestedTypeReference(outputArgument, named: "Output") {
+        issues.append(
+          "third generic parameter must be `Output` (or `Self.Output`), found `\(outputArgument.trimmedDescription)`"
+        )
+      }
+    } else if outputArgument.trimmedDescription != "Never" {
+      issues.append(
+        "third generic parameter must be `Never` when the feature declares no nested `Output`, found `\(outputArgument.trimmedDescription)`"
       )
     }
 

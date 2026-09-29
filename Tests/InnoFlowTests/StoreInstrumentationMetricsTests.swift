@@ -202,4 +202,40 @@ struct StoreInstrumentationMetricsTests {
     #expect(snapshot.actionQueueCapacityReleases == 1)
     #expect(snapshot.actionQueueLastRetainedByteEstimate == 0)
   }
+
+  @Test("Collector records output delivery, loss, and cancellation suppression")
+  func collectsOutputDeliveryMetrics() {
+    let metrics = StoreInstrumentationMetricsCollector<MetricsFeature.Action>()
+    let instrumentation = metrics.instrumentation()
+
+    instrumentation.didDeliverOutput(
+      .init(
+        sequence: 1,
+        subscriberCount: 0,
+        enqueuedCount: 0,
+        droppedCount: 0,
+        terminatedCount: 0,
+        dispatchCaptureDisposition: nil,
+        wasSuppressedByCancellation: false
+      )
+    )
+    instrumentation.didDeliverOutput(
+      .init(
+        sequence: 2,
+        subscriberCount: 2,
+        enqueuedCount: 1,
+        droppedCount: 1,
+        terminatedCount: 0,
+        dispatchCaptureDisposition: .dropped,
+        wasSuppressedByCancellation: true
+      )
+    )
+
+    let snapshot = metrics.snapshot()
+    #expect(snapshot.outputDelivered == 2)
+    #expect(snapshot.outputWithoutSubscribers == 1)
+    #expect(snapshot.outputSubscriberDrops == 1)
+    #expect(snapshot.outputDispatchCaptureDrops == 1)
+    #expect(snapshot.outputSuppressedByCancellation == 1)
+  }
 }

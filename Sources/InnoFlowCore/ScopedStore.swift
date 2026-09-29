@@ -316,12 +316,13 @@ where
 public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, ChildAction> {
   package var cachedState: ChildState
   @ObservationIgnored private weak var parent: Store<ParentReducer>?
+  @ObservationIgnored private let parentLifetime: StoreLifetimeToken
   @ObservationIgnored private let stateResolver: @MainActor (ParentReducer.State) -> ChildState?
   @ObservationIgnored private let actionTransform: @Sendable (ChildAction) -> ParentReducer.Action
   @ObservationIgnored package let failureKind: ScopedStoreFailureKind
   @ObservationIgnored package let observerRegistry = ProjectionObserverRegistry<ChildState>()
   @ObservationIgnored package let selectionCache = SelectionCache()
-  @ObservationIgnored package var isActive = true
+  package var isActive = true
   @ObservationIgnored private var onDeactivation: (@MainActor (AnyObject) -> Void)?
   @ObservationIgnored package let stableID: AnyHashable?
   @ObservationIgnored private nonisolated let stableIDDebugDescription: String?
@@ -365,7 +366,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   ///
   /// See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
   public var isAlive: Bool {
-    parent != nil && isActive
+    parent != nil && !parentLifetime.isReleased && isActive
   }
 
   /// A read accessor that reports a released parent or inactive projection
@@ -421,6 +422,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     }
     self.cachedState = initialState
     self.parent = parent
+    self.parentLifetime = parent.lifetime
     self.stateResolver = stateResolver
     self.stableID = stableID
     self.stableIDDebugDescription = stableID.map(String.init(describing:))
@@ -451,6 +453,13 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   private func refreshStateFromParent() -> Bool {
     guard isActive else {
       return false
+    }
+    if parentLifetime.isReleased {
+      isActive = false
+      onDeactivation = nil
+      observerRegistry.refreshAll()
+      observerRegistry.pruneAllObservers()
+      return true
     }
     guard let parent else { return false }
     let previousState = cachedState
@@ -488,19 +497,40 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     state[keyPath: keyPath].value
   }
 
-  public func send(_ action: ChildAction) {
+  @discardableResult
+  public func send(_ action: ChildAction) -> FlowTask {
     // Lifecycle race: silently drop the action if the parent store is gone.
     // See `state` above and ARCHITECTURE_CONTRACT.md — "Projection lifecycle
     // contract". Debug builds still surface the race via `assertionFailure`.
     guard let parent else {
       assertionFailure(parentReleasedMessage())
-      return
+      return .completed
     }
     guard isActive else {
       assertionFailure(staleMessage())
-      return
+      return .completed
     }
-    parent.send(actionTransform(action))
+    return parent.send(actionTransform(action))
+  }
+
+  /// Sends a child action and captures parent outputs from only that dispatch tree.
+  @discardableResult
+  public func send(
+    _ action: ChildAction,
+    capturingOutputs bufferingPolicy: AsyncStream<ParentReducer.Output>.Continuation.BufferingPolicy
+  ) -> OutputFlowTask<ParentReducer.Output> {
+    guard let parent else {
+      assertionFailure(parentReleasedMessage())
+      return .completed
+    }
+    guard isActive else {
+      assertionFailure(staleMessage())
+      return .completed
+    }
+    return parent.send(
+      actionTransform(action),
+      capturingOutputs: bufferingPolicy
+    )
   }
 
   package var projectionObserverStats: ProjectionObserverRegistryStats {

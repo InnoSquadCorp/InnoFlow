@@ -164,6 +164,10 @@ struct BidirectionalWebSocketFeature {
   }
 
   struct State: Equatable, Sendable, DefaultInitializable {
+    static let retainedTranscriptLimit = 10
+    static let maximumTranscriptRowBytes = 4 * 1_024
+    static let truncationMarker = " …[truncated]"
+
     enum ConnectionState: String, Equatable, Sendable {
       case idle
       case connecting
@@ -178,6 +182,33 @@ struct BidirectionalWebSocketFeature {
     var transcript: [String] = []
     var lastError: String?
     var canReconnect = false
+
+    mutating func appendTranscript(_ entry: String) {
+      let storedEntry: String
+      if entry.utf8.count <= Self.maximumTranscriptRowBytes {
+        storedEntry = entry
+      } else {
+        let payloadBudget = Self.maximumTranscriptRowBytes - Self.truncationMarker.utf8.count
+        var payload = ""
+        var usedBytes = 0
+        for scalar in entry.unicodeScalars {
+          let scalarText = String(scalar)
+          let scalarBytes = scalarText.utf8.count
+          if usedBytes + scalarBytes > payloadBudget {
+            break
+          }
+          payload.unicodeScalars.append(scalar)
+          usedBytes += scalarBytes
+        }
+        storedEntry = payload + Self.truncationMarker
+      }
+
+      transcript.append(storedEntry)
+      let overflow = transcript.count - Self.retainedTranscriptLimit
+      if overflow > 0 {
+        transcript.removeFirst(overflow)
+      }
+    }
 
     var canSendMessage: Bool {
       connectionState == .connected
@@ -236,7 +267,7 @@ struct BidirectionalWebSocketFeature {
     )
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .setDraftMessage(let value):
@@ -301,7 +332,7 @@ struct BidirectionalWebSocketFeature {
           state.statusNote = connectionLabel
           state.lastError = nil
           state.canReconnect = false
-          state.transcript.append("system: \(connectionLabel)")
+          state.appendTranscript("system: \(connectionLabel)")
           return .none
 
         case .disconnected(let reason):
@@ -309,7 +340,7 @@ struct BidirectionalWebSocketFeature {
           state.statusNote = "Disconnected"
           state.lastError = nil
           state.canReconnect = true
-          state.transcript.append("system: \(reason)")
+          state.appendTranscript("system: \(reason)")
           return .none
 
         case .reconnecting(let reason):
@@ -317,17 +348,17 @@ struct BidirectionalWebSocketFeature {
           state.statusNote = "Reconnecting"
           state.lastError = nil
           state.canReconnect = false
-          state.transcript.append("system: reconnecting via transport adapter \(reason)")
+          state.appendTranscript("system: reconnecting via transport adapter \(reason)")
           return .none
 
         case .received(let text):
           state.statusNote = "Received message"
-          state.transcript.append("inbound: \(text)")
+          state.appendTranscript("inbound: \(text)")
           return .none
 
         case .sent(let text):
           state.statusNote = "Sent message"
-          state.transcript.append("outbound: \(text)")
+          state.appendTranscript("outbound: \(text)")
           return .none
 
         case .transportFailure(let reason):
@@ -335,7 +366,7 @@ struct BidirectionalWebSocketFeature {
           state.statusNote = "Transport error"
           state.lastError = reason
           state.canReconnect = true
-          state.transcript.append("system: transport error \(reason)")
+          state.appendTranscript("system: transport error \(reason)")
           return .none
         }
       }
@@ -427,7 +458,7 @@ struct BidirectionalWebSocketDemoView: View {
             text: store.binding(
               \.$draftMessage, to: BidirectionalWebSocketFeature.Action.setDraftMessage)
           )
-          .textFieldStyle(.roundedBorder)
+          .sampleTextFieldStyle()
           .autocorrectionDisabled()
           .accessibilityIdentifier("websocket.message")
 
@@ -497,8 +528,11 @@ struct BidirectionalWebSocketDemoView: View {
   }
 }
 
-#Preview("Bidirectional WebSocket") {
-  NavigationStack {
-    BidirectionalWebSocketDemoView()
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("Bidirectional WebSocket") {
+    NavigationStack {
+      BidirectionalWebSocketDemoView()
+    }
   }
-}
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif

@@ -27,8 +27,10 @@ public actor EffectTimingRecorder {
   public enum Phase: String, Codable, Sendable {
     case runStarted
     case runFinished
+    case runFailed
     case actionEmitted
     case actionDropped
+    case outputDelivered
     case effectsCancelled
   }
 
@@ -40,6 +42,7 @@ public actor EffectTimingRecorder {
     public let sequence: UInt64
     public let effectID: String?
     public let actionLabel: String?
+    public let dispatchID: UUID?
     public let timestampNanos: UInt64
 
     public init(
@@ -47,12 +50,14 @@ public actor EffectTimingRecorder {
       sequence: UInt64,
       effectID: String?,
       actionLabel: String?,
+      dispatchID: UUID? = nil,
       timestampNanos: UInt64
     ) {
       self.phase = phase
       self.sequence = sequence
       self.effectID = effectID
       self.actionLabel = actionLabel
+      self.dispatchID = dispatchID
       self.timestampNanos = timestampNanos
     }
   }
@@ -119,6 +124,7 @@ public actor EffectTimingRecorder {
           runToken: event.token,
           effectID: effectID,
           actionLabel: nil,
+          dispatchID: event.dispatchID?.rawValue,
           timestampNanos: timestampNanos
         )
       },
@@ -131,6 +137,20 @@ public actor EffectTimingRecorder {
           runToken: event.token,
           effectID: effectID,
           actionLabel: nil,
+          dispatchID: event.dispatchID?.rawValue,
+          timestampNanos: timestampNanos
+        )
+      },
+      didFailRun: { event in
+        let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
+        let effectID = event.cancellationID?.description
+        recorder.record(
+          phase: .runFailed,
+          sequence: event.sequence,
+          runToken: event.token,
+          effectID: effectID,
+          actionLabel: nil,
+          dispatchID: event.dispatchID?.rawValue,
           timestampNanos: timestampNanos
         )
       },
@@ -143,6 +163,7 @@ public actor EffectTimingRecorder {
           sequence: event.sequence,
           effectID: effectID,
           actionLabel: label,
+          dispatchID: event.dispatchID?.rawValue,
           timestampNanos: timestampNanos
         )
       },
@@ -155,6 +176,18 @@ public actor EffectTimingRecorder {
           sequence: event.sequence,
           effectID: effectID,
           actionLabel: label,
+          dispatchID: event.dispatchID?.rawValue,
+          timestampNanos: timestampNanos
+        )
+      },
+      didDeliverOutput: { event in
+        let timestampNanos = Self.nanoseconds(from: startedAt.duration(to: clock.now))
+        recorder.record(
+          phase: .outputDelivered,
+          sequence: event.sequence,
+          effectID: nil,
+          actionLabel: nil,
+          dispatchID: event.dispatchID?.rawValue,
           timestampNanos: timestampNanos
         )
       },
@@ -166,6 +199,7 @@ public actor EffectTimingRecorder {
           sequence: event.sequence,
           effectID: effectID,
           actionLabel: nil,
+          dispatchID: event.dispatchID?.rawValue,
           timestampNanos: timestampNanos
         )
       }
@@ -186,6 +220,7 @@ public actor EffectTimingRecorder {
     runToken: UUID? = nil,
     effectID: String?,
     actionLabel: String?,
+    dispatchID: UUID? = nil,
     timestampNanos: UInt64
   ) {
     storage.withLock { state in
@@ -201,6 +236,7 @@ public actor EffectTimingRecorder {
           sequence: resolvedSequence,
           effectID: effectID,
           actionLabel: actionLabel,
+          dispatchID: dispatchID,
           timestampNanos: timestampNanos
         )
       )
@@ -231,7 +267,7 @@ public actor EffectTimingRecorder {
         return sequence
       }()
 
-    if phase == .runFinished {
+    if phase == .runFinished || phase == .runFailed {
       state.fallbackSequenceByRunToken.removeValue(forKey: runToken)
     }
 

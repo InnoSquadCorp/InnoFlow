@@ -101,7 +101,12 @@ extension TestStore {
     file: StaticString,
     line: UInt
   ) async {
-    let effect = reducer.reduce(into: &state, action: action)
+    let effect = reduceAction(
+      action,
+      source: .automatic,
+      file: file,
+      line: line
+    )
     await walker.walk(
       effect,
       context: nextEffectContext(for: effect, file: file, line: line),

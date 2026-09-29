@@ -14,7 +14,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
   @Test("@InnoFlow: @BindableField matched by Action.setX emits no diagnostics")
   func bindableFieldMatchedBySetterPassesCleanly() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
@@ -25,7 +25,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
                 case setStep(Int)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -39,9 +39,21 @@ struct InnoFlowBindableFieldDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setStep(Int)
+
+                  static let setStepCasePath = CasePath<Self, Int>(
+                    embed: { childAction in
+                      .setStep(childAction)
+                    },
+                    extract: { action in
+                      guard case .setStep(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -65,7 +77,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
   @Test("@InnoFlow warns when @BindableField has no matching Action.setX case")
   func bindableFieldWithoutSetterWarns() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
@@ -76,7 +88,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
                 case increment
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -92,7 +104,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
                   case increment
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -128,7 +140,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
   @Test("@InnoFlow skips @BindableField diagnostics when Action is a typealias")
   func typealiasedActionSkipsBindableFieldDiagnostic() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct ChildFeature {
@@ -137,7 +149,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
             }
             typealias Action = ParentFeature.ChildAction
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -151,7 +163,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
               }
               typealias Action = ParentFeature.ChildAction
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -165,6 +177,15 @@ struct InnoFlowBindableFieldDiagnosticsTests {
           extension ChildFeature: Reducer {
           }
           """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "@InnoFlow skips CasePath synthesis and phase-totality diagnostics for `Action` because it is declared as a `typealias`. Define `Action` as a nested `enum` directly inside this type to enable those diagnostics.",
+            line: 6,
+            column: 5,
+            severity: .note
+          )
+        ],
         macros: testMacros
       )
     #else
@@ -175,7 +196,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
   @Test("@InnoFlow tolerates acronym casings like mfaCode ↔ setMFACode")
   func bindableFieldAcronymCasingIsAccepted() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct AuthFeature {
@@ -186,7 +207,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
                 case setMFACode(String)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -200,9 +221,21 @@ struct InnoFlowBindableFieldDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setMFACode(String)
+
+                  static let setMFACodeCasePath = CasePath<Self, String>(
+                    embed: { childAction in
+                      .setMFACode(childAction)
+                    },
+                    extract: { action in
+                      guard case .setMFACode(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -226,7 +259,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
   @Test("@InnoFlow accepts same-name @BindableField setters when payload spelling uses typealiases")
   func bindableFieldSetterPayloadTypealiasSpellingIsAccepted() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct ProfileFeature {
@@ -238,7 +271,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
                 case setName(String)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -253,9 +286,21 @@ struct InnoFlowBindableFieldDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setName(String)
+
+                  static let setNameCasePath = CasePath<Self, String>(
+                    embed: { childAction in
+                      .setName(childAction)
+                    },
+                    extract: { action in
+                      guard case .setName(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -279,7 +324,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
   @Test("@InnoFlow warns when Action.setX exists but takes the wrong payload type")
   func bindableFieldSetterPayloadTypeMismatchWarnsWithoutFixIt() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
@@ -290,7 +335,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
                 case setStep(String)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -304,9 +349,21 @@ struct InnoFlowBindableFieldDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setStep(String)
+
+                  static let setStepCasePath = CasePath<Self, String>(
+                    embed: { childAction in
+                      .setStep(childAction)
+                    },
+                    extract: { action in
+                      guard case .setStep(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }
@@ -339,7 +396,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
   @Test("@InnoFlow warns only for @BindableField fields missing their Action.setX")
   func bindableFieldDiagnosticIsFieldLocal() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct FormFeature {
@@ -351,7 +408,7 @@ struct InnoFlowBindableFieldDiagnosticsTests {
                 case setName(String)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     .none
                 }
@@ -366,9 +423,21 @@ struct InnoFlowBindableFieldDiagnosticsTests {
               }
               enum Action: Sendable {
                   case setName(String)
+
+                  static let setNameCasePath = CasePath<Self, String>(
+                    embed: { childAction in
+                      .setName(childAction)
+                    },
+                    extract: { action in
+                      guard case .setName(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       .none
                   }

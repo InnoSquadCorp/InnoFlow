@@ -14,6 +14,7 @@ import Testing
   let testMacros: [String: any Macro.Type] = [
     "InnoFlow": InnoFlowMacro.self,
     "_InnoFlowActionPaths": InnoFlowActionPathsMacro.self,
+    "_InnoFlowOutputPaths": InnoFlowOutputPathsMacro.self,
     "InnoFlowCasePathIgnored": InnoFlowCasePathIgnoredMacro.self,
   ]
 #endif
@@ -21,17 +22,314 @@ import Testing
 @Suite("Macro Tests")
 struct InnoFlowMacrosTests {
 
+  @Test("Output paths preserve availability and conditional compilation")
+  func outputPathsPreservePlatformGuards() throws {
+    #if canImport(InnoFlowMacros)
+      assertSwiftTestingMacroExpansion(
+        """
+        @_InnoFlowOutputPaths
+        enum Output {
+            case baseline
+            @available(macOS 26.0, *)
+            case modern
+            @available(*, unavailable)
+            case retired
+            @available(macOS, unavailable)
+            case retiredOnMac
+            #if os(macOS)
+            @available(*, unavailable)
+            #endif
+            case conditionallyRetired
+            #if os(macOS)
+            case platform(Int)
+            #elseif os(iOS)
+            case platform(Double)
+            #else
+            case platform(String)
+            #endif
+        }
+        """,
+        expandedSource: """
+          enum Output {
+              case baseline
+              @available(macOS 26.0, *)
+              case modern
+              @available(*, unavailable)
+              case retired
+              @available(macOS, unavailable)
+              case retiredOnMac
+              #if os(macOS)
+              @available(*, unavailable)
+              #endif
+              case conditionallyRetired
+              #if os(macOS)
+              case platform(Int)
+              #elseif os(iOS)
+              case platform(Double)
+              #else
+              case platform(String)
+              #endif
+
+              static let baselineCasePath = CasePath<Self, Void>(
+                embed: { value in
+                  .baseline
+                },
+                extract: { output in
+                  guard case .baseline = output else {
+                      return nil
+                  }
+                  return .some(())
+                }
+              )
+
+              @available(macOS 26.0, *)
+              static let modernCasePath = CasePath<Self, Void>(
+                embed: { value in
+                  .modern
+                },
+                extract: { output in
+                  guard case .modern = output else {
+                      return nil
+                  }
+                  return .some(())
+                }
+              )
+
+              @available(macOS, unavailable)
+              static let retiredOnMacCasePath = CasePath<Self, Void>(
+                embed: { value in
+                  .retiredOnMac
+                },
+                extract: { output in
+                  guard case .retiredOnMac = output else {
+                      return nil
+                  }
+                  return .some(())
+                }
+              )
+
+              #if !((os(macOS)))
+              #if os(macOS)
+              @available(*, unavailable)
+              #endif
+              static let conditionallyRetiredCasePath = CasePath<Self, Void>(
+                embed: { value in
+                  .conditionallyRetired
+                },
+                extract: { output in
+                  guard case .conditionallyRetired = output else {
+                      return nil
+                  }
+                  return .some(())
+                }
+              )
+              #endif
+
+              #if os(macOS)
+              static let platformCasePath = CasePath<Self, Int>(
+                embed: { value in
+                  .platform(value)
+                },
+                extract: { output in
+                  guard case .platform(let value) = output else {
+                      return nil
+                  }
+                  return .some(value)
+                }
+              )
+              #elseif os(iOS)
+              static let platformCasePath = CasePath<Self, Double>(
+                embed: { value in
+                  .platform(value)
+                },
+                extract: { output in
+                  guard case .platform(let value) = output else {
+                      return nil
+                  }
+                  return .some(value)
+                }
+              )
+              #else
+              static let platformCasePath = CasePath<Self, String>(
+                embed: { value in
+                  .platform(value)
+                },
+                extract: { output in
+                  guard case .platform(let value) = output else {
+                      return nil
+                  }
+                  return .some(value)
+                }
+              )
+              #endif
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("Output paths distinguish mutually exclusive target environments")
+  func outputPathsPreserveIndependentTargetEnvironmentBranches() throws {
+    #if canImport(InnoFlowMacros)
+      assertSwiftTestingMacroExpansion(
+        """
+        @_InnoFlowOutputPaths
+        enum Output {
+            #if targetEnvironment(simulator)
+            case channel(Int)
+            #endif
+            #if targetEnvironment(macCatalyst)
+            case channel(String)
+            #endif
+        }
+        """,
+        expandedSource: """
+          enum Output {
+              #if targetEnvironment(simulator)
+              case channel(Int)
+              #endif
+              #if targetEnvironment(macCatalyst)
+              case channel(String)
+              #endif
+
+              #if targetEnvironment(simulator)
+              static let channelCasePath = CasePath<Self, Int>(
+                embed: { value in
+                  .channel(value)
+                },
+                extract: { output in
+                  guard case .channel(let value) = output else {
+                      return nil
+                  }
+                  return .some(value)
+                }
+              )
+              #endif
+
+              #if targetEnvironment(macCatalyst)
+              static let channelCasePath = CasePath<Self, String>(
+                embed: { value in
+                  .channel(value)
+                },
+                extract: { output in
+                  guard case .channel(let value) = output else {
+                      return nil
+                  }
+                  return .some(value)
+                }
+              )
+              #endif
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("Output paths honor an explicit Mac Catalyst availability override")
+  func outputPathsPreserveCatalystAvailabilityOverride() throws {
+    #if canImport(InnoFlowMacros)
+      assertSwiftTestingMacroExpansion(
+        """
+        @_InnoFlowOutputPaths
+        enum Output {
+            @available(iOS, unavailable)
+            @available(macCatalyst 13.0, *)
+            case desktop(Int)
+        }
+        """,
+        expandedSource: """
+          enum Output {
+              @available(iOS, unavailable)
+              @available(macCatalyst 13.0, *)
+              case desktop(Int)
+
+              @available(iOS, unavailable)
+              @available(macCatalyst 13.0, *)
+              static let desktopCasePath = CasePath<Self, Int>(
+                embed: { value in
+                  .desktop(value)
+                },
+                extract: { output in
+                  guard case .desktop(let value) = output else {
+                      return nil
+                  }
+                  return .some(value)
+                }
+              )
+          }
+          """,
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
+  @Test("Output paths continue to diagnose simultaneously active collisions")
+  func outputPathsDiagnoseActiveCollisions() throws {
+    #if canImport(InnoFlowMacros)
+      assertSwiftTestingMacroExpansion(
+        """
+        @_InnoFlowOutputPaths
+        enum Output {
+            case value(Int)
+            case _value(String)
+        }
+        """,
+        expandedSource: """
+          enum Output {
+              case value(Int)
+              case _value(String)
+
+              static let valueCasePath = CasePath<Self, Int>(
+                embed: { value in
+                  .value(value)
+                },
+                extract: { output in
+                  guard case .value(let value) = output else {
+                      return nil
+                  }
+                  return .some(value)
+                }
+              )
+          }
+          """,
+        diagnostics: [
+          DiagnosticSpec(
+            message:
+              "generated output path name collides with another generated output path or existing static member; declare an explicit static path or rename the case",
+            line: 4,
+            column: 10
+          )
+        ],
+        macros: testMacros
+      )
+    #else
+      Issue.record("Macros are only supported when running tests for the host platform")
+    #endif
+  }
+
   @Test("@InnoFlow synthesizes reduce forwarding for body-based authoring")
   func bodyAuthoringAddsConformanceAndForwarder() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CounterFeature {
-            struct State: Sendable { var count = 0 }
-            enum Action: Sendable { case increment }
+            struct State: Sendable {
+                var count = 0
+            }
+            enum Action: Sendable {
+                case increment
+            }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     switch action {
                     case .increment:
@@ -44,10 +342,14 @@ struct InnoFlowMacrosTests {
         """,
         expandedSource: """
           struct CounterFeature {
-              struct State: Sendable { var count = 0 }
-              enum Action: Sendable { case increment }
+              struct State: Sendable {
+                  var count = 0
+              }
+              enum Action: Sendable {
+                  case increment
+              }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       switch action {
                       case .increment:
@@ -61,7 +363,9 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension CounterFeature: Reducer {}
+
+          extension CounterFeature: Reducer {
+          }
           """,
         macros: testMacros
       )
@@ -73,14 +377,18 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow accepts a Self-qualified body signature")
   func selfQualifiedBodySignatureIsAccepted() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct QualifiedFeature {
-            struct State: Sendable { var count = 0 }
-            enum Action: Sendable { case increment }
+            struct State: Sendable {
+                var count = 0
+            }
+            enum Action: Sendable {
+                case increment
+            }
 
-            var body: some Reducer<Self.State, Self.Action> {
+            var body: some Reducer<Self.State, Self.Action, Never> {
                 Reduce { state, action in
                     switch action {
                     case .increment:
@@ -93,10 +401,14 @@ struct InnoFlowMacrosTests {
         """,
         expandedSource: """
           struct QualifiedFeature {
-              struct State: Sendable { var count = 0 }
-              enum Action: Sendable { case increment }
+              struct State: Sendable {
+                  var count = 0
+              }
+              enum Action: Sendable {
+                  case increment
+              }
 
-              var body: some Reducer<Self.State, Self.Action> {
+              var body: some Reducer<Self.State, Self.Action, Never> {
                   Reduce { state, action in
                       switch action {
                       case .increment:
@@ -110,7 +422,9 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension QualifiedFeature: Reducer {}
+
+          extension QualifiedFeature: Reducer {
+          }
           """,
         macros: testMacros
       )
@@ -122,14 +436,18 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow accepts a module-qualified Reducer constraint")
   func moduleQualifiedReducerConstraintIsAccepted() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct ModuleQualifiedFeature {
-            struct State: Sendable { var count = 0 }
-            enum Action: Sendable { case increment }
+            struct State: Sendable {
+                var count = 0
+            }
+            enum Action: Sendable {
+                case increment
+            }
 
-            var body: some InnoFlow.Reducer<State, Action> {
+            var body: some InnoFlow.Reducer<State, Action, Never> {
                 Reduce { state, action in
                     switch action {
                     case .increment:
@@ -142,10 +460,14 @@ struct InnoFlowMacrosTests {
         """,
         expandedSource: """
           struct ModuleQualifiedFeature {
-              struct State: Sendable { var count = 0 }
-              enum Action: Sendable { case increment }
+              struct State: Sendable {
+                  var count = 0
+              }
+              enum Action: Sendable {
+                  case increment
+              }
 
-              var body: some InnoFlow.Reducer<State, Action> {
+              var body: some InnoFlow.Reducer<State, Action, Never> {
                   Reduce { state, action in
                       switch action {
                       case .increment:
@@ -159,7 +481,9 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension ModuleQualifiedFeature: Reducer {}
+
+          extension ModuleQualifiedFeature: Reducer {
+          }
           """,
         macros: testMacros
       )
@@ -171,14 +495,16 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects non-Self qualification in the body signature")
   func foreignQualifiedBodySignatureIsRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct WrongFeature {
             struct State: Sendable {}
-            enum Action: Sendable { case noop }
+            enum Action: Sendable {
+                case noop
+            }
 
-            var body: some Reducer<Other.State, Other.Action> {
+            var body: some Reducer<Other.State, Other.Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -186,9 +512,11 @@ struct InnoFlowMacrosTests {
         expandedSource: """
           struct WrongFeature {
               struct State: Sendable {}
-              enum Action: Sendable { case noop }
+              enum Action: Sendable {
+                  case noop
+              }
 
-              var body: some Reducer<Other.State, Other.Action> {
+              var body: some Reducer<Other.State, Other.Action, Never> {
                   Reduce { state, action in .none }
               }
           }
@@ -198,7 +526,7 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action>
+              var body: some Reducer<State, Action, Output>
               Detected issues: first generic parameter must be `State` (or `Self.State`), found `Other.State`; second generic parameter must be `Action` (or `Self.Action`), found `Other.Action`.
               Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
@@ -216,7 +544,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow preserves public access on synthesized members")
   func publicFeatureSynthesizesPublicMembers() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         public struct PublicFeature {
@@ -225,9 +553,11 @@ struct InnoFlowMacrosTests {
                 case child(ChildAction)
                 case row(id: Int, action: ChildAction)
             }
-            public enum ChildAction: Sendable { case start }
+            public enum ChildAction: Sendable {
+                case start
+            }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -238,10 +568,36 @@ struct InnoFlowMacrosTests {
               public enum Action: Sendable {
                   case child(ChildAction)
                   case row(id: Int, action: ChildAction)
-              }
-              public enum ChildAction: Sendable { case start }
 
-              var body: some Reducer<State, Action> {
+                  public static let childCasePath = CasePath<Self, ChildAction>(
+                    embed: { childAction in
+                      .child(childAction)
+                    },
+                    extract: { action in
+                      guard case .child(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
+
+                  public static let rowActionPath = CollectionActionPath<Self, Int, ChildAction>(
+                    embed: { id, action in
+                      .row(id: id, action: action)
+                    },
+                    extract: { action in
+                      guard case let .row(id, childAction) = action else {
+                          return nil
+                      }
+                      return (id, childAction)
+                    }
+                  )
+              }
+              public enum ChildAction: Sendable {
+                  case start
+              }
+
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -249,26 +605,8 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension PublicFeature: Reducer {}
-          extension PublicFeature.Action {
-            public static let childCasePath = CasePath<Self, ChildAction>(
-              embed: { childAction in
-                .child(childAction)
-              },
-              extract: { action in
-                guard case .child(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
-            public static let rowActionPath = CollectionActionPath<Self, Int, ChildAction>(
-              embed: { id, action in
-                .row(id: id, action: action)
-              },
-              extract: { action in
-                guard case let .row(id, childAction) = action else { return nil }
-                return (id, childAction)
-              }
-            )
+
+          extension PublicFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -281,18 +619,22 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow phase-managed form preserves package access on synthesized members")
   func packageFeatureSynthesizesPackageMembers() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow(phaseManaged: true)
         package struct PackageFeature {
             package struct State: Sendable {
-                package enum Phase: Hashable, Sendable { case idle, loaded }
+                package enum Phase: Hashable, Sendable {
+                    case idle, loaded
+                }
                 package var phase = Phase.idle
             }
             package enum Action: Sendable {
                 case child(ChildAction)
             }
-            package enum ChildAction: Sendable { case start }
+            package enum ChildAction: Sendable {
+                case start
+            }
 
             package static var phaseMap: PhaseMap<State, Action, State.Phase> {
                 PhaseMap(\\.phase) {
@@ -301,7 +643,7 @@ struct InnoFlowMacrosTests {
                 }
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -309,13 +651,29 @@ struct InnoFlowMacrosTests {
         expandedSource: """
           package struct PackageFeature {
               package struct State: Sendable {
-                  package enum Phase: Hashable, Sendable { case idle, loaded }
+                  package enum Phase: Hashable, Sendable {
+                      case idle, loaded
+                  }
                   package var phase = Phase.idle
               }
               package enum Action: Sendable {
                   case child(ChildAction)
+
+                  package static let childCasePath = CasePath<Self, ChildAction>(
+                    embed: { childAction in
+                      .child(childAction)
+                    },
+                    extract: { action in
+                      guard case .child(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
-              package enum ChildAction: Sendable { case start }
+              package enum ChildAction: Sendable {
+                  case start
+              }
 
               package static var phaseMap: PhaseMap<State, Action, State.Phase> {
                   PhaseMap(\\.phase) {
@@ -324,7 +682,7 @@ struct InnoFlowMacrosTests {
                   }
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -332,17 +690,8 @@ struct InnoFlowMacrosTests {
                 body.phaseMap(Self.phaseMap).reduce(into: &state, action: action)
               }
           }
-          extension PackageFeature: Reducer {}
-          extension PackageFeature.Action {
-            package static let childCasePath = CasePath<Self, ChildAction>(
-              embed: { childAction in
-                .child(childAction)
-              },
-              extract: { action in
-                guard case .child(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
+
+          extension PackageFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -355,7 +704,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow synthesizes case paths for single child-action cases")
   func childActionCasePathIsSynthesized() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct ParentFeature {
@@ -367,7 +716,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -377,12 +726,24 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case child(ChildAction)
+
+                  static let childCasePath = CasePath<Self, ChildAction>(
+                    embed: { childAction in
+                      .child(childAction)
+                    },
+                    extract: { action in
+                      guard case .child(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
               enum ChildAction: Sendable {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -390,17 +751,8 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension ParentFeature: Reducer {}
-          extension ParentFeature.Action {
-            static let childCasePath = CasePath<Self, ChildAction>(
-              embed: { childAction in
-                .child(childAction)
-              },
-              extract: { action in
-                guard case .child(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
+
+          extension ParentFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -413,7 +765,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow synthesizes collection action paths for id/action cases")
   func collectionActionPathIsSynthesized() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct TodoFeature {
@@ -425,7 +777,7 @@ struct InnoFlowMacrosTests {
                 case toggle
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -435,12 +787,24 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case todo(id: UUID, action: TodoAction)
+
+                  static let todoActionPath = CollectionActionPath<Self, UUID, TodoAction>(
+                    embed: { id, action in
+                      .todo(id: id, action: action)
+                    },
+                    extract: { action in
+                      guard case let .todo(id, childAction) = action else {
+                          return nil
+                      }
+                      return (id, childAction)
+                    }
+                  )
               }
               enum TodoAction: Sendable {
                   case toggle
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -448,17 +812,8 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension TodoFeature: Reducer {}
-          extension TodoFeature.Action {
-            static let todoActionPath = CollectionActionPath<Self, UUID, TodoAction>(
-              embed: { id, action in
-                .todo(id: id, action: action)
-              },
-              extract: { action in
-                guard case let .todo(id, childAction) = action else { return nil }
-                return (id, childAction)
-              }
-            )
+
+          extension TodoFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -471,7 +826,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow uses computed action paths inside generic features")
   func genericFeatureUsesComputedActionPaths() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct GenericFeature<Value: Sendable> {
@@ -482,7 +837,7 @@ struct InnoFlowMacrosTests {
                 private enum __InnoFlowGeneratedActionPathIdentity_childCasePath {}
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -493,11 +848,46 @@ struct InnoFlowMacrosTests {
               enum Action: Sendable {
                   case child(Value)
                   case row(id: Int, action: Value)
-                  private enum __InnoFlowGeneratedActionPathIdentity_childCasePath {
+                  private enum __InnoFlowGeneratedActionPathIdentity_childCasePath {}
+
+                  private enum __InnoFlowGeneratedActionPathIdentity_childCasePath_ {
+                  }
+
+                  static var childCasePath: CasePath<Self, Value> {
+                    CasePath<Self, Value>._innoFlowGenerated(
+                      marker: __InnoFlowGeneratedActionPathIdentity_childCasePath_.self,
+                      embed: { childAction in
+                        .child(childAction)
+                      },
+                      extract: { action in
+                        guard case .child(let childAction) = action else {
+                            return nil
+                        }
+                        return childAction
+                      }
+                    )
+                  }
+
+                  private enum __InnoFlowGeneratedActionPathIdentity_rowActionPath {
+                  }
+
+                  static var rowActionPath: CollectionActionPath<Self, Int, Value> {
+                    CollectionActionPath<Self, Int, Value>._innoFlowGenerated(
+                      marker: __InnoFlowGeneratedActionPathIdentity_rowActionPath.self,
+                      embed: { id, action in
+                        .row(id: id, action: action)
+                      },
+                      extract: { action in
+                        guard case let .row(id, childAction) = action else {
+                            return nil
+                        }
+                        return (id, childAction)
+                      }
+                    )
                   }
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -505,36 +895,8 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension GenericFeature: Reducer {}
-          extension GenericFeature.Action {
-            private enum __InnoFlowGeneratedActionPathIdentity_childCasePath_ {
-            }
-            static var childCasePath: CasePath<Self, Value> {
-              CasePath<Self, Value>._innoFlowGenerated(
-                marker: __InnoFlowGeneratedActionPathIdentity_childCasePath_.self,
-                embed: { childAction in
-                  .child(childAction)
-                },
-                extract: { action in
-                  guard case .child(let childAction) = action else { return nil }
-                  return childAction
-                }
-              )
-            }
-            private enum __InnoFlowGeneratedActionPathIdentity_rowActionPath {
-            }
-            static var rowActionPath: CollectionActionPath<Self, Int, Value> {
-              CollectionActionPath<Self, Int, Value>._innoFlowGenerated(
-                marker: __InnoFlowGeneratedActionPathIdentity_rowActionPath.self,
-                embed: { id, action in
-                  .row(id: id, action: action)
-                },
-                extract: { action in
-                  guard case let .row(id, childAction) = action else { return nil }
-                  return (id, childAction)
-                }
-              )
-            }
+
+          extension GenericFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -547,7 +909,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow synthesizes collection action paths from id/action labels")
   func collectionActionPathUsesLabelsNotActionSuffix() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct FeedFeature {
@@ -559,7 +921,7 @@ struct InnoFlowMacrosTests {
                 case appeared
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -569,12 +931,24 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case row(id: UUID, action: ChildEvent)
+
+                  static let rowActionPath = CollectionActionPath<Self, UUID, ChildEvent>(
+                    embed: { id, action in
+                      .row(id: id, action: action)
+                    },
+                    extract: { action in
+                      guard case let .row(id, childAction) = action else {
+                          return nil
+                      }
+                      return (id, childAction)
+                    }
+                  )
               }
               enum ChildEvent: Sendable {
                   case appeared
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -582,17 +956,8 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension FeedFeature: Reducer {}
-          extension FeedFeature.Action {
-            static let rowActionPath = CollectionActionPath<Self, UUID, ChildEvent>(
-              embed: { id, action in
-                .row(id: id, action: action)
-              },
-              extract: { action in
-                guard case let .row(id, childAction) = action else { return nil }
-                return (id, childAction)
-              }
-            )
+
+          extension FeedFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -605,7 +970,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow strips one leading underscore from generated case path names")
   func leadingUnderscoreCasePathUsesCleanName() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct LoadingFeature {
@@ -617,7 +982,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -627,12 +992,24 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case _loaded(ChildAction)
+
+                  static let loadedCasePath = CasePath<Self, ChildAction>(
+                    embed: { childAction in
+                      ._loaded(childAction)
+                    },
+                    extract: { action in
+                      guard case ._loaded(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
               enum ChildAction: Sendable {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -640,17 +1017,8 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension LoadingFeature: Reducer {}
-          extension LoadingFeature.Action {
-            static let loadedCasePath = CasePath<Self, ChildAction>(
-              embed: { childAction in
-                ._loaded(childAction)
-              },
-              extract: { action in
-                guard case ._loaded(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
+
+          extension LoadingFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -663,7 +1031,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow synthesizes payload case paths for single unlabeled payload cases")
   func singlePayloadCasePathIsSynthesized() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct LoadingFeature {
@@ -672,7 +1040,7 @@ struct InnoFlowMacrosTests {
                 case _loaded(String)
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -682,9 +1050,21 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case _loaded(String)
+
+                  static let loadedCasePath = CasePath<Self, String>(
+                    embed: { childAction in
+                      ._loaded(childAction)
+                    },
+                    extract: { action in
+                      guard case ._loaded(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -692,17 +1072,8 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension LoadingFeature: Reducer {}
-          extension LoadingFeature.Action {
-            static let loadedCasePath = CasePath<Self, String>(
-              embed: { childAction in
-                ._loaded(childAction)
-              },
-              extract: { action in
-                guard case ._loaded(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
+
+          extension LoadingFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -715,14 +1086,14 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow leaves empty action enums without synthesized action paths")
   func emptyActionEnumDoesNotSynthesizeActionPaths() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct EmptyActionFeature {
             struct State: Sendable {}
             enum Action: Sendable {}
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -732,7 +1103,7 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {}
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -740,7 +1111,9 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension EmptyActionFeature: Reducer {}
+
+          extension EmptyActionFeature: Reducer {
+          }
           """,
         macros: testMacros
       )
@@ -752,7 +1125,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow warns on labeled single-parameter cases instead of silently skipping them")
   func labeledSingleParameterCaseDoesNotSynthesizeActionPath() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct LabeledActionFeature {
@@ -764,7 +1137,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -779,7 +1152,7 @@ struct InnoFlowMacrosTests {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -787,13 +1160,15 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension LabeledActionFeature: Reducer {}
+
+          extension LabeledActionFeature: Reducer {
+          }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
-              "case `child` has a labeled payload (`action:`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, or declare `static let childCasePath = CasePath<Self, …>(embed:extract:)` manually",
-            line: 5,
+              "case `child` has a labeled payload (`action:`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, declare `static let childCasePath = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed",
+            line: 6,
             column: 14,
             severity: .warning
           )
@@ -808,7 +1183,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow labeled-payload warnings use the generated action path base name")
   func labeledLeadingUnderscorePayloadNoteUsesGeneratedBaseName() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct LabeledActionFeature {
@@ -820,7 +1195,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -835,7 +1210,7 @@ struct InnoFlowMacrosTests {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -843,13 +1218,15 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension LabeledActionFeature: Reducer {}
+
+          extension LabeledActionFeature: Reducer {
+          }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
               "case `_child` has a labeled payload (`action:`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, declare `static let childCasePath = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed",
-            line: 5,
+            line: 6,
             column: 14,
             severity: .warning
           )
@@ -864,7 +1241,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow warns on multi-parameter cases instead of silently skipping them")
   func multiParameterCaseDoesNotSynthesizeActionPath() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct MultiParameterActionFeature {
@@ -876,7 +1253,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -891,7 +1268,7 @@ struct InnoFlowMacrosTests {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -899,13 +1276,15 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension MultiParameterActionFeature: Reducer {}
+
+          extension MultiParameterActionFeature: Reducer {
+          }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
               "case `child` has multiple payload parameters; no CasePath is synthesized. Why: CasePath auto-synthesis only handles unlabeled single payloads and `id:action:` collection routes. Fix: collapse the payload into a single struct/tuple, declare `static let childCasePath = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed",
-            line: 5,
+            line: 6,
             column: 14,
             severity: .warning
           )
@@ -920,7 +1299,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow multi-payload warnings use the generated action path base name")
   func multiPayloadWarningUsesGeneratedActionPathBaseName() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @_InnoFlowActionPaths
         enum Action: Sendable {
@@ -951,7 +1330,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow accepts canonical manual CasePaths for unsupported payload shapes")
   func manualCasePathsSuppressUnsupportedPayloadWarnings() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct ManualActionPathFeature {
@@ -979,7 +1358,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1010,7 +1389,7 @@ struct InnoFlowMacrosTests {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1018,7 +1397,9 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension ManualActionPathFeature: Reducer {}
+
+          extension ManualActionPathFeature: Reducer {
+          }
           """,
         macros: testMacros
       )
@@ -1030,7 +1411,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow accepts aliased and factory-built canonical manual CasePaths")
   func aliasedAndFactoryManualCasePathsSuppressWarnings() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct IndirectManualActionPathFeature {
@@ -1064,7 +1445,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1101,7 +1482,7 @@ struct InnoFlowMacrosTests {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1109,7 +1490,9 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension IndirectManualActionPathFeature: Reducer {}
+
+          extension IndirectManualActionPathFeature: Reducer {
+          }
           """,
         macros: testMacros
       )
@@ -1121,7 +1504,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlowCasePathIgnored skips synthesis and unsupported-payload warnings")
   func explicitCasePathOptOutSkipsSynthesisAndWarnings() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct IgnoredActionPathFeature {
@@ -1136,7 +1519,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1146,13 +1529,14 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case child(ChildAction)
+                  @InnoFlow.InnoFlowCasePathIgnored
                   case multi(id: UUID, action: ChildAction, metadata: String)
               }
               enum ChildAction: Sendable {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1160,7 +1544,9 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension IgnoredActionPathFeature: Reducer {}
+
+          extension IgnoredActionPathFeature: Reducer {
+          }
           """,
         macros: testMacros
       )
@@ -1172,7 +1558,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlowCasePathIgnored rejects non-case declarations")
   func explicitCasePathOptOutRequiresEnumCase() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlowCasePathIgnored
         struct NotAnEnumCase {}
@@ -1198,7 +1584,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow warns on optional payload cases while still synthesizing a CasePath")
   func optionalPayloadCaseEmitsNote() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct OptionalPayloadFeature {
@@ -1210,7 +1596,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1220,12 +1606,24 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case child(ChildAction?)
+
+                  static let childCasePath = CasePath<Self, ChildAction?>(
+                    embed: { childAction in
+                      .child(childAction)
+                    },
+                    extract: { action in
+                      guard case .child(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
               enum ChildAction: Sendable {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1233,24 +1631,15 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension OptionalPayloadFeature: Reducer {}
-          extension OptionalPayloadFeature.Action {
-            static let childCasePath = CasePath<Self, ChildAction?>(
-              embed: { childAction in
-                .child(childAction)
-              },
-              extract: { action in
-                guard case .child(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
+
+          extension OptionalPayloadFeature: Reducer {
           }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
               "case `child` has an optional payload; CasePath is still synthesized but `.child(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.child(value)` + `.childCleared`) or declare a custom CasePath that flattens the inner optional",
-            line: 5,
+            line: 6,
             column: 14,
             severity: .warning
           )
@@ -1265,7 +1654,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow warns on Optional<T> payload cases")
   func genericOptionalPayloadCaseEmitsNote() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct OptionalPayloadFeature {
@@ -1277,7 +1666,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1287,12 +1676,24 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case child(Optional<ChildAction>)
+
+                  static let childCasePath = CasePath<Self, Optional<ChildAction>>(
+                    embed: { childAction in
+                      .child(childAction)
+                    },
+                    extract: { action in
+                      guard case .child(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
               enum ChildAction: Sendable {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1300,24 +1701,15 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension OptionalPayloadFeature: Reducer {}
-          extension OptionalPayloadFeature.Action {
-            static let childCasePath = CasePath<Self, Optional<ChildAction>>(
-              embed: { childAction in
-                .child(childAction)
-              },
-              extract: { action in
-                guard case .child(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
+
+          extension OptionalPayloadFeature: Reducer {
           }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
               "case `child` has an optional payload; CasePath is still synthesized but `.child(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.child(value)` + `.childCleared`) or declare a custom CasePath that flattens the inner optional",
-            line: 5,
+            line: 6,
             column: 14,
             severity: .warning
           )
@@ -1332,7 +1724,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow warns on implicitly unwrapped optional payload cases")
   func implicitlyUnwrappedOptionalPayloadCaseEmitsNote() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct OptionalPayloadFeature {
@@ -1344,7 +1736,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1354,12 +1746,24 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case child(ChildAction!)
+
+                  static let childCasePath = CasePath<Self, ChildAction!>(
+                    embed: { childAction in
+                      .child(childAction)
+                    },
+                    extract: { action in
+                      guard case .child(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
               enum ChildAction: Sendable {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1367,24 +1771,15 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension OptionalPayloadFeature: Reducer {}
-          extension OptionalPayloadFeature.Action {
-            static let childCasePath = CasePath<Self, ChildAction!>(
-              embed: { childAction in
-                .child(childAction)
-              },
-              extract: { action in
-                guard case .child(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
+
+          extension OptionalPayloadFeature: Reducer {
           }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
               "case `child` has an optional payload; CasePath is still synthesized but `.child(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.child(value)` + `.childCleared`) or declare a custom CasePath that flattens the inner optional",
-            line: 5,
+            line: 6,
             column: 14,
             severity: .warning
           )
@@ -1399,7 +1794,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow strips one leading underscore from generated collection action path names")
   func leadingUnderscoreCollectionActionPathUsesCleanName() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct TodoListFeature {
@@ -1411,7 +1806,7 @@ struct InnoFlowMacrosTests {
                 case toggle
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1421,12 +1816,24 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {
                   case _todo(id: UUID, action: TodoAction)
+
+                  static let todoActionPath = CollectionActionPath<Self, UUID, TodoAction>(
+                    embed: { id, action in
+                      ._todo(id: id, action: action)
+                    },
+                    extract: { action in
+                      guard case let ._todo(id, childAction) = action else {
+                          return nil
+                      }
+                      return (id, childAction)
+                    }
+                  )
               }
               enum TodoAction: Sendable {
                   case toggle
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1434,17 +1841,8 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension TodoListFeature: Reducer {}
-          extension TodoListFeature.Action {
-            static let todoActionPath = CollectionActionPath<Self, UUID, TodoAction>(
-              embed: { id, action in
-                ._todo(id: id, action: action)
-              },
-              extract: { action in
-                guard case let ._todo(id, childAction) = action else { return nil }
-                return (id, childAction)
-              }
-            )
+
+          extension TodoListFeature: Reducer {
           }
           """,
         macros: testMacros
@@ -1457,7 +1855,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow diagnoses stripped action path collisions")
   func strippedActionPathCollisionsAreDiagnosed() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CollisionFeature {
@@ -1470,7 +1868,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1481,12 +1879,24 @@ struct InnoFlowMacrosTests {
               enum Action: Sendable {
                   case child(ChildAction)
                   case _child(ChildAction)
+
+                  static let childCasePath = CasePath<Self, ChildAction>(
+                    embed: { childAction in
+                      .child(childAction)
+                    },
+                    extract: { action in
+                      guard case .child(let childAction) = action else {
+                          return nil
+                      }
+                      return childAction
+                    }
+                  )
               }
               enum ChildAction: Sendable {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1494,25 +1904,16 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension CollisionFeature: Reducer {}
-          extension CollisionFeature.Action {
-            static let childCasePath = CasePath<Self, ChildAction>(
-              embed: { childAction in
-                .child(childAction)
-              },
-              extract: { action in
-                guard case .child(let childAction) = action else { return nil }
-                return childAction
-              }
-            )
+
+          extension CollisionFeature: Reducer {
           }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
               "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
-            line: 6,
-            column: 10
+            line: 7,
+            column: 14
           )
         ],
         macros: testMacros
@@ -1525,7 +1926,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow diagnoses generated action path collisions in static multi-bindings")
   func staticMultiBindingActionPathCollisionsAreDiagnosed() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct CollisionFeature {
@@ -1538,7 +1939,7 @@ struct InnoFlowMacrosTests {
                 case start
             }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1554,7 +1955,7 @@ struct InnoFlowMacrosTests {
                   case start
               }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -1562,13 +1963,15 @@ struct InnoFlowMacrosTests {
                 body.reduce(into: &state, action: action)
               }
           }
-          extension CollisionFeature: Reducer {}
+
+          extension CollisionFeature: Reducer {
+          }
           """,
         diagnostics: [
           DiagnosticSpec(
             message:
               "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
-            line: 6,
+            line: 7,
             column: 14
           )
         ],
@@ -1582,7 +1985,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects missing body")
   func missingBodyIsRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct MissingBodyFeature {
@@ -1598,7 +2001,8 @@ struct InnoFlowMacrosTests {
           """,
         diagnostics: [
           DiagnosticSpec(
-            message: "@InnoFlow requires `var body: some Reducer<State, Action>`",
+            message:
+              "@InnoFlow requires `var body: some Reducer<State, Action, Output>`; use `Never` when no output is emitted",
             line: 1,
             column: 1
           )
@@ -1613,12 +2017,16 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects explicit reduce authoring")
   func explicitReduceIsRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct LegacyFeature {
-            struct State: Sendable { var count = 0 }
-            enum Action: Sendable { case increment }
+            struct State: Sendable {
+                var count = 0
+            }
+            enum Action: Sendable {
+                case increment
+            }
 
             func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
                 state.count += 1
@@ -1628,8 +2036,12 @@ struct InnoFlowMacrosTests {
         """,
         expandedSource: """
           struct LegacyFeature {
-              struct State: Sendable { var count = 0 }
-              enum Action: Sendable { case increment }
+              struct State: Sendable {
+                  var count = 0
+              }
+              enum Action: Sendable {
+                  case increment
+              }
 
               func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
                   state.count += 1
@@ -1640,7 +2052,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead",
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)",
             line: 1,
             column: 1,
             fixIts: [
@@ -1651,11 +2063,16 @@ struct InnoFlowMacrosTests {
         macros: testMacros,
         applyFixIts: ["replace explicit reduce with body-based reducer composition"],
         fixedSource: """
+          @InnoFlow
           struct LegacyFeature {
-              struct State: Sendable { var count = 0 }
-              enum Action: Sendable { case increment }
+              struct State: Sendable {
+                  var count = 0
+              }
+              enum Action: Sendable {
+                  case increment
+              }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       state.count += 1
                       return .none
@@ -1672,12 +2089,16 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow omits explicit reduce Fix-It when body contains a multiline string")
   func explicitReduceWithMultilineStringOmitsFixIt() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct LegacyFeature {
-            struct State: Sendable { var message = "" }
-            enum Action: Sendable { case log }
+            struct State: Sendable {
+                var message = ""
+            }
+            enum Action: Sendable {
+                case log
+            }
 
             func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
                 state.message = \"\"\"
@@ -1690,8 +2111,12 @@ struct InnoFlowMacrosTests {
         """,
         expandedSource: """
           struct LegacyFeature {
-              struct State: Sendable { var message = "" }
-              enum Action: Sendable { case log }
+              struct State: Sendable {
+                  var message = ""
+              }
+              enum Action: Sendable {
+                  case log
+              }
 
               func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
                   state.message = \"\"\"
@@ -1705,7 +2130,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead",
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)",
             line: 1,
             column: 1
           )
@@ -1720,7 +2145,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects body without reducer surface")
   func invalidBodyTypeIsRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct InvalidBodyFeature {
@@ -1743,8 +2168,8 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action>
-              Detected issues: `body` type `Int` must be an opaque type (`some Reducer<State, Action>`).
+              var body: some Reducer<State, Action, Output>
+              Detected issues: `body` type `Int` must be an opaque `some Reducer<State, Action, Output>` type.
               Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
             line: 1,
@@ -1761,7 +2186,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects `any Reducer` (existential instead of opaque)")
   func anyReducerIsRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct AnyReducerFeature {
@@ -1788,7 +2213,7 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action>
+              var body: some Reducer<State, Action, Output>
               Detected issues: `body` must use `some` (not `any`).
               Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
@@ -1806,7 +2231,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects wrong constraint name like ReducerLike")
   func wrongConstraintNameIsRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct WrongConstraintFeature {
@@ -1833,7 +2258,7 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action>
+              var body: some Reducer<State, Action, Output>
               Detected issues: `body` type must constrain to `Reducer`, found `ReducerLike`.
               Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
@@ -1851,14 +2276,14 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects wrong generic parameters like Reducer<Int, String>")
   func wrongGenericParamsRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct WrongGenericsFeature {
             struct State: Sendable {}
             enum Action: Sendable {}
 
-            var body: some Reducer<Int, String> {
+            var body: some Reducer<Int, String, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1868,7 +2293,7 @@ struct InnoFlowMacrosTests {
               struct State: Sendable {}
               enum Action: Sendable {}
 
-              var body: some Reducer<Int, String> {
+              var body: some Reducer<Int, String, Never> {
                   Reduce { state, action in .none }
               }
           }
@@ -1878,7 +2303,7 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action>
+              var body: some Reducer<State, Action, Output>
               Detected issues: first generic parameter must be `State` (or `Self.State`), found `Int`; second generic parameter must be `Action` (or `Self.Action`), found `String`.
               Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
@@ -1896,14 +2321,14 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects generic clauses on State and Action")
   func genericClausesOnStateAndActionAreRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct SpecializedGenericsFeature {
             struct State<Value: Sendable>: Sendable {}
             enum Action<Value: Sendable>: Sendable {}
 
-            var body: some Reducer<State<Int>, Action<String>> {
+            var body: some Reducer<State<Int>, Action<String>, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -1913,7 +2338,7 @@ struct InnoFlowMacrosTests {
               struct State<Value: Sendable>: Sendable {}
               enum Action<Value: Sendable>: Sendable {}
 
-              var body: some Reducer<State<Int>, Action<String>> {
+              var body: some Reducer<State<Int>, Action<String>, Never> {
                   Reduce { state, action in .none }
               }
           }
@@ -1923,7 +2348,7 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action>
+              var body: some Reducer<State, Action, Output>
               Detected issues: first generic parameter must be `State` (or `Self.State`), found `State<Int>`; second generic parameter must be `Action` (or `Self.Action`), found `Action<String>`.
               Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
@@ -1941,14 +2366,18 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow rejects reduce and body declared together")
   func conflictingAuthoringModesAreRejected() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
         struct ConflictingFeature {
-            struct State: Sendable { var count = 0 }
-            enum Action: Sendable { case increment }
+            struct State: Sendable {
+                var count = 0
+            }
+            enum Action: Sendable {
+                case increment
+            }
 
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in
                     state.count += 1
                     return .none
@@ -1962,10 +2391,14 @@ struct InnoFlowMacrosTests {
         """,
         expandedSource: """
           struct ConflictingFeature {
-              struct State: Sendable { var count = 0 }
-              enum Action: Sendable { case increment }
+              struct State: Sendable {
+                  var count = 0
+              }
+              enum Action: Sendable {
+                  case increment
+              }
 
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in
                       state.count += 1
                       return .none
@@ -1980,7 +2413,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead",
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)",
             line: 1,
             column: 1
           )
@@ -1995,7 +2428,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow(phaseManaged:) wraps body in static phaseMap")
   func phaseManagedAuthoringAddsPhaseMapWrapper() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow(phaseManaged: true)
         struct PhaseManagedFeature {
@@ -2017,7 +2450,7 @@ struct InnoFlowMacrosTests {
                     From(.loading) {}
                 }
             }
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -2042,7 +2475,7 @@ struct InnoFlowMacrosTests {
                       From(.loading) {}
                   }
               }
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -2064,7 +2497,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow(phaseManaged:) requires static phaseMap")
   func phaseManagedRequiresStaticPhaseMap() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow(phaseManaged: true)
         struct MissingPhaseMapFeature {
@@ -2077,7 +2510,7 @@ struct InnoFlowMacrosTests {
             enum Action: Sendable {
                 case load
             }
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -2093,12 +2526,8 @@ struct InnoFlowMacrosTests {
               enum Action: Sendable {
                   case load
               }
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
-              }
-
-              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-                body.reduce(into: &state, action: action)
               }
           }
           """,
@@ -2120,7 +2549,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow(phaseManaged:) rejects explicit body phaseMap wrapping")
   func phaseManagedRejectsExplicitBodyPhaseMap() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow(phaseManaged: true)
         struct ExplicitPhaseMapFeature {
@@ -2138,7 +2567,7 @@ struct InnoFlowMacrosTests {
                     From(.idle) {}
                 }
             }
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
                     .phaseMap(Self.phaseMap)
             }
@@ -2160,7 +2589,7 @@ struct InnoFlowMacrosTests {
                       From(.idle) {}
                   }
               }
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
                       .phaseMap(Self.phaseMap)
               }
@@ -2184,7 +2613,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow(phaseManaged:) rejects non-literal boolean argument")
   func phaseManagedRejectsNonLiteralArgument() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow(phaseManaged: someFlag)
         struct NonLiteralPhaseManagedFeature {
@@ -2197,7 +2626,7 @@ struct InnoFlowMacrosTests {
             enum Action: Sendable {
                 case load
             }
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -2213,8 +2642,12 @@ struct InnoFlowMacrosTests {
               enum Action: Sendable {
                   case load
               }
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
+              }
+
+              func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+                body.reduce(into: &state, action: action)
               }
           }
           """,
@@ -2238,7 +2671,7 @@ struct InnoFlowMacrosTests {
   )
   func phaseManagedWarnsWhenPhaseCaseIsNeverReferencedFromPhaseMap() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow(phaseManaged: true)
         struct UnreferencedPhaseFeature {
@@ -2260,7 +2693,7 @@ struct InnoFlowMacrosTests {
                     }
                 }
             }
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -2285,7 +2718,7 @@ struct InnoFlowMacrosTests {
                       }
                   }
               }
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -2318,7 +2751,7 @@ struct InnoFlowMacrosTests {
   )
   func phaseManagedTotalityIgnoresUnrelatedMemberAccess() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow(phaseManaged: true)
         struct UnrelatedMemberAccessFeature {
@@ -2343,7 +2776,7 @@ struct InnoFlowMacrosTests {
                     }
                 }
             }
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -2371,7 +2804,7 @@ struct InnoFlowMacrosTests {
                       }
                   }
               }
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 
@@ -2402,7 +2835,7 @@ struct InnoFlowMacrosTests {
   @Test("@InnoFlow(phaseManaged:) counts On targets set references as phase coverage")
   func phaseManagedTotalityCountsTargetsSetReferences() throws {
     #if canImport(InnoFlowMacros)
-      assertMacroExpansion(
+      assertSwiftTestingMacroExpansion(
         """
         @InnoFlow(phaseManaged: true)
         struct TargetSetPhaseFeature {
@@ -2427,7 +2860,7 @@ struct InnoFlowMacrosTests {
                     }
                 }
             }
-            var body: some Reducer<State, Action> {
+            var body: some Reducer<State, Action, Never> {
                 Reduce { state, action in .none }
             }
         }
@@ -2455,7 +2888,7 @@ struct InnoFlowMacrosTests {
                       }
                   }
               }
-              var body: some Reducer<State, Action> {
+              var body: some Reducer<State, Action, Never> {
                   Reduce { state, action in .none }
               }
 

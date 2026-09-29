@@ -9,7 +9,10 @@
 import Foundation
 import Testing
 
-@Suite("EffectTiming comparison script")
+@Suite(
+  "EffectTiming comparison script",
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+)
 struct EffectTimingComparisonScriptTests {
 
   @Test("Comparison script passes when current timings stay within tolerance")
@@ -158,7 +161,8 @@ struct EffectTimingComparisonScriptTests {
     #expect(result.terminationStatus == 0)
     #expect(
       result.stdout.contains(
-        "INNOFLOW_WRITE_EFFECT_BASELINE=Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl")
+        "INNOFLOW_WRITE_EFFECT_BASELINE=Tests/InnoFlowTests/Fixtures/EffectTimings.baseline.jsonl"
+      )
     )
     #expect(result.stdout.contains("EffectTimingBaselineGate"))
     #expect(result.stdout.contains("1  metric regression detected"))

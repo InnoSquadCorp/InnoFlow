@@ -43,7 +43,7 @@ struct IdentifiedCollectionFeature {
     }
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     CombineReducers {
       Reduce { _, action in
         switch action {

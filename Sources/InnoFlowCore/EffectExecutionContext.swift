@@ -2,6 +2,26 @@
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
+import os
+
+/// Request-local cancellation state for a scheduled run.
+///
+/// Admission and physical execution use distinct tasks. This shared boundary
+/// suppresses late emissions even when an operation ignores task cancellation.
+package final class EffectRunCancellationState: Sendable {
+  private let storage = OSAllocatedUnfairLock(initialState: false)
+
+  package init() {}
+
+  package var isCancelled: Bool {
+    storage.withLock { $0 }
+  }
+
+  package func cancel() {
+    storage.withLock { $0 = true }
+  }
+}
+
 package struct EffectAnimation: Sendable, CustomStringConvertible {
   private let performer: @MainActor @Sendable (_ updates: () -> Void) -> Void
   package let description: String
@@ -48,6 +68,9 @@ package struct EffectExecutionContext: Sendable {
   /// Store/TestStore sequence number for cancellation boundary tracking.
   package let sequence: UInt64?
   package let origin: EffectOrigin?
+  package let flowTaskTracker: FlowTaskTracker?
+  package let dispatchID: DispatchID?
+  private let runCancellationState: EffectRunCancellationState?
 
   package var cancellationID: AnyEffectID? {
     cancellationIDs.last
@@ -61,7 +84,10 @@ package struct EffectExecutionContext: Sendable {
     interpreterLease: EffectInterpreterLease? = nil,
     animation: EffectAnimation? = nil,
     sequence: UInt64? = nil,
-    origin: EffectOrigin?
+    origin: EffectOrigin?,
+    flowTaskTracker: FlowTaskTracker? = nil,
+    dispatchID: DispatchID? = nil,
+    runCancellationState: EffectRunCancellationState? = nil
   ) {
     if let cancellationIDs {
       self.cancellationIDs = cancellationIDs
@@ -76,6 +102,9 @@ package struct EffectExecutionContext: Sendable {
     self.animation = animation
     self.sequence = sequence
     self.origin = origin
+    self.flowTaskTracker = flowTaskTracker
+    self.dispatchID = dispatchID ?? flowTaskTracker?.dispatchID
+    self.runCancellationState = runCancellationState
   }
 
   package static func managedRoot(
@@ -83,7 +112,8 @@ package struct EffectExecutionContext: Sendable {
     interpreterLease: EffectInterpreterLease,
     animation: EffectAnimation? = nil,
     sequence: UInt64,
-    origin: EffectOrigin? = nil
+    origin: EffectOrigin? = nil,
+    flowTaskTracker: FlowTaskTracker? = nil
   ) -> Self {
     .init(
       cancellationScope: cancellationScope,
@@ -91,7 +121,9 @@ package struct EffectExecutionContext: Sendable {
       interpreterLease: interpreterLease,
       animation: animation,
       sequence: sequence,
-      origin: origin
+      origin: origin,
+      flowTaskTracker: flowTaskTracker,
+      dispatchID: flowTaskTracker?.dispatchID
     )
   }
 
@@ -101,12 +133,15 @@ package struct EffectExecutionContext: Sendable {
   /// cancellable work. Store/TestStore execution uses `managedRoot` factories.
   package static func unmanaged(
     animation: EffectAnimation? = nil,
-    sequence: UInt64? = nil
+    sequence: UInt64? = nil,
+    flowTaskTracker: FlowTaskTracker? = nil
   ) -> Self {
     .init(
       animation: animation,
       sequence: sequence,
-      origin: nil
+      origin: nil,
+      flowTaskTracker: flowTaskTracker,
+      dispatchID: flowTaskTracker?.dispatchID
     )
   }
 
@@ -126,7 +161,10 @@ package struct EffectExecutionContext: Sendable {
       interpreterLease: existing?.interpreterLease,
       animation: existing?.animation,
       sequence: existing?.sequence,
-      origin: existing?.origin
+      origin: existing?.origin,
+      flowTaskTracker: existing?.flowTaskTracker,
+      dispatchID: existing?.dispatchID,
+      runCancellationState: existing?.runCancellationState
     )
   }
 
@@ -141,11 +179,36 @@ package struct EffectExecutionContext: Sendable {
       interpreterLease: existing?.interpreterLease,
       animation: animation,
       sequence: existing?.sequence,
-      origin: existing?.origin
+      origin: existing?.origin,
+      flowTaskTracker: existing?.flowTaskTracker,
+      dispatchID: existing?.dispatchID,
+      runCancellationState: existing?.runCancellationState
+    )
+  }
+
+  package static func withRunCancellation(
+    _ state: EffectRunCancellationState,
+    on existing: Self?
+  ) -> Self {
+    .init(
+      cancellationIDs: existing?.cancellationIDs ?? [],
+      cancellationScope: existing?.cancellationScope,
+      cancellationTokens: existing?.cancellationTokens ?? [],
+      interpreterLease: existing?.interpreterLease,
+      animation: existing?.animation,
+      sequence: existing?.sequence,
+      origin: existing?.origin,
+      flowTaskTracker: existing?.flowTaskTracker,
+      dispatchID: existing?.dispatchID,
+      runCancellationState: state
     )
   }
 
   package var shouldProceed: Bool {
+    // Immediate outputs carry dispatch ownership but no structural scope.
+    // They must honor cancellation accepted during reducer/observer execution.
+    guard flowTaskTracker?.isCancelled != true else { return false }
+    guard runCancellationState?.isCancelled != true else { return false }
     guard cancellationScope?.isGloballyCancelled != true else { return false }
     return cancellationTokens.allSatisfy { $0.isCancelled == false }
   }
@@ -162,7 +225,10 @@ package struct EffectExecutionContext: Sendable {
       interpreterLease: nil,
       animation: animation,
       sequence: sequence,
-      origin: origin
+      origin: origin,
+      flowTaskTracker: flowTaskTracker,
+      dispatchID: dispatchID,
+      runCancellationState: runCancellationState
     )
   }
 
@@ -171,7 +237,7 @@ package struct EffectExecutionContext: Sendable {
   }
 }
 
-extension EffectTask {
+extension ReducerEffect {
   package func applyingAnimation(_ animation: EffectAnimation) -> Self {
     .init(operation: .animation(effect: self, animation: animation))
   }

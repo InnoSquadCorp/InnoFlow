@@ -76,7 +76,12 @@ where Root.State: Equatable {
     // post-reduction case is handled by the failable expected-state updater.
     _ = stateReader(previousRootState)
 
-    let effect = parent.applyScopedAction(actionEmbedder(action))
+    let effect = parent.applyScopedAction(
+      actionEmbedder(action),
+      source: .scopedSend,
+      file: file,
+      line: line
+    )
     parent.assertStateTransition(
       from: previousRootState,
       expectedStateMutation: rootStateUpdater(from: updateExpectedState),
@@ -194,6 +199,34 @@ where Root.State: Equatable {
 
     case .cancelled:
       return nil
+    }
+  }
+
+  /// Receives a root reducer output while asserting through this scoped test
+  /// handle. Output ownership remains at the root reducer, so the path is
+  /// explicitly rooted in `Root.Output` and no duplicate scoped queue exists.
+  ///
+  /// Exhaustive and non-exhaustive mismatch behavior is identical to
+  /// `TestStore.receiveOutput`, including preservation of optional `nil`
+  /// payloads as `.some(nil)`.
+  @discardableResult
+  public func receiveOutput<Value>(
+    _ path: CasePath<Root.Output, Value>,
+    caseName: String? = nil,
+    timeout: Duration? = nil,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async -> Value? {
+    await parent.receiveMatchedOutput(
+      expectation: caseName.map { "case path '\($0)'" } ?? "the supplied root output case path",
+      timeout: timeout,
+      file: file,
+      line: line
+    ) { output in
+      switch path.extract(output) {
+      case .some(let value): .matched(value)
+      case .none: .mismatched
+      }
     }
   }
 
@@ -393,7 +426,12 @@ where Root.State: Equatable {
     let previousRootState = parent.state
     _ = stateReader(previousRootState)
 
-    let effect = parent.applyScopedAction(rootAction)
+    let effect = parent.applyScopedAction(
+      rootAction,
+      source: .scopedReceive,
+      file: file,
+      line: line
+    )
     parent.assertStateTransition(
       from: previousRootState,
       expectedStateMutation: rootStateUpdater(from: updateExpectedState),
@@ -468,24 +506,6 @@ where Root.State: Equatable {
         line: line
       )
     }
-  }
-
-  /// Performs the parent harness's legacy single-action absence check.
-  ///
-  /// This does not wait for the complete effect lifecycle. Use `finish()` at
-  /// the terminal test boundary or `assertNoBufferedActions()` for an
-  /// intermediate queue checkpoint.
-  @available(
-    *,
-    deprecated,
-    message:
-      "Use finish() for terminal verification, or assertNoBufferedActions() for an intermediate queue checkpoint."
-  )
-  public func assertNoMoreActions(
-    file: StaticString = #filePath,
-    line: UInt = #line
-  ) async {
-    await parent.assertNoMoreActions(file: file, line: line)
   }
 
   /// Waits for all parent-owned effects to finish and asserts that every

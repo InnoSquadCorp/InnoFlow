@@ -36,7 +36,9 @@ extension InnoFlowMacro {
 
     guard !hasBodyProperty,
       isCanonicalReduceFunction(reduceFunction),
-      let replacement = bodyReplacement(for: reduceFunction)
+      let replacement = bodyReplacement(for: reduceFunction)?
+        .with(\.leadingTrivia, reduceFunction.leadingTrivia)
+        .with(\.trailingTrivia, reduceFunction.trailingTrivia)
     else {
       return Diagnostic(node: anchor, message: message)
     }
@@ -118,14 +120,20 @@ extension InnoFlowMacro {
       return nil
     }
 
-    let renderedStatements = indentCodeBlockItems(body.statements, spaces: 8)
+    let declarationIndent = trailingIndent(in: function.leadingTrivia.description)
+    let reducerIndent = declarationIndent + "    "
+    let statementIndent = reducerIndent + "    "
+    let renderedStatements = indentCodeBlockItems(
+      body.statements,
+      prefix: statementIndent
+    )
     return try? VariableDeclSyntax(
       """
-      var body: some Reducer<State, Action> {
-          Reduce { state, action in
+      var body: some Reducer<State, Action, Never> {
+      \(raw: reducerIndent)Reduce { state, action in
       \(raw: renderedStatements)
-          }
-      }
+      \(raw: reducerIndent)}
+      \(raw: declarationIndent)}
       """
     )
   }
@@ -136,31 +144,33 @@ extension InnoFlowMacro {
 
   private static func indentCodeBlockItems(
     _ items: CodeBlockItemListSyntax,
-    spaces: Int
+    prefix: String
   ) -> String {
-    let prefix = String(repeating: " ", count: spaces)
-
-    return items.map { item in
+    let lines = items.flatMap { item in
       item.description
         .trimmingCharacters(in: .newlines)
         .split(separator: "\n", omittingEmptySubsequences: false)
-        .map { line in
-          let lineText = String(line)
-          if lineText.trimmingCharacters(in: .whitespaces).isEmpty {
-            return prefix
-          }
+        .map(String.init)
+    }
 
-          let leadingWhitespace = String(lineText.prefix { $0.isWhitespace })
-          let normalizedLeadingWhitespace = leadingWhitespace.replacingOccurrences(
-            of: "\t",
-            with: String(repeating: " ", count: 4)
-          )
-          let content = String(lineText.dropFirst(leadingWhitespace.count))
-          return prefix + normalizedLeadingWhitespace + content
-        }
-        .joined(separator: "\n")
+    let commonIndent =
+      lines
+      .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+      .map { $0.prefix { $0.isWhitespace }.count }
+      .min() ?? 0
+
+    return lines.map { line in
+      guard !line.trimmingCharacters(in: .whitespaces).isEmpty else {
+        return prefix
+      }
+      return prefix + line.dropFirst(commonIndent)
     }
     .joined(separator: "\n")
+  }
+
+  private static func trailingIndent(in trivia: String) -> String {
+    let suffix = trivia.split(separator: "\n", omittingEmptySubsequences: false).last ?? ""
+    return String(suffix).replacingOccurrences(of: "\t", with: "    ")
   }
 }
 
@@ -171,7 +181,7 @@ enum InnoFlowMacroMessage: DiagnosticMessage {
     switch self {
     case .explicitReduceUnsupported:
       return
-        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action>` instead"
+        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)"
     }
   }
 

@@ -69,18 +69,21 @@ package final class EffectCancellationBoundaries {
     cancellationIDs: [AnyEffectID] = [],
     potentialCancellationIDs: Set<AnyEffectID> = [],
     animation: EffectAnimation? = nil,
-    origin: EffectOrigin? = nil
+    origin: EffectOrigin? = nil,
+    flowTaskTracker: FlowTaskTracker? = nil
   ) -> EffectExecutionContext {
     let ownedScope = scopes.makeScopeAndInterpreterLease(
       sequence: sequence,
       potentialCancellationIDs: potentialCancellationIDs.union(cancellationIDs)
     )
+    flowTaskTracker?.registerCancellationScope(ownedScope.scope)
     var context = EffectExecutionContext.managedRoot(
       cancellationScope: ownedScope.scope,
       interpreterLease: ownedScope.lease,
       animation: animation,
       sequence: sequence,
-      origin: origin
+      origin: origin,
+      flowTaskTracker: flowTaskTracker
     )
     for id in cancellationIDs {
       context = .withCancellation(id, on: context)
@@ -91,13 +94,15 @@ package final class EffectCancellationBoundaries {
   package func nextContext(
     potentialCancellationIDs: Set<AnyEffectID> = [],
     animation: EffectAnimation? = nil,
-    origin: EffectOrigin? = nil
+    origin: EffectOrigin? = nil,
+    flowTaskTracker: FlowTaskTracker? = nil
   ) -> EffectExecutionContext {
     makeContext(
       sequence: nextSequence(),
       potentialCancellationIDs: potentialCancellationIDs,
       animation: animation,
-      origin: origin
+      origin: origin,
+      flowTaskTracker: flowTaskTracker
     )
   }
 
@@ -330,6 +335,35 @@ package actor EffectRuntime<Action: Sendable> {
 
   package func activeCancellationIDCount() -> Int {
     tokensByID.count
+  }
+
+  package func cancellationTargetDispatchIDs(
+    id: AnyEffectID,
+    upTo sequence: UInt64
+  ) -> Set<DispatchID> {
+    guard let tokens = tokensByID[id] else { return [] }
+    return Set(
+      tokens.compactMap { token in
+        guard let trackedRun = tasks[token] else { return nil }
+        guard
+          trackedRun.sequence <= sequence
+            || trackedRun.context?.isCancelled(id: id) == true
+        else { return nil }
+        return trackedRun.context?.dispatchID
+      }
+    )
+  }
+
+  package func cancellationTargetDispatchIDs(upTo sequence: UInt64) -> Set<DispatchID> {
+    Set(
+      tasks.values.compactMap { trackedRun in
+        guard
+          trackedRun.sequence <= sequence
+            || trackedRun.context?.shouldProceed == false
+        else { return nil }
+        return trackedRun.context?.dispatchID
+      }
+    )
   }
 
   private func removeToken(_ token: UUID) {

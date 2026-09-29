@@ -260,7 +260,7 @@ struct PerfReducerComposition {
 
     let result = measureBlock(label: "construct-only N=2", iterations: 5_000) {
       let seed = nextConstructionSeed()
-      let reducer = CombineReducers<PerfBenchState, PerfBenchAction> {
+      let reducer = CombineReducers<PerfBenchState, PerfBenchAction, Never> {
         seededConstructNode(baseSeed: seed, offset: 1)
         seededConstructNode(baseSeed: seed, offset: 2)
       }
@@ -274,7 +274,7 @@ struct PerfReducerComposition {
 
     let result = measureBlock(label: "construct-only N=8", iterations: 5_000) {
       let seed = nextConstructionSeed()
-      let reducer = CombineReducers<PerfBenchState, PerfBenchAction> {
+      let reducer = CombineReducers<PerfBenchState, PerfBenchAction, Never> {
         seededConstructNode(baseSeed: seed, offset: 1)
         seededConstructNode(baseSeed: seed, offset: 2)
         seededConstructNode(baseSeed: seed, offset: 3)
@@ -294,7 +294,7 @@ struct PerfReducerComposition {
 
     let result = measureBlock(label: "construct-only N=32", iterations: 2_000) {
       let seed = nextConstructionSeed()
-      let reducer = CombineReducers<PerfBenchState, PerfBenchAction> {
+      let reducer = CombineReducers<PerfBenchState, PerfBenchAction, Never> {
         seededConstructNode(baseSeed: seed, offset: 1)
         seededConstructNode(baseSeed: seed, offset: 2)
         seededConstructNode(baseSeed: seed, offset: 3)
@@ -338,7 +338,7 @@ struct PerfReducerComposition {
   @Test func _perf_dispatch_N8_10k() async throws {
     guard isReducerCompositionPerfBenchmarkEnabled else { return }
 
-    let reducer = CombineReducers<PerfBenchState, PerfBenchAction> {
+    let reducer = CombineReducers<PerfBenchState, PerfBenchAction, Never> {
       PerfBenchAppender()
       PerfBenchAppender()
       PerfBenchAppender()
@@ -360,7 +360,7 @@ struct PerfReducerComposition {
   @Test func _perf_dispatch_N32_10k() async throws {
     guard isReducerCompositionPerfBenchmarkEnabled else { return }
 
-    let reducer = CombineReducers<PerfBenchState, PerfBenchAction> {
+    let reducer = CombineReducers<PerfBenchState, PerfBenchAction, Never> {
       PerfBenchAppender()
       PerfBenchAppender()
       PerfBenchAppender()

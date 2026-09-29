@@ -21,7 +21,7 @@ struct CounterFeature {
     case setStep(Int)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .increment:
@@ -55,11 +55,29 @@ struct CounterView: View {
 }
 ```
 
+`send(_:)` returns a dispatch-scoped task. A view can ignore it, while a
+coordinator or `.task` closure can wait for the complete descendant tree:
+
+```swift
+await store.send(.increment).finish()
+```
+
+For one-shot app-boundary intent, add a nested `Output`, return
+`Self.output(...)` from the reducer, and subscribe before sending because the
+output stream is live and non-replaying. Keep values needed for rendering or
+restoration in `State`. Such a feature declares
+`var body: some Reducer<State, Action, Output>`; a feature without output uses
+`Never` as the third generic argument. The default stream buffer is unbounded
+to preserve one-shot commands; choose a bounded policy only when dropping is
+intentional.
+
 SwiftUI app targets that use the `@InnoFlow` macro should depend on both
 `InnoFlow` and `InnoFlowSwiftUI`. Runtime-only domain targets can depend on
 `InnoFlowCore` alone. `InnoFlowSwiftUI` contains the SwiftUI-only helpers:
 `Store.binding`, `ScopedStore.binding`, `Store.preview`, and
-`EffectTask.animation(Animation?)`; it reexports `InnoFlowCore` but not the
+`EffectTask.animation(Animation?)`. Optional-state presentation adapters cover
+sheet, full-screen cover, navigation destination, popover where SwiftUI supports it, alert, and
+confirmation dialog; it reexports `InnoFlowCore` but not the
 macro declarations, so macro users must import `InnoFlow` directly.
 
 For labeled or multi-payload action cases outside the standard synthesis
@@ -90,6 +108,14 @@ For domain phases, prefer `PhaseMap` as the canonical phase-transition layer and
 validation explicit through `phaseMap.derivedGraph`; see <doc:PhaseDrivenModeling>. Prefer
 `CasePath`-based `On(...)` rules first, `Equatable` actions second, and reserve `On(where:)` for
 escape-hatch cases where the trigger cannot be expressed more directly.
+Use `requireComplete(...)` only for features that opt into explicit trigger
+coverage, and use `mermaidDiagram()` / `dotGraph(name:)` when the declared
+topology should also drive documentation.
+When every declared `Phase` case must appear directly in the static map, use
+`@InnoFlow(phaseManaged: true, strictPhaseTotality: true)`. This is a
+compile-time declaration-coverage gate, not a replacement for trigger samples:
+predicate evaluation, helper-built DSL fragments, dynamic target resolution,
+and graph reachability remain test responsibilities.
 When you want a full end-to-end sample that covers `Store`, row projections, and `TestStore`, continue with <doc:PhaseDrivenWalkthrough>.
 
 For store-level debounce or throttle tests, inject `StoreClock.manual(...)` instead of relying on wall-clock delays. `StoreClock.manual(...)` lives in the `InnoFlowTesting` module, so test targets should `import InnoFlowTesting` before using it. New `.run` effects should prefer `EffectContext.sleep(for:)` and `EffectContext.checkCancellation()` over `Task.sleep(...)` plus ad-hoc cancellation checks so the same store clock controls both scheduling operators and effect delays. Cancellation remains cooperative: InnoFlow drops late emissions for cancelled or released stores immediately, while runtime teardown continues as best-effort async cleanup. Long-running work should still probe `checkCancellation()` if it needs prompt shutdown.

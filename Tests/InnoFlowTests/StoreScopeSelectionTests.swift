@@ -388,6 +388,173 @@ struct StoreScopeSelectionTests {
     #expect(weakSelected == nil)
   }
 
+  @Test("A released root notifies live projection liveness observers exactly once")
+  func parentReleaseInvalidatesProjectionObservers() {
+    var store: Store<ScopedBindableChildFeature>? = Store(
+      reducer: ScopedBindableChildFeature(), initialState: .init()
+    )
+    let scoped = store!.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath
+    )
+    let rootSelection = store!.select(\.child.step)
+    let childSelection = scoped.select(\.step)
+    let rootProbe = ObservationProbe()
+    let scopedProbe = ObservationProbe()
+    let childProbe = ObservationProbe()
+
+    withObservationTracking(
+      { _ = rootSelection.optionalValue },
+      onChange: { [weak rootSelection] in
+        rootProbe.recordChange()
+        MainActor.assumeIsolated {
+          #expect(rootSelection?.optionalValue == nil)
+        }
+      }
+    )
+    withObservationTracking(
+      { _ = scoped.optionalState },
+      onChange: { scopedProbe.recordChange() }
+    )
+    withObservationTracking(
+      { _ = childSelection.optionalValue },
+      onChange: { childProbe.recordChange() }
+    )
+
+    store = nil
+
+    #expect(rootProbe.count == 1)
+    #expect(scopedProbe.count == 1)
+    #expect(childProbe.count == 1)
+    #expect(rootSelection.optionalValue == nil)
+    #expect(scoped.optionalState == nil)
+    #expect(childSelection.optionalValue == nil)
+  }
+
+  @Test("Keyless closure selections keep captures isolated across the same call site")
+  func keylessClosureSelectionsDoNotAliasCapturedInput() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let scoped = store.scope(
+      state: \.child, action: ScopedBindableChildFeature.Action.childCasePath
+    )
+
+    func root(_ offset: Int) -> SelectedStore<Int> {
+      store.select(dependingOn: \.child.step) { $0 + offset }
+    }
+    func child(_ offset: Int) -> SelectedStore<Int> {
+      scoped.select(dependingOn: \.step) { $0 + offset }
+    }
+    func memoized(_ offset: Int) -> SelectedStore<Int> {
+      store.select(memoize: true) { $0.child.step + offset }
+    }
+    func variadic(_ offset: Int) -> SelectedStore<Int> {
+      store.select(dependingOnAll: \.child.step, \.unrelated) { $0 + $1 + offset }
+    }
+    func opaque(_ multiplier: Int, _ bias: Int) -> SelectedStore<Int> {
+      store.select { $0.child.step * multiplier + bias }
+    }
+    func scopedOpaque(_ multiplier: Int, _ bias: Int) -> SelectedStore<Int> {
+      scoped.select { $0.step * multiplier + bias }
+    }
+    func scopedMemoized(_ offset: Int) -> SelectedStore<Int> {
+      scoped.select(memoize: true) { $0.step + offset }
+    }
+    func scopedVariadic(_ offset: Int) -> SelectedStore<Int> {
+      scoped.select(dependingOnAll: \.step, \.priority) { $0 + $1 + offset }
+    }
+
+    let rootA = root(0)
+    let rootB = root(10)
+    let childA = child(0)
+    let childB = child(10)
+    let memoA = memoized(0)
+    let memoB = memoized(10)
+    let variadicA = variadic(0)
+    let variadicB = variadic(10)
+    let opaqueA = opaque(1, 0)
+    let opaqueB = opaque(2, -1)
+    let scopedOpaqueA = scopedOpaque(1, 0)
+    let scopedOpaqueB = scopedOpaque(2, -1)
+    let scopedMemoA = scopedMemoized(0)
+    let scopedMemoB = scopedMemoized(10)
+    let scopedVariadicA = scopedVariadic(0)
+    let scopedVariadicB = scopedVariadic(10)
+    #expect(rootA !== rootB)
+    #expect(childA !== childB)
+    #expect(memoA !== memoB)
+    #expect(variadicA !== variadicB)
+    #expect(opaqueA !== opaqueB)
+    #expect(scopedOpaqueA !== scopedOpaqueB)
+    #expect(scopedMemoA !== scopedMemoB)
+    #expect(scopedVariadicA !== scopedVariadicB)
+    #expect([rootA, childA, memoA, variadicA].map { $0.requireAlive() } == [1, 1, 1, 1])
+    #expect([rootB, childB, memoB, variadicB].map { $0.requireAlive() } == [11, 11, 11, 11])
+    #expect(opaqueA.requireAlive() == opaqueB.requireAlive())
+    #expect(scopedOpaqueA.requireAlive() == scopedOpaqueB.requireAlive())
+    #expect([scopedMemoA, scopedVariadicA].map { $0.requireAlive() } == [1, 1])
+    #expect([scopedMemoB, scopedVariadicB].map { $0.requireAlive() } == [11, 11])
+
+    store.send(.child(.setStep(5)))
+    #expect([rootA, childA, memoA, variadicA].map { $0.requireAlive() } == [5, 5, 5, 5])
+    #expect([rootB, childB, memoB, variadicB].map { $0.requireAlive() } == [15, 15, 15, 15])
+    #expect([opaqueA, scopedOpaqueA].map { $0.requireAlive() } == [5, 5])
+    #expect([opaqueB, scopedOpaqueB].map { $0.requireAlive() } == [9, 9])
+    #expect([scopedMemoA, scopedVariadicA].map { $0.requireAlive() } == [5, 5])
+    #expect([scopedMemoB, scopedVariadicB].map { $0.requireAlive() } == [15, 15])
+    #expect(store.selectionCache.entryCount == 0)
+    #expect(scoped.selectionCache.entryCount == 0)
+  }
+
+  @Test("Explicit semantic IDs reuse live closure selections and release dead entries")
+  func explicitSelectionIDsReuseOnlyLiveHandles() {
+    let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
+    let callsiteLine: UInt = #line
+    func selected(_ offset: Int) -> SelectedStore<Int> {
+      store.select(
+        dependingOn: \.child.step,
+        id: "offset-\(offset)",
+        fileID: #fileID,
+        line: callsiteLine,
+        column: 0
+      ) { $0 + offset }
+    }
+
+    let zero = selected(0)
+    let same = selected(0)
+    let ten = selected(10)
+    #expect(zero === same)
+    #expect(zero !== ten)
+    #expect(ten.requireAlive() == 11)
+    let variadicShape = store.select(
+      dependingOnAll: \.child.step,
+      id: "offset-0",
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { step in step + 100 }
+    #expect(variadicShape !== zero)
+    #expect(variadicShape.requireAlive() == 101)
+    let differentValueType = store.select(
+      dependingOn: \.child.step,
+      id: "offset-0",
+      fileID: #fileID,
+      line: callsiteLine,
+      column: 0
+    ) { String($0) }
+    #expect(differentValueType.requireAlive() == "1")
+
+    for offset in 20..<148 {
+      _ = selected(offset)
+    }
+    #expect(store.selectionCache.entryCount < 64)
+    #expect(store.projectionObserverStats.registeredObservers < 64)
+    #expect(selected(0) === zero)
+
+    for offset in 0..<128 {
+      _ = store.select(dependingOn: \.child.step) { $0 + offset }
+    }
+    #expect(store.projectionObserverStats.registeredObservers < 64)
+  }
+
   @Test("Store.select(dependingOnAll:) tracks an arbitrary number of explicit dependency slices")
   func selectedStoreDependingOnAllVariadic() {
     struct VariadicState: Equatable, Sendable, DefaultInitializable {
@@ -491,6 +658,7 @@ struct StoreScopeSelectionTests {
       \VariadicState.e,
       \VariadicState.f,
       \VariadicState.g,
+      id: "sum",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -507,6 +675,7 @@ struct StoreScopeSelectionTests {
       \VariadicState.e,
       \VariadicState.f,
       \VariadicState.g,
+      id: "sum",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -548,18 +717,26 @@ struct StoreScopeSelectionTests {
   )
   func selectedStoreClosureMemoizeFalseAlwaysRefreshes() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    let probe = SelectionTransformProbe()
+    let alwaysProbe = SelectionTransformProbe()
+    let memoProbe = SelectionTransformProbe()
 
-    let alwaysRefresh = store.select(memoize: false) { state -> Int in
-      probe.record()
-      return state.child.step
+    func make(_ memoize: Bool, probe: SelectionTransformProbe) -> SelectedStore<Int> {
+      store.select(memoize: memoize) { state -> Int in
+        probe.record()
+        return state.child.step
+      }
     }
+    let alwaysRefresh = make(false, probe: alwaysProbe)
+    let memoized = make(true, probe: memoProbe)
 
     #expect(alwaysRefresh.requireAlive() == 1)
-    let baseline = probe.count
+    #expect(memoized.requireAlive() == 1)
+    let alwaysBaseline = alwaysProbe.count
+    let memoBaseline = memoProbe.count
 
     store.send(.setUnrelated(0))
-    #expect(probe.count > baseline)
+    #expect(alwaysProbe.count > alwaysBaseline)
+    #expect(memoProbe.count == memoBaseline)
   }
 
   @Test("Store.select preserves SelectedStore identity across repeated calls")
@@ -621,6 +798,7 @@ struct StoreScopeSelectionTests {
     let callsiteLine: UInt = #line
     let first = store.select(
       dependingOn: \.child.title,
+      id: "uppercase-title",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -629,6 +807,7 @@ struct StoreScopeSelectionTests {
     }
     let second = store.select(
       dependingOn: \.child.title,
+      id: "uppercase-title",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -668,6 +847,7 @@ struct StoreScopeSelectionTests {
     let callsiteLine: UInt = #line
     let first = store.select(
       dependingOnAll: \.child.step, \.child.title,
+      id: "title-step",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -676,6 +856,7 @@ struct StoreScopeSelectionTests {
     }
     let second = store.select(
       dependingOnAll: \.child.step, \.child.title,
+      id: "title-step",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -754,6 +935,7 @@ struct StoreScopeSelectionTests {
     let callsiteLine: UInt = #line
     let first = store.select(
       dependingOnAll: \.child.step, \.child.title, \.child.note, \.child.priority,
+      id: "four-fields",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -762,6 +944,7 @@ struct StoreScopeSelectionTests {
     }
     let second = store.select(
       dependingOnAll: \.child.step, \.child.title, \.child.note, \.child.priority,
+      id: "four-fields",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -988,6 +1171,7 @@ struct StoreScopeSelectionTests {
     let callsiteLine: UInt = #line
     let first = scoped.select(
       dependingOn: \.title,
+      id: "uppercase-title",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -996,6 +1180,7 @@ struct StoreScopeSelectionTests {
     }
     let second = scoped.select(
       dependingOn: \.title,
+      id: "uppercase-title",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -1040,6 +1225,7 @@ struct StoreScopeSelectionTests {
     let callsiteLine: UInt = #line
     let first = scoped.select(
       dependingOnAll: \.step, \.title,
+      id: "title-step",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -1048,6 +1234,7 @@ struct StoreScopeSelectionTests {
     }
     let second = scoped.select(
       dependingOnAll: \.step, \.title,
+      id: "title-step",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -1173,6 +1360,7 @@ struct StoreScopeSelectionTests {
     let callsiteLine: UInt = #line
     let first = scoped.select(
       dependingOnAll: \.step, \.title, \.note, \.priority,
+      id: "four-fields",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -1181,6 +1369,7 @@ struct StoreScopeSelectionTests {
     }
     let second = scoped.select(
       dependingOnAll: \.step, \.title, \.note, \.priority,
+      id: "four-fields",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -1410,6 +1599,7 @@ struct StoreScopeSelectionTests {
       \VariadicParentFeature.Child.e,
       \VariadicParentFeature.Child.f,
       \VariadicParentFeature.Child.g,
+      id: "sum",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -1426,6 +1616,7 @@ struct StoreScopeSelectionTests {
       \VariadicParentFeature.Child.e,
       \VariadicParentFeature.Child.f,
       \VariadicParentFeature.Child.g,
+      id: "sum",
       fileID: #fileID,
       line: callsiteLine,
       column: 0
@@ -1692,6 +1883,87 @@ struct StoreScopeSelectionTests {
 
     #expect(probe.count == 1)
     #expect(scopedTodos[0].isDone == true)
+  }
+
+  @Test("Collection-scoped liveness notifies when its source element is removed")
+  func collectionScopedLivenessInvalidatesOnRemoval() {
+    let store = Store(reducer: ScopedCollectionFeature(), initialState: .init())
+    let scopedTodos = store.scope(
+      collection: \.todos,
+      action: ScopedCollectionFeature.Action.todoActionPath
+    )
+    let removedRow = scopedTodos[0]
+    let selectedTitle = removedRow.select(\.title)
+    let rowLivenessProbe = ObservationProbe()
+    let rowOptionalStateProbe = ObservationProbe()
+    let selectionLivenessProbe = ObservationProbe()
+    let selectionOptionalValueProbe = ObservationProbe()
+
+    withObservationTracking(
+      { _ = removedRow.isAlive },
+      onChange: { rowLivenessProbe.recordChange() }
+    )
+    withObservationTracking(
+      { _ = removedRow.optionalState },
+      onChange: { rowOptionalStateProbe.recordChange() }
+    )
+    withObservationTracking(
+      { _ = selectedTitle.isAlive },
+      onChange: { selectionLivenessProbe.recordChange() }
+    )
+    withObservationTracking(
+      { _ = selectedTitle.optionalValue },
+      onChange: { selectionOptionalValueProbe.recordChange() }
+    )
+
+    store.send(.removeTodo(removedRow.id))
+
+    #expect(rowLivenessProbe.count == 1)
+    #expect(rowOptionalStateProbe.count == 1)
+    #expect(selectionLivenessProbe.count == 1)
+    #expect(selectionOptionalValueProbe.count == 1)
+    #expect(removedRow.isAlive == false)
+    #expect(removedRow.optionalState == nil)
+    #expect(selectedTitle.isAlive == false)
+    #expect(selectedTitle.optionalValue == nil)
+
+    let repeatedRemovalProbe = ObservationProbe()
+    withObservationTracking(
+      { _ = removedRow.isAlive },
+      onChange: { repeatedRemovalProbe.recordChange() }
+    )
+    store.send(.removeTodo(removedRow.id))
+    #expect(repeatedRemovalProbe.count == 0)
+  }
+
+  @Test("Removing a sibling does not invalidate collection-scoped liveness")
+  func collectionScopedLivenessIgnoresSiblingRemoval() {
+    let store = Store(reducer: ScopedCollectionFeature(), initialState: .init())
+    let scopedTodos = store.scope(
+      collection: \.todos,
+      action: ScopedCollectionFeature.Action.todoActionPath
+    )
+    let survivingRow = scopedTodos[0]
+    let removedSibling = scopedTodos[1]
+    let selectedTitle = survivingRow.select(\.title)
+    let rowProbe = ObservationProbe()
+    let selectionProbe = ObservationProbe()
+
+    withObservationTracking(
+      { _ = survivingRow.isAlive },
+      onChange: { rowProbe.recordChange() }
+    )
+    withObservationTracking(
+      { _ = selectedTitle.optionalValue },
+      onChange: { selectionProbe.recordChange() }
+    )
+
+    store.send(.removeTodo(removedSibling.id))
+
+    #expect(rowProbe.count == 0)
+    #expect(selectionProbe.count == 0)
+    #expect(survivingRow.isAlive)
+    #expect(selectedTitle.optionalValue == "One")
   }
 
   @Test("ScopedStore stale message formatter includes types, ids, and remediation")

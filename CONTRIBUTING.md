@@ -14,12 +14,14 @@ Read these files first:
 
 Those files define the current framework contract.
 
-The 5.0 development line requires Swift 6.3 or newer. Run validation with a
+The 6.0 development line requires Swift 6.3 or newer. Run validation with a
 toolchain that satisfies that minimum before committing changes.
 
 ## Non-negotiable rules
 
-- `@InnoFlow` features use `var body: some Reducer<State, Action>`.
+- `@InnoFlow` features declare the third reducer generic explicitly: use
+  `var body: some Reducer<State, Action, Never>` without app-boundary output,
+  or the feature's typed `Output` when it emits one.
 - Public feature authoring does not use explicit `reduce(into:action:)`.
 - Reducer composition should use `Reduce`, `CombineReducers`, and `Scope`.
 - Binding must stay explicit through `@BindableField`, and SwiftUI entry points should use projected key paths like `\.$field`.

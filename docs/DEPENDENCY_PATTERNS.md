@@ -65,7 +65,7 @@ struct PhaseDrivenTodoFeature {
     self.init(dependencies: .init(todoService: todoService))
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .loadTodos:

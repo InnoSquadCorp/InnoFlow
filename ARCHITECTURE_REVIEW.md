@@ -4,7 +4,7 @@ Use this checklist when a change modifies framework semantics or canonical patte
 
 ## Review prompts
 
-- Does the change preserve `var body: some Reducer<State, Action>` as the public authoring surface?
+- Does the change preserve `var body: some Reducer<State, Action, Never>` as the public authoring surface?
 - Does the change keep ownership boundaries clear between InnoFlow, app-layer navigation, transport/session lifecycle, and dependency construction?
 - If the change touches `SelectedStore`, does it preserve the `dependingOn:` contract and the always-refresh fallback story?
 - If the change touches `PhaseMap`, does it preserve post-reduce ownership, `derivedGraph`, and topology-only graph validation?

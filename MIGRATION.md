@@ -2,6 +2,175 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
+## 6.0.0
+
+### Who is affected
+
+- Every `@InnoFlow` feature body must add the reducer output generic. Use
+  `Never` when the feature emits no output, and its nested `Output` type when
+  it does. Explicit generic uses of `Reduce` and `CombineReducers` must do the
+  same.
+- Manual reducers that emit output now return
+  `ReducerEffect<Action, Output>`. `EffectTask<Action>` remains available as
+  the `Output == Never` alias for reducers without outputs.
+- Direct statement calls to `store.send(...)` remain source-compatible because
+  the new `FlowTask` result is discardable. Code that stores `send` as a
+  `Void`-returning function value must wrap it in a closure and discard the
+  result explicitly.
+- Tests still calling `assertNoMoreActions()` must choose the terminal or
+  checkpoint contract described below.
+- Features adopting typed outputs must subscribe before sending the action that
+  emits them when using the store-wide broadcast. Output streams are live and
+  non-replaying by design.
+
+### Required action
+
+Migrate reducer bodies and any explicitly specialized composition primitives:
+
+```swift
+// No app-boundary output
+var body: some Reducer<State, Action, Never> {
+  Reduce { state, action in
+    // ...
+    return .none
+  }
+}
+
+// Typed app-boundary output
+enum Output: Sendable { case dismiss }
+
+var body: some Reducer<State, Action, Output> {
+  Reduce { _, _ in
+    Self.output(.dismiss)
+  }
+}
+```
+
+Child and parent output types must match at a composition boundary. Use
+`mapOutput(_:)` when they differ; an unmapped mismatch is now a compile-time
+error instead of a value that can disappear at runtime.
+
+Use the dispatch handle when a caller owns an action tree's lifetime:
+
+```swift
+let task = store.send(.load)
+await task.finish()
+
+let cancelTask = store.send(.startSearch)
+cancelTask.cancel()
+await cancelTask.finish()
+```
+
+When adapting a method value that previously returned `Void`, discard the
+handle explicitly:
+
+```swift
+let send: (Feature.Action) -> Void = { action in
+  _ = store.send(action)
+}
+```
+
+Replace terminal `assertNoMoreActions()` calls with `await store.finish()`.
+Replace immediate queue-only checks with
+`await store.assertNoBufferedActions()`.
+
+Typed outputs are for one-shot app-boundary commands, not renderable or
+restorable state:
+
+```swift
+@InnoFlow
+struct Feature {
+  enum Output: Equatable, Sendable {
+    case openDetail(Int)
+  }
+
+  // Inside body:
+  // return Self.output(.openDetail(id))
+}
+
+var outputs = store.outputs().makeAsyncIterator()
+await store.send(.select(42)).finish()
+let output = await outputs.next()
+```
+
+If output must be correlated to one action tree, prefer the atomic dispatch
+capture. It is installed before enqueue, so synchronous output cannot race the
+subscriber:
+
+```swift
+let task = store.send(.select(42), capturingOutputs: .unbounded)
+var outputs = task.outputs.makeAsyncIterator()
+await task.finish()
+let output = await outputs.next()
+```
+
+`OutputFlowTask.outputs` is single-consumer and terminates with the dispatch.
+Choose a bounded capture only when dropping is part of the feature contract.
+Cancelling a task awaiting captured outputs cancels that dispatch, including
+when consumption lives in SwiftUI `.task`. A plain `break` is not task
+cancellation: call `task.cancel()` if the retained capture is being abandoned.
+Cancelling a store-wide broadcast subscription never cancels dispatch work.
+
+Use `mapOutput(_:)` at a child composition boundary when the child and parent
+output types differ. Tests must consume emitted values with
+`receiveOutput(_:)`; exhaustive `finish()` reports unhandled outputs.
+For an output-free child or `EffectTask` helper, use
+`promoteOutput(to: Output.self)` instead of manually mapping an impossible
+`Never` value. Real child outputs still require `mapOutput(_:)`.
+Non-equatable outputs can be received by predicate (`receiveOutput(where:)`)
+or by `CasePath`. Like action matching, output matching honors exhaustivity and
+one total timeout, including skipped mismatches and invalidated buffered values.
+
+`Store.outputs()` now defaults to unbounded buffering so one-shot coordinator
+commands are not silently dropped during a burst. Hosts may pass a bounded
+`AsyncStream` buffering policy only when dropping is an explicit product
+decision and should keep the stream continuously consumed.
+
+Prefer `EffectTask.perform` for one async request with explicit success and
+failure actions. Cancellation deliberately emits neither terminal action.
+Use `onChange(of:perform:)` only for a narrow equatable state projection, not
+an entire application state.
+
+Independent requests that share an external resource can opt into Store-local
+admission. Handle rejection explicitly so UI ownership is not stranded:
+
+```swift
+return .run(
+  id: EffectID("profile-load"),
+  policy: .dropWhileRunning,
+  onAdmission: { .loadAdmission($0) }
+) { send, context in
+  // Cancellation remains cooperative.
+}
+```
+
+Use `.serial(maxPending:)` only for bounded run admission. It does not replace
+an application's persistence revision, transaction, retry, or rollback model.
+Use `FlowScope` when one lexical caller owns several dispatch trees; register
+only work that should be cancelled together.
+
+`StoreDiagnostics` is opt-in and payload-free. Supplying one to `Store.init`
+enables a bounded lifecycle history; omitting it allocates no history buffer.
+Tests may supply `TestStoreInvariant` and replay `TestStoreScenario` values.
+Invariant checks run once after the composed reducer for every reduction path.
+Scenario callers that cancel execution can inspect `wasCancelled`,
+`cancelledStepIndex`, and `cancelledStepLabel`; cancelled runs no longer execute
+subsequent steps or look like fully completed scenarios.
+
+Supported nested `Output` enum cases now receive macro-generated case paths.
+`ScopedTestStore.receiveOutput` still consumes the root output queue, preserving
+its ordering, exhaustivity, and total timeout. Existing manual canonical paths
+continue to win, and `@InnoFlowCasePathIgnored` remains the explicit opt-out.
+
+`PhaseMap` remains partial at runtime. Add `try phaseMap.requireComplete(...)`
+to a test or release gate only when a feature intentionally promises complete
+trigger coverage.
+
+For directly declared phase enums, opt into compile-time declaration coverage
+with `@InnoFlow(phaseManaged: true, strictPhaseTotality: true)`. This turns an
+unreferenced `Phase` case into an error; predicate and payload-domain coverage
+still belongs in `requireComplete(...)` tests.
+
 ## 5.1.1
 
 - Existing unlabeled single-payload and `id:action:` collection cases require
@@ -208,6 +377,20 @@ failure in every build, replace `selected.someMember` with
 `selected.requireAlive().someMember`. For release-tolerant non-UI reads, use
 `selected.optionalValue` and regenerate the projection when it returns `nil`.
 
+In 6.0, closure-based `select` calls no longer infer identity from their call
+site alone. Each call creates an independent handle unless a stable semantic
+`id:` is supplied, including the dependency-aware and `memoize:` overloads.
+If a view relied on repeated closure calls at one call site returning the
+same handle, pass an ID that covers every captured input and retain the handle
+for as long as that identity is needed. Calls from different source locations
+do not share a handle. Key-path-only selections keep their existing cache.
+Code that stores a closure-based `select` method itself as a function value
+must adapt to the new defaulted `id:` parameter; Swift does not apply default
+arguments when converting a method to a function value.
+Tracked `isAlive`, `optionalState`, and `optionalValue` reads now invalidate
+when the parent store is released, not only when a collection element is
+removed or when the caller checks liveness again.
+
 `ScopedStore` now provides the same explicit strict path through
 `scoped.requireAlive()`. Its existing `state` and dynamic-member reads retain
 the view-facing cached fallback, while `optionalState` remains the
@@ -252,7 +435,7 @@ projection is a programming error.
 
 ### Required action
 
-- Keep feature bodies typed as `some Reducer<State, Action>` and compose with
+- Keep feature bodies typed as `some Reducer<State, Action, Never>` and compose with
   public reducers (`Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`,
   `ForEachReducer`) instead of naming `_EmptyReducer`, `_ReducerSequence`,
   `_OptionalReducer`, `_ConditionalReducer`, or `_ArrayReducer`.

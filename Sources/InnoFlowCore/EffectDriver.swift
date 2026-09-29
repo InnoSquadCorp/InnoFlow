@@ -45,14 +45,14 @@ package func shouldAdmitDelayedScope(
 }
 
 @MainActor
-package final class ThrottleStateMap<Action: Sendable> {
+package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
   private struct AdmissionState {
     var latestSequence: UInt64
     var outstandingCount: Int
   }
 
   package struct PendingTrailing: Sendable {
-    package let effect: EffectTask<Action>
+    package let effect: ReducerEffect<Action, Output>
     package let context: EffectExecutionContext?
     package let requiresAwaitedCompletion: Bool
   }
@@ -76,7 +76,7 @@ package final class ThrottleStateMap<Action: Sendable> {
   }
 
   package func storePending(
-    _ effect: EffectTask<Action>,
+    _ effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext?,
     requiresAwaitedCompletion: Bool = false,
     for id: AnyEffectID
@@ -205,6 +205,17 @@ package final class ThrottleStateMap<Action: Sendable> {
     }
   }
 
+  package func cancellationTargetDispatchIDs(
+    where isTarget: (DelayedEffectScope) -> Bool
+  ) -> Set<DispatchID> {
+    Set(
+      scopeByID.values.compactMap { scope in
+        guard isTarget(scope) else { return nil }
+        return scope.cancellationContext?.dispatchID
+      }
+    )
+  }
+
   @discardableResult
   package func finishState(for id: AnyEffectID, generation: UInt64) -> Bool {
     guard generationByID[id] == generation else { return false }
@@ -236,13 +247,17 @@ package final class ThrottleStateMap<Action: Sendable> {
 /// The walker (`EffectWalker`) owns the recursive tree-traversal and structural rules.
 /// The driver provides leaf operations that differ between `Store` and `TestStore`.
 @MainActor
-package protocol EffectDriver<Action>: AnyObject {
+package protocol EffectDriver<Action, Output>: AnyObject {
   associatedtype Action: Sendable
+  associatedtype Output: Sendable
 
   // MARK: - Leaf Operations
 
   /// Deliver an action back to the reduce cycle.
   func deliverAction(_ action: Action, context: EffectExecutionContext?)
+
+  /// Deliver a reducer output after the action's state mutation is visible.
+  func deliverOutput(_ output: Output, context: EffectExecutionContext?)
 
   /// Surface a structural action drop (e.g., `IfLet` child state missing)
   /// without re-delivering the action. Stores route this to
@@ -262,6 +277,18 @@ package protocol EffectDriver<Action>: AnyObject {
     operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>
+
+  /// Admits a run into a Store-local execution lane and returns the task that
+  /// owns both queue waiting and physical operation completion.
+  @discardableResult
+  func scheduleRun(
+    id: AnyEffectID,
+    policy: EffectExecutionPolicy,
+    priority: TaskPriority?,
+    onAdmission: (@Sendable (EffectAdmission) -> Action)?,
+    operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void,
+    context: EffectExecutionContext?
+  ) async -> Task<Void, Never>?
 
   // MARK: - Cancellation
 
@@ -288,7 +315,7 @@ package protocol EffectDriver<Action>: AnyObject {
   /// strong reference has left scope.
   @discardableResult
   func scheduleDebounce(
-    _ nested: EffectTask<Action>,
+    _ nested: ReducerEffect<Action, Output>,
     id: AnyEffectID,
     interval: Duration,
     context: EffectExecutionContext?,
@@ -296,14 +323,14 @@ package protocol EffectDriver<Action>: AnyObject {
     nestedAwaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
-        EffectTask<Action>, EffectExecutionContext?, Bool
+        ReducerEffect<Action, Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async -> Task<Void, Never>?
 
   // MARK: - Throttle State
 
   /// Shared throttle bookkeeping for the driver.
-  var throttleState: ThrottleStateMap<Action> { get }
+  var throttleState: ThrottleStateMap<Action, Output> { get }
 
   /// Schedules the generation-scoped drain task for the throttle id.
   ///
@@ -322,7 +349,7 @@ package protocol EffectDriver<Action>: AnyObject {
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
-        EffectTask<Action>, EffectExecutionContext?, Bool
+        ReducerEffect<Action, Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) -> Task<Void, Never>
 
@@ -341,23 +368,23 @@ package protocol EffectDriver<Action>: AnyObject {
 
   /// Run children concurrently (merge).
   func runConcurrently(
-    _ children: [EffectTask<Action>],
+    _ children: [ReducerEffect<Action, Output>],
     context: EffectExecutionContext?,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
-        EffectTask<Action>, EffectExecutionContext?, Bool
+        ReducerEffect<Action, Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async
 
   /// Run children sequentially (concatenate).
   func runSequentially(
-    _ children: [EffectTask<Action>],
+    _ children: [ReducerEffect<Action, Output>],
     context: EffectExecutionContext?,
     awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
-        EffectTask<Action>, EffectExecutionContext?, Bool
+        ReducerEffect<Action, Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async
 }

@@ -44,7 +44,7 @@ final class EffectInstrumentationWitness: Sendable {
       case .effectsCancelled:
         recordCancellation()
 
-      case .actionEmitted, .actionDropped, .actionQueueDrained, .runFailed:
+      case .actionEmitted, .actionDropped, .outputDelivered, .actionQueueDrained, .runFailed:
         break
       }
     }

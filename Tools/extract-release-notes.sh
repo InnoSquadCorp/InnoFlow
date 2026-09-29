@@ -7,7 +7,14 @@ if [[ $# -ne 1 ]]; then
   exit 1
 fi
 
-tag="${1#v}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts" && pwd)"
+source "$SCRIPT_DIR/release-tag-policy.sh"
+
+tag="$1"
+if ! is_strict_release_tag "$tag"; then
+  echo "invalid release tag '$tag': expected strict numeric SemVer without a v prefix, prerelease, metadata, or leading zero" >&2
+  exit 1
+fi
 changelog="CHANGELOG.md"
 
 if [[ ! -f "$changelog" ]]; then

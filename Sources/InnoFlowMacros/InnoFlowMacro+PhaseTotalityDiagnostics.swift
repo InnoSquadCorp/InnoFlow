@@ -38,15 +38,25 @@ extension InnoFlowMacro {
   /// static `phaseMap` variable exists on the feature, and it collects
   /// references only from direct `From(...)` / `On(to:)` / `On(targets:)`
   /// calls. DSL wrapped in helper functions, aliased phase enums, or
-  /// dynamically built rules are invisible to it and are silently skipped —
-  /// the diagnostic is warning-grade and fails safe toward not reporting.
+  /// dynamically built rules are invisible to this syntax pass. Missing
+  /// direct references are warnings by default and errors when
+  /// `strictPhaseTotality` is enabled; helper-built semantics still require
   /// Runtime coverage for those shapes belongs to
   /// `PhaseMap.validationReport(...)` in tests.
   static func diagnosePhaseTotalityIfNeeded(
     in declaration: StructDeclSyntax,
+    strict: Bool = false,
     context: some MacroExpansionContext
   ) {
     guard let phaseEnum = findPhaseEnum(in: declaration) else {
+      if strict {
+        context.diagnose(
+          Diagnostic(
+            node: Syntax(declaration.name),
+            message: PhaseTotalityDiagnosticMessage.phaseEnumUnavailable
+          )
+        )
+      }
       return
     }
 
@@ -67,7 +77,10 @@ extension InnoFlowMacro {
       context.diagnose(
         Diagnostic(
           node: Syntax(element.name),
-          message: PhaseTotalityDiagnosticMessage.unreferencedCase(caseName: element.name.text)
+          message: PhaseTotalityDiagnosticMessage.unreferencedCase(
+            caseName: element.name.text,
+            strict: strict
+          )
         )
       )
     }
@@ -234,24 +247,38 @@ private enum PhaseManagedContractDiagnosticMessage: DiagnosticMessage {
 }
 
 private enum PhaseTotalityDiagnosticMessage: DiagnosticMessage {
-  case unreferencedCase(caseName: String)
+  case unreferencedCase(caseName: String, strict: Bool)
+  case phaseEnumUnavailable
 
   var message: String {
     switch self {
-    case .unreferencedCase(let caseName):
+    case .unreferencedCase(let caseName, _):
       return
         "`Phase.\(caseName)` is declared but never referenced from the static `phaseMap` — add a `From(.\(caseName)) { ... }` rule, an `On(..., to: .\(caseName))` target, or remove the case if it is unused"
+    case .phaseEnumUnavailable:
+      return
+        "strict phase totality requires a directly nested `Phase` enum on the feature or its nested `State`; aliases and dynamically declared phase types cannot be proven at macro-expansion time"
     }
   }
 
   var diagnosticID: MessageID {
     switch self {
-    case .unreferencedCase:
-      return .init(domain: "InnoFlowMacro", id: "PhaseUnreferencedCase")
+    case .unreferencedCase(_, let strict):
+      return .init(
+        domain: "InnoFlowMacro",
+        id: strict ? "StrictPhaseUnreferencedCase" : "PhaseUnreferencedCase"
+      )
+    case .phaseEnumUnavailable:
+      return .init(domain: "InnoFlowMacro", id: "StrictPhaseEnumUnavailable")
     }
   }
 
   var severity: DiagnosticSeverity {
-    .warning
+    switch self {
+    case .unreferencedCase(_, let strict):
+      return strict ? .error : .warning
+    case .phaseEnumUnavailable:
+      return .error
+    }
   }
 }

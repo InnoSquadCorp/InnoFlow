@@ -41,7 +41,7 @@ struct SampleArticleRowFeature {
     case setIsFavorite(Bool)
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     Reduce { state, action in
       switch action {
       case .toggleFavorite:
@@ -127,7 +127,7 @@ struct ListDetailPaginationFeature {
     self.init(dependencies: .init(articlesService: articlesService))
   }
 
-  var body: some Reducer<State, Action> {
+  var body: some Reducer<State, Action, Never> {
     CombineReducers {
       Reduce { state, action in
         switch action {
@@ -353,6 +353,9 @@ struct ListDetailPaginationDetailView: View {
   }
 }
 
-#Preview("List + Detail") {
-  ListDetailPaginationDemoView()
-}
+#if !INNOFLOW_DISABLE_PREVIEWS
+  #Preview("List + Detail") {
+    ListDetailPaginationDemoView()
+  }
+// PreviewsMacros is unavailable in the Swift 6.3 command-line SDK.
+#endif
