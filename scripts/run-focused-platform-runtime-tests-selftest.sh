@@ -31,6 +31,9 @@ while [[ $# -gt 0 ]]; do
   fi
   if [[ "$1" == "-resultBundlePath" ]]; then
     mkdir -p "$2"
+    if [[ "${FOCUSED_RUNTIME_FIXTURE_MODE:-}" == xcode-failure* ]]; then
+      exit 65
+    fi
     break
   fi
   shift
@@ -73,6 +76,9 @@ if [[ "${1:-}" == "swift" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "xcresulttool" && "${2:-}" == "get" && "${3:-}" == "test-results" ]]; then
+  if [[ "${FOCUSED_RUNTIME_FIXTURE_MODE:-}" == "xcode-failure-unreadable" ]]; then
+    exit 42
+  fi
   /usr/bin/python3 - "${4:-}" <<'PY'
 import json
 import os
@@ -92,6 +98,10 @@ elif mode == "duplicate":
 elif mode == "zero":
     identifiers = []
 if sys.argv[1] == "summary":
+    if mode == "xcode-failure":
+        print(json.dumps({"result": "Failed", "failedTests": 1,
+                          "testFailures": [{"failureText": "fixture assertion details"}]}))
+        raise SystemExit(0)
     print(json.dumps({
         "result": "Passed", "failedTests": 0, "skippedTests": 0,
         "expectedFailures": 0, "runtimeWarnings": [],
@@ -146,6 +156,26 @@ for mode in partial missing renamed duplicate zero; do
     exit 1
   fi
 done
+unset FOCUSED_RUNTIME_FIXTURE_MODE
+for mode in xcode-failure xcode-failure-unreadable; do
+  export FOCUSED_RUNTIME_FIXTURE_MODE="$mode"
+  failure_status=0
+  failure_bundle="$TMP_ROOT/$mode.xcresult"
+  "$SCRIPT_DIR/run-focused-platform-runtime-tests.sh" \
+    --destination "platform=iOS Simulator,id=FAKE-DEVICE-ID" \
+    --package-root "$TMP_ROOT/package" \
+    --result-bundle "$failure_bundle" >"$TMP_ROOT/$mode.log" 2>&1 || failure_status=$?
+  [[ "$failure_status" == 65 ]] || {
+    echo "xcodebuild failure status was masked for $mode: $failure_status" >&2
+    exit 1
+  }
+  [[ -d "$failure_bundle" ]] || {
+    echo "Explicit failure result bundle was not preserved" >&2
+    exit 1
+  }
+done
+grep -F 'fixture assertion details' "$TMP_ROOT/xcode-failure.log" >/dev/null
+grep -F 'failure summary could not be extracted' "$TMP_ROOT/xcode-failure-unreadable.log" >/dev/null
 unset FOCUSED_RUNTIME_FIXTURE_MODE
 mv "$TMP_ROOT/package/.swiftpm" "$TMP_ROOT/workspace-good"
 mkdir "$TMP_ROOT/foreign-workspace"

@@ -246,7 +246,17 @@ jobs:
         run: |
           set -eo pipefail
           "$GITHUB_WORKSPACE/scripts/run-focused-platform-runtime-matrix.sh" \
-            --platform "${{ matrix.platform }}"
+            --platform "${{ matrix.platform }}" \
+            --result-bundle "$RUNNER_TEMP/focused-runtime-${{ matrix.platform }}.xcresult"
+
+      - name: Preserve failed focused runtime results
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: focused-runtime-${{ matrix.platform }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/focused-runtime-${{ matrix.platform }}.xcresult
+          retention-days: 7
+          if-no-files-found: warn
 
   principle-gates:
     name: Principle Gates (Static)

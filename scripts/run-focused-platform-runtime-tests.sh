@@ -186,7 +186,22 @@ cd "$package_root"
 "${discovery_command[@]}"
 /usr/bin/python3 "$script_dir/validate-focused-runtime-result.py" \
   discover "$inventory_file" "$discovery_file"
-"${command[@]}"
+test_status=0
+"${command[@]}" || test_status=$?
+if (( test_status != 0 )); then
+  echo "[focused-runtime] xcodebuild failed with status=$test_status result-bundle=$result_bundle" >&2
+  # A quiet xcodebuild failure only lists test names. Emit the assertion details
+  # before a temporary result bundle is cleaned up, without masking its status.
+  if [[ -d "$result_bundle" ]]; then
+    if xcrun xcresulttool get test-results summary --path "$result_bundle" --compact \
+      >"$validation_root/failure-summary.json"; then
+      cat "$validation_root/failure-summary.json"
+    else
+      echo "[focused-runtime] failure summary could not be extracted" >&2
+    fi
+  fi
+  exit "$test_status"
+fi
 
 summary_file="$validation_root/summary.json"
 tests_file="$validation_root/tests.json"

@@ -195,6 +195,7 @@ struct DispatchDiagnosticsTests {
   @Test("cancelling a pending request immediately removes it from the diagnosed queue")
   func pendingCancellationUpdatesQueuedCountWhileSiblingLives() async {
     let diagnostics = StoreDiagnostics(capacity: 64)
+    let queuedAdmission = AsyncTestSignal()
     let firstProbe = DiagnosticUncooperativeProbe()
     let siblingProbe = DiagnosticUncooperativeProbe()
     let queuedProbe = DiagnosticUncooperativeProbe()
@@ -202,7 +203,8 @@ struct DispatchDiagnosticsTests {
       reducer: DiagnosticPendingCancellationFeature(
         firstProbe: firstProbe,
         siblingProbe: siblingProbe,
-        queuedProbe: queuedProbe
+        queuedProbe: queuedProbe,
+        queuedAdmission: queuedAdmission
       ),
       diagnostics: diagnostics
     )
@@ -210,6 +212,9 @@ struct DispatchDiagnosticsTests {
     let first = store.send(.startFirst)
     #expect(await firstProbe.started.wait())
     let combined = store.send(.startQueuedAndSibling)
+    // Merge children are concurrent: the sibling starting does not prove that
+    // the scheduled child has reached the queue. Observe both preconditions.
+    #expect(await queuedAdmission.wait())
     #expect(await siblingProbe.started.wait())
 
     let submitted = diagnostics.snapshot().records.filter { $0.kind == .submitted }
@@ -232,6 +237,7 @@ struct DispatchDiagnosticsTests {
     #expect(activeCombined?.activeRunCount == 1)
     #expect(queuedProbe.hasStarted == false)
 
+    await queuedProbe.release()
     await siblingProbe.release()
     await combined.finish()
   }
@@ -413,11 +419,13 @@ private struct DiagnosticPendingCancellationFeature: Reducer {
   enum Action: Equatable, Sendable {
     case startFirst
     case startQueuedAndSibling
+    case admitted(EffectAdmission)
   }
 
   let firstProbe: DiagnosticUncooperativeProbe
   let siblingProbe: DiagnosticUncooperativeProbe
   let queuedProbe: DiagnosticUncooperativeProbe
+  let queuedAdmission: AsyncTestSignal
   private let lane: StaticEffectID = "diagnostic-pending-lane"
   private let owner: StaticEffectID = "diagnostic-pending-owner"
 
@@ -430,12 +438,19 @@ private struct DiagnosticPendingCancellationFeature: Reducer {
 
     case .startQueuedAndSibling:
       return .merge(
-        .run(id: lane, policy: .serial(maxPending: 1)) { _, _ in
+        .run(id: lane, policy: .serial(maxPending: 1), onAdmission: Action.admitted) { _, _ in
           await queuedProbe.run()
         }
         .cancellable(owner),
         .run { _ in await siblingProbe.run() }
       )
+
+    case .admitted(.queued):
+      queuedAdmission.signal()
+      return .none
+
+    case .admitted:
+      return .none
     }
   }
 }
