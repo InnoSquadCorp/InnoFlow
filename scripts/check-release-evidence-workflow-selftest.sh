@@ -26,7 +26,9 @@ expect_mutation_failure echo-verifier \
 expect_mutation_failure unrelated-needs \
   's=File.read(ARGV[0]); s.sub!("needs: [release-gate, release-platform-builds, release-runtime-tests, release-sanitizers, release-coverage]", "needs: [release-gate]"); File.write(ARGV[1],s)'
 expect_mutation_failure continue-on-error \
-  's=File.read(ARGV[0]); s.sub!("    runs-on: macos-26\n    timeout-minutes: 120", "    runs-on: macos-26\n    continue-on-error: true\n    timeout-minutes: 120"); File.write(ARGV[1],s)'
+  's=File.read(ARGV[0]); s.sub!("    runs-on: xcode-27\n    timeout-minutes: 120", "    runs-on: xcode-27\n    continue-on-error: true\n    timeout-minutes: 120"); File.write(ARGV[1],s)'
+expect_mutation_failure old-xcresult-reader \
+  's=File.read(ARGV[0]); s.sub!("runs-on: xcode-27", "runs-on: macos-26"); File.write(ARGV[1],s)'
 expect_mutation_failure suppress-verifier \
   's=File.read(ARGV[0]); s.sub!("            --stage pre-publication\n", "            --stage pre-publication || true\n"); File.write(ARGV[1],s)'
 expect_mutation_failure echo-remote-verifier \
@@ -64,8 +66,8 @@ expect_producer_mutation_failure() {
 
 expect_producer_mutation_failure no-explicit-approval \
   's=File.read(ARGV[0]); s.sub!("github.ref_type == '\''tag'\'' && inputs.release_approval", "github.ref_type == '\''tag'\''"); File.write(ARGV[1],s)'
-expect_producer_mutation_failure hosted-runner \
-  's=File.read(ARGV[0]); s.sub!("[self-hosted, macOS, innoflow-release-evidence]", "macos-26"); File.write(ARGV[1],s)'
+expect_producer_mutation_failure self-hosted-runner \
+  's=File.read(ARGV[0]); s.sub!("runs-on: xcode-27", "runs-on: [self-hosted, macOS, innoflow-release-evidence]"); File.write(ARGV[1],s)'
 expect_producer_mutation_failure echo-tag-check \
   's=File.read(ARGV[0]); s.sub!("-- scripts/check-release-sync.sh", "-- echo scripts/check-release-sync.sh"); File.write(ARGV[1],s)'
 expect_producer_mutation_failure skip-local-verifier \
@@ -82,6 +84,8 @@ expect_producer_mutation_failure import-local-intake \
   's=File.read(ARGV[0]); s.sub!("gh run download", "ditto"); File.write(ARGV[1],s)'
 expect_producer_mutation_failure download-wrong-sha \
   's=File.read(ARGV[0]); s.sub!("--name \"innoflow-release-preflight-$GITHUB_SHA\"", "--name \"unrelated\""); File.write(ARGV[1],s)'
+expect_producer_mutation_failure unpack-bypass \
+  's=File.read(ARGV[0]); s.sub!("release-evidence-archive.rb unpack", "release-evidence-archive.rb skip"); File.write(ARGV[1],s)'
 
 expect_preflight_mutation_failure() {
   local name="$1" expression="$2"
@@ -95,13 +99,25 @@ expect_preflight_mutation_failure() {
 expect_preflight_mutation_failure untrusted-branch \
   's=File.read(ARGV[0]); s.sub!("refs/heads/main", "refs/heads/feature"); File.write(ARGV[1],s)'
 expect_preflight_mutation_failure subset \
-  's=File.read(ARGV[0]); s.sub!("execute --evidence-root", "execute --check-id static-format --evidence-root"); File.write(ARGV[1],s)'
+  's=File.read(ARGV[0]); s.sub!("fromJSON(needs.plan.outputs.matrix)", "fromJSON(needs.plan.outputs.subset)"); File.write(ARGV[1],s)'
 expect_preflight_mutation_failure plan-not-execute \
-  's=File.read(ARGV[0]); s.sub!("execute --evidence-root", "plan --evidence-root"); File.write(ARGV[1],s)'
+  's=File.read(ARGV[0]); s.sub!("execute --check-id", "matrix --check-id"); File.write(ARGV[1],s)'
 expect_preflight_mutation_failure failed-pass-artifact \
   's=File.read(ARGV[0]); s.sub!("      - name: Upload complete candidate-bound preflight", "      - if: always()\n        name: Upload complete candidate-bound preflight"); File.write(ARGV[1],s)'
 expect_preflight_mutation_failure job-continue-on-error \
-  's=File.read(ARGV[0]); s.sub!("    timeout-minutes: 360", "    continue-on-error: true\n    timeout-minutes: 360"); File.write(ARGV[1],s)'
+  's=File.read(ARGV[0]); s.sub!("    timeout-minutes: 180", "    continue-on-error: true\n    timeout-minutes: 180"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure self-hosted-runner \
+  's=File.read(ARGV[0]); s.sub!("runs-on: ${{ matrix.runner }}", "runs-on: [self-hosted, macOS]"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure aggregate-without-shards \
+  's=File.read(ARGV[0]); s.sub!("needs: [plan, preflight]", "needs: [plan]"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure skip-merge \
+  's=File.read(ARGV[0]); s.sub!("merge --shards", "matrix --shards"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure flatten-artifacts \
+  's=File.read(ARGV[0]); s.sub!("merge-multiple: false", "merge-multiple: true"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure foreign-run-artifacts \
+  's=File.read(ARGV[0]); s.sub!("merge-multiple: false", "merge-multiple: false\n          run-id: 1234"); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure archive-bypass \
+  's=File.read(ARGV[0]); s.sub!("release-evidence-archive.rb pack", "release-evidence-archive.rb skip"); File.write(ARGV[1],s)'
 
 RELEASE_GATE_RESULT=success RELEASE_PLATFORM_BUILDS_RESULT=success \
   RELEASE_RUNTIME_TESTS_RESULT=success RELEASE_SANITIZERS_RESULT=success RELEASE_COVERAGE_RESULT=success \

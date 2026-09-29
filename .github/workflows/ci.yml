@@ -41,6 +41,7 @@ jobs:
           scripts/check-release-evidence-workflow-selftest.sh
           scripts/write-github-evidence-provenance-selftest.sh
           scripts/run-release-preflight-selftest.sh
+          ruby scripts/hosted-release-preflight-selftest.rb
 
       - name: Lint sources
         run: |

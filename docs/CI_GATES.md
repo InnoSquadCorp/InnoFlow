@@ -105,20 +105,43 @@ requires 32 checks; earlier adoption counts are historical.
   local evidence transfers before CI could validate a release.
 - Constraints: retain all 32 checks, exact SHA, Swift 6.3/6.4, five SDKs, eight
   runtime targets, raw evidence, separate public tag/Release approvals and
-  dedicated-runner isolation. Mulbyul remains excluded.
+  fresh GitHub-hosted job isolation. Mulbyul remains excluded. Self-hosted
+  runners are not used or required.
 - Alternatives: keep local collection; re-execute everything after tagging;
   or execute once on main CI and let the tag producer verify that successful
   exact-SHA run. The third option avoids local installs and duplicate matrices.
 - Execution: manually dispatch `Release Preflight` on main, never PR code.
-  A fresh outside-checkout directory collects the complete policy. Successful
-  artifacts are SHA-bound; failure/cancellation artifacts have a distinct name.
-  The dedicated runner must already have the required toolchains/runtimes.
+  The complete policy generates 32 isolated jobs (maximum concurrency six).
+  Swift 6.3 uses `macos-26` / Xcode 26.6; other jobs use `xcode-27` / Xcode 27.0.
+  Each runtime job downloads/imports only its exact missing runtime from Apple.
+  A final hosted job combines unchanged receipt/raw bytes and independently
+  verifies all 32 checks. Successful artifacts are SHA-bound;
+  failure/cancellation artifacts have a distinct name. The producer also uses
+  `xcode-27`; no local SDK path or preinstalled custom Swift toolchain is assumed.
 - Failure behavior: absent runners/runtime images leave the gate queued or
   failed. Do not fall back to local execution or remove checks. The producer
   rejects incomplete/failed, wrong-workflow/ref/SHA, expired or ambiguous runs.
 - Validation: workflow/provenance mutation tests and isolated execution-guard
   fixtures run in ordinary PR lint. Actual 32-check runtime proof requires the
   main CI run. `local-preflight` remains the serialized stage name only.
+
+Runner availability and installed versions were checked against GitHub's
+[Xcode 27 image inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
+and the successful PR #44 CI log (Xcode 26.6 / Swift 6.3.3). The `xcode-27`
+label is a public preview: environment checks fail closed if the selected Xcode
+or Swift changes. Runtime provisioning uses Apple's documented
+[`xcodebuild -downloadPlatform` / `-importPlatform`](https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components).
+Provisioning failures, hosted storage limits, or removed pinned images are CI
+failures, not grounds to skip checks or run the matrix locally. Failed jobs can
+be retried; to repeat already-successful jobs start a new workflow dispatch,
+because successful artifacts are immutable and never overwritten.
+
+Every shard, complete preflight and producer artifact transports one
+`evidence.tar.gz`. GitHub's ZIP artifact transport
+[does not preserve file permissions](https://github.com/actions/upload-artifact#permission-loss),
+which are included in receipt digests. The nested archive preserves both bytes
+and modes; extraction rejects traversal, links, special files and duplicates.
+The final verifier still reopens the original receipts and raw xcresults.
 
 After an approved immutable tag is created at the same SHA, dispatch
 `Release Evidence Producer` with `preflight_run_id` and explicit approval.

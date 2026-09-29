@@ -79,10 +79,9 @@ def available_runtime!(check)
 end
 
 def toolchain_identity(check)
-  env = %w[swift-6.3-toolchain sample-swift-6.3].include?(check.fetch("id")) ? {
-    "TOOLCHAINS" => "org.swift.633202606251a",
-    "SDKROOT" => "/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk",
-  } : {}
+  # CI selects the reviewed Xcode per matrix job. Never assume a toolchain or
+  # SDK installed on a developer's Mac exists on an ephemeral hosted runner.
+  env = {}
   swift = capture!("swift", "--version", env: env).lines.first.to_s.strip
   expected = check.dig("environment", "swift")
   abort_preflight("Swift #{expected} toolchain is unavailable: #{swift}") if expected && !swift.match?(/\bversion #{Regexp.escape(expected)}(?:\.|\b)/)

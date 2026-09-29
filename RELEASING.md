@@ -66,12 +66,11 @@ tag, run and confirm the following in CI (not a local release matrix):
    automatic package resolution so the canonical sample cannot silently use
    a different SwiftSyntax patch than the release candidate.
    Also run the required Swift 6.3 command-line sample gate through
-   `scripts/check-sample-swift63.sh --scratch-path <isolated-build-path>` with
-   `TOOLCHAINS=org.swift.633202606251a` and
-   `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk`.
-   That SDK lacks `PreviewsMacros`, so this gate excludes only preview
-   declarations; the canonical Xcode sample app build must separately pass
-   without the exclusion flag.
+   `scripts/check-sample-swift63.sh --scratch-path <isolated-build-path>` on
+   GitHub-hosted `macos-26` with Xcode 26.6 selected. The script discovers
+   that Xcode's macOS SDK; it does not use a developer-specific toolchain or
+   SDK path. This CLI gate excludes only preview declarations; the canonical
+   Xcode sample app build must separately pass without the exclusion flag.
 4. Macro source fallback: `swift build --disable-experimental-prebuilts --product InnoFlow --jobs 1 -Xswiftc -warnings-as-errors`
 5. Macro operations contract: `scripts/check-macro-operations.sh`
 6. Package builds for every declared destination: `macOS`, `iOS`, `tvOS`,
@@ -198,8 +197,8 @@ Before tagging a release (automated release checks execute in CI):
     the checked-out commit, but only immutable-tag enforcement closes the gap
     between a completed gate and the later GitHub Release API call.
 19. Dispatch `Release Preflight` (`release-preflight.yml`) on `main` at the
-    exact frozen candidate SHA. The dedicated runner creates `candidate.json`,
-    executes all 32 required checks from the canonical
+    exact frozen candidate SHA. GitHub-hosted jobs create `candidate.json`,
+    execute all 32 required checks from the canonical
     [JSON evidence policy](docs/contracts/release-evidence-policy.json), retains
     receipts/raw xcresults, and verifies the full `local-preflight` stage.
     Only success uploads `innoflow-release-preflight-<exact-SHA>`; failed or
@@ -208,10 +207,15 @@ Before tagging a release (automated release checks execute in CI):
     Missing runtimes/toolchains block CI and must be provisioned on the CI
     runner, not the user's Mac. Do not change main while freezing the release;
     a new candidate SHA requires a new run. No preloaded local bundle is used.
+    Swift 6.3 uses `macos-26` / Xcode 26.6; other checks use `xcode-27` /
+    Xcode 27.0. There is one job per check, with at most six jobs concurrent.
+    Missing exact runtimes are downloaded/imported from Apple in that job.
+    Aggregation rejects missing/extra shards, mismatched snapshots and damaged
+    raw evidence; partial shards are not release inputs. Start a fresh dispatch
+    to repeat already-successful jobs (immutable artifacts are not overwritten).
 20. Dispatch `Release Evidence Producer` on the exact immutable tag with the
     successful `preflight_run_id` and explicit release
-    approval. The dedicated `self-hosted`, `macOS`,
-    `innoflow-release-evidence` runner checks out the exact candidate,
+    approval. The GitHub-hosted `xcode-27` runner checks out the exact candidate,
     verifies the prior CI run's repository, workflow, main ref, exact SHA,
     success and artifact identity/digest/expiry, downloads its bundle,
     reopens every CI receipt and raw artifact, records the tag baseline and

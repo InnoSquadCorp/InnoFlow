@@ -1,3 +1,6 @@
+# actionlint's legacy key also allowlists new GitHub-hosted labels that its
+# bundled catalog does not yet know. This does NOT configure a self-hosted job.
+# https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md
 self-hosted-runner:
   labels:
-    - innoflow-release-evidence
+    - xcode-27
