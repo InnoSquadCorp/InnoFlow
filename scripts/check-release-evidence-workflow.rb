@@ -102,6 +102,8 @@ begin
       "CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO", "build"]
   )
   evidence = job!(jobs, "release-evidence")
+  fail_contract("release evidence must reopen Xcode 27 results on hosted Xcode 27") unless evidence["runs-on"] == "xcode-27" &&
+    evidence.dig("env", "DEVELOPER_DIR") == "/Applications/Xcode_27.0.app/Contents/Developer"
   fail_contract("release-evidence job uses continue-on-error") if evidence["continue-on-error"] == true
   required_needs = %w[release-gate release-platform-builds release-runtime-tests release-sanitizers release-coverage].sort
   fail_contract("release-evidence needs do not match required jobs") unless Array(evidence["needs"]).sort == required_needs
@@ -154,7 +156,8 @@ begin
   producer_job = job!(producer_jobs, "produce-release-evidence")
   producer_if = producer_job["if"].to_s
   fail_contract("producer must require a tag and explicit approval") unless producer_if.include?("github.ref_type == 'tag'") && producer_if.include?("inputs.release_approval")
-  fail_contract("producer must use the dedicated self-hosted labels") unless Array(producer_job["runs-on"]) == %w[self-hosted macOS innoflow-release-evidence]
+  fail_contract("producer must use GitHub-hosted Xcode 27") unless producer_job["runs-on"] == "xcode-27" &&
+    producer_job.dig("env", "DEVELOPER_DIR") == "/Applications/Xcode_27.0.app/Contents/Developer"
   producer_steps = steps!(producer_job, "produce-release-evidence")
   strict_script_step!(producer_steps, "scripts/write-github-evidence-provenance.sh",
     ["--preflight", '--run-id "$PREFLIGHT_RUN_ID"', '--artifact-name "innoflow-release-preflight-$GITHUB_SHA"', "--output"])
@@ -165,7 +168,7 @@ begin
     import_run.index("scripts/write-github-evidence-provenance.sh") < import_run.index("gh run download")
   fail_contract("producer download must bind run, repository and SHA") unless
     ['gh run download "$PREFLIGHT_RUN_ID"', '--repo "$GITHUB_REPOSITORY"',
-      '--name "innoflow-release-preflight-$GITHUB_SHA"', '--dir "$evidence_root"'].all? { |part| import_run.include?(part) }
+      '--name "innoflow-release-preflight-$GITHUB_SHA"', '--dir "$evidence_root.download"'].all? { |part| import_run.include?(part) }
   fail_contract("producer may not import local intake") if File.read(producer_path).match?(/intake_name|INTAKE_NAME|\bditto\b/)
   producer_checkouts = checkout_steps(producer_steps)
   fail_contract("producer must checkout only InnoFlow") unless producer_checkouts.length == 1
@@ -186,32 +189,76 @@ begin
   preflight_trigger = preflight["on"] || preflight[true]
   fail_contract("preflight must only expose input-free workflow_dispatch") unless preflight_trigger == { "workflow_dispatch" => nil }
   fail_contract("preflight permissions must be read-only") unless preflight["permissions"] == { "contents" => "read" }
-  fail_contract("preflight job inventory changed") unless preflight.fetch("jobs").keys == ["preflight"]
-  preflight_job = job!(preflight.fetch("jobs"), "preflight")
-  fail_contract("preflight must run only on main") unless preflight_job["if"] == "github.ref == 'refs/heads/main'"
-  fail_contract("preflight must use dedicated runner") unless preflight_job["runs-on"] == %w[self-hosted macOS innoflow-release-evidence]
-  fail_contract("preflight may not skip failures") if preflight_job["continue-on-error"] || preflight_job.key?("strategy")
-  fail_contract("preflight needs a bounded full-suite timeout") unless preflight_job["timeout-minutes"] == 360
+  preflight_jobs = preflight.fetch("jobs")
+  fail_contract("preflight job inventory changed") unless preflight_jobs.keys == %w[plan preflight aggregate]
+  preflight_jobs.each do |name, job|
+    fail_contract("#{name} must run only on main") unless job["if"] == "github.ref == 'refs/heads/main'"
+    fail_contract("#{name} may not skip failures") if job["continue-on-error"]
+    checkouts = checkout_steps(steps!(job, name))
+    fail_contract("#{name} must checkout only InnoFlow") unless checkouts.one?
+    assert_checkout!(checkouts.first.first, label: name, path: "components/InnoFlow", ref: "${{ github.sha }}")
+  end
+  plan = job!(preflight_jobs, "plan")
+  fail_contract("plan must use hosted macOS") unless plan["runs-on"] == "macos-26"
+  fail_contract("matrix output changed") unless plan.dig("outputs", "matrix") == "${{ steps.matrix.outputs.matrix }}"
+  planner = plan.fetch("steps").find { |step| step["id"] == "matrix" }
+  fail_contract("plan must enumerate the entire validated policy") unless planner &&
+    planner["working-directory"] == "components/InnoFlow" && !planner.key?("if") &&
+    planner["run"] == "set -euo pipefail\nruby scripts/check-release-evidence-policy.rb\nmatrix=\"$(ruby scripts/hosted-release-preflight.rb matrix)\"\necho \"matrix=$matrix\" >>\"$GITHUB_OUTPUT\"\n"
+  preflight_job = job!(preflight_jobs, "preflight")
+  fail_contract("preflight must use the complete hosted matrix") unless preflight_job["needs"] == "plan" &&
+    preflight_job["runs-on"] == "${{ matrix.runner }}" &&
+    preflight_job["strategy"] == { "fail-fast" => false, "max-parallel" => 6, "matrix" => "${{ fromJSON(needs.plan.outputs.matrix) }}" } &&
+    preflight_job.dig("env", "DEVELOPER_DIR") == "/Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer"
+  fail_contract("preflight needs a bounded timeout") unless preflight_job["timeout-minutes"] == 180
   preflight_steps = steps!(preflight_job, "preflight")
-  preflight_checkouts = checkout_steps(preflight_steps)
-  fail_contract("preflight must checkout only InnoFlow") unless preflight_checkouts.one?
-  assert_checkout!(preflight_checkouts.first.first, label: "preflight", path: "components/InnoFlow", ref: "${{ github.sha }}")
-  strict_script_step!(preflight_steps, "scripts/run-release-preflight.sh", ['execute --evidence-root "$EVIDENCE_ROOT"'])
-  execution = preflight_steps.find { |step| step.fetch("run", "").include?("scripts/run-release-preflight.sh") }
-  fail_contract("preflight cannot select a subset or skip execution") if execution.key?("if") || execution.fetch("run").include?("--check-id")
-  fail_contract("preflight execution must use exact component") unless execution["working-directory"] == "components/InnoFlow"
+  runner_script = "ruby scripts/hosted-release-preflight.rb"
+  strict_script_step!(preflight_steps, runner_script, ['execute --check-id "$CHECK_ID" --evidence-root "$EVIDENCE_ROOT"'])
+  execution = preflight_steps.find { |step| step.fetch("run", "").include?(runner_script) }
+  fail_contract("preflight execution must use the selected check unconditionally") unless !execution.key?("if") &&
+    execution["working-directory"] == "components/InnoFlow" && execution.dig("env", "CHECK_ID") == "${{ matrix.check }}"
   uploads = preflight_steps.select { |step| step["uses"].to_s.start_with?("actions/upload-artifact@") }
-  fail_contract("preflight needs separate complete and diagnostic artifacts") unless uploads.length == 2
-  complete = uploads.find { |step| step.dig("with", "name") == "innoflow-release-preflight-${{ github.sha }}" }
-  fail_contract("preflight success artifact must follow successful execution") unless complete && !complete.key?("if") &&
-    preflight_steps.index(complete) > preflight_steps.index(execution)
-  fail_contract("preflight complete artifact must fail closed") unless complete.dig("with", "if-no-files-found") == "error" &&
-    complete.dig("with", "overwrite") == false && complete.dig("with", "include-hidden-files") == true &&
-    complete.dig("with", "path") == "${{ steps.evidence.outputs.root }}"
-  diagnostic = uploads.find { |step| step != complete }
+  fail_contract("preflight needs separate shard and diagnostic artifacts") unless uploads.length == 2
+  shard = uploads.find { |step| step.dig("with", "name") == "innoflow-preflight-shard-${{ github.sha }}-${{ matrix.check }}" }
+  fail_contract("shard upload must follow successful execution") unless shard && !shard.key?("if") &&
+    preflight_steps.index(shard) > preflight_steps.index(execution)
+  diagnostic = uploads.find { |step| step != shard }
   fail_contract("preflight failure artifact must not impersonate success") unless
-    diagnostic.dig("with", "name") == "innoflow-preflight-diagnostics-${{ github.sha }}-${{ github.run_attempt }}" &&
+    diagnostic.dig("with", "name") == "innoflow-preflight-diagnostics-${{ github.sha }}-${{ matrix.check }}-${{ github.run_attempt }}" &&
     diagnostic["if"] == "${{ failure() || cancelled() }}"
+  aggregate = job!(preflight_jobs, "aggregate")
+  fail_contract("aggregation requires every shard") unless aggregate["needs"] == %w[plan preflight] &&
+    aggregate["runs-on"] == "xcode-27" && aggregate.dig("env", "DEVELOPER_DIR") == "/Applications/Xcode_27.0.app/Contents/Developer"
+  aggregate_steps = steps!(aggregate, "aggregate")
+  downloads = aggregate_steps.select { |step| step["uses"].to_s.start_with?("actions/download-artifact@") }
+  fail_contract("aggregate must download only this run's candidate shards without flattening") unless downloads.one? &&
+    downloads.first["with"] == { "pattern" => "innoflow-preflight-shard-${{ github.sha }}-*",
+      "path" => "${{ runner.temp }}/innoflow-preflight-shards", "merge-multiple" => false }
+  strict_script_step!(aggregate_steps, runner_script, ['merge --shards "$SHARDS" --evidence-root "$EVIDENCE_ROOT"'])
+  merge = aggregate_steps.find { |step| step.fetch("run", "").include?(runner_script) }
+  fail_contract("aggregation may not skip verification") if merge.key?("if") || merge["working-directory"] != "components/InnoFlow"
+  complete_uploads = aggregate_steps.select { |step| step["uses"].to_s.start_with?("actions/upload-artifact@") }
+  fail_contract("aggregate must upload exactly one complete bundle") unless complete_uploads.one?
+  complete = complete_uploads.first
+  fail_contract("complete artifact must follow successful aggregation") unless !complete.key?("if") &&
+    complete.dig("with", "name") == "innoflow-release-preflight-${{ github.sha }}" &&
+    aggregate_steps.index(complete) > aggregate_steps.index(merge)
+  [shard, complete].each do |upload|
+    fail_contract("evidence artifact must fail closed") unless upload.dig("with", "if-no-files-found") == "error" &&
+      upload.dig("with", "overwrite") == false && upload.dig("with", "include-hidden-files") == true &&
+      upload.dig("with", "path") == "${{ runner.temp }}/innoflow-transport/evidence.tar.gz"
+  end
+  archive_script = "ruby scripts/release-evidence-archive.rb"
+  strict_script_step!(evidence_steps, archive_script, ['unpack "$evidence_root.download/evidence.tar.gz" "$evidence_root"'])
+  # Producer has both import and export steps, each unconditional.
+  [producer_steps, preflight_steps, aggregate_steps].each do |steps|
+    packs = steps.select { |step| step.fetch("run", "").include?("#{archive_script} pack") }
+    fail_contract("evidence must be archived before upload") unless packs.one? && !packs.first.key?("if") &&
+      packs.first.fetch("run").include?('pack "$EVIDENCE_ROOT" "$RUNNER_TEMP/innoflow-transport/evidence.tar.gz"')
+  end
+  fail_contract("producer must unpack CI evidence") unless import_run.include?(
+    'ruby scripts/release-evidence-archive.rb unpack "$evidence_root.download/evidence.tar.gz" "$evidence_root"')
+  fail_contract("producer archive path mismatch") unless upload["path"] == "${{ runner.temp }}/innoflow-transport/evidence.tar.gz"
   fail_contract("preflight may not publish") if File.read(preflight_path).match?(/\b(?:gh release create|swift package publish|npm publish)\b/)
   [File.read(cd_path), File.read(producer_path), File.read(preflight_path)].each do |source|
     fail_contract("release workflows retain retired Mulbyul dependencies") if source.match?(/mulbyul|MULBYUL/i)

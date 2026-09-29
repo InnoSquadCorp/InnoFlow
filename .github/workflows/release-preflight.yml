@@ -11,11 +11,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  preflight:
-    # Never run untrusted PR/feature-branch code on the dedicated runner.
+  plan:
     if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, macOS, innoflow-release-evidence]
-    timeout-minutes: 360
+    runs-on: macos-26
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: components/InnoFlow
+      - name: Enumerate every required policy check
+        id: matrix
+        working-directory: components/InnoFlow
+        run: |
+          set -euo pipefail
+          ruby scripts/check-release-evidence-policy.rb
+          matrix="$(ruby scripts/hosted-release-preflight.rb matrix)"
+          echo "matrix=$matrix" >>"$GITHUB_OUTPUT"
+
+  preflight:
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -33,21 +62,21 @@ jobs:
           [[ ! -e "$evidence_root" && ! -L "$evidence_root" ]]
           echo "root=$evidence_root" >>"$GITHUB_OUTPUT"
 
-      - name: Execute all 32 required checks in CI
+      - name: Provision exact runtime and execute required check
         working-directory: components/InnoFlow
         env:
+          CHECK_ID: ${{ matrix.check }}
           EVIDENCE_ROOT: ${{ steps.evidence.outputs.root }}
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF" == "refs/heads/main" ]]
-          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
-          scripts/run-release-preflight.sh execute --evidence-root "$EVIDENCE_ROOT"
+          ruby scripts/hosted-release-preflight.rb execute --check-id "$CHECK_ID" --evidence-root "$EVIDENCE_ROOT"
+          ruby scripts/release-evidence-archive.rb pack "$EVIDENCE_ROOT" "$RUNNER_TEMP/innoflow-transport/evidence.tar.gz"
 
-      - name: Upload complete candidate-bound preflight
+      - name: Upload verified shard
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: innoflow-release-preflight-${{ github.sha }}
-          path: ${{ steps.evidence.outputs.root }}
+          name: innoflow-preflight-shard-${{ github.sha }}-${{ matrix.check }}
+          path: ${{ runner.temp }}/innoflow-transport/evidence.tar.gz
           if-no-files-found: error
           include-hidden-files: true
           overwrite: false
@@ -57,9 +86,56 @@ jobs:
         if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: innoflow-preflight-diagnostics-${{ github.sha }}-${{ github.run_attempt }}
+          name: innoflow-preflight-diagnostics-${{ github.sha }}-${{ matrix.check }}-${{ github.run_attempt }}
           path: ${{ steps.evidence.outputs.root }}
           if-no-files-found: warn
+          include-hidden-files: true
+          overwrite: false
+          retention-days: 30
+
+  aggregate:
+    needs: [plan, preflight]
+    if: github.ref == 'refs/heads/main'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: components/InnoFlow
+      - name: Download successful shards from this run only
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: innoflow-preflight-shard-${{ github.sha }}-*
+          path: ${{ runner.temp }}/innoflow-preflight-shards
+          merge-multiple: false
+      - name: Allocate fresh evidence outside checkout
+        id: evidence
+        run: |
+          set -euo pipefail
+          evidence_root="$RUNNER_TEMP/innoflow-release-preflight-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          [[ ! -e "$evidence_root" && ! -L "$evidence_root" ]]
+          echo "root=$evidence_root" >>"$GITHUB_OUTPUT"
+      - name: Merge unchanged receipts and verify all 32 checks
+        working-directory: components/InnoFlow
+        env:
+          SHARDS: ${{ runner.temp }}/innoflow-preflight-shards
+          EVIDENCE_ROOT: ${{ steps.evidence.outputs.root }}
+        run: |
+          set -euo pipefail
+          ruby scripts/hosted-release-preflight.rb merge --shards "$SHARDS" --evidence-root "$EVIDENCE_ROOT"
+          ruby scripts/release-evidence-archive.rb pack "$EVIDENCE_ROOT" "$RUNNER_TEMP/innoflow-transport/evidence.tar.gz"
+      - name: Upload complete candidate-bound preflight
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: innoflow-release-preflight-${{ github.sha }}
+          path: ${{ runner.temp }}/innoflow-transport/evidence.tar.gz
+          if-no-files-found: error
           include-hidden-files: true
           overwrite: false
           retention-days: 30

@@ -15,12 +15,13 @@ if [[ ! -f "$sample/Package.swift" ]]; then
   echo "Canonical sample package is missing" >&2
   exit 66
 fi
-if [[ "${SDKROOT:-}" != "/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk" ]]; then
-  echo "The Swift 6.3 sample gate requires the macOS 26.5 command-line SDK" >&2
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+if [[ ! -d "$SDKROOT" ]]; then
+  echo "The selected Swift 6.3 Xcode has no macOS SDK" >&2
   exit 65
 fi
 
-# The command-line SDK has no PreviewsMacros plugin. This flag excludes only
+# The CLI consumer does not require PreviewsMacros. This flag excludes only
 # source-level #Preview declarations; the unflagged Xcode sample build is a
 # separate required gate and verifies that previews remain compilable.
 exec "$script_dir/run-swift-toolchain-evidence.sh" --expected-prefix 6.3 -- \

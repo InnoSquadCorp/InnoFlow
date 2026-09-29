@@ -24,7 +24,9 @@ concurrency:
 jobs:
   produce-release-evidence:
     if: github.ref_type == 'tag' && inputs.release_approval
-    runs-on: [self-hosted, macOS, innoflow-release-evidence]
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
     timeout-minutes: 240
 
     steps:
@@ -66,7 +68,8 @@ jobs:
           gh run download "$PREFLIGHT_RUN_ID" \
             --repo "$GITHUB_REPOSITORY" \
             --name "innoflow-release-preflight-$GITHUB_SHA" \
-            --dir "$evidence_root"
+            --dir "$evidence_root.download"
+          ruby scripts/release-evidence-archive.rb unpack "$evidence_root.download/evidence.tar.gz" "$evidence_root"
           cp "$provenance" "$evidence_root/ci-preflight-provenance.json"
           [[ -f "$evidence_root/candidate.json" && ! -L "$evidence_root/candidate.json" ]]
           [[ -f "$evidence_root/manifest.tsv" && ! -L "$evidence_root/manifest.tsv" ]]
@@ -145,11 +148,19 @@ jobs:
             --environment-json "$environment_json" \
             --producer-json "$producer_json"
 
+      - name: Preserve evidence permissions for artifact transport
+        working-directory: components/InnoFlow
+        env:
+          EVIDENCE_ROOT: ${{ steps.evidence.outputs.root }}
+        run: |
+          set -euo pipefail
+          ruby scripts/release-evidence-archive.rb pack "$EVIDENCE_ROOT" "$RUNNER_TEMP/innoflow-transport/evidence.tar.gz"
+
       - name: Upload candidate-bound evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: innoflow-release-evidence-${{ github.sha }}
-          path: ${{ steps.evidence.outputs.root }}
+          path: ${{ runner.temp }}/innoflow-transport/evidence.tar.gz
           if-no-files-found: error
           include-hidden-files: true
           overwrite: false

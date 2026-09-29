@@ -12,6 +12,9 @@ Key reminders that earn their own line here so search tooling still surfaces the
   Do not install release-matrix runtimes or run `execute`/`resume` on the user's
   Mac. Local `plan`/`report`, static checks and focused diagnostic/fixture tests
   are allowed; they are not release evidence. See CLAUDE.md and RELEASING.md.
+- **GitHub-hosted runners only:** release CI uses `macos-26` (Swift 6.3)
+  and `xcode-27` (Swift 6.4). Do not assume or require a self-hosted runner.
+  Runtime provisioning belongs to isolated hosted CI jobs, never the user's Mac.
 - `@InnoFlow` features must declare the third reducer generic: use
   `var body: some Reducer<State, Action, Never>` without app-boundary output,
   or the feature's typed `Output` when it emits one.

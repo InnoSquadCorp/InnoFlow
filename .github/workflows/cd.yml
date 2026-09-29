@@ -207,8 +207,11 @@ jobs:
   release-evidence:
     if: startsWith(github.ref, 'refs/tags/') && always()
     needs: [release-gate, release-platform-builds, release-runtime-tests, release-sanitizers, release-coverage]
-    runs-on: macos-26
+    # Reopen Xcode 27 xcresults with the same Xcode major used to collect them.
+    runs-on: xcode-27
     timeout-minutes: 120
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
 
     steps:
       - name: Checkout exact release candidate
@@ -237,6 +240,7 @@ jobs:
             "$RELEASE_COVERAGE_RESULT"
 
       - name: Download candidate-bound release evidence
+        working-directory: release-components/InnoFlow
         env:
           GH_TOKEN: ${{ github.token }}
           EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
@@ -251,7 +255,8 @@ jobs:
           gh run download "$EVIDENCE_RUN_ID" \
             --repo "$GITHUB_REPOSITORY" \
             --name "innoflow-release-evidence-$GITHUB_SHA" \
-            --dir "$evidence_root"
+            --dir "$evidence_root.download"
+          ruby scripts/release-evidence-archive.rb unpack "$evidence_root.download/evidence.tar.gz" "$evidence_root"
           echo "EVIDENCE_ROOT=$evidence_root" >>"$GITHUB_ENV"
 
       - name: Verify complete pre-publication evidence

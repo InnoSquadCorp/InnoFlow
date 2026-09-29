@@ -58,6 +58,14 @@ diagnostics and isolated tooling selftests remain allowed, but do not replace
 CI evidence. The serialized policy stage retains its historical name
 `local-preflight`; it now describes CI-produced evidence, not a local task.
 
+Use GitHub-hosted runners only: `macos-26` / Xcode 26.6 for Swift 6.3,
+`xcode-27` / Xcode 27.0 for Swift 6.4 and the release evidence producer.
+There is no self-hosted release runner requirement. Preflight enumerates every
+required policy check into isolated jobs (at most six concurrent), provisions
+only each job's exact runtime if missing, then verifies all 32 unchanged receipts
+against the same SHA before uploading a complete bundle. Do not replace a
+missing pinned toolchain/runtime with an unverified newer version.
+
 Keep all 32 checks and exact-SHA/raw-artifact verification. Missing CI runners,
 toolchains or runtimes block the CI gate; never waive them or fall back to local
 execution. The tag producer accepts only a successful main CI preflight run
