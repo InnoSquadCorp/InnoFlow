@@ -58,7 +58,9 @@ public struct InnoFlowSampleAppRootView: View {
             "Explore queue-based dispatch, orchestration, phase-driven state, app-boundary navigation, form-heavy bindings, and explicit cross-framework transport composition in one place."
         )
         .listRowBackground(Color.clear)
+        #if os(iOS) || os(macOS) || os(visionOS)
         .listRowSeparator(.hidden)
+        #endif
 
         ForEach(SampleDemo.catalog) { metadata in
           let demo = metadata.demo

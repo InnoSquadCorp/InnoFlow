@@ -37,6 +37,8 @@ grep -Fx -- '-workspace' "$SDK_BUILD_COMMAND_LOG" >/dev/null
 grep -Fx -- "$script_dir/../.swiftpm/xcode/package.xcworkspace" "$SDK_BUILD_COMMAND_LOG" >/dev/null ||
   grep -F -- '/.swiftpm/xcode/package.xcworkspace' "$SDK_BUILD_COMMAND_LOG" >/dev/null
 grep -Fx -- 'generic/platform=macOS' "$SDK_BUILD_COMMAND_LOG" >/dev/null
+grep -Fx -- 'InnoFlow-Package' "$SDK_BUILD_COMMAND_LOG" >/dev/null
+grep -Fx -- '-disableAutomaticPackageResolution' "$SDK_BUILD_COMMAND_LOG" >/dev/null
 grep -Fx -- 'build' "$SDK_BUILD_COMMAND_LOG" >/dev/null
 if "$script_dir/run-sdk-platform-build.sh" \
   --platform macOS --derived-data "$fixture_root/Derived" \
@@ -71,4 +73,35 @@ fi
   echo "SDK build ran after workspace redirection" >&2
   exit 1
 }
+
+sample_fixture="$fixture_root/sample-package"
+sample_path="$sample_fixture/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
+mkdir -p "$sample_fixture/scripts" "$sample_path"
+cp "$script_dir/run-sdk-platform-build.sh" "$sample_fixture/scripts/"
+printf '%s\n' '// swift-tools-version: 6.0' >"$sample_path/Package.swift"
+"$sample_fixture/scripts/run-sdk-platform-build.sh" --sample \
+  --platform macOS --derived-data "$fixture_root/SampleDerived" \
+  --result-bundle "$fixture_root/sample.xcresult" >/dev/null
+sample_physical_path="$(cd "$sample_path" && pwd -P)"
+grep -Fx -- "$sample_physical_path/.swiftpm/xcode/package.xcworkspace" "$SDK_BUILD_COMMAND_LOG" >/dev/null
+grep -Fx -- 'InnoFlowSampleAppFeature' "$SDK_BUILD_COMMAND_LOG" >/dev/null
+grep -Fx -- '-disableAutomaticPackageResolution' "$SDK_BUILD_COMMAND_LOG" >/dev/null
+
+for redirected_segment in Examples Examples/InnoFlowSampleApp Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage; do
+  redirected_fixture="$fixture_root/redirected-${redirected_segment//\//-}"
+  mkdir -p "$redirected_fixture/scripts" "$(dirname "$redirected_fixture/$redirected_segment")"
+  cp "$script_dir/run-sdk-platform-build.sh" "$redirected_fixture/scripts/"
+  ln -s "$fixture_root/foreign" "$redirected_fixture/$redirected_segment"
+  rm -f "$SDK_BUILD_COMMAND_LOG"
+  if "$redirected_fixture/scripts/run-sdk-platform-build.sh" --sample \
+    --platform macOS --derived-data "$fixture_root/SampleDerived" \
+    --result-bundle "$fixture_root/redirected.xcresult" >/dev/null 2>&1; then
+    echo "Redirected sample package was accepted: $redirected_segment" >&2
+    exit 1
+  fi
+  [[ ! -e "$SDK_BUILD_COMMAND_LOG" ]] || {
+    echo "SDK build ran after sample redirection: $redirected_segment" >&2
+    exit 1
+  }
+done
 echo "[run-sdk-platform-build-selftest] All checks passed"

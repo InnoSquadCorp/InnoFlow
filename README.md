@@ -211,6 +211,7 @@ The InnoFlow 6.0 development line uses a small composition surface instead of mu
 Reduce<State, Action, Never> { state, action in
   // mutate state
   // return EffectTask<Action>
+  return .none
 }
 ```
 
@@ -262,12 +263,14 @@ var body: some Reducer<State, Action, Never> {
       case .child(.finished):
         state.isLoading = false
         return .none
+      case .child:
+        return .none
       }
     }
 
     Scope(
       state: \.child,
-      action: .childCasePath,
+      action: Action.childCasePath,
       reducer: ChildFeature()
     )
   }
@@ -279,8 +282,16 @@ When `@InnoFlow` is attached, the matching `Action` case path is synthesized aut
 ```swift
 @InnoFlow
 struct ParentFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var child = ChildFeature.State()
+  }
+
   enum Action: Equatable, Sendable {
     case child(ChildFeature.Action)
+  }
+
+  var body: some Reducer<State, Action, Never> {
+    Scope(state: \.child, action: Action.childCasePath, reducer: ChildFeature())
   }
 }
 ```
@@ -305,7 +316,7 @@ same lifted parent `Action` case path as `Scope`.
 ```swift
 IfLet(
   state: \.child,
-  action: .childCasePath,
+  action: Action.childCasePath,
   reducer: ChildFeature()
 )
 ```
@@ -328,7 +339,7 @@ static let detailState = CasePath<State, DetailFeature.State>(
 
 IfCaseLet(
   state: Self.detailState,
-  action: .childCasePath,
+  action: Action.childCasePath,
   reducer: DetailFeature()
 )
 ```
@@ -342,7 +353,7 @@ cache that power runtime collection scoping.
 ```swift
 ForEachReducer(
   state: \.todos,
-  action: .todoActionPath,
+  action: Action.todoActionPath,
   reducer: TodoRowFeature()
 )
 ```
@@ -644,6 +655,8 @@ return .run { send, context in
     await send(.finished)
   } catch is CancellationError {
     return
+  } catch {
+    await send(.failed(error.localizedDescription))
   }
 }
 ```
@@ -673,10 +686,12 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .combined(
       metrics.increment("feature.effect.run_started")
     case .runFinished:
       metrics.increment("feature.effect.run_finished")
-    case .actionEmitted(let actionEvent):
-      metrics.increment("feature.effect.emitted", tags: ["action": "\(actionEvent.action)"])
+    case .actionEmitted:
+      metrics.increment("feature.effect.emitted")
     case .actionDropped(let actionEvent):
       metrics.increment("feature.effect.dropped", tags: ["reason": "\(actionEvent.reason)"])
+    case .outputDelivered:
+      metrics.increment("feature.output.delivered")
     case .actionQueueDrained(let queueEvent):
       metrics.gauge("feature.action_queue.high_water", value: queueEvent.pendingActionHighWaterMark)
     case .effectsCancelled:
@@ -687,6 +702,10 @@ let instrumentation: StoreInstrumentation<Feature.Action> = .combined(
   }
 )
 ```
+
+Custom sinks do not automatically redact action payloads or dynamic effect IDs.
+Keep metrics tags bounded and payload-free; add app-specific details only after
+a privacy and cardinality review.
 
 If a team standardizes on one backend later, prefer an optional ecosystem package such as
 `InnoFlowMetrics` over adding vendor dependencies to the core package graph.

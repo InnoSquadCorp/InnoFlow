@@ -80,12 +80,24 @@ restorable state:
 ```swift
 @InnoFlow
 struct Feature {
+  struct State: Equatable, Sendable, DefaultInitializable {}
+
+  enum Action: Equatable, Sendable {
+    case select(Int)
+  }
+
   enum Output: Equatable, Sendable {
     case openDetail(Int)
   }
 
-  // Inside body:
-  // return Self.output(.openDetail(id))
+  var body: some Reducer<State, Action, Output> {
+    Reduce { _, action in
+      switch action {
+      case .select(let id):
+        return Self.output(.openDetail(id))
+      }
+    }
+  }
 }
 
 var outputs = store.outputs().makeAsyncIterator()
@@ -198,6 +210,10 @@ still belongs in `requireComplete(...)` tests.
   the recommended idiom.
 
 ## 5.0.0
+
+Historical 5.0 migration guidance follows. Its partial examples describe that
+version's transition and are not copy-ready 6.0 recipes; use the 6.0.0 section
+above for current feature authoring and testing contracts.
 
 ### Who is affected
 

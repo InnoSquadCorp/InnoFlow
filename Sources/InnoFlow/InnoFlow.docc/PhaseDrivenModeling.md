@@ -128,7 +128,7 @@ If the graph itself is part of the contract, validate it statically as well:
 let report = ItemsFeature.phaseGraph.validationReport(
   allPhases: [.idle, .loading, .loaded, .failed],
   root: .idle,
-  terminalPhases: [.loaded]
+  terminalPhases: []
 )
 
 precondition(report.issues.isEmpty)
@@ -137,7 +137,7 @@ assertValidGraph(
   ItemsFeature.phaseGraph,
   allPhases: [.idle, .loading, .loaded, .failed],
   root: .idle,
-  terminalPhases: [.loaded]
+  terminalPhases: []
 )
 ```
 
@@ -147,6 +147,9 @@ checks, and `assertPhaseMapCovers(...)` for explicit trigger coverage. Use
 gate, and `phaseMap.derivedGraph.mermaidDiagram()` or `.dotGraph()` when the
 declared topology should feed documentation. `validatePhaseTransitions(...)`
 remains available for backwards compatibility.
+
+`loaded` is not terminal in this example: a new `load` returns it to `loading`.
+Declare terminal phases only when they have no outgoing transitions.
 
 If you want stronger trigger coverage without changing runtime behavior, validate explicit expected
 triggers in tests:

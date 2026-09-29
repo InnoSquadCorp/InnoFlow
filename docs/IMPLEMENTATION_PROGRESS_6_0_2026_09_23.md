@@ -235,3 +235,81 @@ The expanded sample SwiftPM suite passes 44/44 tests on Xcode 27. The full
 nine-case sample UI suite passed with no failure or skip on a dedicated
 iPhone 16 Pro/iOS 18.5 simulator. iPad UI, unsupported sample deletion and
 reinsertion, parent-release UI boundaries, and final-SHA evidence remain open.
+
+The clean Draft PR candidate `62cf14a` was pushed to
+`release/6.0.0-candidate`; the remote ref matched the local SHA and the
+original 93-entry dirty worktree remained unchanged. The preceding `843f3f0`
+candidate completed all 28 local preflight rows, including visionOS 27.0,
+but that receipt is deliberately nonfinal for `62cf14a`. Exact-SHA remote CI
+for `62cf14a` started; sample package tests/build and DocC had passed when
+this paragraph was written, while the remaining jobs were still running.
+
+R64's next exact-source probe reproduced a real README compile failure:
+`StoreInstrumentationEvent` acquired `outputDelivered`, but the documented
+exhaustive metrics switch omitted it. The new external target failed with
+Swift's missing-case diagnostic before the README fix and passed afterward.
+A privacy pass also removed direct action-payload metrics tags and raw
+error-description/cancellation-ID logging from copyable custom-adapter
+examples. The external checker now builds 31 distinct exact Swift fences
+(32 uses) in 17 targets, and its five phase tests pass. A digest-pinned
+129-row review ledger classifies 36 runnable, 80 contextual/partial, and
+13 versioned-historical fences; 70 contextual harnesses are explicitly
+pending, so `report-doc-fence-review.rb --require-complete` still fails and
+R64 remains open. The historical 5.0 migration and dated remediation
+fragments are marked non-copyable. This is progress, not a final-candidate
+preflight or permission to publish.
+
+## 2026-09-29 — merged baseline and remaining release gates
+
+The owner authorized merging PR #41 and continuing the remaining work.
+PR #41 merged by squash at `a9028f75a10758544b27fd685b920b3c2b52daa1`;
+its tree matches the reviewed `62cf14a` head. The follow-up checkout is
+`release/6.0.0-final-gates`, while the original 93-entry dirty checkout
+remains untouched. Merging that PR is not final release approval.
+
+The old head's CI run `36105348631` failed its sample tvOS/watchOS SDK
+builds because `listRowSeparator` is unavailable there. A compile-time
+platform guard now retains separators only on iOS/macOS/visionOS.
+Fresh final-source sample SDK wrappers passed tvOS, watchOS, and visionOS
+with zero errors/warnings/analyzer warnings; raw results are
+`/tmp/innoflow-r65-final-{tvos,watchos,visionos}.xcresult`. The earlier fresh
+iOS build also passed after the injectable OfflineFirst preview initializer.
+
+R64's entire inventory is now digest-bound: 129 fences in 22 files,
+35 runnable / 80 contextual / 14 explicitly historical, zero unreviewed
+or pending contexts. The external consumer compiles 101 exact fences
+(106 uses) in 38 targets, parses eight installation fragments, and executes
+31 named tests in 14 test targets. Both Xcode 27/Swift 6.4 and the actual
+Swift 6.3.3 command-line toolchain passed with warnings as errors:
+`.build/r65-doc-contexts.log` and `.build/r65-doc-swift63.log`.
+The six digest-pinned sample-guide fences retain their separate strict
+SwiftUI/SwiftData typechecks and two executed tests.
+
+The expanded compiler/runtime checks reproduced and corrected stale
+composition action paths, missing reducer returns, incomplete feature
+declarations, missing non-cancellation error handling in two `.run` examples,
+obsolete sample dependency/composition syntax, and a missing clock-test
+state assertion. The DocC graph example also crashed at its precondition:
+it marked `loaded` terminal while allowing a retry transition out of it.
+The corrected exact example passes the same graph/runtime test.
+Timing examples now wait for dispatch completion and describe their private
+probe context; custom metrics examples no longer emit raw action/error/ID
+payloads. App-owned fixture types do not replace InnoFlow implementations.
+
+The complete fence ledger is enforced in CI and before external compilation.
+Its positive control and ten negative controls pass. The local evidence
+policy now has 32 mandatory rows: the original 28 plus complete fence review
+and three sample SDK builds. The minimum-toolchain sample inventory is
+updated from 43 to the actual 44 tests, without reducing required coverage.
+Sample SDK command substitution/path redirection, policy mutation, and
+preflight retry/lock/interruption/tamper controls pass.
+Fresh DocC generation, strict source format lint, full syntax inventory
+(113 parseable / 16 pinned contexts / zero unexpected failures), static
+principle checks, actionlint, and `git diff --check` also pass.
+
+These are fresh source-tree checks, not the frozen candidate's 32 receipts.
+Final candidate-bound local execution and follow-up exact-SHA CI remain
+required. Sample UI regression is being refreshed on dedicated iPhone/iPad
+simulators. API-owner approval, effective branch/tag protection, dedicated
+release-runner proof, and separate public-tag/Release authorization remain
+external gates. Mulbyul validation remains excluded.

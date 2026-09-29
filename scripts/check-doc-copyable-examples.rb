@@ -7,11 +7,16 @@ require "json"
 require "open3"
 require "tmpdir"
 require_relative "release-evidence-output-parser"
+require_relative "doc-example-contexts"
 
 root = File.realpath(File.expand_path("..", __dir__))
+review, error, status = Open3.capture3("ruby", File.join(__dir__, "report-doc-fence-review.rb"), "--require-complete")
+abort "[doc-copyable] Complete fence review failed: #{error}" unless status.success?
+print review
 examples = {
   "DocCGettingStarted" => [
     ["Sources/InnoFlow/InnoFlow.docc/GettingStarted.md", "1b62fc406dd87ce9f32e91f92cba368c4548427022a85a9bad2366def7487951"],
+    ["Sources/InnoFlow/InnoFlow.docc/GettingStarted.md", "60b1f62c30490f0db8c4ffa08b3f78309fe311fcc007f24a591a585527589d51"],
   ],
   "ReadmeDependencyInjection" => [
     ["README.md", "d6799f402603bfa90bfa249d399e7821517b7e91a74929bd28d2d98321e8242f"],
@@ -35,6 +40,9 @@ examples = {
   ],
   "PhaseGuideFeature" => [
     ["PHASE_DRIVEN_MODELING.md", "5a1c5fa991819e6afab1e975945498539caf63634d0f610a9219374d1023b85c"],
+    ["PHASE_DRIVEN_MODELING.md", "033358b738788981917e9b4f0e105b7cc70f3cf3ce493e569676bcdeaafba213"],
+    ["PHASE_DRIVEN_MODELING.md", "de5b60ba358e82e6743bd0660e3e790d827257be8443531a5d336d0c4d248876"],
+    ["PHASE_DRIVEN_MODELING.md", "d4d545691d815b69eaacaa0940a81663f2dfc1e9c7713a4ea444b2f01151957e"],
   ],
   "DocCPhaseFeature" => [
     ["Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md", "37aef6225e84c59299e8d44290b6ae2c47befee5ddf9457bb0681ddf7fc83552"],
@@ -42,6 +50,9 @@ examples = {
   "ReadmePhaseRuntime" => [
     ["README.md", "74e84070d7dfd0ec5d6d803dd3772ffa8a4d2f31f5401076ae779c125e9b68ff"],
     ["README.md", "acea7240e0b3338ae01cda5dab43c23a7dee2b6d022b3b505c401ca1e8774a89"],
+    ["README.md", "c795fc8a9041a817a625f2ad33058e6f945c609572d365b26eca7d0214ed0abb"],
+    ["README.md", "23712f236ffc46a089f04ffa283acbc29231c8c2551b261148d18ae0895185f0"],
+    ["README.md", "e45bac53a844f228fe18fd5bb015d13a2f1b724e5b7e3c17c1efa2ffeb6624db"],
   ],
   "DocCPhaseRuntime" => [
     ["Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md", "37aef6225e84c59299e8d44290b6ae2c47befee5ddf9457bb0681ddf7fc83552"],
@@ -70,7 +81,13 @@ examples = {
   "InstrumentationEventBuffer" => [
     ["docs/INSTRUMENTATION_COOKBOOK.md", "897cd0e48ff3a5a817ad5e385a8157d46eac4198f030cabc1e4f8a5c72f1643a"],
   ],
-}
+  "ReadmeInstrumentation" => [
+    ["README.md", "1e75c7303c1b9b1da14e1f77d2be5e9c7ae9b53a744ab0047945713c9b9b78bd"],
+  ],
+  "CookbookRunFailure" => [
+    ["docs/INSTRUMENTATION_COOKBOOK.md", "70e1be4cffb7d70770b0514bde4e860a1a412a8909da9fef2fa62d47650b2aa4"],
+  ],
+}.merge(DocExampleContexts::EXAMPLES)
 
 def swift_blocks(root, relative)
   lines = File.readlines(File.join(root, relative))
@@ -96,8 +113,17 @@ def swift_blocks(root, relative)
 end
 
 selected = examples.values.flatten(1).map(&:first).uniq.to_h { |relative| [relative, swift_blocks(root, relative)] }
-runtime_examples = %w[ReadmePhaseRuntime DocCPhaseRuntime ContributorPhaseGuide ContributorChildGuide].freeze
-fixture = Dir.mktmpdir("innoflow-doc-copyable-")
+runtime_examples = (%w[ReadmePhaseRuntime DocCPhaseRuntime ContributorPhaseGuide ContributorChildGuide PhaseGuideFeature] +
+  DocExampleContexts::TEST_NAMES.keys).freeze
+fixture = ENV["INNOFLOW_DOC_FIXTURE"] || Dir.mktmpdir("innoflow-doc-copyable-")
+marker = File.join(fixture, ".innoflow-doc-fixture")
+if ENV["INNOFLOW_DOC_FIXTURE"]
+  abort "[doc-copyable] Reuse requires an owned fixture for this checkout" unless
+    File.directory?(fixture) && !File.symlink?(fixture) &&
+    File.file?(marker) && File.read(marker) == root + "\n"
+else
+  File.write(marker, root + "\n")
+end
 begin
   package = <<~SWIFT
     // swift-tools-version: 6.3
@@ -116,10 +142,34 @@ begin
       matches.first.last
     end
     case name
+    when "DocCGettingStarted"
+      feature, usage = sources
+      sources = [feature, <<~SWIFT]
+        @MainActor func waitForIncrement(_ store: Store<CounterFeature>) async {
+      #{usage.lines.map { |line| "  #{line}" }.join.rstrip}
+        }
+      SWIFT
     when "PhaseGuideFeature"
-      sources.unshift(<<~SWIFT)
+      feature, test_side, validation, graph = sources
+      test_body = test_side.sub(/\Aimport InnoFlowTesting\nimport Testing\n\n/, "")
+      abort "[doc-copyable] Phase guide test imports changed" if test_body == test_side
+      sources = [<<~SWIFT, feature, <<~SWIFT, <<~SWIFT]
+        import InnoFlowTesting
+        import Testing
+
         struct UserProfile: Equatable, Sendable {
           static let fixture = Self()
+        }
+      SWIFT
+        @Test @MainActor func phaseGuideTestSideValidation() async {
+      #{test_body.lines.map { |line| "  #{line}" }.join.rstrip}
+          await store.finish()
+        }
+      SWIFT
+        @Test @MainActor func phaseGuideContractValidation() throws {
+      #{validation.lines.map { |line| "  #{line}" }.join.rstrip}
+      #{graph.lines.map { |line| "  #{line}" }.join.rstrip}
+          #expect(!mermaid.isEmpty && !graphviz.isEmpty)
         }
       SWIFT
     when "DocCPhaseFeature"
@@ -128,10 +178,24 @@ begin
         struct Item: Equatable, Sendable {}
       SWIFT
     when "ReadmePhaseRuntime"
-      sources.unshift(<<~SWIFT)
+      feature, test, graph, totality, clock = sources
+      sources = [<<~SWIFT, feature, test, <<~SWIFT, <<~SWIFT, <<~SWIFT]
         import InnoFlow
         struct UserProfile: Equatable, Sendable {
           static let fixture = Self()
+        }
+      SWIFT
+        @Test @MainActor func readmePhaseGraphValidation() {
+      #{graph.lines.map { |line| "  #{line}" }.join.rstrip}
+        }
+      SWIFT
+        @Test @MainActor func readmePhaseTotalityValidation() {
+      #{totality.lines.map { |line| "  #{line}" }.join.rstrip}
+        }
+      SWIFT
+        @MainActor func readmeManualClockSetup() {
+      #{clock.lines.map { |line| "  #{line}" }.join.rstrip}
+          _ = store
         }
       SWIFT
     when "DocCPhaseRuntime"
@@ -194,6 +258,21 @@ begin
         @Test @MainActor func eventBufferExample() async throws {
       #{("let buffer = " + usage).lines.map { |line| "  #{line}" }.join.rstrip}
         }
+      SWIFT
+    when "ReadmeInstrumentation", "CookbookRunFailure"
+      sources.unshift(<<~SWIFT)
+        import InnoFlow
+        import OSLog
+
+        enum Feature {
+          enum Action: Sendable { case load }
+        }
+        struct Metrics: Sendable {
+          func increment(_ name: String, tags: [String: String] = [:]) {}
+          func gauge(_ name: String, value: Int) {}
+        }
+        let logger = Logger(subsystem: "app", category: "innoflow")
+        let metrics = Metrics()
       SWIFT
     when "ReadmeSelection"
       view, single, pair, many, row = sources
@@ -305,6 +384,7 @@ begin
         }
       SWIFT
     end
+    sources = DocExampleContexts.source(root, name, sources) if DocExampleContexts::EXAMPLES.key?(name)
     source_directory = File.join(fixture, runtime_examples.include?(name) ? "Tests" : "Sources", name)
     FileUtils.mkdir_p(source_directory)
     File.write(File.join(source_directory, "Example.swift"), sources.join("\n"))
@@ -333,12 +413,14 @@ begin
   print output
   warn error unless error.empty?
   abort "[doc-copyable] External phase example tests failed" unless status.success?
+  expected_test_names = ["loadFlow()", "validatesItemsPhaseTransitions()", "loadingFlow()", "scopedChildFlow()", "scopedReadmeChildFlow()", "phaseGuideTestSideValidation()", "phaseGuideContractValidation()", "readmePhaseGraphValidation()", "readmePhaseTotalityValidation()"] +
+    DocExampleContexts::TEST_NAMES.values.flatten
   test_result = ReleaseEvidenceOutputParser.parse({
     # SwiftPM may group test targets into one run (Xcode 26) or emit separate
-    # runs (Xcode 27). The exact five test identities and total remain required.
-    "minimumTestCount" => 5,
-    "maximumTestCount" => 5,
-    "expectedTestNames" => ["loadFlow()", "validatesItemsPhaseTransitions()", "loadingFlow()", "scopedChildFlow()", "scopedReadmeChildFlow()"],
+    # runs (Xcode 27). The exact test identities and total remain required.
+    "minimumTestCount" => expected_test_names.length,
+    "maximumTestCount" => expected_test_names.length,
+    "expectedTestNames" => expected_test_names,
   }, output + error)
   abort "[doc-copyable] Phase test evidence invalid: #{test_result.fetch("failures").join(", ")}" unless
     test_result.fetch("failures").empty?
@@ -380,7 +462,7 @@ begin
   puts "[doc-copyable] Compiled #{examples.length} external targets from #{examples.values.flatten(1).uniq.length} distinct exact Swift fences (#{examples.values.sum(&:length)} uses)"
   puts "[doc-copyable] Parsed four localized installation manifests from eight exact Swift fences"
 ensure
-  if ENV["INNOFLOW_KEEP_DOC_FIXTURE"] == "1"
+  if ENV["INNOFLOW_KEEP_DOC_FIXTURE"] == "1" || ENV["INNOFLOW_DOC_FIXTURE"]
     warn "[doc-copyable] Preserved fixture: #{fixture}"
   else
     FileUtils.remove_entry(fixture)

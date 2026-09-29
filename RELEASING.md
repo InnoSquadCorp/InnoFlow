@@ -71,7 +71,11 @@ tag, run and confirm:
    `watchOS`, and `visionOS`, using
    `scripts/run-sdk-platform-build.sh --platform <platform> --derived-data <absolute-dir> --result-bundle <absolute-xcresult>`.
    The wrapper binds the package-only workspace and `InnoFlow-Package` scheme,
-   disables code signing, and requires a fresh, clean build-result bundle.
+   disables automatic resolution/code signing, and requires a fresh, clean
+   build-result bundle. The same wrapper's `--sample` mode binds the canonical
+   sample package and `InnoFlowSampleAppFeature` scheme. Required local
+   `sample-sdk-tvos`, `sample-sdk-watchos`, and `sample-sdk-visionos` receipts
+   cover the sample destinations beyond its macOS tests and iOS app build.
 7. Public API comparison against the previous stable tag:
    `swift package diagnose-api-breaking-changes 5.1.1 --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting`.
    A minor or patch release must have no unexplained breakage. A major release
@@ -86,21 +90,29 @@ tag, run and confirm:
     every Swift fence. Its 16 pinned contextual/historical exceptions are not
     typecheck approvals; runnable and partial examples still need their
     versioned compilation/harness review before the 6.0 candidate is approved.
-    `scripts/check-doc-copyable-examples.rb` additionally compiles 29 distinct exact
-    README/DocC quick-start, dependency-injection, selection, phase-modeling,
-    cross-framework transport, instrumentation, and contributor-guidance
-    fences in eleven external SwiftPM targets and four phase-runtime test
-    targets (30 fence uses)
-    with warnings as errors.
-    The five phase tests must each execute and pass, not merely compile. It uses the
+    `scripts/check-doc-copyable-examples.rb` compiles 101 distinct exact
+    current README/DocC/contributor/dependency/composition/selection/phase,
+    cross-framework, timing, instrumentation, and migration fences in
+    24 external compile targets and 14 runtime test targets (106 fence uses),
+    with warnings as errors. Contextual fixtures supply app-owned models and
+    dependencies, not replacements for InnoFlow behavior.
+    All 31 named tests must execute and pass, not merely compile. It uses the
     release candidate's `Package.resolved` without automatic version updates.
     It also parses four localized installation manifests assembled from eight
     exact dependency/target-list fragments. The sample guidance gate checks
     all six of its Swift fences: four exact typechecks (three SwiftUI examples
     on iOS 18.5/26.0 and the complete Sendable example), a contextual SwiftData
     typecheck on both iOS targets, and two executed Swift Testing examples in
-    a contextual fixture. These focused checks do not classify or typecheck
-    the remaining contextual fences elsewhere in the documentation corpus.
+    a contextual fixture. Together these checks cover all 129 inventory rows:
+    101 external examples, eight installation fragments, six sample-guide
+    fences, and 14 explicitly historical/non-copyable fragments. The ledger
+    classifies 35 runnable, 80 contextual/partial, and 14 historical fences.
+    `scripts/report-doc-fence-review.rb --require-complete` compares the
+    candidate's entire Swift-fence inventory with a digest-pinned review ledger
+    and refuses unresolved contextual harnesses. It must pass before R64 and
+    final-candidate approval; a syntax pass or partial ledger is not approval.
+    It is a required local receipt and runs before external compilation, so
+    new, stale, substituted, or unbound examples fail closed.
 12. Full principle gates: `scripts/principle-gates.sh`
 13. Instrumented coverage and required-module inventory: `scripts/run-coverage.sh`.
     The shared CI/release workflow enforces the repository-owned

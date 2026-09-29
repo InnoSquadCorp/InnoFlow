@@ -36,7 +36,7 @@ def catalog(check, raw, derived, destination = nil)
     %w[swift format lint --strict --recursive Sources Tests Examples]
   when "static-innoflow-diff"
     %w[git diff --check]
-  when "static-principle", "doc-swift-syntax", "doc-copyable-examples", "coverage", "full-principle", "catalyst-macro-consumer", "migration-consumer"
+  when "static-principle", "doc-swift-syntax", "doc-fence-review", "doc-copyable-examples", "coverage", "full-principle", "catalyst-macro-consumer", "migration-consumer"
     [check.fetch("commandContract").fetch("executable"), *check.fetch("commandContract").fetch("exactArguments")]
   when "tsan-focused", "asan-focused"
     sanitizer = id.start_with?("tsan") ? "thread" : "address"
@@ -51,6 +51,9 @@ def catalog(check, raw, derived, destination = nil)
     ["scripts/check-sample-swift63.sh", "--scratch-path", File.join(File.dirname(derived), "SampleBuild")]
   when /^sdk-(macos|ios|tvos|watchos|visionos)$/
     ["scripts/run-sdk-platform-build.sh", "--platform", check.fetch("environment").fetch("platform"),
+      "--derived-data", derived, "--result-bundle", raw]
+  when /^sample-sdk-(tvos|watchos|visionos)$/
+    ["scripts/run-sdk-platform-build.sh", "--sample", "--platform", check.fetch("environment").fetch("platform"),
       "--derived-data", derived, "--result-bundle", raw]
   when /^runtime-(ios|tvos|watchos|visionos)-/
     abort_preflight("Missing destination for #{id}") unless destination
@@ -131,12 +134,12 @@ def preflight_environment!(checks, evidence)
   available_kib = capture!("df", "-Pk", evidence).lines.last.to_s.split.fetch(3).to_i
   minimum_kib = heavy ? 10 * 1024 * 1024 : 1024 * 1024
   abort_preflight("Insufficient free space: #{available_kib / 1024} MiB; minimum #{minimum_kib / 1024} MiB") if available_kib < minimum_kib
-  sdk_output = capture!("xcodebuild", "-showsdks") if checks.any? { |check| check["id"].start_with?("sdk-") }
+  sdk_output = capture!("xcodebuild", "-showsdks") if checks.any? { |check| check["id"].match?(/\A(?:sample-)?sdk-/) }
   sdk_names = { "macos" => "macosx", "ios" => "iphoneos", "tvos" => "appletvos", "watchos" => "watchos", "visionos" => "xros" }
   checks.each do |check|
     toolchain_identity(check)
-    if check["id"].start_with?("sdk-")
-      token = sdk_names.fetch(check.fetch("id").delete_prefix("sdk-"))
+    if check["id"].match?(/\A(?:sample-)?sdk-/)
+      token = sdk_names.fetch(check.fetch("id").delete_prefix("sample-").delete_prefix("sdk-"))
       abort_preflight("Required SDK is unavailable: #{token}") unless sdk_output.include?(token)
     end
     available_runtime!(check) if runtime_info(check)

@@ -13,10 +13,10 @@ begin
   policy = JSON.parse(File.read(policy_path))
   expected_ids_by_stage = {
     "local-preflight" => %w[
-      static-format static-innoflow-diff static-principle doc-swift-syntax doc-copyable-examples coverage full-principle
+      static-format static-innoflow-diff static-principle doc-swift-syntax doc-fence-review doc-copyable-examples coverage full-principle
       tsan-focused asan-focused external-macro-consumer migration-consumer catalyst-macro-consumer
       swift-6.3-toolchain sample-swift-6.3 swift-6.4-toolchain sdk-macos sdk-ios sdk-tvos
-      sdk-watchos sdk-visionos runtime-ios-18.5 runtime-ios-27.0
+      sdk-watchos sdk-visionos sample-sdk-tvos sample-sdk-watchos sample-sdk-visionos runtime-ios-18.5 runtime-ios-27.0
       runtime-tvos-18.5 runtime-tvos-27.0 runtime-watchos-11.5
       runtime-watchos-27.0 runtime-visionos-2.5 runtime-visionos-27.0
     ],
@@ -40,11 +40,15 @@ begin
   abort "[release-evidence-policy] copyable documentation contract changed" unless
     doc_copyable&.dig("commandContract") == { "executable" => "scripts/check-doc-copyable-examples.rb", "exactArguments" => [] } &&
     doc_copyable["profile"] == "command" && File.executable?(File.join(root, "scripts/check-doc-copyable-examples.rb"))
+  doc_review = policy.fetch("checks").find { |entry| entry["id"] == "doc-fence-review" }
+  abort "[release-evidence-policy] complete documentation review contract changed" unless
+    doc_review&.dig("commandContract") == { "executable" => "scripts/report-doc-fence-review.rb", "exactArguments" => ["--require-complete"] } &&
+    doc_review["profile"] == "command" && File.executable?(File.join(root, "scripts/report-doc-fence-review.rb"))
   sample = policy.fetch("checks").find { |entry| entry["id"] == "sample-swift-6.3" }
   abort "[release-evidence-policy] Swift 6.3 sample contract changed" unless
     sample&.dig("commandContract") == {
       "executable" => "scripts/check-sample-swift63.sh", "requiredArguments" => ["--scratch-path"]
-    } && sample["minimumTestCount"] == 43 && sample["maximumTestCount"] == 43 &&
+    } && sample["minimumTestCount"] == 44 && sample["maximumTestCount"] == 44 &&
     sample["expectedTestRunCount"] == 1 &&
     sample["expectedResultSuites"] == ["InnoFlowSampleAppFeature tests"] &&
     sample.dig("environment", "swift") == "6.3"
@@ -101,6 +105,16 @@ begin
       sdk_contract["executable"] == "scripts/run-sdk-platform-build.sh" &&
       Array(sdk_contract["requiredArguments"]) == %w[--platform --derived-data --result-bundle] &&
       sdk_contract.dig("exclusiveOptionValues", "--platform") == sdk_check.dig("environment", "platform")
+  end
+  sample_sdk_checks = policy.fetch("checks").select { |entry| entry.fetch("id").start_with?("sample-sdk-") }
+  abort "[release-evidence-policy] three sample SDK checks are required" unless sample_sdk_checks.length == 3
+  sample_sdk_checks.each do |check|
+    contract = check.fetch("commandContract")
+    abort "[release-evidence-policy] sample SDK contract changed: #{check.fetch('id')}" unless
+      check["profile"] == "build" &&
+      contract["executable"] == "scripts/run-sdk-platform-build.sh" &&
+      contract["requiredArguments"] == %w[--sample --platform --derived-data --result-bundle] &&
+      contract.dig("exclusiveOptionValues", "--platform") == check.dig("environment", "platform")
   end
 
   runtime_checks = policy.fetch("checks").select { |entry| entry.fetch("id").start_with?("runtime-") }

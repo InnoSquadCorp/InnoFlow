@@ -6,6 +6,11 @@ domain events into actions.
 ## Overview
 
 Use the sequence overload when an existing API already exposes an `AsyncSequence`:
+the sequence and its iterator must both conform to `Sendable`. In particular,
+`AsyncStream.Iterator` is not `Sendable`; do not add an unchecked conformance
+to bypass iterator ownership. Adapt that API with an explicitly owned,
+Sendable iterator or consume it inside the non-throwing `.run { send, context in ... }`
+operation with explicit cancellation and error handling.
 
 ```swift
 return .run { context in

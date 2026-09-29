@@ -59,6 +59,12 @@ jobs:
       - name: Check Swift documentation fence syntax
         run: '"$GITHUB_WORKSPACE/scripts/check-doc-swift-syntax.rb"'
 
+      - name: Require complete documentation example inventory
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/scripts/report-doc-fence-review.rb" --require-complete
+          ruby "$GITHUB_WORKSPACE/scripts/report-doc-fence-review-selftest.rb"
+
       - name: Compile copyable documentation examples as external consumers
         run: '"$GITHUB_WORKSPACE/scripts/check-doc-copyable-examples.rb"'
 

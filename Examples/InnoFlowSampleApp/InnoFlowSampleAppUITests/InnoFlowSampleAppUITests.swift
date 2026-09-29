@@ -455,8 +455,9 @@ final class InnoFlowSampleAppUITests: XCTestCase {
       )
     )
     // This ungrouped Toggle exposes a full-width accessibility frame, while
-    // its actual switch control is at the trailing edge of that frame.
-    favorite.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+    // its actual switch control is at the trailing edge of that frame on
+    // both compact iPhone and wider iPad layouts.
+    favorite.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
     XCTAssertTrue(
       waitForCondition(
         switchMatches(favorite, isOn: true, describedAs: "enabled detail favorite"),
