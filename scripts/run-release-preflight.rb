@@ -12,6 +12,8 @@ require "shellwords"
 require "time"
 require_relative "release-runtime-catalog"
 
+$stdout.sync = true
+
 ROOT = File.realpath(File.expand_path("..", __dir__))
 LOCAL_STAGE = "local-preflight"
 
@@ -239,6 +241,9 @@ OptionParser.new do |parser|
   parser.on("--check-id ID") { |value| options[:check_id] = value }
 end.parse!(ARGV)
 abort_preflight("Unexpected arguments: #{ARGV.join(' ')}") unless ARGV.empty?
+if %w[execute resume].include?(mode) && ENV["GITHUB_ACTIONS"] != "true"
+  abort_preflight("Release preflight execution is CI-only; dispatch Release Preflight on main. Local plan/report and focused non-release diagnostics remain available.")
+end
 abort_preflight("--evidence-root is required") unless options[:evidence]
 evidence = File.expand_path(options.fetch(:evidence))
 abort_preflight("Evidence must be outside the candidate repository") if inside?(ROOT, evidence)

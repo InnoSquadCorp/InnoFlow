@@ -2,6 +2,14 @@
 
 This document defines the minimum release quality bar for InnoFlow.
 
+> Execution policy, 2026-09-29: the owner requires the full 32-check preflight
+> to run **only in CI**, including tvOS 18.5 / watchOS 11.5. Do not install
+> these runtimes or execute the release matrix on the user's Mac. Dispatch
+> `Release Preflight` on main. The legacy serialized stage name
+> `local-preflight` is retained, but all its release evidence is CI-produced.
+> Earlier local-execution plans and historical receipts do not override this
+> policy. Local static checks and focused diagnostic/fixture tests are allowed.
+
 > Scope revision, 2026-09-18: the owner has removed Mulbyul-specific validation
 > from InnoFlow's release checklist. Mulbyul feature/UI/accessibility/VoiceOver
 > checks are out of scope, not passed or waived failures. The active pre-release
@@ -45,15 +53,14 @@ tag. A release is publish-ready only after its exact tag triggers a successful
 GitHub Actions `Release Gate`.
 
 For the current development line, and again before creating the next release
-tag, run and confirm:
+tag, run and confirm the following in CI (not a local release matrix):
 
 1. Main package tests: `swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
 2. Release package tests: `swift test -c release --jobs 1 --no-parallel -Xswiftc -warnings-as-errors`
 3. Sample package tests: `swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --disable-automatic-resolution --jobs 1 -Xswiftc -warnings-as-errors`
    CI builds the sample feature package for its declared `tvOS`, `watchOS`,
    and `visionOS` destinations. The tag-triggered Release Gate builds it on
-   all five declared destinations; local platform validation must do the same
-   when preparing a release.
+   all five declared destinations; CI release validation must do the same.
    The sample SwiftPM package and Xcode project's tracked `Package.resolved`
    files must match the root package pins. CI and release checks disable
    automatic package resolution so the canonical sample cannot silently use
@@ -73,7 +80,7 @@ tag, run and confirm:
    The wrapper binds the package-only workspace and `InnoFlow-Package` scheme,
    disables automatic resolution/code signing, and requires a fresh, clean
    build-result bundle. The same wrapper's `--sample` mode binds the canonical
-   sample package and `InnoFlowSampleAppFeature` scheme. Required local
+   sample package and `InnoFlowSampleAppFeature` scheme. Required CI preflight
    `sample-sdk-tvos`, `sample-sdk-watchos`, and `sample-sdk-visionos` receipts
    cover the sample destinations beyond its macOS tests and iOS app build.
 7. Public API comparison against the previous stable tag:
@@ -123,7 +130,7 @@ tag, run and confirm:
 `STABLE_VERSION` records the public stable version at the source revision. Keep
 it at `5.1.1` in the frozen 6.0.0 candidate and exact tag: promoting it before
 the tag exists would make the API baseline gate require a nonexistent tag and
-invalidate the candidate snapshot. The mandatory local/CI migration consumer
+invalidate the candidate snapshot. The mandatory CI migration consumer
 instead builds both the exact `5.1.1` baseline and 6.0.0 candidate, while the
 reviewed four-product API inventory must classify the major breakage. After
 GitHub Release publication, update `STABLE_VERSION` and the current-stable
@@ -149,7 +156,7 @@ untagged.
 
 ## Release Checklist
 
-Before tagging a release:
+Before tagging a release (automated release checks execute in CI):
 
 1. Update [CHANGELOG.md](CHANGELOG.md).
 2. Decide whether [MIGRATION.md](MIGRATION.md) needs a new entry.
@@ -190,23 +197,26 @@ Before tagging a release:
     of release tags. The local and workflow checks bind the triggering tag to
     the checked-out commit, but only immutable-tag enforcement closes the gap
     between a completed gate and the later GitHub Release API call.
-19. Create `candidate.json` with `scripts/release-candidate-snapshot.rb` from
-    the exact InnoFlow checkout plus the single canonical
-    [JSON evidence policy](docs/contracts/release-evidence-policy.json). Use
-    `scripts/record-release-evidence.sh` for commands and preserved raw
-    xcresult bundles, and `scripts/record-manual-release-evidence.sh` only for
-    a pre-existing manual observation artifact. Verify the complete directory
-    through the `local-preflight` stage with
-    `scripts/verify-release-evidence.sh`. Keep the bundle outside either source
-    checkout and preload it under the dedicated runner's
-    `$RUNNER_TEMP/innoflow-release-evidence-intake/<intake-name>` directory.
+19. Dispatch `Release Preflight` (`release-preflight.yml`) on `main` at the
+    exact frozen candidate SHA. The dedicated runner creates `candidate.json`,
+    executes all 32 required checks from the canonical
+    [JSON evidence policy](docs/contracts/release-evidence-policy.json), retains
+    receipts/raw xcresults, and verifies the full `local-preflight` stage.
+    Only success uploads `innoflow-release-preflight-<exact-SHA>`; failed or
+    cancelled runs preserve a separately named diagnostic artifact, never a
+    release input. Record the successful run ID before authorizing the tag.
+    Missing runtimes/toolchains block CI and must be provisioned on the CI
+    runner, not the user's Mac. Do not change main while freezing the release;
+    a new candidate SHA requires a new run. No preloaded local bundle is used.
 20. Dispatch `Release Evidence Producer` on the exact immutable tag with the
-    intake directory name and explicit release
+    successful `preflight_run_id` and explicit release
     approval. The dedicated `self-hosted`, `macOS`,
     `innoflow-release-evidence` runner checks out the exact candidate,
-    reopens every local receipt and raw artifact, records the tag baseline and
+    verifies the prior CI run's repository, workflow, main ref, exact SHA,
+    success and artifact identity/digest/expiry, downloads its bundle,
+    reopens every CI receipt and raw artifact, records the tag baseline and
     dispatch actor's approval, and uploads
-    `innoflow-release-evidence-<exact-tag-SHA>`. A missing runner, intake bundle,
+    `innoflow-release-evidence-<exact-tag-SHA>`. A missing runner, CI artifact,
     or approval leaves the release blocked.
 21. After that producer run has completed successfully, dispatch the tag's
     `Release Gate` with the producer GitHub Actions run ID that
@@ -233,20 +243,25 @@ attestations require the expected environment, reviewer, UTC observation time,
 and a hashed non-empty artifact; generating a receipt is not a substitute for
 performing the manual check.
 
-For a clean isolated candidate, `scripts/run-release-preflight.sh plan
+For a candidate, `scripts/run-release-preflight.sh plan
 --evidence-root <outside-repository-directory>` lists the policy's required local
 check IDs, their reviewed commands, and expected environments without running
-them. `execute` collects them serially into a new evidence root; `resume`
+them. `plan` and `report` are available locally. In CI only, `execute` collects
+them serially into a new evidence root; `resume`
 reuses only independently verified receipts for the same candidate and current
 toolchain, then runs missing checks. `report` distinguishes verified passes
 from missing or stale attempts and prints elapsed time and artifact paths.
-Use `--check-id <id>` for a focused attempt. Keep the evidence root and its
+Use `--check-id <id>` for a focused CI diagnostic attempt; the official workflow
+always executes the complete inventory. Keep the evidence root and its
 adjacent `.work` directory outside the source checkout. Failed attempts stay
 in the evidence root; a modified previously recorded artifact requires a new
 evidence root rather than relabeling or deleting the old receipt. The runner
 does not accept a dirty candidate, create a commit or tag, import historical
 logs, or substitute for the final full verifier. The required local checks
-must all pass for the same frozen candidate before the pre-tag gate can close.
+must all pass in CI for the same frozen candidate before the pre-tag gate can close.
+The execution guard is an operational safeguard, not an authentication token:
+setting `GITHUB_ACTIONS=true` locally does not create trusted CI evidence. The
+producer verifies the real GitHub run before accepting any bundle.
 
 Evidence policy v3 is intentionally fail-closed and is not compatible with v2
 receipts. V3 requires an automated check to declare its repository component
@@ -271,8 +286,8 @@ one previously nonexistent result bundle through `-resultBundlePath` (or the
 accessibility runner's `--result-bundle-path`) matching `--raw-artifact`; an old
 xcresult cannot be attached to a new successful command.
 
-The producer does not manufacture local evidence. Required command results and
-raw artifacts must already exist in its candidate-bound intake bundle. The
+The producer does not manufacture preflight evidence. Required command results
+and raw artifacts must come from the successful exact-SHA main CI run. The
 producer adds only the exact-tag baseline and explicit dispatch approval. The
 later tag workflow adds only the independent GitHub producer-run verification;
 it cannot verify its own pending conclusion. If any required row, trusted

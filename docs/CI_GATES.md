@@ -22,10 +22,14 @@ modules and candidate evidence. This is not evidence that InnoFlow has shipped.
 
 ## Local execution
 
+The full 32-check release matrix is CI-only as of 2026-09-29. Do not install
+its simulator runtimes or collect final release receipts on the user's Mac.
+The commands below are development diagnostics, not release approval; see
+the CI-only release pipeline below.
+
 ```bash
 scripts/principle-gates.sh --static
 scripts/principle-gates-selftest.sh
-scripts/run-coverage.sh
 ```
 
 The full `scripts/principle-gates.sh` runs its own negative controls before the
@@ -74,8 +78,9 @@ Debug tests, Release configuration tests, platform builds, focused runtime
 tests and the canonical sample build begin after lint instead of waiting for a
 second full principle-gate execution. The CI principle job runs only static
 contracts; `check-release-configuration.sh` retains the optimized build, full
-Release test suite and isolated timing baseline. The unqualified local
-`principle-gates.sh` command remains the complete sequential preflight.
+Release test suite and isolated timing baseline. The unqualified
+`principle-gates.sh` command remains a complete sequential suite executed in
+the CI release preflight, not a required local task.
 
 `Release Gate /
 release-evidence` requires `release-coverage` and the five-platform package
@@ -91,7 +96,35 @@ ignored failures, missing artifacts and concurrency collisions. Coverage
 unit tests exercise malformed reports, module omission, floor changes,
 multiple SwiftPM test bundles, stale profiles and failed LLVM exports.
 The canonical release-evidence policy also requires the `coverage` command at
-local preflight, increasing its required check inventory from 68 to 69.
+the legacy `local-preflight` stage, now executed in CI. The current policy
+requires 32 checks; earlier adoption counts are historical.
+
+## CI-only release pipeline (2026-09-29)
+
+- Problem: a local 32-check matrix required large runtime installations and
+  local evidence transfers before CI could validate a release.
+- Constraints: retain all 32 checks, exact SHA, Swift 6.3/6.4, five SDKs, eight
+  runtime targets, raw evidence, separate public tag/Release approvals and
+  dedicated-runner isolation. Mulbyul remains excluded.
+- Alternatives: keep local collection; re-execute everything after tagging;
+  or execute once on main CI and let the tag producer verify that successful
+  exact-SHA run. The third option avoids local installs and duplicate matrices.
+- Execution: manually dispatch `Release Preflight` on main, never PR code.
+  A fresh outside-checkout directory collects the complete policy. Successful
+  artifacts are SHA-bound; failure/cancellation artifacts have a distinct name.
+  The dedicated runner must already have the required toolchains/runtimes.
+- Failure behavior: absent runners/runtime images leave the gate queued or
+  failed. Do not fall back to local execution or remove checks. The producer
+  rejects incomplete/failed, wrong-workflow/ref/SHA, expired or ambiguous runs.
+- Validation: workflow/provenance mutation tests and isolated execution-guard
+  fixtures run in ordinary PR lint. Actual 32-check runtime proof requires the
+  main CI run. `local-preflight` remains the serialized stage name only.
+
+After an approved immutable tag is created at the same SHA, dispatch
+`Release Evidence Producer` with `preflight_run_id` and explicit approval.
+It downloads the verified CI artifact instead of accepting local intake.
+Then run the tag's verify-only `Release Gate`; publication remains a separate
+authorized dispatch. This implementation alone is not a successful CI run.
 
 GitHub execution, release approval and publication still require the existing
 release process. Local script and workflow checks do not prove a remote run.

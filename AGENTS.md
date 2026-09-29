@@ -7,6 +7,11 @@
 
 Key reminders that earn their own line here so search tooling still surfaces them:
 
+- **CI-only release validation:** run the full 32-check release preflight,
+  including tvOS 18.5 / watchOS 11.5 runtimes, only in `Release Preflight` CI.
+  Do not install release-matrix runtimes or run `execute`/`resume` on the user's
+  Mac. Local `plan`/`report`, static checks and focused diagnostic/fixture tests
+  are allowed; they are not release evidence. See CLAUDE.md and RELEASING.md.
 - `@InnoFlow` features must declare the third reducer generic: use
   `var body: some Reducer<State, Action, Never>` without app-boundary output,
   or the feature's typed `Output` when it emits one.

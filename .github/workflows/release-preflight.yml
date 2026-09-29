@@ -1,0 +1,65 @@
+name: Release Preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-preflight-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    # Never run untrusted PR/feature-branch code on the dedicated runner.
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS, innoflow-release-evidence]
+    timeout-minutes: 360
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: components/InnoFlow
+
+      - name: Allocate fresh evidence outside checkout
+        id: evidence
+        run: |
+          set -euo pipefail
+          evidence_root="$RUNNER_TEMP/innoflow-release-preflight-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          [[ ! -e "$evidence_root" && ! -L "$evidence_root" ]]
+          echo "root=$evidence_root" >>"$GITHUB_OUTPUT"
+
+      - name: Execute all 32 required checks in CI
+        working-directory: components/InnoFlow
+        env:
+          EVIDENCE_ROOT: ${{ steps.evidence.outputs.root }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          scripts/run-release-preflight.sh execute --evidence-root "$EVIDENCE_ROOT"
+
+      - name: Upload complete candidate-bound preflight
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: innoflow-release-preflight-${{ github.sha }}
+          path: ${{ steps.evidence.outputs.root }}
+          if-no-files-found: error
+          include-hidden-files: true
+          overwrite: false
+          retention-days: 30
+
+      - name: Preserve failed or cancelled diagnostics separately
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: innoflow-preflight-diagnostics-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ steps.evidence.outputs.root }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          overwrite: false
+          retention-days: 30

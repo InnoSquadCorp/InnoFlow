@@ -3,8 +3,8 @@ name: Release Evidence Producer
 on:
   workflow_dispatch:
     inputs:
-      intake_name:
-        description: "Preloaded fail-closed evidence directory name on the dedicated runner"
+      preflight_run_id:
+        description: "Successful Release Preflight CI run on main at the exact tag SHA"
         required: true
         type: string
       release_approval:
@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release-evidence-${{ github.sha }}
@@ -38,32 +39,41 @@ jobs:
       - name: Validate immutable producer inputs
         working-directory: components/InnoFlow
         env:
-          INTAKE_NAME: ${{ inputs.intake_name }}
+          PREFLIGHT_RUN_ID: ${{ inputs.preflight_run_id }}
         run: |
           set -euo pipefail
-          [[ "$INTAKE_NAME" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$PREFLIGHT_RUN_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$GITHUB_REF" == "refs/tags/$GITHUB_REF_NAME" ]]
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
 
-      - name: Import a preserved local-preflight bundle
+      - name: Verify and download successful CI preflight
         id: evidence
         working-directory: components/InnoFlow
         env:
-          INTAKE_NAME: ${{ inputs.intake_name }}
+          PREFLIGHT_RUN_ID: ${{ inputs.preflight_run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          intake="$RUNNER_TEMP/innoflow-release-evidence-intake/$INTAKE_NAME"
           evidence_root="$RUNNER_TEMP/innoflow-release-evidence-work/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          [[ -d "$intake" && ! -L "$intake" ]]
+          provenance="$RUNNER_TEMP/innoflow-preflight-provenance-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.json"
           [[ ! -e "$evidence_root" && ! -L "$evidence_root" ]]
-          mkdir -p "$(dirname "$evidence_root")"
-          ditto "$intake" "$evidence_root"
+          [[ ! -e "$provenance" && ! -L "$provenance" ]]
+          scripts/write-github-evidence-provenance.sh \
+            --preflight \
+            --run-id "$PREFLIGHT_RUN_ID" \
+            --artifact-name "innoflow-release-preflight-$GITHUB_SHA" \
+            --output "$provenance"
+          gh run download "$PREFLIGHT_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "innoflow-release-preflight-$GITHUB_SHA" \
+            --dir "$evidence_root"
+          cp "$provenance" "$evidence_root/ci-preflight-provenance.json"
           [[ -f "$evidence_root/candidate.json" && ! -L "$evidence_root/candidate.json" ]]
           [[ -f "$evidence_root/manifest.tsv" && ! -L "$evidence_root/manifest.tsv" ]]
           [[ -f "$evidence_root/attempts.tsv" && ! -L "$evidence_root/attempts.tsv" ]]
           echo "root=$evidence_root" >>"$GITHUB_OUTPUT"
 
-      - name: Verify exact candidate and complete local evidence
+      - name: Verify exact candidate and complete CI evidence
         working-directory: components/InnoFlow
         env:
           EVIDENCE_ROOT: ${{ steps.evidence.outputs.root }}

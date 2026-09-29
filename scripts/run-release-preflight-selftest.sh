@@ -59,6 +59,17 @@ git -C "$repo" add scripts docs
 git -C "$repo" commit -qm fixture
 
 cd "$repo"
+for mode in execute resume; do
+  if GITHUB_ACTIONS=false scripts/run-release-preflight.sh "$mode" \
+    --evidence-root "$fixture_root/local-forbidden-$mode" >"$fixture_root/local-$mode.log" 2>&1; then
+    echo "Local release preflight was accepted: $mode" >&2
+    exit 1
+  fi
+  grep -q 'CI-only' "$fixture_root/local-$mode.log"
+  [[ ! -e "$fixture_root/local-forbidden-$mode" ]]
+done
+# Emulate Actions only inside this isolated fixture; never run real release checks locally.
+export GITHUB_ACTIONS=true
 ruby -r ./scripts/release-runtime-catalog -e '
   {
     "ios" => ["iOS", "iOS Simulator", "18.5"],
