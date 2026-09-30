@@ -30,6 +30,9 @@ This document captures the stable framework guarantees that should not drift wit
 - `SelectedStore` is the official derived-read model.
 - Use `select(dependingOn:)` for a single explicit state slice; use the variadic `select(dependingOnAll:)` for two or more slices. Both forms keep selective invalidation regardless of arity.
 - Closure-based `select { ... }` remains an always-refresh fallback when dependency reads cannot be declared soundly.
+- `IdentifiedArray` equality and hashing include stored ID-to-position mappings
+  and ordered values. Identity-only changes invalidate root/scoped selections;
+  custom identity projections must remain stable for stored elements.
 
 ## Reducer output contract
 
@@ -288,6 +291,11 @@ They suspend on the registration event itself, so neither a poll interval nor
 a yield count is involved. `sleeperCount` remains available as an observable
 condition for bounded polls in scenarios the deterministic waits do not
 cover.
+
+`ManualTestClock.sleep(for:)` checks task cancellation before returning for a
+zero or negative duration, matching `StoreClock.continuous`. Uncancelled
+nonpositive waits do not park or advance time. Cancellation of a parked sleeper
+removes that sleeper and leaves the clock reusable.
 
 ## Instrumentation
 

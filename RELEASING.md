@@ -41,7 +41,8 @@ published on GitHub Releases, 2026-08-26)
 
 Release target: `6.0.0` (verify live tag/Release status on GitHub)
 
-The draft `release/6.0.0-candidate` branch carries the staged 6.0.0 contract.
+The 6.0.0 development source carries the staged contract; record the actual
+candidate branch and immutable commit when freezing each release attempt.
 Installation snippets and non-tag release metadata are aligned with that
 candidate. A frozen tagged source snapshot keeps the prior published-stable
 marker; tag creation and GitHub Release publication remain separate gates.

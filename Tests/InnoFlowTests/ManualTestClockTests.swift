@@ -8,6 +8,59 @@ import Testing
 @Suite("ManualTestClock deterministic waits")
 struct ManualTestClockTests {
 
+  @Test("Pre-cancelled sleep throws for negative, zero and positive durations")
+  func preCancelledSleepMatchesContinuous() async {
+    for duration in [Duration.nanoseconds(-1), .zero, .nanoseconds(1)] {
+      let clock = ManualTestClock()
+      let sleeps: [@Sendable (Duration) async throws -> Void] = [
+        { try await clock.sleep(for: $0) },
+        StoreClock.manual(clock).sleep,
+        StoreClock.continuous.sleep,
+      ]
+      for sleep in sleeps {
+        let task = Task {
+          // Cancel this task itself so cancellation precedes the call without a race.
+          withUnsafeCurrentTask { $0?.cancel() }
+          try await sleep(duration)
+        }
+        await #expect(throws: CancellationError.self) { try await task.value }
+      }
+      #expect(await clock.sleeperCount == 0)
+      #expect(await clock.sleepRegistrationCount == 0)
+    }
+  }
+
+  @Test("Uncancelled nonpositive sleep returns without parking or advancing time")
+  func nonPositiveSleepMatchesContinuous() async throws {
+    let clock = ManualTestClock()
+    let initial = await clock.now
+    for duration in [Duration.nanoseconds(-1), .zero] {
+      try await clock.sleep(for: duration)
+      try await StoreClock.manual(clock).sleep(duration)
+      try await StoreClock.continuous.sleep(duration)
+    }
+    #expect(await clock.now == initial)
+    #expect(await clock.sleeperCount == 0)
+    #expect(await clock.sleepRegistrationCount == 0)
+  }
+
+  @Test("Cancelling a registered sleep cleans up and leaves the clock reusable")
+  func registeredSleepCancellationCleansUp() async throws {
+    let clock = ManualTestClock()
+    let sleeper = Task { try await StoreClock.manual(clock).sleep(.seconds(1)) }
+    try await clock.waitForSleepers(atLeast: 1)
+    sleeper.cancel()
+    await #expect(throws: CancellationError.self) { try await sleeper.value }
+    #expect(await clock.sleeperCount == 0)
+    #expect(await clock.sleepRegistrationCount == 1)
+
+    let next = Task { try await clock.sleep(for: .seconds(1)) }
+    try await clock.advance(by: .seconds(1), onceSleepersReach: 1)
+    try await next.value
+    #expect(await clock.sleeperCount == 0)
+    #expect(await clock.sleepRegistrationCount == 2)
+  }
+
   @Test("waitForSleepers resumes when the sleeper threshold is reached")
   func waitForSleepersResumesOnRegistration() async throws {
     let clock = ManualTestClock()

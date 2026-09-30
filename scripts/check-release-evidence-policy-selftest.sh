@@ -20,6 +20,17 @@ cp "$root_dir/scripts/report-doc-fence-review.rb" "$fixture_root/scripts/"
 
 ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
 
+# The identity/cancellation regressions must remain in every platform run.
+for suite in IdentifiedArrayTests ManualTestClockTests; do
+  ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.lines.reject { |line| line.include?("-only-testing:InnoFlowTests/#{suite}") }.join)' \
+    "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$suite"
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Runtime suite omission passed: $suite" >&2
+    exit 1
+  fi
+  cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
+done
+
 expect_mutation_failure() {
   local name="$1" expression="$2"
   cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/release-evidence-policy.json"

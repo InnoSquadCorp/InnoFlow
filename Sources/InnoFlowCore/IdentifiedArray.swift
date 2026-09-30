@@ -22,6 +22,9 @@ import Foundation
 /// invariant that the `index` map and `elements` array stay in lockstep.
 /// Insertion order is preserved across all mutating operations so iteration
 /// and `Collection` semantics remain deterministic.
+/// Equality and hashing include both element values and their stored identity
+/// positions. Equal values with different IDs are different collections;
+/// equivalent identity projections do not need to be the same closure.
 public struct IdentifiedArray<ID: Hashable & Sendable, Element>: Sendable
 where Element: Sendable {
 
@@ -40,6 +43,8 @@ where Element: Sendable {
   /// so the resulting value can cross actor boundaries with the rest of the
   /// state. For `Identifiable` elements use `IdentifiedArrayOf<Element>`,
   /// which wires `\.id` automatically.
+  /// The projection must be stable for each stored element: do not derive IDs
+  /// from mutable external state or change an element's identity in place.
   public init(id: @escaping @Sendable (Element) -> ID) {
     self.elements = []
     self.index = [:]
@@ -274,13 +279,14 @@ extension IdentifiedArray: Equatable where Element: Equatable {
     lhs: IdentifiedArray<ID, Element>,
     rhs: IdentifiedArray<ID, Element>
   ) -> Bool {
-    lhs.elements == rhs.elements
+    lhs.index == rhs.index && lhs.elements == rhs.elements
   }
 }
 
 extension IdentifiedArray: Hashable where Element: Hashable {
   @inlinable
   public func hash(into hasher: inout Hasher) {
+    hasher.combine(index)
     hasher.combine(elements)
   }
 }

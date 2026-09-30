@@ -39,6 +39,10 @@ harness accepts cancellation first, a later domain error from uncooperative
 work is discarded instead of being reclassified as a test failure.
 
 For time-sensitive effects, inject ``ManualTestClock`` and advance it explicitly.
+Its `sleep(for:)` throws `CancellationError` for an already-cancelled task,
+including zero and negative durations. Uncancelled nonpositive sleeps return
+without parking; positive sleeps can be synchronized using the clock's
+deterministic registration waits before advancing time.
 ``EffectTimingRecorder`` captures instrumentation events for repeatable baseline
 comparisons.
 

@@ -183,6 +183,26 @@ with `@InnoFlow(phaseManaged: true, strictPhaseTotality: true)`. This turns an
 unreferenced `Phase` case into an error; predicate and payload-domain coverage
 still belongs in `requireComplete(...)` tests.
 
+### Collection identity and cancelled test-clock waits
+
+`IdentifiedArray` equality and hashing now compare the stored ID-to-position
+mapping as well as ordered element values. Arrays with equal values but
+different custom IDs (or the same IDs at different positions) are no longer
+interchangeable selection snapshots or Set/Dictionary keys. If a consumer
+intentionally compares payloads only, compare `values` explicitly; do not use
+payload-only equality to suppress identity-dependent updates. An identity
+projection must remain stable for each stored element and must not depend on
+mutable external state. Equivalent projections still compare equally when
+they produce the same stored mapping and values.
+
+`ManualTestClock.sleep(for:)` now throws `CancellationError` for a task that is
+already cancelled, even when the duration is zero or negative. Remove tests
+that expect code after that sleep to run successfully in a cancelled task.
+Use an uncancelled task to test immediate completion, and separately assert
+cancellation propagation. Nonpositive sleeps do not register a sleeper;
+positive waits still use the deterministic registration APIs before advancing
+manual time. These corrections do not require source-signature changes.
+
 ## 5.1.1
 
 - Existing unlabeled single-payload and `id:action:` collection cases require

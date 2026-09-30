@@ -126,6 +126,18 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
     captured inputs and is weakly cached. Key-path-only selection retains
     stable identity. Parent release invalidates tracked projection liveness
     and optional reads on MainActor before Store deinitialization finishes.
+17. `IdentifiedArray` equality and hashing include stored ID-to-position mappings
+    as well as ordered element values. Identity-only replacement must refresh
+    root/scoped key-path, dependency, and memoized selections. Custom identity
+    projections must remain stable for each stored element.
+18. `ManualTestClock.sleep(for:)` must check pre-existing task cancellation even
+    for zero or negative durations, matching `StoreClock.continuous`. Uncancelled
+    nonpositive sleeps must not park; cancelled sleepers must release their
+    registration and leave the clock reusable.
+
+`IdentifiedArrayTests` and `ManualTestClockTests` lock these contracts and are
+included in the focused platform runtime inventory. Run targeted local tests
+when changing them; the full release/runtime matrix remains CI-only.
 
 Macro-first means `@InnoFlow` is the canonical feature-authoring path, while
 `InnoFlowCore` remains a deliberate compiler-plugin-free runtime and recovery
