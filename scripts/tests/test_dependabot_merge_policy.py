@@ -76,7 +76,7 @@ class Transcript:
         elif suffix == f'commits/{MERGE}/check-runs?filter=all': value = self.merge_checks
         elif suffix.endswith('/statuses'): value = self.statuses
         elif suffix == f'commits/{self.base}/pulls': value = [self.pr]
-        elif suffix == 'pulls?state=open&base=main': value = [self.pr]
+        elif suffix == 'pulls?state=open': value = [self.pr]
         else: raise AssertionError('Unexpected pages: ' + route)
         return copy.deepcopy(value)
 
@@ -333,6 +333,19 @@ class DependabotPolicyTests(unittest.TestCase):
             change(api)
             with self.assertRaises(p.Rejected): p.verify_post_merge(api, NUMBER, BASE)
         with self.assertRaises(p.Rejected): p.verify_post_merge(self.api, NUMBER, HEAD)
+
+    def test_reconciliation_finds_retargeted_bots_but_not_nonmain_humans(self):
+        self.api.pr['base']['ref'] = 'develop'
+        self.api.pr['auto_merge'] = dict(enabled_by=dict(p.BOT))
+        for event in ['schedule', 'workflow_dispatch', 'push']:
+            self.assertEqual(p.targets(self.api, event, {}), ([NUMBER], None))
+        self.assertIn('wrong base', p.coordinate(self.api, NUMBER, True))
+        self.assertIsNone(self.api.pr['auto_merge'])
+        self.assertEqual(self.api.checks[-1]['conclusion'], 'failure')
+        self.api.pr['user'] = dict(login='human', id=1, type='User')
+        self.assertEqual(p.targets(self.api, 'schedule', {}), ([], None))
+        self.api.pr['base']['ref'] = 'main'
+        self.assertEqual(p.targets(self.api, 'schedule', {}), ([NUMBER], None))
 
     def test_supported_event_targets_and_foreign_notifications(self):
         for event in ['schedule', 'workflow_dispatch', 'push']:

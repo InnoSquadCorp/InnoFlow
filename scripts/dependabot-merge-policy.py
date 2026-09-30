@@ -496,7 +496,11 @@ def targets(api, event_name, event):
         require(len(numbers) == 1, "missing/ambiguous notification PR")
         return numbers, alert if path == CI_PATH else None
     require(event_name in {"schedule", "workflow_dispatch", "push"}, "unsupported coordinator event")
-    return [p["number"] for p in api.pages(route("pulls?state=open&base=main"))], None
+    # A main -> other-base edit may no longer pass the default-main event
+    # guard. Reconciliation must still find verified bots to cancel old native
+    # requests; non-main human PRs are outside the managed readiness surface.
+    return [p["number"] for p in api.pages(route("pulls?state=open"))
+            if p.get("base", {}).get("ref") == "main" or bot(p)], None
 
 
 def main():

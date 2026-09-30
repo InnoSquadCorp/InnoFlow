@@ -69,6 +69,9 @@ success. Native strict checks own the actual merge and base freshness. There is 
 direct merge, admin bypass or unconditional fallback. Human PRs receive Ready
 success meaning only “automation ineligible; manual policy applies”. Failed proof
 invalidates readiness and cancels a verified bot's existing native request.
+Reconciliation lists all open PRs, managing main PRs plus verified bots retargeted
+away from main so those old native requests are still cancelled. Non-main human
+PRs remain outside that managed surface.
 Uncertain writes are read back and never blindly retried. API denial is a blocker.
 
 ## Actual post-merge recovery
