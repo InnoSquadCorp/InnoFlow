@@ -211,6 +211,18 @@ Before tagging a release (automated release checks execute in CI):
     Swift 6.3 uses `macos-26` / Xcode 26.6; other checks use `xcode-27` /
     Xcode 27.0. There is one job per check, with at most six jobs concurrent.
     Missing exact runtimes are downloaded/imported from Apple in that job.
+    The downloader prefers `arm64`. Only an explicit response that the exact
+    platform/version's `arm64Only` variant is unavailable permits one retry
+    with Apple's `universal` format at the same pinned OS version. Network,
+    authentication, import, or post-import availability failures still block
+    the check; no newer runtime substitutes for the requested identifier.
+    After the GitHub-hosted environment guard, but before Git candidate or
+    toolchain validation and runtime provisioning, setup metadata and command
+    output are streamed to a fresh outside-checkout
+    `<evidence-root>-provisioning/provisioning.log`. Failed/cancelled jobs
+    upload this directory alongside any check evidence, including when setup
+    failed before receipts existed. Setup diagnostics never enter successful
+    shard archives and cannot count as a PASS receipt.
     Aggregation rejects missing/extra shards, mismatched snapshots and damaged
     raw evidence; partial shards are not release inputs. Start a fresh dispatch
     to repeat already-successful jobs (immutable artifacts are not overwritten).

@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 require_relative "hosted-release-preflight"
+require "rbconfig"
+require "yaml"
 
 def assert(value, message)
   raise message unless value
@@ -31,11 +33,56 @@ def pack_shards(source, destination)
   end
 end
 
+class RuntimeProvisioningFixture < HostedReleasePreflight
+  attr_accessor :available
+  attr_reader :calls, :identifiers
+
+  def initialize(root, responses, success, failure)
+    super(root)
+    @responses, @success, @failure = responses, success, failure
+    @available = false
+    @calls, @identifiers = [], []
+  end
+
+  def runtime_available?(identifier)
+    @identifiers << identifier
+    @available
+  end
+
+  def run_provisioning(*command)
+    @calls << command
+    response = @responses.shift or raise "Unexpected provisioning command: #{command.inspect}"
+    response.fetch(:output, "").each_line { |line| yield line if block_given? }
+    return @failure if response[:failure]
+    if command.include?("-downloadPlatform")
+      image = File.join(command.last, "fixture.simruntime.dmg")
+      case response[:image]
+      when :missing then nil
+      when :symlink then File.symlink("missing-target", image)
+      when :directory then Dir.mkdir(image)
+      else
+        File.write(image, "fixture")
+        File.write(File.join(command.last, "extra.dmg"), "fixture") if response[:image] == :multiple
+      end
+    elsif command.include?("-importPlatform")
+      @available = response.fetch(:available, true)
+    end
+    @success
+  end
+end
+
 source = File.expand_path("..", __dir__)
 matrix = HostedReleasePreflight.new(source).matrix.fetch("include")
 assert(matrix.length == 32 && matrix.map { |row| row.fetch("check") }.uniq.length == 32, "Missing required matrix check")
 assert(matrix.count { |row| row["runner"] == "macos-26" && row["swift"] == "6.3" && row["xcode"] == "26.6" } == 2, "Wrong minimum toolchain jobs")
 assert(matrix.count { |row| row["runner"] == "xcode-27" && row["swift"] == "6.4" && row["xcode"] == "27.0" } == 30, "Wrong current toolchain jobs")
+workflow = YAML.safe_load(File.read(File.join(source, ".github/workflows/release-preflight.yml")))
+diagnostics = workflow.fetch("jobs").fetch("preflight").fetch("steps").find do |step|
+  step["name"] == "Preserve failed or cancelled diagnostics separately"
+end
+assert(diagnostics.fetch("if") == "${{ failure() || cancelled() }}", "Lost failure/cancellation diagnostics")
+assert(diagnostics.fetch("with").fetch("path").lines.map(&:strip) ==
+  ["${{ steps.evidence.outputs.root }}", "${{ steps.evidence.outputs.root }}-provisioning"], "Early provisioning logs are not uploaded")
 
 Dir.mktmpdir("innoflow-hosted-selftest-") do |fixture|
   repo = File.join(fixture, "repo")
@@ -142,28 +189,130 @@ Dir.mktmpdir("innoflow-hosted-selftest-") do |fixture|
   end
   rejects("Unsafe archive type") { ReleaseEvidenceArchive.unpack(link_archive, File.join(fixture, "link-output")) }
 
-  # Runtime command fixture: no actual xcodebuild download/import is called.
-  runtime_runner = HostedReleasePreflight.new(repo)
-  runtime_runner.instance_variable_set(:@available, false)
-  runtime_runner.instance_variable_set(:@calls, [])
-  def runtime_runner.runtime_available?(_identifier) = @available
-  def runtime_runner.run!(*command)
-    @calls << command
-    if command.include?("-downloadPlatform")
-      File.write(File.join(command.last, "fixture.simruntime.dmg"), "fixture")
-    elsif command.include?("-importPlatform")
-      @available = true unless @reject_import
-    end
-  end
+  # Runtime command fixtures: no actual xcodebuild download/import is called.
+  success = Open3.capture3(RbConfig.ruby, "-e", "exit 0").last
+  failure = Open3.capture3(RbConfig.ruby, "-e", "exit 65").last
   runtime = { "id" => "runtime-tvos-18.5", "environment" => { "os" => "18.5", "platform" => "tvOS Simulator" } }
+  unavailable = { failure: true, output: "tvOS 18.5 (arm64Only) is not available for download.\n" }
+  runtime_runner = RuntimeProvisioningFixture.new(repo, [{}, {}], success, failure)
   runtime_runner.provision_runtime!(runtime)
-  calls = runtime_runner.instance_variable_get(:@calls)
+  calls = runtime_runner.calls
   assert(calls.length == 2 && calls.first.take(7) == %w[xcodebuild -downloadPlatform tvOS -buildVersion 18.5 -architectureVariant arm64], "Runtime version not pinned")
   assert(!File.exist?(calls.first.last), "Runtime download not cleaned up")
   runtime_runner.provision_runtime!(runtime)
   assert(calls.length == 2, "Installed runtime downloaded again")
-  runtime_runner.instance_variable_set(:@available, false)
-  runtime_runner.instance_variable_set(:@reject_import, true)
-  rejects("Exact runtime unavailable") { runtime_runner.provision_runtime!(runtime) }
+  fallback = RuntimeProvisioningFixture.new(repo, [unavailable, {}, {}], success, failure)
+  fallback.provision_runtime!(runtime)
+  downloads = fallback.calls.select { |call| call.include?("-downloadPlatform") }
+  assert(downloads.map { |call| call.take(7) } == %w[arm64 universal].map { |variant|
+    ["xcodebuild", "-downloadPlatform", "tvOS", "-buildVersion", "18.5", "-architectureVariant", variant]
+  }, "Fallback changed the OS version/platform or was not bounded")
+  assert(downloads.map(&:last).uniq.length == 2 && downloads.none? { |call| File.exist?(call.last) }, "Fallback reused or leaked a download directory")
+  assert(fallback.identifiers == ["com.apple.CoreSimulator.SimRuntime.tvOS-18-5"] * 2, "Exact runtime identifier not verified")
+  # Cover every policy runtime, including Apple's visionOS download name vs
+  # CoreSimulator's xrOS identifier. These are command fixtures, not OS tests.
+  JSON.parse(File.read(File.join(source, "docs/contracts/release-evidence-policy.json"))).fetch("checks").each do |check|
+    info = ReleaseRuntimeCatalog.runtime_info(check)
+    next unless info
+    platform, version = check.fetch("id").delete_prefix("runtime-").split("-", 2)
+    platform = { "ios" => "iOS", "tvos" => "tvOS", "watchos" => "watchOS", "visionos" => "visionOS" }.fetch(platform)
+    response = { failure: true, output: "#{platform} #{version} (arm64Only) is not available for download.\n" }
+    mapped = RuntimeProvisioningFixture.new(repo, [response, {}, {}], success, failure)
+    mapped.provision_runtime!(check)
+    assert(mapped.calls[1].take(7) == ["xcodebuild", "-downloadPlatform", platform, "-buildVersion", version, "-architectureVariant", "universal"], "Runtime fallback mapping drifted")
+    assert(mapped.identifiers == [info.first] * 2, "Runtime identifier drifted")
+  end
+
+  ["Network unavailable", "iOS 18.5 (arm64Only) is not available for download.",
+    "tvOS 27.0 (arm64Only) is not available for download.",
+    "tvOS 18.5 (universal) is not available for download."].each do |output|
+    rejected = RuntimeProvisioningFixture.new(repo, [{ failure: true, output: output }], success, failure)
+    rejects("Runtime download failed") { rejected.provision_runtime!(runtime) }
+    assert(rejected.calls.length == 1 && !File.exist?(rejected.calls.first.last), "Unrelated failure retried or leaked files")
+  end
+  rejected = RuntimeProvisioningFixture.new(repo, [unavailable, unavailable], success, failure)
+  rejects("(universal)") { rejected.provision_runtime!(runtime) }
+  assert(rejected.calls.length == 2, "Unavailable universal retried again or imported")
+  [{ failure: true }, { available: false }].each do |response|
+    rejected = RuntimeProvisioningFixture.new(repo, [{}, response], success, failure)
+    rejects(response[:failure] ? "Runtime import failed" : "Exact runtime unavailable") { rejected.provision_runtime!(runtime) }
+    assert(rejected.calls.length == 2 && !File.exist?(rejected.calls.first.last), "Import failure retried or leaked download")
+  end
+  { missing: "exactly one", multiple: "exactly one", symlink: "symlink", directory: "Unsafe runtime image" }.each do |kind, message|
+    rejected = RuntimeProvisioningFixture.new(repo, [{ image: kind }], success, failure)
+    rejects(message) { rejected.provision_runtime!(runtime) }
+    assert(rejected.calls.length == 1, "Unsafe image imported")
+  end
+
+  # A rejected local invocation must not write even setup diagnostics.
+  early = File.join(fixture, "early-failure")
+  ENV["GITHUB_ACTIONS"] = "false"
+  rejects("CI-only") { runner.execute("first-check", early) }
+  assert(!File.exist?("#{early}-provisioning"), "Local invocation wrote diagnostics")
+  ENV["GITHUB_ACTIONS"] = "true"
+  ENV["RUNNER_ENVIRONMENT"] = "self-hosted"
+  rejects("CI-only") { runner.execute("first-check", early) }
+  assert(!File.exist?("#{early}-provisioning"), "Self-hosted invocation wrote diagnostics")
+  ENV["RUNNER_ENVIRONMENT"] = "github-hosted"
+
+  # Real Git command failures in disposable fixtures must retain diagnostics
+  # without reaching Xcode, runtime provisioning, or release execution.
+  { "missing-git" => "git rev-parse HEAD failed", "broken-index" => "git status" }.each do |name, message|
+    broken = File.join(fixture, name)
+    if name == "missing-git"
+      FileUtils.mkdir_p(File.join(broken, "docs/contracts"))
+      FileUtils.cp(policy_path, File.join(broken, "docs/contracts/release-evidence-policy.json"))
+    else
+      FileUtils.cp_r(repo, broken)
+      File.write(File.join(broken, ".git/index"), "broken-index")
+    end
+    failed_evidence = File.join(fixture, "evidence-#{name}")
+    rejects(message) { HostedReleasePreflight.new(broken).execute("first-check", failed_evidence) }
+    path = "#{failed_evidence}-provisioning/provisioning.log"
+    assert(File.file?(path), "#{name} failure lost diagnostics")
+    log = File.read(path)
+    assert(log.include?(sha) && log.include?(message) && log.include?("status=pid"), "Git command output/status missing")
+    assert(!File.exist?(failed_evidence) && !log.include?("xcodebuild"), "Invalid Git candidate reached execution")
+  end
+  { "GITHUB_REF" => "refs/heads/feature", "GITHUB_SHA" => "0" * 40 }.each do |key, value|
+    original = ENV.fetch(key)
+    ENV[key] = value
+    failed_evidence = File.join(fixture, "invalid-#{key}")
+    rejects("Only exact main") { runner.execute("first-check", failed_evidence) }
+    assert(File.read("#{failed_evidence}-provisioning/provisioning.log").include?("Only exact main"), "Candidate guard failure lost diagnostics")
+    assert(!File.exist?(failed_evidence), "Invalid candidate produced evidence")
+    ENV[key] = original
+  end
+  dirty_file = File.join(repo, "dirty-guard.txt")
+  File.write(dirty_file, "must be preserved")
+  failed_evidence = File.join(fixture, "dirty-candidate")
+  rejects("Candidate must be clean") { runner.execute("first-check", failed_evidence) }
+  assert(File.read("#{failed_evidence}-provisioning/provisioning.log").include?("dirty-guard.txt"), "Dirty status output missing")
+  assert(File.read(dirty_file) == "must be preserved" && !File.exist?(failed_evidence), "Dirty candidate changed or executed")
+  File.unlink(dirty_file) # Task-owned fixture only, never the user's checkout.
+  ENV["DEVELOPER_DIR"] = "deliberately-wrong-xcode"
+  rejects("Unexpected selected Xcode") { runner.execute("first-check", early) }
+  log = File.read("#{early}-provisioning/provisioning.log")
+  assert(log.include?(sha) && log.include?("first-check") && log.include?("Unexpected selected Xcode"), "Early failure lost metadata/error")
+  assert(!File.exist?(early), "Setup failure produced a success evidence directory")
+  rejects("File exists") { runner.execute("first-check", early) }
+  rejects("outside checkout") { runner.execute("first-check", File.join(repo, "early")) }
+
+  # Exercise real streaming/exit status using a harmless child process; never
+  # fake hosted state around production downloads or preflight execution.
+  streamed = File.join(fixture, "streamed")
+  ENV["INNOFLOW_FIXTURE_SECRET"] = "must-not-appear-in-log"
+  rejects("stream failure") do
+    runner.with_provisioning_diagnostics("first-check", streamed) do
+      result = runner.run_provisioning(RbConfig.ruby, "-e", '$stdout.sync = true; puts "stdout-marker"; warn "stderr-marker"; exit 65')
+      assert(!result.success? && result.exitstatus == 65, "Streaming lost child exit status")
+      raise "stream failure"
+    end
+  end
+  ENV.delete("INNOFLOW_FIXTURE_SECRET")
+  log = File.read("#{streamed}-provisioning/provisioning.log")
+  assert(%w[stdout-marker stderr-marker stream\ failure].all? { |text| log.include?(text) }, "Streaming failure lost diagnostics")
+  assert(!log.include?("must-not-appear-in-log"), "Diagnostics dumped unrestricted environment")
+  assert(!File.exist?(streamed), "Diagnostics mixed with verified receipts")
 end
-puts "[hosted-release-preflight-selftest] 32-check mapping, hosted/main/SHA guards, real receipt merge, immutable bytes, missing/stale/failed/unsafe/tampered evidence, exact runtime provisioning passed"
+puts "[hosted-release-preflight-selftest] 32-check mapping, hosted/main/SHA guards, immutable receipt merge, adversarial evidence, exact-version bounded runtime fallback and durable early diagnostics passed"

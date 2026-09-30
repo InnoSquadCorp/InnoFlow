@@ -6,6 +6,7 @@ require "find"
 require "json"
 require "open3"
 require "optparse"
+require "time"
 require "tmpdir"
 require_relative "release-runtime-catalog"
 require_relative "release-evidence-archive"
@@ -36,6 +37,7 @@ class HostedReleasePreflight
 
   def capture!(*command)
     output, error, status = Open3.capture3(*command, chdir: @root)
+    @provision_log&.write("$ #{JSON.generate(command)}\n#{output}#{error}\nstatus=#{status}\n")
     raise "#{command.join(' ')} failed: #{error.strip}" unless status.success?
     output
   end
@@ -44,8 +46,12 @@ class HostedReleasePreflight
     raise "Command failed: #{command.join(' ')}" unless system(*command, chdir: @root)
   end
 
-  def hosted!
+  def hosted_environment!
     raise "Execution is GitHub-hosted CI-only" unless ENV["GITHUB_ACTIONS"] == "true" && ENV["RUNNER_ENVIRONMENT"] == "github-hosted"
+  end
+
+  def hosted!
+    hosted_environment!
     raise "Only exact main candidates are accepted" unless ENV["GITHUB_REF"] == "refs/heads/main" &&
       ENV["GITHUB_SHA"] == capture!("git", "rev-parse", "HEAD").strip
     raise "Candidate must be clean" unless capture!("git", "status", "--porcelain=v1", "--untracked-files=all").empty?
@@ -57,6 +63,46 @@ class HostedReleasePreflight
     end
   end
 
+  # Stream both channels to CI and durable diagnostics without buffering a
+  # potentially large download/import log in memory. Never invoke a shell.
+  def run_provisioning(*command)
+    @provision_log&.puts("$ #{JSON.generate(command)}")
+    Open3.popen2e(*command, chdir: @root) do |input, output, wait|
+      input.close
+      output.each_line do |line|
+        $stdout.write(line)
+        @provision_log&.write(line)
+        yield line if block_given?
+      end
+      status = wait.value
+      @provision_log&.puts("\nstatus=#{status}")
+      status
+    end
+  end
+
+  def with_provisioning_diagnostics(id, evidence)
+    diagnostics = outside!("#{evidence}-provisioning")
+    # A fresh sibling keeps setup failures out of successful receipt archives.
+    # mkdir/exclusive open refuse reuse, including dangling symlinks.
+    Dir.mkdir(diagnostics, 0o700)
+    File.open(File.join(diagnostics, "provisioning.log"), "wx", 0o600) do |log|
+      @provision_log = log
+      log.sync = true
+      log.puts(JSON.generate({ "check" => id, "started_at" => Time.now.utc.iso8601,
+        "environment" => ENV.to_h.slice("GITHUB_SHA", "GITHUB_REF", "GITHUB_RUN_ID",
+          "GITHUB_RUN_ATTEMPT", "RUNNER_ENVIRONMENT", "RUNNER_OS", "RUNNER_ARCH",
+          "ImageOS", "ImageVersion", "DEVELOPER_DIR") }))
+      begin
+        yield
+      rescue StandardError => error
+        log.puts("ERROR #{error.class}: #{error.message}")
+        raise
+      ensure
+        @provision_log = nil
+      end
+    end
+  end
+
   def provision_runtime!(check)
     info = ReleaseRuntimeCatalog.runtime_info(check)
     return unless info
@@ -64,30 +110,48 @@ class HostedReleasePreflight
     return if runtime_available?(identifier)
     platform, version = check.fetch("id").delete_prefix("runtime-").split("-", 2)
     platform = { "ios" => "iOS", "tvos" => "tvOS", "watchos" => "watchOS", "visionos" => "visionOS" }.fetch(platform)
-    # Apple supplies the exact version, never an unpinned latest runtime. Only
-    # this task-owned download directory is removed after import finishes.
-    Dir.mktmpdir("innoflow-runtime-", ENV.fetch("RUNNER_TEMP")) do |download|
-      run!("xcodebuild", "-downloadPlatform", platform, "-buildVersion", version,
-        "-architectureVariant", "arm64", "-exportPath", download)
-      images = Dir.glob(File.join(download, "**", "*.dmg"))
-      raise "Expected exactly one #{platform} #{version} image" unless images.one?
-      raise "Runtime image is a symlink" if File.symlink?(images.first)
-      run!("xcodebuild", "-importPlatform", images.first)
+    # Some older versions lack the arm64Only distribution. Retry once using
+    # Apple's universal format, but only for that exact availability response.
+    # Network/auth/import failures remain failures; the OS version never moves.
+    %w[arm64 universal].each do |variant|
+      imported = Dir.mktmpdir("innoflow-runtime-", ENV.fetch("RUNNER_TEMP")) do |download|
+        unavailable = false
+        status = run_provisioning("xcodebuild", "-downloadPlatform", platform, "-buildVersion", version,
+          "-architectureVariant", variant, "-exportPath", download) do |line|
+          unavailable ||= line.strip == "#{platform} #{version} (arm64Only) is not available for download."
+        end
+        next false if !status.success? && variant == "arm64" && unavailable
+        raise "Runtime download failed: #{platform} #{version} (#{variant}), #{status}" unless status.success?
+        images = Dir.glob(File.join(download, "**", "*.dmg"))
+        raise "Expected exactly one #{platform} #{version} image" unless images.one?
+        image = images.first
+        raise "Runtime image is a symlink" if File.symlink?(image)
+        raise "Unsafe runtime image" unless File.file?(image) && File.realpath(image).start_with?(File.realpath(download) + "/")
+        status = run_provisioning("xcodebuild", "-importPlatform", image)
+        raise "Runtime import failed: #{platform} #{version}, #{status}" unless status.success?
+        true
+      end
+      break if imported
     end
     raise "Exact runtime unavailable after import: #{identifier}" unless runtime_available?(identifier)
   end
 
   def execute(id, evidence)
-    hosted!
+    hosted_environment!
     entry = matrix.fetch("include").find { |item| item.fetch("check") == id }
     raise "Unknown check: #{id}" unless entry
-    xcode = "/Applications/Xcode_#{entry.fetch('xcode')}.app/Contents/Developer"
-    raise "Unexpected selected Xcode" unless ENV["DEVELOPER_DIR"] == xcode && File.directory?(xcode)
-    raise "Unexpected Xcode version" unless capture!("xcodebuild", "-version").lines.first.to_s.strip == "Xcode #{entry.fetch('xcode')}"
-    swift = capture!("swift", "--version").lines.first.to_s
-    raise "Swift #{entry.fetch('swift')} is required: #{swift}" unless swift.match?(/\bversion #{Regexp.escape(entry.fetch('swift'))}(?:\.|\b)/)
-    raise "Inherited toolchain/SDK override" unless ENV["TOOLCHAINS"].to_s.empty? && ENV["SDKROOT"].to_s.empty?
-    provision_runtime!(@checks.find { |check| check.fetch("id") == id })
+    evidence = outside!(evidence)
+    raise "Evidence root already exists" if File.exist?(evidence)
+    with_provisioning_diagnostics(id, evidence) do
+      hosted!
+      xcode = "/Applications/Xcode_#{entry.fetch('xcode')}.app/Contents/Developer"
+      raise "Unexpected selected Xcode" unless ENV["DEVELOPER_DIR"] == xcode && File.directory?(xcode)
+      raise "Unexpected Xcode version" unless capture!("xcodebuild", "-version").lines.first.to_s.strip == "Xcode #{entry.fetch('xcode')}"
+      swift = capture!("swift", "--version").lines.first.to_s
+      raise "Swift #{entry.fetch('swift')} is required: #{swift}" unless swift.match?(/\bversion #{Regexp.escape(entry.fetch('swift'))}(?:\.|\b)/)
+      raise "Inherited toolchain/SDK override" unless ENV["TOOLCHAINS"].to_s.empty? && ENV["SDKROOT"].to_s.empty?
+      provision_runtime!(@checks.find { |check| check.fetch("id") == id })
+    end
     run!(File.join(@root, "scripts/run-release-preflight.sh"), "execute", "--check-id", id, "--evidence-root", evidence)
   end
 
