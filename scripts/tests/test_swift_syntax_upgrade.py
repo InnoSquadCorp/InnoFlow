@@ -1,6 +1,7 @@
 """Keep reviewed 603/604 admission paired with exact blocking compatibility jobs."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -37,6 +38,38 @@ class SwiftSyntaxUpgradeTests(unittest.TestCase):
                 (root / file).write_text(json.dumps(doc))
             with self.assertRaises(ValueError):
                 policy.coherence(root)
+
+    def test_toolchain_banner_accepts_optional_patch_but_rejects_wrong_line(self):
+        ci = json.loads(subprocess.check_output(['ruby', '-ryaml', '-rjson', '-e',
+            'puts YAML.safe_load(File.read(ARGV[0]), aliases: false).to_json',
+            str(ROOT / '.github/workflows/ci.yml')], text=True))
+        script = next(s['run'] for s in ci['jobs']['swift-syntax-compatibility']['steps']
+                      if s['name'] == 'Verify pinned compatibility toolchain')
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'xcodebuild').write_text('#!/bin/sh\nprintf "Xcode 27.0\\n"\n')
+            (root / 'swift').write_text('#!/bin/sh\nprintf "%s\\n" "$TEST_SWIFT_BANNER"\nexit "${TEST_SWIFT_EXIT:-0}"\n')
+            for tool in ['xcodebuild', 'swift']:
+                (root / tool).chmod(0o755)
+            env = dict(os.environ, PATH=temp + os.pathsep + os.environ['PATH'])
+            cases = [
+                ('6.4', 'Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)', True),
+                ('6.4', 'Apple Swift version 6.4.1 (swiftlang-6.4.1)', True),
+                ('6.3', 'Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3)', True),
+                ('6.4', 'Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3)', False),
+                ('6.4', 'Apple Swift version 6.40 (swiftlang-6.40.0)', False),
+                ('6.4', 'Apple Swift version 6x4 (swiftlang-6.4.0)', False),
+                ('6.4', 'Swift version 6.4 (swift-6.4-RELEASE)', False),
+                ('6.4', '', False),
+            ]
+            for line, banner, allowed in cases:
+                with self.subTest(line=line, banner=banner):
+                    result = subprocess.run(['bash', '-c', script], env=dict(env,
+                        SWIFT_LINE=line, TEST_SWIFT_BANNER=banner), capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, allowed, result.stdout + result.stderr)
+            result = subprocess.run(['bash', '-c', script], env=dict(env, SWIFT_LINE='6.4',
+                TEST_SWIFT_BANNER=cases[0][1], TEST_SWIFT_EXIT='1'), capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
 
     def test_real_workflow_keeps_floor_forward_and_exact_proof(self):
         ci = json.loads(subprocess.check_output(['ruby', '-ryaml', '-rjson', '-e',

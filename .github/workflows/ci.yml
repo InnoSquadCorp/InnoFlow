@@ -575,7 +575,14 @@ jobs:
           set -euo pipefail
           xcodebuild -version
           swift --version
-          swift --version | grep -F "Apple Swift version $SWIFT_LINE."
+          # Apple omits the patch component for initial releases (for example 6.4).
+          swift --version | awk -v expected="$SWIFT_LINE" '
+            $1 == "Apple" && $2 == "Swift" && $3 == "version" {
+              split($4, version, ".")
+              if (version[1] "." version[2] == expected) found = 1
+            }
+            END { exit !found }
+          '
       - name: Resolve and verify audited SwiftSyntax
         run: |
           set -euo pipefail
