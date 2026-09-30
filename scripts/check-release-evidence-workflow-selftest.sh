@@ -45,6 +45,32 @@ expect_mutation_failure publish-without-opt-in \
   's=File.read(ARGV[0]); s.sub!("inputs.publish_release == true && ", ""); File.write(ARGV[1],s)'
 expect_mutation_failure publish-on-tag-push \
   's=File.read(ARGV[0]); s.sub!("github.event_name == '\''workflow_dispatch'\'' && ", ""); File.write(ARGV[1],s)'
+expect_mutation_failure publish-condition-bypass \
+  's=File.read(ARGV[0]); s.sub!("needs.release-evidence.result == '\''success'\''", "needs.release-evidence.result == '\''success'\'' || true"); File.write(ARGV[1],s)'
+expect_mutation_failure publish-without-environment \
+  's=File.read(ARGV[0]); s.sub!("    environment: release\n", ""); File.write(ARGV[1],s)'
+expect_mutation_failure cancel-release \
+  's=File.read(ARGV[0]); s.sub!("cancel-in-progress: false", "cancel-in-progress: true"); File.write(ARGV[1],s)'
+expect_mutation_failure validation-write-permissions \
+  's=File.read(ARGV[0]); s.sub!("  contents: read", "  contents: write"); File.write(ARGV[1],s)'
+expect_mutation_failure unpinned-candidate-checkout \
+  's=File.read(ARGV[0]); s.sub!("ref: ${{ github.sha }}", "ref: main"); File.write(ARGV[1],s)'
+expect_mutation_failure skip-remote-tag-check \
+  's=File.read(ARGV[0]); s.sub!("scripts/verify-release-publication.sh", "echo scripts/verify-release-publication.sh"); File.write(ARGV[1],s)'
+expect_mutation_failure conditional-remote-tag-check \
+  's=File.read(ARGV[0]); s.sub!("      - name: Recheck exact remote tag before publication\n", "      - name: Recheck exact remote tag before publication\n        if: false\n"); File.write(ARGV[1],s)'
+expect_mutation_failure remote-check-wrong-sha \
+  's=File.read(ARGV[0]); s.sub!("RELEASE_SHA: ${{ github.sha }}", "RELEASE_SHA: main"); File.write(ARGV[1],s)'
+expect_mutation_failure unbound-release-assets \
+  's=File.read(ARGV[0]); s.gsub!("name: innoflow-release-gate-${{ github.sha }}", "name: innoflow-release-gate"); File.write(ARGV[1],s)'
+expect_mutation_failure missing-release-assets \
+  's=File.read(ARGV[0]); s.sub!("if-no-files-found: error", "if-no-files-found: warn"); File.write(ARGV[1],s)'
+expect_mutation_failure release-assets-from-other-run \
+  's=File.read(ARGV[0]); s.sub!("          path: release-assets\n", "          path: release-assets\n          run-id: 1234\n"); File.write(ARGV[1],s)'
+expect_mutation_failure unchecked-release-assets \
+  's=File.read(ARGV[0]); s.sub!("shasum -a 256 -c SHA256SUMS", "echo shasum -a 256 -c SHA256SUMS"); File.write(ARGV[1],s)'
+expect_mutation_failure unmatched-publish-assets \
+  's=File.read(ARGV[0]); s.sub!("fail_on_unmatched_files: true", "fail_on_unmatched_files: false"); File.write(ARGV[1],s)'
 expect_mutation_failure sdk-build-bypass \
   's=File.read(ARGV[0]); s.sub!("scripts/run-sdk-platform-build.sh", "xcodebuild"); File.write(ARGV[1],s)'
 expect_mutation_failure sample-platform-build-bypass \
@@ -139,4 +165,5 @@ for coverage_status in missing skipped failure cancelled; do
   fi
 done
 
+"$script_dir/verify-release-publication-selftest.sh"
 echo "[check-release-evidence-workflow-selftest] All checks passed"

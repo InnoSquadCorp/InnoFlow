@@ -9,7 +9,8 @@ permissions:
 # A called workflow inherits github.workflow from its caller. The static
 # prefix prevents this job from cancelling another reusable release gate.
 concurrency:
-  group: innoflow-coverage-${{ github.workflow }}-${{ github.ref }}
+  # A separately admitted recovery run must not cancel native push children.
+  group: innoflow-coverage-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:

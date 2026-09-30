@@ -1,29 +1,125 @@
 name: CI
+run-name: >-
+  ${{ inputs.dependabot_merge_pr != '' && format('CI / Dependabot merge #{0}', inputs.dependabot_merge_pr) || 'CI' }}
 
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+    inputs:
+      dependabot_merge_pr:
+        description: "Trusted recovery only: actual merged Dependabot PR at current main"
+        required: false
+        default: ''
+        type: string
 
 # Keep only the newest run for a branch or pull request. This is especially
 # important for macOS jobs, where stale runs otherwise occupy scarce runners
-# long after a newer commit has superseded their evidence.
+# long after a newer commit has superseded their evidence. Recovery dispatches
+# cannot cancel a native push when main races forward before dispatch admission.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.dependabot_merge_pr != '' && format('dependabot-{0}', inputs.dependabot_merge_pr) || 'validation' }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  ci-plan:
+    name: CI Plan
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      post_merge: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dependabot_merge_pr != '')) }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify actual post-merge main origin
+        if: inputs.dependabot_merge_pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGED_PR: ${{ inputs.dependabot_merge_pr }}
+          EVENT_REF: ${{ github.ref }}
+        run: |
+          [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'Recovery must run on main.' >&2; exit 1; }
+          python3 -B scripts/dependabot-merge-policy.py verify-post-merge --pr "$MERGED_PR" --expected-sha "$GITHUB_SHA"
+      - name: Plan exact changed paths
+        id: plan
+        run: python3 -B scripts/ci-policy.py plan --event "$GITHUB_EVENT_PATH" --output .build/ci-plan.json
+      - name: Preserve change selection evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-plan-${{ github.sha }}-${{ github.run_attempt }}
+          path: .build/ci-plan.json
+          if-no-files-found: error
+
+  policy:
+    name: CI and public operations policy
+    needs: ci-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Verify CI selection and public operations
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'
+          python3 -B scripts/check-public-operations.py
+          scripts/check-workflow-action-pins.sh
+          scripts/check-workflow-job-timeouts.sh
+          ruby scripts/check-ci-efficiency.rb
+          scripts/check-ci-efficiency-selftest.sh
+          ruby scripts/check-coverage-workflow.rb
+          bash scripts/check-coverage-workflow-selftest.sh
+
+  documentation:
+    name: Documentation
+    needs: ci-plan
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.documentation
+    uses: ./.github/workflows/docs.yml
+    with:
+      publish_pages: ${{ needs.ci-plan.outputs.post_merge == 'true' }}
+
+  # Preserve the existing main ruleset context without changing live settings.
+  docs-required:
+    name: Build Documentation
+    if: always()
+    needs: [ci-plan, documentation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Require planned documentation result
+        env:
+          CI_PLAN: ${{ needs.ci-plan.outputs.plan }}
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: python3 -B scripts/ci-policy.py evaluate-documentation
+
   coverage:
     name: Coverage Gate
+    needs: ci-plan
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.coverage
     uses: ./.github/workflows/coverage.yml
 
   lint:
     name: Lint
+    needs: ci-plan
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.lint
     runs-on: macos-26
     timeout-minutes: 30
 
@@ -80,7 +176,8 @@ jobs:
     name: Package Tests (Core)
     runs-on: macos-26
     timeout-minutes: 60
-    needs: lint
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.tests
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -118,7 +215,8 @@ jobs:
     name: Package Tests (Release)
     runs-on: macos-26
     timeout-minutes: 90
-    needs: lint
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.release-tests
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -135,7 +233,8 @@ jobs:
     name: Public API Compatibility
     runs-on: macos-26
     timeout-minutes: 45
-    needs: lint
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.api-compatibility
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -156,7 +255,8 @@ jobs:
     name: Package Tests (ThreadSanitizer)
     runs-on: macos-26
     timeout-minutes: 60
-    needs: lint
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.thread-sanitizer
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -179,7 +279,8 @@ jobs:
     name: Package Tests (Sample)
     runs-on: macos-26
     timeout-minutes: 30
-    needs: lint
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-tests
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -198,7 +299,8 @@ jobs:
     name: Package Build (${{ matrix.platform }})
     runs-on: macos-26
     timeout-minutes: 30
-    needs: lint
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.package-builds
     strategy:
       fail-fast: false
       matrix:
@@ -226,7 +328,8 @@ jobs:
     name: Focused Runtime Tests (${{ matrix.platform }})
     runs-on: macos-26
     timeout-minutes: 60
-    needs: lint
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.focused-runtime-tests
     strategy:
       fail-fast: false
       matrix:
@@ -262,7 +365,8 @@ jobs:
     name: Principle Gates (Static)
     runs-on: macos-26
     timeout-minutes: 30
-    needs: [lint, coverage]
+    needs: [ci-plan, lint, coverage]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.principle-gates
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -284,7 +388,8 @@ jobs:
     name: Sample Package Build (${{ matrix.platform }})
     runs-on: macos-26
     timeout-minutes: 30
-    needs: sample-tests
+    needs: [ci-plan, sample-tests]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-package-builds
     strategy:
       fail-fast: false
       matrix:
@@ -315,7 +420,8 @@ jobs:
     name: Canonical Sample Build
     runs-on: macos-26
     timeout-minutes: 30
-    needs: lint
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-build
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -342,8 +448,8 @@ jobs:
     name: Package Tests (AddressSanitizer)
     runs-on: macos-26
     timeout-minutes: 60
-    needs: lint
-    if: github.event_name == 'push'
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.address-sanitizer
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -366,7 +472,8 @@ jobs:
     name: Canonical Sample UI Smoke Tests
     runs-on: macos-26
     timeout-minutes: 60
-    needs: sample-build
+    needs: [ci-plan, sample-build]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-ui-tests
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -436,6 +543,10 @@ jobs:
     name: CI Required
     if: always()
     needs:
+      - ci-plan
+      - policy
+      - docs-required
+      - documentation
       - coverage
       - lint
       - tests
@@ -450,30 +561,14 @@ jobs:
       - sample-build
       - address-sanitizer
       - sample-ui-tests
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-
-      - name: Require every mandatory CI result
-        run: |
-          set -euo pipefail
-          ruby "$GITHUB_WORKSPACE/scripts/check-required-ci-results.rb" \
-            "${{ github.event_name }}" \
-            "coverage=${{ needs.coverage.result }}" \
-            "lint=${{ needs.lint.result }}" \
-            "tests=${{ needs.tests.result }}" \
-            "release-tests=${{ needs.release-tests.result }}" \
-            "api-compatibility=${{ needs.api-compatibility.result }}" \
-            "thread-sanitizer=${{ needs.thread-sanitizer.result }}" \
-            "sample-tests=${{ needs.sample-tests.result }}" \
-            "package-builds=${{ needs.package-builds.result }}" \
-            "focused-runtime-tests=${{ needs.focused-runtime-tests.result }}" \
-            "principle-gates=${{ needs.principle-gates.result }}" \
-            "sample-package-builds=${{ needs.sample-package-builds.result }}" \
-            "sample-build=${{ needs.sample-build.result }}" \
-            "address-sanitizer=${{ needs.address-sanitizer.result }}" \
-            "sample-ui-tests=${{ needs.sample-ui-tests.result }}"
+      - name: Require every planned CI result
+        env:
+          CI_PLAN: ${{ needs.ci-plan.outputs.plan }}
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: python3 -B scripts/ci-policy.py evaluate

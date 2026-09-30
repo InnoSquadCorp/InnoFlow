@@ -20,6 +20,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: innoflow-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release-coverage:
     name: Release Coverage Gate
@@ -39,6 +43,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Show Xcode version
@@ -68,6 +73,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Show Xcode version
@@ -111,6 +117,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Show Xcode version
@@ -132,6 +139,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -193,16 +201,22 @@ jobs:
 
       - name: Package DocC artifact
         run: |
+          set -euo pipefail
           mkdir -p .build/docc
           tar -C .build/docc -czf .build/docc/innoflow-docc.tar.gz InnoFlow
+          (cd .build/docc && shasum -a 256 innoflow-docc.tar.gz > SHA256SUMS)
 
       - name: Upload release artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: innoflow-release-gate
+          name: innoflow-release-gate-${{ github.sha }}
           path: |
             .build/docc/innoflow-docc.tar.gz
+            .build/docc/SHA256SUMS
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 30
 
   release-evidence:
     if: startsWith(github.ref, 'refs/tags/') && always()
@@ -309,6 +323,9 @@ jobs:
     needs: [release-evidence]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Configure required reviewers and tag-only deployment rules in GitHub.
+    # Declaring this name does not configure those server-side protections.
+    environment: release
     permissions:
       contents: write
 
@@ -316,24 +333,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Download release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: innoflow-release-gate
+          name: innoflow-release-gate-${{ github.sha }}
           path: release-assets
+
+      - name: Verify release artifact checksum
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          test -s innoflow-docc.tar.gz
+          shasum -a 256 -c SHA256SUMS
 
       - name: Prepare release notes
         run: |
+          set -euo pipefail
           chmod +x Tools/extract-release-notes.sh
           Tools/extract-release-notes.sh "${GITHUB_REF_NAME}" > release-notes.md
+          test -s release-notes.md
+
+      - name: Recheck exact remote tag before publication
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          scripts/verify-release-publication.sh "$RELEASE_TAG" "$RELEASE_SHA"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ github.ref_name }}
           body_path: release-notes.md
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
           files: |
-            release-assets/**/*.tar.gz
+            release-assets/innoflow-docc.tar.gz
+            release-assets/SHA256SUMS

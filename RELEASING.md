@@ -249,6 +249,15 @@ Before tagging a release (automated release checks execute in CI):
     authorized dispatch of the same exact tag with `publish_release=true` and
     the evidence run ID is required to enter the publication job. That job
     also requires the evidence prerequisite to succeed in its own run.
+    Publication enters the `release` GitHub environment; administrators must
+    separately configure and verify required reviewers and tag-only deployment
+    rules there. The workflow declaration alone does not enable protections.
+    Attempts for the same ref serialize without cancelling a running release.
+    The publication checkout is pinned to the exact event SHA, downloads only
+    this run's SHA-named DocC asset, verifies its checksum, and rechecks that
+    the remote tag still targets that SHA immediately before the release API
+    request. This last check narrows the race; it does not replace the
+    server-side immutable-tag rules in step 18. Missing assets fail closed.
 
 The evidence manifest cannot define its own required set. The versioned JSON
 policy does, and verification rejects missing, duplicate, unknown, failed,

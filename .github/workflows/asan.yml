@@ -1,23 +1,18 @@
-name: Pull Request AddressSanitizer
+name: Manual AddressSanitizer
 
 on:
-  pull_request:
-    branches: [main, develop]
-    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   address-sanitizer:
-    if: >-
-      contains(github.event.pull_request.labels.*.name, 'run-asan') &&
-      (github.event.action != 'labeled' || github.event.label.name == 'run-asan')
     name: Package Tests (AddressSanitizer)
     runs-on: macos-26
     timeout-minutes: 60
     concurrency:
-      group: asan-${{ github.event.pull_request.number }}
+      group: asan-manual-${{ github.ref }}
       cancel-in-progress: true
 
     steps:

@@ -44,7 +44,7 @@ check(uploads.one? && uploads.first["if"] == "always()" &&
   caller = jobs.fetch(name)
   check(caller["uses"] == "./.github/workflows/coverage.yml", "#{file}: coverage callee changed")
   check(!caller.key?("continue-on-error"), "#{file}: coverage caller cannot ignore failures")
-  expected_condition = file == "cd.yml" ? "startsWith(github.ref, 'refs/tags/')" : nil
+  expected_condition = file == "cd.yml" ? "startsWith(github.ref, 'refs/tags/')" : "fromJSON(needs.ci-plan.outputs.plan).jobs.coverage"
   check(caller["if"] == expected_condition, "#{file}: coverage caller condition changed")
   check(Array(jobs.fetch(dependent)["needs"]).include?(name), "#{file}: #{dependent} must require coverage")
 end

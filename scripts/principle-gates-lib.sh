@@ -1178,9 +1178,14 @@ run_community_health_checks() {
   search_lines '^blank_issues_enabled:[[:space:]]*false$' .github/ISSUE_TEMPLATE/config.yml >/dev/null
   search_lines '^name:[[:space:]]*Usage question$' .github/ISSUE_TEMPLATE/question.md >/dev/null
   search_lines '^labels:[[:space:]]*question$' .github/ISSUE_TEMPLATE/question.md >/dev/null
-  search_lines 'package-ecosystem:[[:space:]]*github-actions' .github/dependabot.yml >/dev/null
-  search_lines 'package-ecosystem:[[:space:]]*swift' .github/dependabot.yml >/dev/null
+  ruby -ryaml -e '
+    config = YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)
+    ecosystems = config.fetch("updates").map { |update| update.fetch("package-ecosystem") }
+    abort "[principle-gates] Missing required Dependabot ecosystems" unless
+      %w[github-actions swift].all? { |ecosystem| ecosystems.include?(ecosystem) }
+  ' .github/dependabot.yml
   search_lines '@Ethan-IS' GOVERNANCE.md >/dev/null
+  python3 "$SCRIPT_DIR/check-package-index.py" "$ROOT_DIR"
 }
 
 run_workflow_security_checks() {
