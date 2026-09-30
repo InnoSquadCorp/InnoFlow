@@ -1,0 +1,83 @@
+name: Contract Fixture Measurement
+run-name: Contract fixtures / PR ${{ github.event.pull_request.number }} / ${{ github.event.pull_request.head.sha }}
+
+# Runs on the experiment PR itself, including Draft PRs. A new dispatch-only
+# workflow would not be available before it reached the default branch.
+on:
+  pull_request:
+    branches: [ci/flow-automation-standardization]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-fixture-measurement-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  paired-macos:
+    if: >-
+      github.event.pull_request.head.ref == 'perf/shared-macro-consumer-fixtures' &&
+      github.event.pull_request.base.ref == 'ci/flow-automation-standardization' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Initialize failure artifact
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/contract-fixture-measurement"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'contract-fixture-measurement' / 'summary.json'
+          path.write_text(json.dumps({
+              'schemaVersion': 1,
+              'status': 'not-started',
+              'baselineSHA': 'd581ecc9b4d82b19d7fdcb37ec989a63ef73ebd5',
+              'candidateSHA': os.environ['CANDIDATE_SHA'],
+              'errors': ['Measurement did not start; inspect the job setup log.'],
+          }, indent=2) + '\n')
+          PY
+
+      - name: Checkout exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          path: candidate
+
+      - name: Checkout fixed baseline separately
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: d581ecc9b4d82b19d7fdcb37ec989a63ef73ebd5
+          persist-credentials: false
+          path: baseline
+
+      - name: Check measurement tooling without building Swift
+        working-directory: candidate
+        run: python3 -B -m unittest discover -s scripts/tests -p 'test_contract_fixture_measurement.py' -v
+
+      - name: Measure exact revisions on the same runner
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 -B candidate/scripts/measure-contract-fixtures.py \
+            --baseline "$GITHUB_WORKSPACE/baseline" \
+            --candidate "$GITHUB_WORKSPACE/candidate" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --output "$RUNNER_TEMP/contract-fixture-measurement" \
+            --temporary "$RUNNER_TEMP/contract-fixture-temporary"
+
+      - name: Upload raw evidence including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: contract-fixture-measurement-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/contract-fixture-measurement
+          if-no-files-found: error
+          retention-days: 14

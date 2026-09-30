@@ -61,6 +61,13 @@ addition to the no-flag build; compiler-predicate fixtures also exercise active
 `arch`, `swift`, and `compiler` helpers. Changes to this model must keep those
 matrices and the active-collision diagnostic test green.
 
+The consumer matrix keeps one fresh package/build tree per test invocation and
+changes these fixture-only defines on both consumer targets. SwiftPM can reuse
+the unchanged InnoFlow/SwiftSyntax dependency build while recompiling each flag
+configuration; all combinations and negative controls still run. The separate
+application-extension check retains its global compiler flag and isolated build
+tree so extension-safety validation still includes the dependency graph.
+
 Availability is never weakened to make a helper compile. Introduced,
 deprecated, and conditional `@available` attributes are preserved on generated
 helpers. A case carrying a normal platform `unavailable` restriction cannot
