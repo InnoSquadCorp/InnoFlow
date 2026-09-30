@@ -250,6 +250,46 @@ Dir.mktmpdir("innoflow-hosted-selftest-") do |fixture|
   rejects("CI-only") { runner.execute("first-check", early) }
   assert(!File.exist?("#{early}-provisioning"), "Local invocation wrote diagnostics")
   ENV["GITHUB_ACTIONS"] = "true"
+  ENV["RUNNER_ENVIRONMENT"] = "self-hosted"
+  rejects("CI-only") { runner.execute("first-check", early) }
+  assert(!File.exist?("#{early}-provisioning"), "Self-hosted invocation wrote diagnostics")
+  ENV["RUNNER_ENVIRONMENT"] = "github-hosted"
+
+  # Real Git command failures in disposable fixtures must retain diagnostics
+  # without reaching Xcode, runtime provisioning, or release execution.
+  { "missing-git" => "git rev-parse HEAD failed", "broken-index" => "git status" }.each do |name, message|
+    broken = File.join(fixture, name)
+    if name == "missing-git"
+      FileUtils.mkdir_p(File.join(broken, "docs/contracts"))
+      FileUtils.cp(policy_path, File.join(broken, "docs/contracts/release-evidence-policy.json"))
+    else
+      FileUtils.cp_r(repo, broken)
+      File.write(File.join(broken, ".git/index"), "broken-index")
+    end
+    failed_evidence = File.join(fixture, "evidence-#{name}")
+    rejects(message) { HostedReleasePreflight.new(broken).execute("first-check", failed_evidence) }
+    path = "#{failed_evidence}-provisioning/provisioning.log"
+    assert(File.file?(path), "#{name} failure lost diagnostics")
+    log = File.read(path)
+    assert(log.include?(sha) && log.include?(message) && log.include?("status=pid"), "Git command output/status missing")
+    assert(!File.exist?(failed_evidence) && !log.include?("xcodebuild"), "Invalid Git candidate reached execution")
+  end
+  { "GITHUB_REF" => "refs/heads/feature", "GITHUB_SHA" => "0" * 40 }.each do |key, value|
+    original = ENV.fetch(key)
+    ENV[key] = value
+    failed_evidence = File.join(fixture, "invalid-#{key}")
+    rejects("Only exact main") { runner.execute("first-check", failed_evidence) }
+    assert(File.read("#{failed_evidence}-provisioning/provisioning.log").include?("Only exact main"), "Candidate guard failure lost diagnostics")
+    assert(!File.exist?(failed_evidence), "Invalid candidate produced evidence")
+    ENV[key] = original
+  end
+  dirty_file = File.join(repo, "dirty-guard.txt")
+  File.write(dirty_file, "must be preserved")
+  failed_evidence = File.join(fixture, "dirty-candidate")
+  rejects("Candidate must be clean") { runner.execute("first-check", failed_evidence) }
+  assert(File.read("#{failed_evidence}-provisioning/provisioning.log").include?("dirty-guard.txt"), "Dirty status output missing")
+  assert(File.read(dirty_file) == "must be preserved" && !File.exist?(failed_evidence), "Dirty candidate changed or executed")
+  File.unlink(dirty_file) # Task-owned fixture only, never the user's checkout.
   ENV["DEVELOPER_DIR"] = "deliberately-wrong-xcode"
   rejects("Unexpected selected Xcode") { runner.execute("first-check", early) }
   log = File.read("#{early}-provisioning/provisioning.log")

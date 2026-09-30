@@ -216,8 +216,9 @@ Before tagging a release (automated release checks execute in CI):
     with Apple's `universal` format at the same pinned OS version. Network,
     authentication, import, or post-import availability failures still block
     the check; no newer runtime substitutes for the requested identifier.
-    Before toolchain validation or runtime provisioning, setup metadata and
-    command output are streamed to a fresh outside-checkout
+    After the GitHub-hosted environment guard, but before Git candidate or
+    toolchain validation and runtime provisioning, setup metadata and command
+    output are streamed to a fresh outside-checkout
     `<evidence-root>-provisioning/provisioning.log`. Failed/cancelled jobs
     upload this directory alongside any check evidence, including when setup
     failed before receipts existed. Setup diagnostics never enter successful

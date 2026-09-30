@@ -46,8 +46,12 @@ class HostedReleasePreflight
     raise "Command failed: #{command.join(' ')}" unless system(*command, chdir: @root)
   end
 
-  def hosted!
+  def hosted_environment!
     raise "Execution is GitHub-hosted CI-only" unless ENV["GITHUB_ACTIONS"] == "true" && ENV["RUNNER_ENVIRONMENT"] == "github-hosted"
+  end
+
+  def hosted!
+    hosted_environment!
     raise "Only exact main candidates are accepted" unless ENV["GITHUB_REF"] == "refs/heads/main" &&
       ENV["GITHUB_SHA"] == capture!("git", "rev-parse", "HEAD").strip
     raise "Candidate must be clean" unless capture!("git", "status", "--porcelain=v1", "--untracked-files=all").empty?
@@ -133,12 +137,13 @@ class HostedReleasePreflight
   end
 
   def execute(id, evidence)
-    hosted!
+    hosted_environment!
     entry = matrix.fetch("include").find { |item| item.fetch("check") == id }
     raise "Unknown check: #{id}" unless entry
     evidence = outside!(evidence)
     raise "Evidence root already exists" if File.exist?(evidence)
     with_provisioning_diagnostics(id, evidence) do
+      hosted!
       xcode = "/Applications/Xcode_#{entry.fetch('xcode')}.app/Contents/Developer"
       raise "Unexpected selected Xcode" unless ENV["DEVELOPER_DIR"] == xcode && File.directory?(xcode)
       raise "Unexpected Xcode version" unless capture!("xcodebuild", "-version").lines.first.to_s.strip == "Xcode #{entry.fetch('xcode')}"
