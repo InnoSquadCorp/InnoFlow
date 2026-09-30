@@ -28,7 +28,8 @@ remote_sha="$(printf '%s\n' "$remote_tags" | awk -v ref="refs/tags/$tag" '
   $2 == ref "^{}" { peeled = $1; peeled_count++ }
   END {
     if (direct_count != 1 || peeled_count > 1) exit 1
-    print peeled_count == 1 ? peeled : direct
+    # Parentheses are required by macOS/BSD awk around a print ternary.
+    print (peeled_count == 1 ? peeled : direct)
   }
 ')"
 if [[ "$remote_sha" != "$expected_sha" ]]; then
