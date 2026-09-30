@@ -12,7 +12,7 @@ JOBS = (
     "policy", "docs-required", "documentation", "coverage", "lint", "tests", "release-tests",
     "api-compatibility", "thread-sanitizer", "sample-tests", "package-builds",
     "focused-runtime-tests", "principle-gates", "sample-package-builds",
-    "sample-build", "address-sanitizer", "sample-ui-tests",
+    "sample-build", "address-sanitizer", "sample-ui-tests", "swift-syntax-compatibility",
 )
 SHA = re.compile(r"[0-9a-f]{40}")
 PR_ACTIONS = {"opened", "synchronize", "reopened", "labeled", "unlabeled", "ready_for_review"}
@@ -23,7 +23,7 @@ DEPENDENCIES = {
     "package-builds": {"lint"}, "focused-runtime-tests": {"lint"},
     "principle-gates": {"lint", "coverage"}, "sample-package-builds": {"sample-tests"},
     "sample-build": {"lint"}, "address-sanitizer": {"lint"},
-    "sample-ui-tests": {"sample-build"},
+    "sample-ui-tests": {"sample-build"}, "swift-syntax-compatibility": {"lint"},
 }
 WORKFLOW_IMPACT = {
     "ci.yml": set(JOBS),

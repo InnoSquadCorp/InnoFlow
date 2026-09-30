@@ -57,12 +57,16 @@ full validation. Creating labels is a separate owner-approved settings action.
 
 `scripts/check-public-operations.py` requires the root, sample package, sample
 Xcode workspace and DocC SwiftSyntax lock versions/revisions to agree with the
-manifest's single toolchain line and DocC generator. Regenerate lockfiles with
+manifest's reviewed 603/604 range and DocC generator. Regenerate lockfiles with
 SwiftPM from their actual manifests; do not fabricate origin hashes or loosen
 frozen resolution to make CI green. A coordinated major proposal must update the
 manifest range, all four locks, generator metadata, compatibility assertions and
 relevant docs together while preserving Swift 6.3 primary, Swift 6.4 validation,
-prebuilt/fallback expectations and existing performance contracts.
+default/fallback build paths and existing performance contracts. Matching prebuilts
+are optional availability; only artifact evidence proves their use. Additional
+mandatory SwiftSyntax compatibility jobs exercise 603.0.0 on Swift 6.3 and
+604.0.0 on Swift 6.4, while every prior primary job validates the committed 604
+resolution. See [integration evidence](DEPENDENCY_INTEGRATION_2026_09_30.md).
 
 ## Candidate release and publication
 

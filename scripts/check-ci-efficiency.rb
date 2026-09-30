@@ -29,7 +29,7 @@ jobs = ci.fetch("jobs")
 required_job_names = %w[
   ci-plan policy docs-required documentation coverage lint tests release-tests api-compatibility thread-sanitizer
   sample-tests package-builds focused-runtime-tests principle-gates
-  sample-package-builds sample-build address-sanitizer sample-ui-tests
+  sample-package-builds sample-build address-sanitizer sample-ui-tests swift-syntax-compatibility
 ]
 check((jobs.keys - ["ci-required"]).sort == required_job_names.sort,
   "CI Required inventory must classify every non-aggregate CI job")
@@ -41,7 +41,7 @@ prior_dependencies = {
   "thread-sanitizer" => ["lint"], "sample-tests" => ["lint"], "package-builds" => ["lint"],
   "focused-runtime-tests" => ["lint"], "principle-gates" => %w[lint coverage],
   "sample-package-builds" => ["sample-tests"], "sample-build" => ["lint"],
-  "address-sanitizer" => ["lint"], "sample-ui-tests" => ["sample-build"],
+  "address-sanitizer" => ["lint"], "sample-ui-tests" => ["sample-build"], "swift-syntax-compatibility" => ["lint"],
 }
 prior_dependencies.each do |name, prior|
   job = jobs.fetch(name)

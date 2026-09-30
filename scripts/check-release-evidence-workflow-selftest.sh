@@ -78,7 +78,7 @@ expect_mutation_failure sample-platform-build-bypass \
 expect_mutation_failure checkout-after-script \
   's=File.read(ARGV[0]); block=s[/      - name: Checkout exact release candidate\n.*?          persist-credentials: false\n/m]; s.sub!(block, ""); marker="      - name: Download candidate-bound release evidence\n"; s.sub!(marker, block+"\n"+marker); File.write(ARGV[1],s)'
 expect_mutation_failure retired-consumer-checkout \
-  's=File.read(ARGV[0]); marker="      - name: Verify complete pre-publication evidence\n"; block="      - name: Checkout Mulbyul\n        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10\n        with:\n          repository: InnoSquadCorp/Mulbyul\n          fetch-depth: 0\n          persist-credentials: false\n          path: release-components/Mulbyul\n\n"; s.sub!(marker, block+marker); File.write(ARGV[1],s)'
+  's=File.read(ARGV[0]); marker="      - name: Verify complete pre-publication evidence\n"; block="      - name: Checkout Mulbyul\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n        with:\n          repository: InnoSquadCorp/Mulbyul\n          fetch-depth: 0\n          persist-credentials: false\n          path: release-components/Mulbyul\n\n"; s.sub!(marker, block+marker); File.write(ARGV[1],s)'
 
 expect_producer_mutation_failure() {
   local name="$1" expression="$2"

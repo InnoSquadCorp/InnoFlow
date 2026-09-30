@@ -68,6 +68,10 @@ CORE = {'CI Plan': ['Plan exact changed paths'],
                                      'Run canonical sample UI smoke tests'],
  'CI Required': ['Require every planned CI result'],
  'Build Documentation': ['Require planned documentation result']}
+CORE.update({
+    "SwiftSyntax Compatibility (Swift 6.3, 603.0.0)": ['Checkout exact compatibility candidate', 'Verify pinned compatibility toolchain', 'Resolve and verify audited SwiftSyntax', 'Test macro and external compile contracts'],
+    "SwiftSyntax Compatibility (Swift 6.4, 604.0.0)": ['Checkout exact compatibility candidate', 'Verify pinned compatibility toolchain', 'Resolve and verify audited SwiftSyntax', 'Test macro and external compile contracts'],
+})
 ALLOWED_STEP_SKIP = {('CI Plan', 'Verify actual post-merge main origin'),
  ('Documentation / Build Documentation', 'Upload Documentation Artifact'),
  ('Focused Runtime Tests (iOS)', 'Preserve failed focused runtime results'),

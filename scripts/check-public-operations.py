@@ -70,9 +70,11 @@ def coherence(root):
     version, revision = states[0]
     manifest = (root / 'Package.swift').read_text()
     spans = re.findall(r'\.package\(url: "https://github.com/swiftlang/swift-syntax.git", "([0-9]+)\.0\.0"\.\.<"([0-9]+)\.0\.0"\)', manifest)
-    require(len(spans) == 1, 'root manifest must retain one explicit SwiftSyntax toolchain line')
+    require(len(spans) == 1, 'root manifest must retain one reviewed SwiftSyntax range')
     low, high = map(int, spans[0])
-    require(high == low + 1 and int(version.split('.')[0]) == low, 'resolved SwiftSyntax is outside manifest toolchain line')
+    require((low, high) == (603, 605), 'manifest must retain reviewed 603.0.0..<605.0.0 range')
+    require(low <= int(version.split('.')[0]) < high, 'resolved SwiftSyntax is outside manifest toolchain range')
+    require(manifest.startswith('// swift-tools-version: 6.3'), 'minimum Swift 6.3 contract changed')
     generator = (root / 'Tools/generate-docc.sh').read_text()
     for key, value in [('DOCC_SWIFT_SYNTAX_VERSION', version), ('DOCC_SWIFT_SYNTAX_REVISION', revision)]:
         require(re.findall(r'^' + key + r'="([^"]+)"$', generator, re.M) == [value], 'DocC generator/lock mismatch: ' + key)

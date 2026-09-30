@@ -44,12 +44,12 @@ let package = Package(
     ),
   ],
   dependencies: [
-    // Constrained to a single SwiftSyntax toolchain line so macro
-    // expansion and diagnostics cannot drift across toolchain majors,
-    // while still letting consumer graphs share a newer 603.x patch
-    // with other macro packages. Maintainer reproducibility comes from
-    // Package.resolved, not the manifest (docs/MACRO_OPERATIONS.md).
-    .package(url: "https://github.com/swiftlang/swift-syntax.git", "603.0.0"..<"604.0.0")
+    // Bound the reviewed SwiftSyntax 603/604 lines. Swift 6.3 remains the
+    // minimum toolchain; CI tests the committed 604 resolution and the 603
+    // floor without weakening macro, consumer or performance contracts.
+    // Maintainer reproducibility comes from Package.resolved, not the
+    // manifest (docs/MACRO_OPERATIONS.md).
+    .package(url: "https://github.com/swiftlang/swift-syntax.git", "603.0.0"..<"605.0.0")
   ],
   targets: [
     // MARK: - Core Library

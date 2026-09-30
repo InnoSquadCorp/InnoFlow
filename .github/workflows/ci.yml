@@ -42,7 +42,7 @@ jobs:
       plan: ${{ steps.plan.outputs.plan }}
       post_merge: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dependabot_merge_pr != '')) }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Verify CI selection and public operations
@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Require planned documentation result
@@ -124,7 +124,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -180,7 +180,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.tests
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -219,7 +219,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.release-tests
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -237,7 +237,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.api-compatibility
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -259,7 +259,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.thread-sanitizer
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -283,7 +283,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-tests
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -307,7 +307,7 @@ jobs:
         platform: [macOS, iOS, tvOS, watchOS, visionOS]
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -336,7 +336,7 @@ jobs:
         platform: [iOS, tvOS, watchOS, visionOS]
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -369,7 +369,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.principle-gates
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -396,7 +396,7 @@ jobs:
         platform: [tvOS, watchOS, visionOS]
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -424,7 +424,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-build
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -452,7 +452,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.address-sanitizer
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -476,7 +476,7 @@ jobs:
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-ui-tests
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -539,6 +539,61 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             test
 
+  swift-syntax-compatibility:
+    name: SwiftSyntax Compatibility (Swift ${{ matrix.swift }}, ${{ matrix.syntax }})
+    needs: [ci-plan, lint]
+    if: fromJSON(needs.ci-plan.outputs.plan).jobs.swift-syntax-compatibility
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            xcode: '26.6'
+            swift: '6.3'
+            syntax: '603.0.0'
+            revision: '2b59c0c741e9184ab057fd22950b491076d42e91'
+          - runner: xcode-27
+            xcode: '27.0'
+            swift: '6.4'
+            syntax: '604.0.0'
+            revision: '050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf'
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+      SWIFT_LINE: ${{ matrix.swift }}
+      SYNTAX_VERSION: ${{ matrix.syntax }}
+      SYNTAX_REVISION: ${{ matrix.revision }}
+    steps:
+      - name: Checkout exact compatibility candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify pinned compatibility toolchain
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+          swift --version | grep -F "Apple Swift version $SWIFT_LINE."
+      - name: Resolve and verify audited SwiftSyntax
+        run: |
+          set -euo pipefail
+          swift package resolve
+          swift package resolve swift-syntax --version "$SYNTAX_VERSION"
+          python3 - <<'PYTHON'
+          import json, os
+          matches = [p for p in json.load(open('Package.resolved'))['pins'] if p['identity'] == 'swift-syntax']
+          assert len(matches) == 1, matches
+          assert matches[0]['state']['version'] == os.environ['SYNTAX_VERSION'], matches
+          assert matches[0]['state']['revision'] == os.environ['SYNTAX_REVISION'], matches
+          PYTHON
+      - name: Test macro and external compile contracts
+        run: |
+          set -euo pipefail
+          swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors \
+            --filter 'InnoFlowMacrosTests|CompileContractTests'
+
   ci-required:
     name: CI Required
     if: always()
@@ -561,10 +616,11 @@ jobs:
       - sample-build
       - address-sanitizer
       - sample-ui-tests
+      - swift-syntax-compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Require every planned CI result

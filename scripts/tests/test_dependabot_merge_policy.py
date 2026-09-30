@@ -388,9 +388,14 @@ class DependabotPolicyTests(unittest.TestCase):
                 if 'uses' in job:
                     expand(documents[job['uses'].rsplit('/', 1)[1]], prefix + name + ' / ')
                     continue
-                platforms = job.get('strategy', {}).get('matrix', {}).get('platform', [None])
-                for platform in platforms:
-                    render = lambda t: t.replace('${{ matrix.platform }}', platform) if platform else t
+                matrix = job.get('strategy', {}).get('matrix', {})
+                rows = matrix.get('include', [{'platform': p} for p in matrix.get('platform', [None])])
+                for row in rows:
+                    def render(text):
+                        for key, value in row.items():
+                            if value is not None:
+                                text = text.replace('${{ matrix.' + key + ' }}', str(value))
+                        return text
                     expanded = prefix + render(name)
                     self.assertNotIn(expanded, actual)
                     actual[expanded] = {render(step['name']) for step in job['steps'] if 'name' in step}

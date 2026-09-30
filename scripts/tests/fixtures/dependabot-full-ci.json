@@ -332,6 +332,42 @@
         "name": "Require planned documentation result",
         "conclusion": "success"
       }
+    ],
+    "SwiftSyntax Compatibility (Swift 6.3, 603.0.0)": [
+      {
+        "name": "Checkout exact compatibility candidate",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify pinned compatibility toolchain",
+        "conclusion": "success"
+      },
+      {
+        "name": "Resolve and verify audited SwiftSyntax",
+        "conclusion": "success"
+      },
+      {
+        "name": "Test macro and external compile contracts",
+        "conclusion": "success"
+      }
+    ],
+    "SwiftSyntax Compatibility (Swift 6.4, 604.0.0)": [
+      {
+        "name": "Checkout exact compatibility candidate",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify pinned compatibility toolchain",
+        "conclusion": "success"
+      },
+      {
+        "name": "Resolve and verify audited SwiftSyntax",
+        "conclusion": "success"
+      },
+      {
+        "name": "Test macro and external compile contracts",
+        "conclusion": "success"
+      }
     ]
   }
 }
