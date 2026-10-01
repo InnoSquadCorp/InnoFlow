@@ -373,7 +373,10 @@ class DependabotPolicyTests(unittest.TestCase):
     def transport(self, name, status='in_progress', conclusion=None):
         check_id = 7000 + len(self.api.ready_jobs.get((READY_RUN, 1), []))
         job = dict(id=check_id, name=name, status=status, conclusion=conclusion,
+                   run_id=READY_RUN, run_attempt=1, head_sha=HEAD, steps=[],
                    check_run_url=f'https://api.github.com/repos/{p.REPOSITORY}/check-runs/{check_id}')
+        if name == 'inspect':
+            job['steps'] = [dict(name=p.COORDINATOR_SOURCE_STEP + BASE, status=status, conclusion=conclusion)]
         self.api.ready_jobs.setdefault((READY_RUN, 1), []).append(job)
         check = dict(job, app=dict(id=p.APP), head_sha=HEAD, check_suite=dict(id=800),
                      details_url=f'https://github.com/{p.REPOSITORY}/actions/runs/{READY_RUN}/job/{check_id}')
@@ -389,6 +392,62 @@ class DependabotPolicyTests(unittest.TestCase):
         self.transport('post-merge', 'queued')
         self.assertIn('armed', p.coordinate(self.api, NUMBER, True))
         self.assertEqual(self.api.native_check['conclusion'], 'success')
+
+    def test_actual_unexpanded_refresh_name_is_only_a_bound_empty_pr_target_skip(self):
+        source = (ROOT / '.github/workflows/dependabot-auto-merge.yml').read_text()
+        expression = source.split('  ready-refresh:\n', 1)[1].split('    name: ${{ ', 1)[1].split(' }}', 1)[0]
+        self.assertEqual(expression, p.SKIPPED_REFRESH_NAME)
+        self.transport('inspect', 'completed', 'success')
+        self.transport(p.SKIPPED_REFRESH_NAME, 'completed', 'skipped')
+        self.assertIn('armed', p.coordinate(self.api, NUMBER, True))
+
+    def test_refresh_skip_rejects_lookalikes_executed_steps_and_other_outcomes(self):
+        mutations = [lambda j,c: j.update(name=p.SKIPPED_REFRESH_NAME + ' '),
+                     lambda j,c: j.update(name='Ready refresh PR45 run1 attempt1'),
+                     lambda j,c: j.update(steps=[dict(name='unexpected execution')]),
+                     lambda j,c: j.update(steps=None),
+                     lambda j,c: j.update(status='in_progress'),
+                     lambda j,c: j.update(conclusion='failure'), lambda j,c: j.update(conclusion='neutral'),
+                     lambda j,c: j.update(conclusion='cancelled'), lambda j,c: j.update(conclusion='success'),
+                     lambda j,c: c.update(conclusion='success'), lambda j,c: c.update(status='in_progress'),
+                     lambda j,c: j.update(run_id=RUN), lambda j,c: j.update(run_attempt=2),
+                     lambda j,c: j.update(head_sha=BASE), lambda j,c: c.update(app=dict(id=999)),
+                     lambda j,c: c.update(check_suite=dict(id=999)),
+                     lambda j,c: j.update(check_run_url='https://api.github.com/repos/foreign/repo/check-runs/7001')]
+        for mutate in mutations:
+            self.api = Transcript()
+            self.transport('inspect', 'completed', 'success')
+            job, check = self.transport(p.SKIPPED_REFRESH_NAME, 'completed', 'skipped')
+            mutate(job, check)
+            with self.subTest(mutation=mutate), self.assertRaises(p.Rejected): p.proof(self.api, NUMBER)
+            self.assertFalse(self.api.mutations)
+
+    def test_refresh_skip_requires_successful_bound_trusted_source(self):
+        mutations = [lambda j,c: j.update(steps=[]),
+                     lambda j,c: j['steps'].append(copy.deepcopy(j['steps'][0])),
+                     lambda j,c: j['steps'][0].update(name=p.COORDINATOR_SOURCE_STEP + HEAD),
+                     lambda j,c: j['steps'][0].update(name=p.COORDINATOR_SOURCE_STEP + 'unknown'),
+                     lambda j,c: j['steps'][0].update(conclusion='skipped'),
+                     lambda j,c: j.update(conclusion='failure'), lambda j,c: c.update(conclusion='failure'),
+                     lambda j,c: c.update(app=dict(id=999)), lambda j,c: j.update(run_attempt=2)]
+        for mutate in mutations:
+            self.api = Transcript()
+            job, check = self.transport('inspect', 'completed', 'success')
+            self.transport(p.SKIPPED_REFRESH_NAME, 'completed', 'skipped')
+            mutate(job, check)
+            with self.subTest(mutation=mutate), self.assertRaises(p.Rejected): p.proof(self.api, NUMBER)
+            self.assertFalse(self.api.mutations)
+        self.api = Transcript()
+        self.transport('inspect', 'completed', 'success')
+        self.transport('inspect', 'completed', 'success')
+        self.transport(p.SKIPPED_REFRESH_NAME, 'completed', 'skipped')
+        with self.assertRaises(p.Rejected): p.proof(self.api, NUMBER)
+        for field, value in [('path', p.CI_PATH), ('event', 'workflow_run'), ('workflow_id', 999)]:
+            self.api = Transcript()
+            self.transport('inspect', 'completed', 'success')
+            self.transport(p.SKIPPED_REFRESH_NAME, 'completed', 'skipped')
+            self.api.ready_run[field] = value
+            with self.assertRaises(p.Rejected): p.proof(self.api, NUMBER)
 
     def test_transport_lookalikes_foreign_provenance_and_unknown_jobs_rejected(self):
         for field, value in [('app', dict(id=123)), ('head_sha', BASE), ('check_suite', dict(id=999)),
@@ -602,7 +661,11 @@ class DependabotPolicyTests(unittest.TestCase):
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
         docc = (ROOT / '.github/workflows/docs.yml').read_text()
         docs = (ROOT / '.github/workflows/docs-publish.yml').read_text()
-        self.assertEqual(coordinator.count('ref: refs/heads/main'), 6)
+        self.assertEqual(coordinator.count('ref: refs/heads/main'), 5)
+        self.assertEqual(coordinator.count('ref: ${{ github.workflow_sha }}'), 1)
+        inspect = coordinator.split('  inspect:\n', 1)[1].split('  ready-plan:\n', 1)[0]
+        self.assertIn('ref: ${{ github.workflow_sha }}', inspect)
+        self.assertIn('name: ' + p.COORDINATOR_SOURCE_STEP + '${{ github.workflow_sha }}', inspect)
         self.assertEqual(coordinator.count('queue: max'), 3)
         self.assertEqual(coordinator.count('persist-credentials: false'), 6)
         for unsafe in ['pull_request.head', 'secrets.', 'download-artifact', 'cache@', 'gh pr merge', 'pip install']:

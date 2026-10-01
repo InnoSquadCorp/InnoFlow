@@ -57,6 +57,8 @@ class PublicOperationsTests(unittest.TestCase):
             with self.subTest(before=before):
                 self.reject(reporter, lambda text, a=before, b=after: text.replace(a, b))
         coordinator = '.github/workflows/dependabot-auto-merge.yml'
+        self.reject(coordinator, lambda text: text.replace('ref: ${{ github.workflow_sha }}', 'ref: refs/heads/main', 1))
+        self.reject(coordinator, lambda text: text.replace('name: Resolve authoritative API targets from ${{ github.workflow_sha }}', 'name: Resolve authoritative API targets', 1))
         self.reject(coordinator, lambda text: text.replace('      queue: max\n', '', 1))
         self.reject(coordinator, lambda text: text.replace('      cancel-in-progress: false', '      cancel-in-progress: true', 1))
 

@@ -33,10 +33,10 @@ jobs:
       - name: Checkout trusted coordinator only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/heads/main
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
           sparse-checkout: scripts
-      - name: Resolve authoritative API targets
+      - name: Resolve authoritative API targets from ${{ github.workflow_sha }}
         id: targets
         env:
           GH_TOKEN: ${{ github.token }}

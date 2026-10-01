@@ -21,6 +21,9 @@ APP = 15368
 BOT = {"login": "dependabot[bot]", "id": 49699333, "type": "Bot"}
 SHA = re.compile(r"[0-9a-f]{40}")
 PREFIX = "CI / Dependabot merge #"
+COORDINATOR_SOURCE_STEP = "Resolve authoritative API targets from "
+SKIPPED_REFRESH_NAME = ("matrix.target.pr && format('Ready refresh PR{0} run{1} attempt{2}', "
+                        "matrix.target.pr, matrix.target.run, matrix.target.attempt) || 'ready-refresh'")
 # All bot updates, including major/toolchain updates, need the full contract.
 # The native required ready check is separate from these inputs (no cycle).
 CORE = {'CI Plan': ['Plan exact changed paths'],
@@ -440,26 +443,57 @@ def coordinator_check_ids(api, number, head, checks):
     """Exclude only proven coordinator transport, never CI or arbitrary names."""
     by_id = {c["id"]: c for c in checks}
     ids = set()
-    names = {"inspect", f"bot-ready ({number})", "ready-plan", "ready-refresh", "post-merge-plan", "post-merge"}
+    names = {"inspect", f"bot-ready ({number})", "ready-plan", "post-merge-plan", "post-merge"}
     runs = coordinator_runs(api, number, head)
     for run in runs:
         for attempt in range(1, run["run_attempt"] + 1):
             jobs = api.pages(route(f"actions/runs/{run['id']}/attempts/{attempt}/jobs"), "jobs")
             for job in jobs:
                 bare_skip = job.get("name") == "bot-ready" and job.get("status") == "completed" and job.get("conclusion") == "skipped"
-                require(job.get("name") in names or bare_skip, "unexpected coordinator transport job")
-                url = job.get("check_run_url", "")
-                require(url.startswith(f"https://api.github.com/repos/{REPOSITORY}/check-runs/"),
-                        "missing coordinator job/check association")
-                check_id = int(url.rsplit("/", 1)[1])
-                check = by_id.get(check_id, {})
-                require(check.get("name") == job["name"] and check.get("app", {}).get("id") == APP and
-                        check.get("head_sha") == head and check.get("check_suite", {}).get("id") == run["check_suite_id"] and
-                        check.get("details_url") == f"https://github.com/{REPOSITORY}/actions/runs/{run['id']}/job/{job['id']}",
-                        "unverified coordinator transport check")
+                refresh_skip = job.get("name") in {"ready-refresh", SKIPPED_REFRESH_NAME}
+                require(job.get("name") in names or bare_skip or refresh_skip, "unexpected coordinator transport job")
+                check_id = coordinator_job_check(job, run, attempt, head, by_id)
+                if refresh_skip:
+                    check = by_id[check_id]
+                    require(job.get("status") == check.get("status") == "completed" and
+                            job.get("conclusion") == check.get("conclusion") == "skipped" and job.get("steps") == [],
+                            "PR-target refresh transport must be a terminal empty skip")
+                    # GitHub can expose the unevaluated name for a matrix that
+                    # never expands. Bind this exact exception to the trusted
+                    # workflow source reported by the real inspect job.
+                    inspectors = [item for item in jobs if item.get("name") == "inspect"]
+                    require(len(inspectors) == 1, "missing/ambiguous coordinator source job")
+                    inspector = inspectors[0]
+                    source_check = by_id[coordinator_job_check(inspector, run, attempt, head, by_id)]
+                    require(inspector.get("status") == source_check.get("status") == "completed" and
+                            inspector.get("conclusion") == source_check.get("conclusion") == "success",
+                            "coordinator source job did not succeed")
+                    source_steps = [step for step in (inspector.get("steps") or [])
+                                    if str(step.get("name", "")).startswith(COORDINATOR_SOURCE_STEP)]
+                    require(len(source_steps) == 1 and source_steps[0].get("status") == "completed" and
+                            source_steps[0].get("conclusion") == "success", "coordinator source step missing/unsuccessful")
+                    source = source_steps[0]["name"][len(COORDINATOR_SOURCE_STEP):]
+                    require(bool(SHA.fullmatch(source)), "invalid coordinator source SHA")
+                    ready_policy().source_ancestor(api, this_policy(), source)
                 ids.add(check_id)
     ids.update(ready_policy().verified_check_ids(api, this_policy(), number, head))
     return ids
+
+def coordinator_job_check(job, run, attempt, head, checks):
+    require(job.get("run_id") == run["id"] and job.get("run_attempt") == attempt and
+            job.get("head_sha") == head and type(job.get("id")) is int and job["id"] > 0,
+            "wrong coordinator job/run/attempt/head")
+    url = job.get("check_run_url", "")
+    prefix = f"https://api.github.com/repos/{REPOSITORY}/check-runs/"
+    require(isinstance(url, str) and url.startswith(prefix) and re.fullmatch(r"[1-9][0-9]*", url[len(prefix):]),
+            "missing coordinator job/check association")
+    check_id = int(url[len(prefix):])
+    check = checks.get(check_id, {})
+    require(check.get("name") == job["name"] and check.get("app", {}).get("id") == APP and
+            check.get("head_sha") == head and check.get("check_suite", {}).get("id") == run["check_suite_id"] and
+            check.get("details_url") == f"https://github.com/{REPOSITORY}/actions/runs/{run['id']}/job/{job['id']}",
+            "unverified coordinator transport check")
+    return check_id
 
 
 def coordinate(api, number, enabled=False, notification=None):

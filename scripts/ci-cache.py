@@ -144,18 +144,24 @@ def fingerprint(inputs, toolchain, profile, variant="default", contract=None):
         require(Path(toolchain[key]).is_absolute(), "nonabsolute toolchain path")
     sdks = toolchain["sdks"]
     require(isinstance(sdks, dict) and bool(sdks), "missing SDK identity")
-    for sdk, identity in sdks.items():
-        require(isinstance(sdk, str) and re.fullmatch(r"[a-z]+\d+(?:\.\d+)*", sdk) and
-                isinstance(identity, dict) and set(identity) == {"version", "build", "path"}, "malformed SDK identity")
-        require(isinstance(identity["version"], str) and re.fullmatch(r"\d+(?:\.\d+)*", identity["version"]) and
-                isinstance(identity["build"], str) and re.fullmatch(r"[A-Za-z0-9]+", identity["build"]),
-                "incomplete SDK build identity: " + sdk + "; SDK metadata=" + repr(sdks))
-        require(isinstance(identity["path"], str) and Path(identity["path"]).is_absolute() and
-                all(ord(c) >= 32 for c in identity["path"]), "invalid resolved SDK path: " + sdk + "; SDK metadata=" + repr(sdks))
     needed = {"macosx"}
     platform = lane.get("platform", variant if "platforms" in lane else None)
     if platform:
         needed.add(PLATFORM_SDKS[platform][bool(lane.get("simulator"))])
+    for sdk, identity in sdks.items():
+        require(isinstance(sdk, str) and re.fullmatch(r"[a-z]+\d+(?:\.\d+)*", sdk) and
+                isinstance(identity, dict) and set(identity) == {"version", "build", "path"}, "malformed SDK identity")
+        require(isinstance(identity["version"], str) and re.fullmatch(r"\d+(?:\.\d+)*", identity["version"]) and
+                isinstance(identity["build"], str),
+                "incomplete SDK identity: " + sdk + "; SDK metadata=" + repr(sdks))
+        # Required application SDKs keep the strong build-ID contract. Extra
+        # inventory (e.g. DriverKit's observed empty build string) is still
+        # fingerprinted exactly, but cannot impose an unused platform's format.
+        if re.sub(r"[\d.]+$", "", sdk) in needed:
+            require(re.fullmatch(r"[A-Za-z0-9]+", identity["build"]),
+                    "incomplete required SDK build identity: " + sdk + "; SDK metadata=" + repr(sdks))
+        require(isinstance(identity["path"], str) and Path(identity["path"]).is_absolute() and
+                all(ord(c) >= 32 for c in identity["path"]), "invalid resolved SDK path: " + sdk + "; SDK metadata=" + repr(sdks))
     available = {re.sub(r"[\d.]+$", "", sdk) for sdk in sdks}
     require(needed <= available, "required profile SDK is missing")
     if profile == "swift-syntax-compatibility":
@@ -165,7 +171,7 @@ def fingerprint(inputs, toolchain, profile, variant="default", contract=None):
         require(compiler[1] == {"603.0.0": "6.3", "604.0.0": "6.4"}[variant],
                 "compatibility profile/compiler mismatch")
     identity = {"schema": SCHEMA, "profile": profile, "variant": variant, "lane": decode(canonical(lane)),
-                "inputs": hashes, "toolchain": toolchain,
+                "inputs": hashes, "toolchain": toolchain, "required-sdks": sorted(needed),
                 "implementation": digest(contract if contract is not None else Path(__file__).read_text()),
                 "paths": list(CACHE_PATHS)}
     return {"dependency-key": f"innoflow-swiftpm-deps-v{SCHEMA}-{profile}-{variant}-" + digest(canonical(identity)),

@@ -100,7 +100,11 @@ def workflow_boundaries(root):
         if name in {'ready-refresh', 'bot-ready', 'post-merge'}:
             require('      cancel-in-progress: false' in job and '      queue: max' in job,
                     name + ': serialized writers must retain pending work')
-        require(job.count('ref: refs/heads/main') == 1 and job.count('persist-credentials: false') == 1 and job.count('sparse-checkout: scripts') == 1, name + ': trusted checkout contract missing')
+        trusted_ref = 'ref: ${{ github.workflow_sha }}' if name == 'inspect' else 'ref: refs/heads/main'
+        require(job.count(trusted_ref) == 1 and job.count('persist-credentials: false') == 1 and job.count('sparse-checkout: scripts') == 1, name + ': trusted checkout contract missing')
+        if name == 'inspect':
+            require('name: Resolve authoritative API targets from ${{ github.workflow_sha }}' in job,
+                    'inspector must expose immutable native source attribution')
         require("github.ref == 'refs/heads/main'" in job and "github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'" in job, name + ': trusted execution guard missing')
     for unsafe in ['pull_request.head', 'secrets.', 'download-artifact', 'cache@', 'gh pr merge', 'pip install', 'npm install', 'continue-on-error']:
         require(unsafe not in source, 'unsafe privileged coordinator input: ' + unsafe)

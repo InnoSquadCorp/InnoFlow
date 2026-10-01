@@ -10,8 +10,10 @@ created, and this implementation does not change repository settings.
 
 `scripts/dependabot-merge-policy.py` executes only from trusted default-main code.
 Every job and mutating CLI command requires the repository, `refs/heads/main` and
-exact default-main workflow reference. Coordinator checkouts are SHA-pinned actions, `ref: refs/heads/main`, sparse
-`scripts`, and `persist-credentials: false`. The separate read-only native reporter
+exact default-main workflow reference. Coordinator checkouts use SHA-pinned actions, sparse `scripts`, and
+`persist-credentials: false`. The inspector pins `github.workflow_sha` to expose
+immutable source attribution; the other coordinator jobs use `refs/heads/main`.
+The separate read-only native reporter
 checks out `github.workflow_sha`, binding execution to immutable trusted-main code.
 It reads API metadata only: no PR checkout, dependencies, caches, downloaded
 artifacts or PR-controlled shell commands execute with write permission.
@@ -92,6 +94,15 @@ identity from a branch/SHA alone. PR code is never checked out. Latest verdicts 
 refresh writers require the original reporter/coordinator/policy blobs to match
 trusted main; historical check attribution still verifies original main ancestry.
 A superseded event/head cannot publish a late accepted verdict.
+
+GitHub can expose the exact unevaluated matrix-name expression for a PR-target
+`ready-refresh` job that never expands. Only a terminal skipped job/check with
+empty steps may use this exception, bound to exact workflow/event/run/attempt,
+head, app, suite and job/check URL, plus a successful native inspector carrying
+its immutable main-ancestry source SHA. Lookalike text, executed steps, unknown
+source or other outcomes remain blocked. Legacy same-head coordinator runs
+without that source marker can require an explicitly approved fresh commit;
+a new metadata event cannot establish missing historical source attribution.
 
 The bot coordinator validates the full proof and latest successful native Ready
 repeatedly before `enablePullRequestAutoMerge(expectedHeadOid)`. Native strict

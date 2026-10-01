@@ -128,6 +128,11 @@ The subsequent DI fix at `1e334b1b0f0da84bc0c9a921d0df2383541cc148` (tree
 `3d95cd94ce6598e19cf9e6ca47dbee187641ad4b`) changes only history shell guards
 and their portability regressions. Flow has no history writer or corresponding
 bare-conditional shell guards, so that delta needs no Flow code adaptation.
+The subsequent trusted transport/source fix at
+`ba42609324767f28588e302473561800c80228fb` (tree
+`c3ec46a19cffe967aa630d84be8c360aa6133606`) is adapted to Flow's own coordinator
+inventory, including immutable inspector source attribution for empty skipped
+matrix-name expressions.
 
 `ready_for_review` is metadata eligibility only. It invokes the trusted native
 **Dependabot Ready** reporter, not the heavy CI graph. Open, synchronize, reopen,
@@ -140,6 +145,15 @@ DocC output, release evidence or reusable pass/fail verdicts. Each validation jo
 uses an explicit profile; platform and SwiftSyntax matrix cells also use explicit
 variants. Exact keys bind the full Apple Swift/Xcode/SDK, OS-build and architecture
 identities, repository manifests/resolved locks and the cache helper contract.
+SDK identity retains the exact version/build/path returned for every listed SDK.
+Identical section/display/identifier rows may repeat in Xcode's output; each
+occurrence must resolve to identical SDK metadata before coalescing. Conflicting
+rows or changing query results still fail. The profile's required host/target SDKs
+must have nonempty application-style build IDs and valid versions/absolute paths.
+Unused SDKs retain their raw build strings in the fingerprint without imposing an
+application SDK's format. In the observed Xcode 26.6 image, unused DriverKit 25.5
+returns an empty build string; no required application SDK is exempted. Missing
+metadata fields, failed commands and missing required SDKs still fail closed.
 There are no broad restore prefixes. The SwiftSyntax matrix fingerprints only
 after its audited lock version/revision has been resolved and verified. Source
 fallback, compiler diagnostics, sanitizer flags, frozen sample resolution and

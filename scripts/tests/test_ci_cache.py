@@ -143,14 +143,49 @@ class FingerprintTests(unittest.TestCase):
 
     def test_rejected_sdk_identity_diagnoses_only_collected_sdk_fields(self):
         current = toolchain()
-        current["sdks"]["driverkit25.5"] = {"version": "25.5", "build": "", "path": "/fixture/DriverKit25.5.sdk"}
+        current["sdks"]["macosx26.6"]["build"] = ""
         with self.assertRaises(ValueError) as caught:
             fingerprint(toolchain=current)
         message = str(caught.exception)
-        self.assertIn("incomplete SDK build identity: driverkit25.5", message)
+        self.assertIn("incomplete required SDK build identity: macosx26.6", message)
         self.assertIn(repr(current["sdks"]), message)
         self.assertNotIn(current["swift-path"], message)
         self.assertNotIn("GITHUB_TOKEN", message)
+
+    def test_observed_unused_sdk_raw_build_is_bound_without_weakening_required_sdks(self):
+        # Exact SDK-only values from PR51 run36850829230/job110332092731.
+        sdks = json.loads((Path(__file__).parent / "fixtures/xcodebuild-sdk-identities-26.6.json").read_text())
+        self.assertEqual(sdks["driverkit25.5"]["build"], "")
+        current = {**toolchain(), "sdks": sdks}
+        original = fingerprint(toolchain=current)
+        self.assertEqual(original["identity"]["required-sdks"], ["macosx"])
+        for profile, contract in cache.PROFILES.items():
+            for variant in contract.get("platforms", contract.get("versions", ("default",))):
+                if profile == "swift-syntax-compatibility":
+                    continue  # Separate compiler/resolution negative controls cover these variants.
+                with self.subTest(profile=profile, variant=variant):
+                    result = fingerprint(toolchain=current, profile=profile, variant=variant)
+                    required = result["identity"]["required-sdks"]
+                    self.assertIn("macosx", required)
+                    for prefix in required:
+                        altered = copy.deepcopy(current)
+                        name = next(sdk for sdk in sdks if sdk.startswith(prefix))
+                        altered["sdks"][name]["build"] = ""
+                        with self.assertRaisesRegex(ValueError, "incomplete required SDK build"):
+                            fingerprint(toolchain=altered, profile=profile, variant=variant)
+        for raw in ("25F70", "SDK-specific.build-identity"):
+            altered = copy.deepcopy(current)
+            altered["sdks"]["driverkit25.5"]["build"] = raw
+            self.assertNotEqual(fingerprint(toolchain=altered)["dependency-key"], original["dependency-key"])
+        for malformed in (None, 42, [], {}):
+            altered = copy.deepcopy(current)
+            altered["sdks"]["driverkit25.5"]["build"] = malformed
+            with self.subTest(malformed=malformed), self.assertRaises(ValueError):
+                fingerprint(toolchain=altered)
+        altered = copy.deepcopy(current)
+        del altered["sdks"]["driverkit25.5"]["build"]
+        with self.assertRaises(ValueError):
+            fingerprint(toolchain=altered)
 
     def test_each_required_input_is_required_and_resolved_pins_are_exact(self):
         for path in inputs():
