@@ -32,7 +32,7 @@ def toolchain():
         "xcode": "Xcode 26.6\nBuild version 17G42",
         "developer-dir": "/Applications/Xcode_26.6.app/Contents/Developer",
         "os-version": "26.6", "os-build": "25G42", "architecture": "arm64",
-        "sdks": {name + "26.6": {"version": "26.6", "build": "25G42"} for name in (
+        "sdks": {name + "26.6": {"version": "26.6", "build": "25G42", "path": "/fixture/SDKs/" + name + "26.6.sdk"} for name in (
             "macosx", "iphoneos", "iphonesimulator", "appletvos", "appletvsimulator",
             "watchos", "watchsimulator", "xros", "xrsimulator")},
     }
@@ -201,7 +201,7 @@ class InputCollectionTests(unittest.TestCase):
             with self.subTest(listing=listing), mock.patch.object(cache, "command", return_value=listing):
                 with self.assertRaises(ValueError) as caught:
                     cache.toolchain_identity()
-                self.assertIn("missing or duplicate SDK inventory", str(caught.exception))
+                self.assertIn("SDK inventory rejected", str(caught.exception))
                 self.assertIn(repr(listing), str(caught.exception))
                 self.assertIn("parsed=", str(caught.exception))
                 self.assertIn("duplicates=", str(caught.exception))
@@ -217,6 +217,8 @@ class InputCollectionTests(unittest.TestCase):
                 return "26.6"
             if args[-1] == "--show-sdk-build-version":
                 return "25G42"
+            if args[-1] == "--show-sdk-path":
+                return "/fixture/SDKs/" + args[2] + ".sdk"
             return {("swift", "--version"): toolchain()["swift"],
                     ("xcrun", "--find", "swift"): toolchain()["swift-path"],
                     ("xcodebuild", "-version"): toolchain()["xcode"],
@@ -232,6 +234,73 @@ class InputCollectionTests(unittest.TestCase):
         for listing in ("", "macOS -sdk macosx26.6\nmacOS duplicate -sdk macosx26.6"):
             with mock.patch.object(cache, "command", return_value=listing), self.assertRaises(ValueError):
                 cache.toolchain_identity()
+
+    def test_hosted_xcode_26_6_duplicate_is_identical_and_resolves_consistently(self):
+        # Exact stdout from InnoFlow PR51 run36847228322/job110320319471.
+        listing = (Path(__file__).parent / "fixtures/xcodebuild-showsdks-26.6.txt").read_text()
+        names = cache.sdk_identifiers(listing)
+        self.assertEqual(len(names), 11)
+        self.assertEqual(names.count("macosx26.5"), 2)
+        self.assertEqual(len(set(names)), 10)
+        queried = []
+        def output(*args):
+            if args == ("xcodebuild", "-showsdks"):
+                return listing
+            if args[0] == "xcrun" and args[1] == "--sdk":
+                queried.append(args)
+                name, flag = args[2:]
+                return {"--show-sdk-version": name.removeprefix("driverkit") if name.startswith("driverkit") else "26.5",
+                        "--show-sdk-build-version": "25G42", "--show-sdk-path": "/fixture/SDKs/" + name + ".sdk"}[flag]
+            return {("swift", "--version"): toolchain()["swift"],
+                    ("xcrun", "--find", "swift"): toolchain()["swift-path"],
+                    ("xcodebuild", "-version"): "Xcode 26.6\nBuild version 17F113",
+                    ("xcode-select", "-p"): toolchain()["developer-dir"],
+                    ("sw_vers", "-productVersion"): "26.6.2", ("sw_vers", "-buildVersion"): "25G83",
+                    ("uname", "-m"): "arm64"}[args]
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(cache, "command", side_effect=output):
+            actual = cache.toolchain_identity()
+            self.assertEqual(len(actual["sdks"]), 10)
+            self.assertEqual(queried.count(("xcrun", "--sdk", "macosx26.5", "--show-sdk-path")), 2)
+            fingerprint(toolchain=actual)
+        for field in ("version", "build", "path"):
+            occurrence = 0
+            flag = {"version": "--show-sdk-version", "build": "--show-sdk-build-version", "path": "--show-sdk-path"}[field]
+            def inconsistent(*args):
+                nonlocal occurrence
+                value = output(*args)
+                if args == ("xcrun", "--sdk", "macosx26.5", flag):
+                    occurrence += 1
+                    if occurrence == 2:
+                        return value + "changed"
+                return value
+            with self.subTest(field=field), mock.patch.object(cache, "command", side_effect=inconsistent), self.assertRaisesRegex(ValueError, "SDK resolution changed"):
+                cache.toolchain_identity()
+
+    def test_same_sdk_identifier_with_other_display_section_or_invalid_row_rejects(self):
+        valid = "macOS SDKs:\nmacOS 26.5 -sdk macosx26.5\n"
+        self.assertEqual(cache.sdk_identifiers(valid + "  macOS  26.5  -sdk  macosx26.5\n"), ["macosx26.5"] * 2)
+        for suffix in ("macOS 99.0 -sdk macosx26.5", "iOS SDKs:\nmacOS 26.5 -sdk macosx26.5",
+                       "macOS 26.5 -sdk malformed", "unparsed SDK row"):
+            with self.subTest(suffix=suffix), self.assertRaisesRegex(ValueError, "SDK inventory rejected"):
+                cache.sdk_identifiers(valid + suffix)
+        for missing in ("", "macOS SDKs:\n", "macOS 26.5 -sdk macosx26.5"):
+            with self.assertRaises(ValueError):
+                cache.sdk_identifiers(missing)
+
+    def test_sdk_path_is_bound_and_missing_profile_sdks_still_fail(self):
+        baseline = fingerprint()["dependency-key"]
+        changed = toolchain()
+        changed["sdks"]["macosx26.6"]["path"] = "/other/SDKs/macosx26.6.sdk"
+        self.assertNotEqual(fingerprint(toolchain=changed)["dependency-key"], baseline)
+        for path in (None, "", "relative/sdk", "/bad\npath"):
+            changed["sdks"]["macosx26.6"]["path"] = path
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                fingerprint(toolchain=changed)
+        for sdk in ("macosx26.6", "iphonesimulator26.6"):
+            changed = toolchain()
+            del changed["sdks"][sdk]
+            with self.subTest(sdk=sdk), self.assertRaisesRegex(ValueError, "required profile SDK"):
+                fingerprint(toolchain=changed, profile="focused-runtime-tests", variant="iOS")
 
 
 class ObservationTests(unittest.TestCase):
@@ -434,8 +503,8 @@ class CLIIntegrationTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(root), "add", "."], check=True)
             commands = {
                 "swift": "printf '%s\\n' 'Apple Swift version 6.3 (swiftlang-6.3.0.4.1 clang-1700.6.5.2)'",
-                "xcodebuild": "if [ \"$1\" = '-version' ]; then printf '%s\\n' 'Xcode 26.6' 'Build version 17G42'; else printf '%s\\n' 'macOS 26.6 -sdk macosx26.6' 'iOS 26.6 -sdk iphoneos26.6'; fi",
-                "xcrun": "if [ \"$1\" = '--find' ]; then echo /fixture/Xcode.app/Contents/Developer/usr/bin/swift; elif [ \"$3\" = '--show-sdk-version' ]; then echo 26.6; elif [ \"$3\" = '--show-sdk-build-version' ]; then echo 25G42; else exit 1; fi",
+                "xcodebuild": "if [ \"$1\" = '-version' ]; then printf '%s\\n' 'Xcode 26.6' 'Build version 17G42'; else printf '%s\\n' 'macOS SDKs:' 'macOS 26.6 -sdk macosx26.6' 'iOS SDKs:' 'iOS 26.6 -sdk iphoneos26.6'; fi",
+                "xcrun": "if [ \"$1\" = '--find' ]; then echo /fixture/Xcode.app/Contents/Developer/usr/bin/swift; elif [ \"$3\" = '--show-sdk-version' ]; then echo 26.6; elif [ \"$3\" = '--show-sdk-build-version' ]; then echo 25G42; elif [ \"$3\" = '--show-sdk-path' ]; then echo /fixture/SDKs/$2.sdk; else exit 1; fi",
                 "sw_vers": "if [ \"$1\" = '-productVersion' ]; then echo 26.6; else echo 25G42; fi",
                 "uname": "echo arm64", "xcode-select": "echo /fixture/Xcode.app/Contents/Developer",
             }

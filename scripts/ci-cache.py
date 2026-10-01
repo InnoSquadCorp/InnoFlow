@@ -146,10 +146,12 @@ def fingerprint(inputs, toolchain, profile, variant="default", contract=None):
     require(isinstance(sdks, dict) and bool(sdks), "missing SDK identity")
     for sdk, identity in sdks.items():
         require(isinstance(sdk, str) and re.fullmatch(r"[a-z]+\d+(?:\.\d+)*", sdk) and
-                isinstance(identity, dict) and set(identity) == {"version", "build"}, "malformed SDK identity")
+                isinstance(identity, dict) and set(identity) == {"version", "build", "path"}, "malformed SDK identity")
         require(isinstance(identity["version"], str) and re.fullmatch(r"\d+(?:\.\d+)*", identity["version"]) and
                 isinstance(identity["build"], str) and re.fullmatch(r"[A-Za-z0-9]+", identity["build"]),
-                "incomplete SDK build identity")
+                "incomplete SDK build identity: " + sdk)
+        require(isinstance(identity["path"], str) and Path(identity["path"]).is_absolute() and
+                all(ord(c) >= 32 for c in identity["path"]), "invalid resolved SDK path: " + sdk)
     needed = {"macosx"}
     platform = lane.get("platform", variant if "platforms" in lane else None)
     if platform:
@@ -196,22 +198,62 @@ def repository_inputs(root):
     return inputs
 
 
+def sdk_identifiers(listing):
+    """Keep every occurrence for resolution checks; merge only identical rows.
+
+    Xcode 26.6's hosted output repeats the identical macOS SDK row. A repeated
+    identifier is safe only when section and display also agree; an unknown
+    format or conflicting row is still an error, not a reason to drop a SDK.
+    """
+    names, rows, section = [], {}, None
+
+    def reject(reason):
+        raise ValueError("SDK inventory rejected: " + reason + "; parsed=" + repr(names) +
+                         "; duplicates=" + repr(sorted(name for name in set(names) if names.count(name) > 1)) +
+                         "; xcodebuild output=" + repr(listing))
+
+    if not isinstance(listing, str) or not listing.strip():
+        reject("missing SDK inventory")
+    for line in listing.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ()/-]* SDKs:", line):
+            section = line
+            continue
+        match = re.fullmatch(r"(.+?)\s+-sdk\s+([a-z]+[0-9]+(?:\.[0-9]+)*)", line)
+        if not match or section is None:
+            reject("unrecognized SDK row or missing section")
+        display, name = " ".join(match[1].split()), match[2]
+        names.append(name)
+        row = (section, display)
+        if name in rows and rows[name] != row:
+            reject("conflicting rows for " + name)
+        rows[name] = row
+    if not names:
+        reject("missing SDK inventory")
+    return names
+
+
 def toolchain_identity():
     listing = command("xcodebuild", "-showsdks")
-    names = re.findall(r"-sdk\s+([a-z]+\d+(?:\.\d+)*)\s*$", listing, re.M)
-    require(names and len(names) == len(set(names)),
-            "missing or duplicate SDK inventory; parsed=" + repr(names) +
-            "; duplicates=" + repr(sorted(name for name in set(names) if names.count(name) > 1)) +
-            "; xcodebuild output=" + repr(listing))
+    names = sdk_identifiers(listing)
+    sdks = {}
+    # Resolve every occurrence before coalescing, including repeated rows.
+    # Identical presentation cannot hide changed SDK version/build/path data.
+    for name in names:
+        identity = {"version": command("xcrun", "--sdk", name, "--show-sdk-version"),
+                    "build": command("xcrun", "--sdk", name, "--show-sdk-build-version"),
+                    "path": command("xcrun", "--sdk", name, "--show-sdk-path")}
+        require(name not in sdks or sdks[name] == identity,
+                "SDK resolution changed for repeated identifier: " + name)
+        sdks[name] = identity
     return {
         "swift": command("swift", "--version"), "swift-path": command("xcrun", "--find", "swift"),
         "xcode": command("xcodebuild", "-version"),
         "developer-dir": os.environ.get("DEVELOPER_DIR") or command("xcode-select", "-p"),
         "os-version": command("sw_vers", "-productVersion"), "os-build": command("sw_vers", "-buildVersion"),
-        "architecture": command("uname", "-m"),
-        "sdks": {name: {"version": command("xcrun", "--sdk", name, "--show-sdk-version"),
-                        "build": command("xcrun", "--sdk", name, "--show-sdk-build-version")}
-                 for name in sorted(names)},
+        "architecture": command("uname", "-m"), "sdks": sdks,
     }
 
 
