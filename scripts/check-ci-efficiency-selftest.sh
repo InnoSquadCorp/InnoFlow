@@ -29,6 +29,11 @@ Dir.mktmpdir("innoflow-ci-efficiency") do |root|
   abort "Valid CI efficiency configuration rejected" unless run.call
 
   mutations = {
+    "Ready transition reruns heavy CI" => [".github/workflows/ci.yml", ->(doc) { (doc["on"] || doc[true])["pull_request"]["types"] << "ready_for_review" }],
+    "proof admission is conditional" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["ci-plan"]["steps"].find { |step| step["id"] == "reuse" }["if"] = "false" }],
+    "proof output is forged" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["ci-plan"]["outputs"]["reuse-proof"] = "{}" }],
+    "fresh coverage is skipped by proof" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["coverage"]["if"] = "needs.ci-plan.outputs.coverage == 'true'" }],
+    "proof verifier can write" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["ci-required"]["permissions"]["checks"] = "write" }],
     "policy omits macro contract" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["policy"]["steps"].each { |step| step["run"] = step["run"].lines.reject { |line| line.strip == "scripts/check-macro-operations.sh" }.join if step["run"] } }],
     "policy omits community contract" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["policy"]["steps"].each { |step| step["run"] = step["run"].lines.reject { |line| line.strip == "scripts/check-community-health.sh" }.join if step["run"] } }],
     "label removal does not replan" => [".github/workflows/ci.yml", ->(doc) { (doc["on"] || doc[true])["pull_request"]["types"].delete("unlabeled") }],

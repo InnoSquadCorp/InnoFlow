@@ -10,16 +10,22 @@ created, and this implementation does not change repository settings.
 
 `scripts/dependabot-merge-policy.py` executes only from trusted default-main code.
 Every job and mutating CLI command requires the repository, `refs/heads/main` and
-exact default-main workflow reference. All checkouts are SHA-pinned actions,
-`ref: refs/heads/main`, sparse `scripts`, and `persist-credentials: false`.
+exact default-main workflow reference. Coordinator checkouts use SHA-pinned actions, sparse `scripts`, and
+`persist-credentials: false`. The inspector pins `github.workflow_sha` to expose
+immutable source attribution; the other coordinator jobs use `refs/heads/main`.
+The separate read-only native reporter
+checks out `github.workflow_sha`, binding execution to immutable trusted-main code.
 It reads API metadata only: no PR checkout, dependencies, caches, downloaded
 artifacts or PR-controlled shell commands execute with write permission.
 
 | Job | Dedicated token scopes |
 | --- | --- |
 | inspect | contents, actions, checks, pull-requests read |
-| manual-ready | contents, actions, pull-requests read; checks write |
-| bot-ready | contents, checks, pull-requests write; actions read |
+| ready-plan | contents, actions, checks, pull-requests read |
+| ready-refresh | contents, checks, pull-requests read; actions write |
+| bot-ready | contents, pull-requests write; actions, checks read |
+| post-merge-plan | contents, actions, pull-requests read |
+| native Ready | contents, actions, checks, pull-requests read |
 | post-merge | contents, pull-requests read; actions write |
 | Review Notice | no permissions, checkout, dependencies, secrets or artifacts |
 
@@ -69,15 +75,51 @@ activation; this code never changes repository settings to satisfy the guard.
 
 Native active strict main rules must require **CI Required**, **Build Documentation**
 and **Dependabot Merge Ready**, each from Actions app `15368`. Visible bypass
-capability is rejected. Redacted bypass data is not treated as an empty list; the
-owner audits no-bypass at activation without adding an admin token to the workflow.
+capability is rejected. Every applicable CI/PR ruleset must report this workflow
+token's `current_user_can_bypass=never`. Redacted `bypass_actors` is not an empty
+list; absent runtime no-bypass proof leaves automation in standby. An owner audit
+does not replace that runtime proof or justify an admin credential in the workflow.
 
-The coordinator marks Ready pending, validates repeatedly, then calls native
-`enablePullRequestAutoMerge(expectedHeadOid)` and validates again before Ready
-success. Native strict checks own the actual merge and base freshness. There is no
-direct merge, admin bypass or unconditional fallback. Human PRs receive Ready
-success meaning only “automation ineligible; manual policy applies”. Failed proof
-invalidates readiness and cancels a verified bot's existing native request.
+GitHub owns one unconditional, fixed-name **Dependabot Merge Ready** job in
+`dependabot-ready.yml`; no API creates or patches its verdict. Its read-only
+snapshot validates current eligibility, and an always-running enforcement step
+requires an explicit true result. Infrastructure/API/evaluation failure, missing
+output, cancellation or ambiguous provenance cannot become green readiness.
+Human PR success means only “manual policy applies”; it grants no auto-merge.
+
+The reporter's trusted run title and evaluation-step name bind PR number, head,
+head/base repository IDs, main base and immutable source SHA. This permits a human
+fork reporter whose REST `pull_requests` association is empty without inferring
+identity from a branch/SHA alone. PR code is never checked out. Latest verdicts and
+refresh writers require the original reporter/coordinator/policy blobs to match
+trusted main; historical check attribution still verifies original main ancestry.
+A superseded event/head cannot publish a late accepted verdict.
+
+GitHub can expose the exact unevaluated matrix-name expression for a PR-target
+`ready-refresh` job that never expands. Only a terminal skipped job/check with
+empty steps may use this exception, bound to exact workflow/event/run/attempt,
+head, app, suite and job/check URL, plus a successful native inspector carrying
+its immutable main-ancestry source SHA. Lookalike text, executed steps, unknown
+source or other outcomes remain blocked. Legacy same-head coordinator runs
+without that source marker can require an explicitly approved fresh commit;
+a new metadata event cannot establish missing historical source attribution.
+
+The bot coordinator validates the full proof and latest successful native Ready
+repeatedly before `enablePullRequestAutoMerge(expectedHeadOid)`. Native strict
+checks and resolved-thread rules own actual merge/base freshness. The request can
+merge immediately, so a later metadata read is not presented as a rollback barrier.
+Failed eligibility cancels a verified bot's existing native request before a
+readiness refresh. There is no direct merge or admin bypass fallback.
+
+Background events may request only a provenance-verified native reporter job
+rerun when a terminal controlled verdict disagrees with current eligibility.
+The actions-write writer is separate from contents/pull-request writes. Per-PR
+queued serialization and authoritative prior-writer history prevent duplicate
+requests for the same run/attempt; uncertain writes are read back, never blindly
+retried. API/infrastructure failures require operator recovery. A new trusted
+reporter definition needs a fresh PR lifecycle run; an old definition is not
+rerun with different policy code.
+
 Reconciliation lists all open PRs, managing main PRs plus verified bots retargeted
 away from main so those old native requests are still cancelled. Non-main human
 PRs remain outside that managed surface.
@@ -98,14 +140,19 @@ again. Main moving during dispatch fails closed; the next main push/reconciliati
 covers the new tip. Recovery uses a separate CI concurrency group, and reusable
 build groups include run ID, so an obsolete recovery cannot cancel a newer native
 main push or its DocC/coverage jobs. Hourly schedules are best-effort, not an execution-time SLA.
-Native auto-merge and post-merge delivery remain untested live until activation.
+This change does not assert that native Ready fork handling, main proof reuse or
+post-merge recovery has been observed after deployment; fixture tests are distinct
+from live activation evidence.
 
 ## Owner-approved flag-last activation
 
 1. Review the final Draft PR SHA and CI, then separately approve/manual-merge this
    implementation. Do not enable auto-merge on a human implementation PR
-2. Keep `DEPENDABOT_AUTO_MERGE_ENABLED` absent/false. Run the main coordinator to
-   establish Ready on open PRs and verify no bootstrap cycle
+2. Keep `DEPENDABOT_AUTO_MERGE_ENABLED` absent/false. Obtain a fresh PR lifecycle
+   event after trusted-main deployment to establish the native Ready reporter.
+   Existing API-created legacy Ready checks are not reused as native proof; bot
+   heads with legacy checks need a fresh head/lifecycle run before admission.
+   Confirm no bootstrap cycle before enabling new bot approvals
 3. Preserve all existing main/tag protections, strict CI Required and Build
    Documentation, review-thread resolution and no bypass. Add only the new
    **Dependabot Merge Ready** Actions context to the main rule. Audit inherited

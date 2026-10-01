@@ -25,6 +25,21 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile coverage
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile coverage
+
       - name: Verify coverage negative controls
         run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/coverage-selftest.py
       - name: Measure and enforce coverage
@@ -37,3 +52,8 @@ jobs:
           path: .build/coverage/
           if-no-files-found: error
           include-hidden-files: true
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile coverage

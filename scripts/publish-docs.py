@@ -242,14 +242,23 @@ def publish(api, event, sleep=time.sleep):
             continue
         if status.get("status") == "succeed":
             return url
-        # These terminal/temporary states match the pinned actions/deploy-pages
-        # implementation. Transient status failures never create a new deployment.
+        # Terminal/temporary errors follow actions/deploy-pages at
+        # 7e97763d1f8271fc88f351a0c275f37de7f32094 (src/internal/deployment.js).
+        # Additional intermediate states come from the Pages deployment schema:
+        # https://docs.github.com/en/rest/pages/pages#get-the-status-of-a-github-pages-deployment
+        # Transient status failures never create a new deployment.
         state = status.get("status")
-        require(state not in {"deployment_failed", "deployment_content_failed", "deployment_cancelled", "deployment_lost"},
+        require(not isinstance(state, str) or state not in {
+                    "deployment_failed", "deployment_content_failed", "deployment_cancelled", "deployment_lost"},
                 "Pages deployment failed: " + str(state))
-        if state not in {"deployment_in_progress", "queued", "pending", "unknown_status", "not_found", "deployment_attempt_error"}:
+        if not isinstance(state, str) or state not in {
+                "deployment_in_progress", "syncing_files", "finished_file_sync", "updating_pages", "purging_cdn",
+                "queued", "pending", "unknown_status", "not_found", "deployment_attempt_error"}:
+            diagnostic = f"Unknown Pages status {state!r}"
+            # Preserve the escaped status even if the single cancel request fails.
+            print(diagnostic + "; requesting cancellation", file=sys.stderr)
             api.mutate(route("pages/deployments/" + deployment_id + "/cancel"), {})
-            raise Rejected("Unknown Pages status; cancellation requested")
+            raise Rejected(diagnostic + "; cancellation requested")
         sleep(5)
     # Timeout does not create a second deployment. The known operation is stopped.
     api.mutate(route("pages/deployments/" + deployment_id + "/cancel"), {})

@@ -77,7 +77,7 @@ class SwiftSyntaxUpgradeTests(unittest.TestCase):
             str(ROOT / '.github/workflows/ci.yml')], text=True))
         job = ci['jobs']['swift-syntax-compatibility']
         self.assertEqual(job['needs'], ['ci-plan', 'lint'])
-        self.assertEqual(job['if'], 'fromJSON(needs.ci-plan.outputs.plan).jobs.swift-syntax-compatibility')
+        self.assertEqual(job['if'], "needs.ci-plan.outputs.swift-syntax-compatibility == 'true'")
         self.assertIs(job['strategy']['fail-fast'], False)
         rows = job['strategy']['matrix']['include']
         self.assertEqual(rows, [
@@ -95,7 +95,10 @@ class SwiftSyntaxUpgradeTests(unittest.TestCase):
         for required in ['--no-parallel', '-warnings-as-errors', 'InnoFlowMacrosTests|CompileContractTests']:
             self.assertIn(required, testing)
         for step in steps.values():
-            self.assertNotIn('if', step)
+            if step['name'] == 'Report cache observations':
+                self.assertEqual(step.get('if'), 'always()')
+            else:
+                self.assertNotIn('if', step)
             self.assertNotIn('continue-on-error', step)
 
 

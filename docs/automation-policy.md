@@ -101,6 +101,17 @@ with a write token. Ordinary branch/manual CI and PRs cannot publish docs.
 Standalone numeric-tag/manual Docs runs also must resolve to current main for
 publication; an old tag cannot roll back the single live documentation root.
 
+The Pages publisher accepts only `succeed` as completion and preserves its bounded
+polling, API-error budget and cancellation behavior. The official REST response
+schema additionally defines `syncing_files`, `finished_file_sync`, `updating_pages`
+and `purging_cdn` as intermediate states; these continue polling. Unrecognized
+values are diagnosed exactly with escaped representation and cancellation of the
+known deployment is requested once, without creating another one. `deployment_queued` is not added by
+inference. The historical failed publication did not log its actual response
+status, so its exact value remains unknown; local state-machine tests do not prove
+a subsequent live deployment succeeded.
+
+
 SPI configuration uses the existing external DocC site rather than promising that
 SPI runs Flow's custom multi-target generator. Registration and current-version
 indexing are separate facts; see [SPI policy](SWIFT_PACKAGE_INDEX.md). Existing
@@ -116,3 +127,89 @@ absent. This PR preserves those contexts and does not mutate settings.
 
 See [Dependabot activation and safety contract](dependabot-auto-merge.md) for the
 additional Ready context, native feature, dedicated job scopes and flag-last order.
+
+## Ready transitions, exact caches and main proof reuse
+
+The standardization reference is InnoDI PR #50 at commit
+`ffaab38bb63ead5c2aa3374b0f7c2900ec83e9c8` (tree
+`d1a8fffac0b4c889583774c5fd74a1c67abff0df`). Flow's jobs, consumers and release
+contracts remain its own inventory; no DI job names or performance-history
+writer are introduced.
+The subsequent DI fix at `1e334b1b0f0da84bc0c9a921d0df2383541cc148` (tree
+`3d95cd94ce6598e19cf9e6ca47dbee187641ad4b`) changes only history shell guards
+and their portability regressions. Flow has no history writer or corresponding
+bare-conditional shell guards, so that delta needs no Flow code adaptation.
+The subsequent trusted transport/source fix at
+`ba42609324767f28588e302473561800c80228fb` (tree
+`c3ec46a19cffe967aa630d84be8c360aa6133606`) is adapted to Flow's own coordinator
+inventory, including immutable inspector source attribution for empty skipped
+matrix-name expressions.
+
+`ready_for_review` is metadata eligibility only. It invokes the trusted native
+**Dependabot Ready** reporter, not the heavy CI graph. Open, synchronize, reopen,
+label and label removal still plan ordinary PR validation. Making a PR Ready does
+not grant a CI success, invalidate an actual failure, or bypass native review rules.
+
+Dependency caches contain only SwiftPM repository mirrors and downloaded prebuilts.
+They never contain `.build` products, test results, coverage output, DerivedData,
+DocC output, release evidence or reusable pass/fail verdicts. Each validation job
+uses an explicit profile; platform and SwiftSyntax matrix cells also use explicit
+variants. Exact keys bind the full Apple Swift/Xcode/SDK, OS-build and architecture
+identities, repository manifests/resolved locks and the cache helper contract.
+SDK identity retains the exact version/build/path returned for every listed SDK.
+Identical section/display/identifier rows may repeat in Xcode's output; each
+occurrence must resolve to identical SDK metadata before coalescing. Conflicting
+rows or changing query results still fail. The profile's required host/target SDKs
+must have nonempty application-style build IDs and valid versions/absolute paths.
+Unused SDKs retain their raw build strings in the fingerprint without imposing an
+application SDK's format. In the observed Xcode 26.6 image, unused DriverKit 25.5
+returns an empty build string; no required application SDK is exempted. Missing
+metadata fields, failed commands and missing required SDKs still fail closed.
+There are no broad restore prefixes. The SwiftSyntax matrix fingerprints only
+after its audited lock version/revision has been resolved and verified. Source
+fallback, compiler diagnostics, sanitizer flags, frozen sample resolution and
+coverage cleanup are unchanged. A cache hit cannot skip any assertion.
+
+Cache `restored` and `report` observations are intentionally fail-closed. A
+restored-state error stops downstream validation; a report error fails its job,
+including when the report runs under `always()`. Cache availability is optional,
+but broken identity/observation is never silently called a successful validation.
+Cache timings and hit/miss metadata are observations, not a measured speedup claim.
+
+On a normal single-commit, same-repository squash merge to current `main`, CI may
+reuse exactly six logical groups from a successful PR run:
+
+- Package Tests (Core), including macro source fallback and all Debug contracts
+- Package Tests (Release)
+- Package Tests (ThreadSanitizer) and Package Tests (AddressSanitizer)
+- Package Build on macOS, iOS, tvOS, watchOS and visionOS
+- SwiftSyntax Compatibility on Swift 6.3/603.0.0 and Swift 6.4/604.0.0
+
+The source must be the latest run and latest successful attempt of this exact CI
+workflow and PR head, with the complete 30-job Flow inventory. Immutable tested
+merge parents must equal current merge base/head, and its entire Git tree must
+match the new main tree. This includes every workflow, helper and test blob.
+GitHub Actions app/suite/job/check IDs, exact check URLs, repository identities,
+all referenced reusable workflow SHAs and every required successful step are
+verified. Prior-attempt check IDs are accepted only through exact repository-bound
+check URLs. Source verification must finish before merge and be at most 24 hours
+old both at admission and final revalidation. Metadata reads are bracketed by a
+fresh latest-run/attempt and current-main check.
+
+All logical plan requirements stay true. A separate, schema-checked proof changes
+only those six physical execution outputs. **CI Required** repeats the complete
+read-only proof after the fresh jobs finish; evidence that changes or disappears
+then fails the aggregate. Before jobs skip, missing/ambiguous/stale proof, API
+errors, forks, changed trees, direct/multiple/forced pushes and unsupported merge
+shapes fall back to the complete original CI. Ordinary PRs, develop pushes, queue
+and manual/recovery runs never obtain reuse permission.
+
+Fresh main work always includes policy, lint and documentation consumer contracts,
+coverage and its exact-SHA artifacts, API baseline/previous-stable migration,
+focused runtime matrices, all sample build/test/UI work, static principles and
+negative controls, both aggregates, DocC upload and current-main publication checks.
+Dynamic simulator selection is deliberately not reusable. No PR artifacts are
+consumed and no check conclusion is synthesized by this optimization. The 32-check
+Release Preflight, tag-bound evidence producer and explicit
+`publish_release=false`/publication approval contract are unchanged. Successful
+PR reuse is ordinary CI evidence, never a replacement release receipt.
