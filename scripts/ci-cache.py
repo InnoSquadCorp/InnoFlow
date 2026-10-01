@@ -149,9 +149,9 @@ def fingerprint(inputs, toolchain, profile, variant="default", contract=None):
                 isinstance(identity, dict) and set(identity) == {"version", "build", "path"}, "malformed SDK identity")
         require(isinstance(identity["version"], str) and re.fullmatch(r"\d+(?:\.\d+)*", identity["version"]) and
                 isinstance(identity["build"], str) and re.fullmatch(r"[A-Za-z0-9]+", identity["build"]),
-                "incomplete SDK build identity: " + sdk)
+                "incomplete SDK build identity: " + sdk + "; SDK metadata=" + repr(sdks))
         require(isinstance(identity["path"], str) and Path(identity["path"]).is_absolute() and
-                all(ord(c) >= 32 for c in identity["path"]), "invalid resolved SDK path: " + sdk)
+                all(ord(c) >= 32 for c in identity["path"]), "invalid resolved SDK path: " + sdk + "; SDK metadata=" + repr(sdks))
     needed = {"macosx"}
     platform = lane.get("platform", variant if "platforms" in lane else None)
     if platform:
@@ -242,9 +242,15 @@ def toolchain_identity():
     # Resolve every occurrence before coalescing, including repeated rows.
     # Identical presentation cannot hide changed SDK version/build/path data.
     for name in names:
-        identity = {"version": command("xcrun", "--sdk", name, "--show-sdk-version"),
-                    "build": command("xcrun", "--sdk", name, "--show-sdk-build-version"),
-                    "path": command("xcrun", "--sdk", name, "--show-sdk-path")}
+        identity = {}
+        for field, flag in (("version", "--show-sdk-version"), ("build", "--show-sdk-build-version"),
+                            ("path", "--show-sdk-path")):
+            try:
+                identity[field] = command("xcrun", "--sdk", name, flag)
+            except (OSError, subprocess.CalledProcessError) as error:
+                raise ValueError("SDK query failed: " + name + " " + flag + "; partial SDK metadata=" +
+                                 repr({**sdks, name: identity}) + "; command error=" + str(error) +
+                                 "; partial output=" + repr(getattr(error, "output", None))) from error
         require(name not in sdks or sdks[name] == identity,
                 "SDK resolution changed for repeated identifier: " + name)
         sdks[name] = identity

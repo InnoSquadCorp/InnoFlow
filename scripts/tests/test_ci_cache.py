@@ -141,6 +141,17 @@ class FingerprintTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "required profile SDK"):
             fingerprint(profile="focused-runtime-tests", variant="watchOS", toolchain=incomplete)
 
+    def test_rejected_sdk_identity_diagnoses_only_collected_sdk_fields(self):
+        current = toolchain()
+        current["sdks"]["driverkit25.5"] = {"version": "25.5", "build": "", "path": "/fixture/DriverKit25.5.sdk"}
+        with self.assertRaises(ValueError) as caught:
+            fingerprint(toolchain=current)
+        message = str(caught.exception)
+        self.assertIn("incomplete SDK build identity: driverkit25.5", message)
+        self.assertIn(repr(current["sdks"]), message)
+        self.assertNotIn(current["swift-path"], message)
+        self.assertNotIn("GITHUB_TOKEN", message)
+
     def test_each_required_input_is_required_and_resolved_pins_are_exact(self):
         for path in inputs():
             missing = inputs()
@@ -195,6 +206,22 @@ class InputCollectionTests(unittest.TestCase):
             target.symlink_to(root / cache.SAMPLE / "InnoFlowSampleAppPackage/Package.resolved")
             with mock.patch.object(cache, "command", side_effect=[tracked, ""]), self.assertRaisesRegex(ValueError, "symlinked"):
                 cache.repository_inputs(root)
+
+    def test_failed_sdk_query_reports_partial_metadata_and_never_continues(self):
+        calls = []
+        def output(*args):
+            calls.append(args)
+            if args == ("xcodebuild", "-showsdks"):
+                return "macOS SDKs:\nmacOS 26.5 -sdk macosx26.5"
+            if args[-1] == "--show-sdk-version":
+                return "26.5"
+            raise subprocess.CalledProcessError(72, args, output="partial SDK-only output")
+        with mock.patch.object(cache, "command", side_effect=output), self.assertRaises(ValueError) as caught:
+            cache.toolchain_identity()
+        self.assertIn("macosx26.5 --show-sdk-build-version", str(caught.exception))
+        self.assertIn("'version': '26.5'", str(caught.exception))
+        self.assertIn("partial SDK-only output", str(caught.exception))
+        self.assertFalse(any(command[-1] == "--show-sdk-path" for command in calls))
 
     def test_sdk_inventory_rejection_preserves_actual_listing_for_diagnosis(self):
         for listing in ("Unsupported SDK listing", "macOS -sdk macosx26.6\nmacOS alias -sdk macosx26.6"):
