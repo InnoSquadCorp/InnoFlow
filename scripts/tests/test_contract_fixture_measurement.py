@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("measure_contract_fixtures", ROOT / "scripts/measure-contract-fixtures.py")
@@ -250,6 +251,77 @@ class ContractMeasurementTests(unittest.TestCase):
             result = BENCH.run_command(["not-a-real-command"], root, os.environ, root / "logs", time.monotonic() - 1)
             self.assertEqual(result["status"], "failed")
             self.assertIn("budget exhausted", result["error"])
+
+    def test_git_uses_remaining_shared_deadline(self):
+        root = Path("checkout with spaces")
+        with mock.patch.object(BENCH.time, "monotonic", side_effect=[100.25, 101.5]), \
+                mock.patch.object(BENCH.subprocess, "check_output", return_value="") as check_output:
+            BENCH.git(root, "rev-parse", "HEAD", deadline=105)
+            BENCH.git(root, "status", "--porcelain", deadline=105)
+        self.assertEqual(check_output.call_args_list, [
+            mock.call(["git", "-C", str(root), "rev-parse", "HEAD"], text=True, timeout=4.75),
+            mock.call(["git", "-C", str(root), "status", "--porcelain"], text=True, timeout=3.5),
+        ])
+
+    def test_git_preserves_stripped_successful_output(self):
+        for output, expected in (("a" * 40 + "\n", "a" * 40), ("", ""),
+                                 (" M first.py\n?? second.py\n", "M first.py\n?? second.py")):
+            with self.subTest(output=output), \
+                    mock.patch.object(BENCH.time, "monotonic", return_value=100), \
+                    mock.patch.object(BENCH.subprocess, "check_output", return_value=output):
+                self.assertEqual(BENCH.git(ROOT, "status", "--porcelain", deadline=105), expected)
+
+    def test_git_expired_budget_does_not_spawn(self):
+        for now in (105, 106):
+            with self.subTest(now=now), \
+                    mock.patch.object(BENCH.time, "monotonic", return_value=now), \
+                    mock.patch.object(BENCH.subprocess, "check_output") as check_output:
+                with self.assertRaisesRegex(ValueError, "budget exhausted"):
+                    BENCH.git(ROOT, "rev-parse", "HEAD", deadline=105)
+                check_output.assert_not_called()
+
+    def test_git_timeout_propagates(self):
+        command = ["git", "-C", str(ROOT), "rev-parse", "HEAD"]
+        error = subprocess.TimeoutExpired(command, 0.5, output="partial output")
+        with mock.patch.object(BENCH.time, "monotonic", return_value=100), \
+                mock.patch.object(BENCH.subprocess, "check_output", side_effect=error) as check_output:
+            with self.assertRaises(subprocess.TimeoutExpired) as caught:
+                BENCH.git(ROOT, "rev-parse", "HEAD", deadline=100.5)
+        self.assertIs(caught.exception, error)
+        check_output.assert_called_once_with(command, text=True, timeout=0.5)
+
+    def test_initial_git_timeout_writes_failed_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            event = {"number": 99, "pull_request": {
+                "base": {"ref": BENCH.BASE_BRANCH, "sha": BENCH.BASELINE_SHA, "repo": {"full_name": "owner/Flow"}},
+                "head": {"ref": BENCH.HEAD_BRANCH, "sha": "a" * 40, "repo": {"full_name": "owner/Flow"}},
+            }}
+            event_path = root / "event.json"
+            event_path.write_text(json.dumps(event))
+            environment = {"GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "pull_request",
+                           "RUNNER_ENVIRONMENT": "github-hosted", "GITHUB_EVENT_PATH": str(event_path)}
+            argv = ["measure-contract-fixtures.py", "--baseline", str(root / "base"),
+                    "--candidate", str(root / "candidate"), "--candidate-sha", "a" * 40,
+                    "--output", str(root / "out"), "--temporary", str(root / "tmp")]
+            command = ["git", "-C", str(root / "base"), "rev-parse", "HEAD"]
+            remaining = BENCH.BUDGET_SECONDS - 7
+            error = subprocess.TimeoutExpired(command, remaining)
+            with mock.patch.object(sys, "argv", argv), mock.patch.dict(os.environ, environment), \
+                    mock.patch.object(BENCH.platform, "system", return_value="Darwin"), \
+                    mock.patch.object(BENCH.time, "monotonic", side_effect=[100, 107, 108]), \
+                    mock.patch.object(BENCH.subprocess, "check_output", side_effect=error) as check_output, \
+                    mock.patch.object(BENCH, "run_command") as run_command, \
+                    mock.patch("builtins.print"):
+                self.assertEqual(BENCH.main(), 1)
+            check_output.assert_called_once_with(command, text=True, timeout=remaining)
+            run_command.assert_not_called()
+            summary = json.loads((root / "out/summary.json").read_text())
+            self.assertEqual(summary["status"], "failed")
+            self.assertEqual(summary["errors"], [str(error)])
+            self.assertEqual(summary["phases"], [])
+            self.assertEqual(summary["budgetSeconds"], 3300)
+            self.assertEqual(summary["runnerElapsedSeconds"], 8)
 
     def fake_swift(self, root, revision, *, failed=False, missing_diagnostic=False):
         fake = root / "fake-swift.py"
