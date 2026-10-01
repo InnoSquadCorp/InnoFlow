@@ -18,7 +18,7 @@ class PublicOperationsTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         files = p.LOCKS + ['Package.swift', p.SAMPLE + '/Package.swift', 'Tools/generate-docc.sh', '.github/dependabot.yml']
-        files += ['.github/workflows/' + n for n in ['ci.yml', 'coverage.yml', 'docs.yml', 'asan.yml', 'dependabot-auto-merge.yml', 'dependabot-review-notice.yml']]
+        files += ['.github/workflows/' + n for n in ['ci.yml', 'coverage.yml', 'docs.yml', 'asan.yml', 'dependabot-auto-merge.yml', 'dependabot-review-notice.yml', 'dependabot-ready.yml']]
         for f in files:
             target = self.root / f
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -38,7 +38,7 @@ class PublicOperationsTests(unittest.TestCase):
 
     def test_readiness_matrices_cannot_cancel_unrelated_prs(self):
         path = '.github/workflows/dependabot-auto-merge.yml'
-        for job in ['manual-ready', 'bot-ready']:
+        for job in ['ready-refresh', 'bot-ready']:
             marker = '\n  ' + job + ':\n'
             for replacement in ['      fail-fast: true\n', '']:
                 def mutate(text, marker=marker, replacement=replacement):
@@ -46,6 +46,19 @@ class PublicOperationsTests(unittest.TestCase):
                     return before + marker + after.replace('      fail-fast: false\n', replacement, 1)
                 with self.subTest(job=job, replacement=replacement):
                     self.reject(path, mutate)
+
+    def test_native_reporter_and_serialized_writers_cannot_expand_or_bypass(self):
+        reporter = '.github/workflows/dependabot-ready.yml'
+        for before, after in [('actions: read', 'actions: write'),
+                              ('ref: ${{ github.workflow_sha }}', 'ref: refs/heads/main'),
+                              ('branches: [main]', 'branches: [develop]'),
+                              ('if: always()', 'if: success()'),
+                              ('    runs-on: ubuntu-latest', '    if: false\n    runs-on: ubuntu-latest')]:
+            with self.subTest(before=before):
+                self.reject(reporter, lambda text, a=before, b=after: text.replace(a, b))
+        coordinator = '.github/workflows/dependabot-auto-merge.yml'
+        self.reject(coordinator, lambda text: text.replace('      queue: max\n', '', 1))
+        self.reject(coordinator, lambda text: text.replace('      cancel-in-progress: false', '      cancel-in-progress: true', 1))
 
     def test_documentation_contract_scripts_reject_missing_policy_text(self):
         with tempfile.TemporaryDirectory() as temp:

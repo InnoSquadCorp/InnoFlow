@@ -13,7 +13,7 @@ Dir.mktmpdir("innoflow-coverage-workflow") do |root|
     "no floor execution" => ["coverage.yml", ->(doc) { doc["jobs"]["coverage"]["steps"].find { |step| step["run"] == "scripts/run-coverage.sh" }["run"] = "echo scripts/run-coverage.sh" }],
     "conditional execution" => ["coverage.yml", ->(doc) { doc["jobs"]["coverage"]["if"] = "false" }],
     "ignored failure" => ["coverage.yml", ->(doc) { doc["jobs"]["coverage"]["steps"][0]["continue-on-error"] = true }],
-    "missing artifact" => ["coverage.yml", ->(doc) { doc["jobs"]["coverage"]["steps"].last["with"]["if-no-files-found"] = "warn" }],
+    "missing artifact" => ["coverage.yml", ->(doc) { doc["jobs"]["coverage"]["steps"].find { |step| step["name"] == "Preserve coverage evidence" }["with"]["if-no-files-found"] = "warn" }],
     "no namespace" => ["coverage.yml", ->(doc) { doc["concurrency"]["group"] = '${{ github.workflow }}' }],
     "CI bypass" => ["ci.yml", ->(doc) { doc["jobs"]["principle-gates"]["needs"].delete("coverage") }],
     "release bypass" => ["cd.yml", ->(doc) { doc["jobs"]["release-evidence"]["needs"].delete("release-coverage") }],

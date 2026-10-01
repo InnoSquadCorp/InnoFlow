@@ -12,7 +12,7 @@ workflow_dir = File.join(root, ".github", "workflows")
 load_yaml = ->(path) { YAML.safe_load(File.read(path), aliases: false) }
 ci = load_yaml.call(File.join(workflow_dir, "ci.yml"))
 ci_trigger = ci["on"] || ci[true]
-check(Array(ci_trigger.dig("pull_request", "types")).sort == %w[opened synchronize reopened labeled unlabeled ready_for_review].sort,
+check(Array(ci_trigger.dig("pull_request", "types")).sort == %w[opened synchronize reopened labeled unlabeled].sort,
   "CI must replan current changes and opt-in labels for every supported PR transition")
 %w[push pull_request].each do |event|
   check((ci_trigger.fetch(event).keys & %w[paths paths-ignore]).empty?,
@@ -47,7 +47,9 @@ prior_dependencies.each do |name, prior|
   job = jobs.fetch(name)
   check(Array(job["needs"]).sort == (["ci-plan"] + prior).sort,
     "#{name}: original dependencies plus CI Plan must be retained")
-  check(job["if"] == "fromJSON(needs.ci-plan.outputs.plan).jobs.#{name}",
+  reusable = %w[tests release-tests thread-sanitizer address-sanitizer package-builds swift-syntax-compatibility]
+  expected_condition = reusable.include?(name) ? "needs.ci-plan.outputs.#{name} == 'true'" : "fromJSON(needs.ci-plan.outputs.plan).jobs.#{name}"
+  check(job["if"] == expected_condition,
     "#{name}: selection must use exactly its fail-closed planned boolean")
 end
 jobs.each do |name, job|
@@ -68,6 +70,18 @@ check(plan.dig("outputs", "post_merge") == "${{ github.ref == 'refs/heads/main' 
   "Pages artifact eligibility must be limited to successful main push/recovery plans")
 check(jobs.dig("documentation", "with", "publish_pages") == "${{ needs.ci-plan.outputs.post_merge == 'true' }}",
   "documentation publication eligibility must come from the successful CI Plan")
+check(plan.dig("permissions") == {"contents" => "read", "pull-requests" => "read", "actions" => "read", "checks" => "read"},
+  "Reuse planning must remain read-only")
+check(plan.dig("outputs", "reuse-proof") == '${{ steps.reuse.outputs.proof }}' &&
+  plan_step.dig("env", "CI_REUSE") == '${{ steps.reuse.outputs.proof }}', "Plan must bind its admitted proof")
+reuse_step = plan.fetch("steps").find { |step| step["id"] == "reuse" }
+check(reuse_step && !reuse_step.key?("if") && reuse_step["run"] == 'python3 -B scripts/main-ci-reuse-policy.py --event "$GITHUB_EVENT_PATH"',
+  "Reuse admission must be unconditional and metadata-only")
+%w[tests release-tests thread-sanitizer address-sanitizer package-builds swift-syntax-compatibility].each do |name|
+  check(plan.dig("outputs", name) == "${{ steps.plan.outputs.#{name} }}", "#{name}: exact physical planner output missing")
+end
+check(jobs.dig("ci-required", "permissions") == {"contents" => "read", "actions" => "read", "checks" => "read", "pull-requests" => "read"},
+  "Final proof revalidation must remain read-only")
 checkout = plan.fetch("steps").find { |step| step["uses"].to_s.start_with?("actions/checkout@") }
 check(checkout && checkout.dig("with", "fetch-depth") == 0 && checkout.dig("with", "persist-credentials") == false,
   "CI Plan must fetch exact diff history without persisting credentials")
@@ -120,7 +134,7 @@ check(asan_trigger.keys == ["workflow_dispatch"],
   verifier = steps.last
   check(verifier["name"] == step_name && !verifier.key?("if") &&
     verifier["run"] == "python3 -B scripts/ci-policy.py #{command}" &&
-    verifier["env"] == {"CI_PLAN" => '${{ needs.ci-plan.outputs.plan }}', "CI_NEEDS" => '${{ toJSON(needs) }}'},
+    verifier["env"] == ({"CI_PLAN" => '${{ needs.ci-plan.outputs.plan }}', "CI_NEEDS" => '${{ toJSON(needs) }}'}.merge(id == "ci-required" ? {"GH_TOKEN" => '${{ github.token }}', "CI_REUSE" => '${{ needs.ci-plan.outputs.reuse-proof }}'} : {})),
     "#{name}: final unconditional verifier must consume the exact plan and dependency results")
 end
 

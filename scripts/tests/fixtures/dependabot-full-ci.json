@@ -1,14 +1,22 @@
 {
-  "source": "Flow main CI run 36650186636 actual job/step inventory; new planner/policy/reusable Docs entries are expected-contract fixtures, not live CI proof.",
+  "source": "Expected complete Flow CI job/step inventory after standardization; generated from reviewed workflow names and matrix expansion. Offline contract fixture, not live CI evidence.",
   "jobs": {
     "CI Plan": [
+      {
+        "name": "Verify actual post-merge main origin",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Admit exact-tree PR verification",
+        "conclusion": "success"
+      },
       {
         "name": "Plan exact changed paths",
         "conclusion": "success"
       },
       {
-        "name": "Verify actual post-merge main origin",
-        "conclusion": "skipped"
+        "name": "Preserve change selection evidence",
+        "conclusion": "success"
       }
     ],
     "CI and public operations policy": [
@@ -29,6 +37,46 @@
       {
         "name": "Upload Documentation Artifact",
         "conclusion": "skipped"
+      }
+    ],
+    "Build Documentation": [
+      {
+        "name": "Require planned documentation result",
+        "conclusion": "success"
+      }
+    ],
+    "Coverage Gate / coverage": [
+      {
+        "name": "Show toolchain",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify coverage negative controls",
+        "conclusion": "success"
+      },
+      {
+        "name": "Measure and enforce coverage",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preserve coverage evidence",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
       }
     ],
     "Lint": [
@@ -57,85 +105,21 @@
         "conclusion": "success"
       }
     ],
-    "Coverage Gate / coverage": [
-      {
-        "name": "Show toolchain",
-        "conclusion": "success"
-      },
-      {
-        "name": "Verify coverage negative controls",
-        "conclusion": "success"
-      },
-      {
-        "name": "Measure and enforce coverage",
-        "conclusion": "success"
-      },
-      {
-        "name": "Preserve coverage evidence",
-        "conclusion": "success"
-      }
-    ],
-    "Public API Compatibility": [
-      {
-        "name": "Show Xcode version",
-        "conclusion": "success"
-      },
-      {
-        "name": "Check compatibility with the 6.0 public baseline",
-        "conclusion": "success"
-      },
-      {
-        "name": "Run 5.1.1 to 6.0 external migration consumer",
-        "conclusion": "success"
-      }
-    ],
-    "Package Tests (Sample)": [
-      {
-        "name": "Show Xcode version",
-        "conclusion": "success"
-      },
-      {
-        "name": "Run sample package tests",
-        "conclusion": "success"
-      }
-    ],
-    "Package Tests (ThreadSanitizer)": [
-      {
-        "name": "Show Xcode version",
-        "conclusion": "success"
-      },
-      {
-        "name": "Run package tests with ThreadSanitizer",
-        "conclusion": "success"
-      }
-    ],
-    "Focused Runtime Tests (tvOS)": [
-      {
-        "name": "Show Xcode version",
-        "conclusion": "success"
-      },
-      {
-        "name": "Run focused scheduler, scope, diagnostics, and Output tests",
-        "conclusion": "success"
-      },
-      {
-        "name": "Preserve failed focused runtime results",
-        "conclusion": "skipped"
-      }
-    ],
-    "Package Tests (Release)": [
-      {
-        "name": "Show Xcode version",
-        "conclusion": "success"
-      },
-      {
-        "name": "Run release configuration checks",
-        "conclusion": "success"
-      }
-    ],
     "Package Tests (Core)": [
       {
         "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
         "conclusion": "success"
       },
       {
@@ -145,35 +129,117 @@
       {
         "name": "Run package tests including output lifetime and composition contracts",
         "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
       }
     ],
-    "Package Build (visionOS)": [
+    "Package Tests (Release)": [
       {
         "name": "Show Xcode version",
         "conclusion": "success"
       },
       {
-        "name": "Build package scheme for visionOS",
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run release configuration checks",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
-    "Package Build (iOS)": [
+    "Public API Compatibility": [
       {
         "name": "Show Xcode version",
         "conclusion": "success"
       },
       {
-        "name": "Build package scheme for iOS",
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Check compatibility with the 6.0 public baseline",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run 5.1.1 to 6.0 external migration consumer",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
-    "Package Tests (AddressSanitizer)": [
+    "Package Tests (ThreadSanitizer)": [
       {
         "name": "Show Xcode version",
         "conclusion": "success"
       },
       {
-        "name": "Run package tests with AddressSanitizer",
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run package tests with ThreadSanitizer",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
+      }
+    ],
+    "Package Tests (Sample)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run sample package tests",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
@@ -183,7 +249,75 @@
         "conclusion": "success"
       },
       {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
         "name": "Build package scheme for macOS",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
+      }
+    ],
+    "Package Build (iOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build package scheme for iOS",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
+      }
+    ],
+    "Package Build (tvOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build package scheme for tvOS",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
@@ -193,7 +327,49 @@
         "conclusion": "success"
       },
       {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
         "name": "Build package scheme for watchOS",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
+      }
+    ],
+    "Package Build (visionOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build package scheme for visionOS",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
@@ -203,26 +379,58 @@
         "conclusion": "success"
       },
       {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
         "name": "Run focused scheduler, scope, diagnostics, and Output tests",
         "conclusion": "success"
       },
       {
         "name": "Preserve failed focused runtime results",
         "conclusion": "skipped"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
       }
     ],
-    "Focused Runtime Tests (visionOS)": [
+    "Focused Runtime Tests (tvOS)": [
       {
         "name": "Show Xcode version",
         "conclusion": "success"
       },
       {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
         "name": "Run focused scheduler, scope, diagnostics, and Output tests",
         "conclusion": "success"
       },
       {
         "name": "Preserve failed focused runtime results",
         "conclusion": "skipped"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
       }
     ],
     "Focused Runtime Tests (watchOS)": [
@@ -231,31 +439,57 @@
         "conclusion": "success"
       },
       {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
         "name": "Run focused scheduler, scope, diagnostics, and Output tests",
         "conclusion": "success"
       },
       {
         "name": "Preserve failed focused runtime results",
         "conclusion": "skipped"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
       }
     ],
-    "Package Build (tvOS)": [
+    "Focused Runtime Tests (visionOS)": [
       {
         "name": "Show Xcode version",
         "conclusion": "success"
       },
       {
-        "name": "Build package scheme for tvOS",
-        "conclusion": "success"
-      }
-    ],
-    "Canonical Sample Build": [
-      {
-        "name": "Show Xcode version",
+        "name": "Fingerprint exact cache inputs",
         "conclusion": "success"
       },
       {
-        "name": "Build canonical sample",
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run focused scheduler, scope, diagnostics, and Output tests",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preserve failed focused runtime results",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
@@ -279,17 +513,23 @@
         "conclusion": "success"
       },
       {
-        "name": "Build sample package for tvOS",
-        "conclusion": "success"
-      }
-    ],
-    "Sample Package Build (visionOS)": [
-      {
-        "name": "Show Xcode version",
+        "name": "Fingerprint exact cache inputs",
         "conclusion": "success"
       },
       {
-        "name": "Build sample package for visionOS",
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build sample package for tvOS",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
@@ -299,13 +539,119 @@
         "conclusion": "success"
       },
       {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
         "name": "Build sample package for watchOS",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
+      }
+    ],
+    "Sample Package Build (visionOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build sample package for visionOS",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
+      }
+    ],
+    "Canonical Sample Build": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build canonical sample",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
+      }
+    ],
+    "Package Tests (AddressSanitizer)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run package tests with AddressSanitizer",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
     "Canonical Sample UI Smoke Tests": [
       {
         "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
         "conclusion": "success"
       },
       {
@@ -319,17 +665,9 @@
       {
         "name": "Run canonical sample UI smoke tests",
         "conclusion": "success"
-      }
-    ],
-    "CI Required": [
+      },
       {
-        "name": "Require every planned CI result",
-        "conclusion": "success"
-      }
-    ],
-    "Build Documentation": [
-      {
-        "name": "Require planned documentation result",
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
@@ -347,7 +685,23 @@
         "conclusion": "success"
       },
       {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
         "name": "Test macro and external compile contracts",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
         "conclusion": "success"
       }
     ],
@@ -365,7 +719,29 @@
         "conclusion": "success"
       },
       {
+        "name": "Fingerprint exact cache inputs",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore SwiftPM dependency cache",
+        "conclusion": "success"
+      },
+      {
+        "name": "Observe restored cache inputs",
+        "conclusion": "success"
+      },
+      {
         "name": "Test macro and external compile contracts",
+        "conclusion": "success"
+      },
+      {
+        "name": "Report cache observations",
+        "conclusion": "success"
+      }
+    ],
+    "CI Required": [
+      {
+        "name": "Require every planned CI result",
         "conclusion": "success"
       }
     ]

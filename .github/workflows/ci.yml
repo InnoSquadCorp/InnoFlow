@@ -7,7 +7,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -38,7 +38,16 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      actions: read
+      checks: read
     outputs:
+      reuse-proof: ${{ steps.reuse.outputs.proof }}
+      tests: ${{ steps.plan.outputs.tests }}
+      release-tests: ${{ steps.plan.outputs.release-tests }}
+      thread-sanitizer: ${{ steps.plan.outputs.thread-sanitizer }}
+      address-sanitizer: ${{ steps.plan.outputs.address-sanitizer }}
+      package-builds: ${{ steps.plan.outputs.package-builds }}
+      swift-syntax-compatibility: ${{ steps.plan.outputs.swift-syntax-compatibility }}
       plan: ${{ steps.plan.outputs.plan }}
       post_merge: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dependabot_merge_pr != '')) }}
     steps:
@@ -55,8 +64,16 @@ jobs:
         run: |
           [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'Recovery must run on main.' >&2; exit 1; }
           python3 -B scripts/dependabot-merge-policy.py verify-post-merge --pr "$MERGED_PR" --expected-sha "$GITHUB_SHA"
+      - name: Admit exact-tree PR verification
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # GET-only metadata; unknown evidence selects the complete original CI.
+        run: python3 -B scripts/main-ci-reuse-policy.py --event "$GITHUB_EVENT_PATH"
       - name: Plan exact changed paths
         id: plan
+        env:
+          CI_REUSE: ${{ steps.reuse.outputs.proof }}
         run: python3 -B scripts/ci-policy.py plan --event "$GITHUB_EVENT_PATH" --output .build/ci-plan.json
       - name: Preserve change selection evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -179,7 +196,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     needs: [ci-plan, lint]
-    if: fromJSON(needs.ci-plan.outputs.plan).jobs.tests
+    if: needs.ci-plan.outputs.tests == 'true'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -188,6 +205,21 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile tests
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile tests
 
       - name: Verify macro source fallback
         run: |
@@ -213,12 +245,17 @@ jobs:
             --no-parallel \
             -Xswiftc -warnings-as-errors
 
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile tests
+
   release-tests:
     name: Package Tests (Release)
     runs-on: macos-26
     timeout-minutes: 90
     needs: [ci-plan, lint]
-    if: fromJSON(needs.ci-plan.outputs.plan).jobs.release-tests
+    if: needs.ci-plan.outputs.release-tests == 'true'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -228,8 +265,28 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile release-tests
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile release-tests
+
       - name: Run release configuration checks
         run: '"$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"'
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile release-tests
 
   api-compatibility:
     name: Public API Compatibility
@@ -247,18 +304,38 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile api-compatibility
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile api-compatibility
+
       - name: Check compatibility with the 6.0 public baseline
         run: '"$GITHUB_WORKSPACE/scripts/check-api-compatibility.sh"'
 
       - name: Run 5.1.1 to 6.0 external migration consumer
         run: '"$GITHUB_WORKSPACE/scripts/check-migration-consumer.sh"'
 
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile api-compatibility
+
   thread-sanitizer:
     name: Package Tests (ThreadSanitizer)
     runs-on: macos-26
     timeout-minutes: 60
     needs: [ci-plan, lint]
-    if: fromJSON(needs.ci-plan.outputs.plan).jobs.thread-sanitizer
+    if: needs.ci-plan.outputs.thread-sanitizer == 'true'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -268,6 +345,21 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile thread-sanitizer
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile thread-sanitizer
+
       - name: Run package tests with ThreadSanitizer
         run: |
           set -eo pipefail
@@ -276,6 +368,11 @@ jobs:
             --sanitize=thread \
             --no-parallel \
             -Xswiftc -warnings-as-errors
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile thread-sanitizer
 
   sample-tests:
     name: Package Tests (Sample)
@@ -292,17 +389,37 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile sample-tests
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile sample-tests
+
       - name: Run sample package tests
         run: |
           set -eo pipefail
           swift test --package-path "$GITHUB_WORKSPACE/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage" --disable-automatic-resolution --jobs 1 -Xswiftc -warnings-as-errors
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile sample-tests
 
   package-builds:
     name: Package Build (${{ matrix.platform }})
     runs-on: macos-26
     timeout-minutes: 30
     needs: [ci-plan, lint]
-    if: fromJSON(needs.ci-plan.outputs.plan).jobs.package-builds
+    if: needs.ci-plan.outputs.package-builds == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -316,6 +433,21 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile package-builds --variant '${{ matrix.platform }}'
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile package-builds --variant '${{ matrix.platform }}'
+
       - name: Build package scheme for ${{ matrix.platform }}
         run: |
           set -eo pipefail
@@ -325,6 +457,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           build
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile package-builds --variant '${{ matrix.platform }}'
 
   focused-runtime-tests:
     name: Focused Runtime Tests (${{ matrix.platform }})
@@ -347,6 +484,21 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile focused-runtime-tests --variant '${{ matrix.platform }}'
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile focused-runtime-tests --variant '${{ matrix.platform }}'
+
       - name: Run focused scheduler, scope, diagnostics, and Output tests
         run: |
           set -eo pipefail
@@ -362,6 +514,11 @@ jobs:
           path: ${{ runner.temp }}/focused-runtime-${{ matrix.platform }}.xcresult
           retention-days: 7
           if-no-files-found: warn
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile focused-runtime-tests --variant '${{ matrix.platform }}'
 
   principle-gates:
     name: Principle Gates (Static)
@@ -405,6 +562,21 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile sample-package-builds --variant '${{ matrix.platform }}'
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile sample-package-builds --variant '${{ matrix.platform }}'
+
       - name: Build sample package for ${{ matrix.platform }}
         run: |
           set -eo pipefail
@@ -417,6 +589,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile sample-package-builds --variant '${{ matrix.platform }}'
 
   sample-build:
     name: Canonical Sample Build
@@ -433,6 +610,21 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile sample-build
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile sample-build
+
       - name: Build canonical sample
         run: |
           set -eo pipefail
@@ -446,12 +638,17 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build
 
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile sample-build
+
   address-sanitizer:
     name: Package Tests (AddressSanitizer)
     runs-on: macos-26
     timeout-minutes: 60
     needs: [ci-plan, lint]
-    if: fromJSON(needs.ci-plan.outputs.plan).jobs.address-sanitizer
+    if: needs.ci-plan.outputs.address-sanitizer == 'true'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -461,6 +658,21 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile address-sanitizer
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile address-sanitizer
+
       - name: Run package tests with AddressSanitizer
         run: |
           set -eo pipefail
@@ -469,6 +681,11 @@ jobs:
             --sanitize=address \
             --no-parallel \
             -Xswiftc -warnings-as-errors
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile address-sanitizer
 
   sample-ui-tests:
     name: Canonical Sample UI Smoke Tests
@@ -484,6 +701,21 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile sample-ui-tests
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile sample-ui-tests
 
       - name: Resolve iOS simulator destination
         id: ios-simulator
@@ -541,10 +773,15 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             test
 
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile sample-ui-tests
+
   swift-syntax-compatibility:
     name: SwiftSyntax Compatibility (Swift ${{ matrix.swift }}, ${{ matrix.syntax }})
     needs: [ci-plan, lint]
-    if: fromJSON(needs.ci-plan.outputs.plan).jobs.swift-syntax-compatibility
+    if: needs.ci-plan.outputs.swift-syntax-compatibility == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
@@ -597,11 +834,31 @@ jobs:
           assert matches[0]['state']['version'] == os.environ['SYNTAX_VERSION'], matches
           assert matches[0]['state']['revision'] == os.environ['SYNTAX_REVISION'], matches
           PYTHON
+      - name: Fingerprint exact cache inputs
+        id: cache-inputs
+        run: python3 -B scripts/ci-cache.py fingerprint --profile swift-syntax-compatibility --variant '${{ matrix.syntax }}'
+      - name: Restore SwiftPM dependency cache
+        id: dependency-cache
+        # Mirrors/downloaded prebuilts only; no .build products or verdicts.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache-inputs.outputs.dependency-paths }}
+          key: ${{ steps.cache-inputs.outputs.dependency-key }}
+      - name: Observe restored cache inputs
+        env:
+          DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
+        run: python3 -B scripts/ci-cache.py restored --profile swift-syntax-compatibility --variant '${{ matrix.syntax }}'
+
       - name: Test macro and external compile contracts
         run: |
           set -euo pipefail
           swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors \
             --filter 'InnoFlowMacrosTests|CompileContractTests'
+
+      - name: Report cache observations
+        if: always()
+        # Observation failures are blocking, even when validation already failed.
+        run: python3 -B scripts/ci-cache.py report --profile swift-syntax-compatibility --variant '${{ matrix.syntax }}'
 
   ci-required:
     name: CI Required
@@ -628,12 +885,19 @@ jobs:
       - swift-syntax-compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Require every planned CI result
         env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REUSE: ${{ needs.ci-plan.outputs.reuse-proof }}
           CI_PLAN: ${{ needs.ci-plan.outputs.plan }}
           CI_NEEDS: ${{ toJSON(needs) }}
         run: python3 -B scripts/ci-policy.py evaluate
