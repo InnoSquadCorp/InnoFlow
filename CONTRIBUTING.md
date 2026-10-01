@@ -10,6 +10,8 @@ Read these files first:
 - `AGENTS.md`
 - `GOVERNANCE.md`
 - `SUPPORT.md`
+- `docs/OSS_POLICY.md`
+- `docs/SWIFT_PACKAGE_INDEX.md` when changing package-index metadata or DocC
 - `docs/MACRO_OPERATIONS.md` when changing macros, package topology, or CI
 
 Those files define the current framework contract.

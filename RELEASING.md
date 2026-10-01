@@ -90,7 +90,7 @@ tag, run and confirm the following in CI (not a local release matrix):
    The 6.0.0 classification is recorded in
    [docs/API_BREAKAGE_6_0.md](docs/API_BREAKAGE_6_0.md).
 8. Thread and address sanitizer package tests, each with `--jobs 1 --no-parallel`.
-9. DocC generation: `Tools/generate-docc.sh` (`swift-docc-plugin` 1.5.0 at revision `647c708be89f834fa6a6d4945442793a77ddf5b6`, `swift-docc-symbolkit` 1.0.0 at revision `b45d1f2ed151d057b54504d653e0da5552844e34`, and `swift-syntax` 603.0.1 at revision `9de99a78f099e59caf2b2beec65a4c45d54b2081`, resolved only from `Tools/docc-package.resolved`)
+9. DocC generation: `Tools/generate-docc.sh` (`swift-docc-plugin` 1.5.0 at revision `647c708be89f834fa6a6d4945442793a77ddf5b6`, `swift-docc-symbolkit` 1.0.0 at revision `b45d1f2ed151d057b54504d653e0da5552844e34`, and `swift-syntax` 604.0.0 at revision `050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf`, resolved only from `Tools/docc-package.resolved`)
 10. Release sync: `scripts/check-release-sync.sh`
 11. Doc parity: `scripts/check-doc-parity.sh`
     Run `scripts/check-doc-swift-syntax.rb` as a separate syntax-only check for
@@ -249,6 +249,15 @@ Before tagging a release (automated release checks execute in CI):
     authorized dispatch of the same exact tag with `publish_release=true` and
     the evidence run ID is required to enter the publication job. That job
     also requires the evidence prerequisite to succeed in its own run.
+    Publication enters the `release` GitHub environment; administrators must
+    separately configure and verify required reviewers and tag-only deployment
+    rules there. The workflow declaration alone does not enable protections.
+    Attempts for the same ref serialize without cancelling a running release.
+    The publication checkout is pinned to the exact event SHA, downloads only
+    this run's SHA-named DocC asset, verifies its checksum, and rechecks that
+    the remote tag still targets that SHA immediately before the release API
+    request. This last check narrows the race; it does not replace the
+    server-side immutable-tag rules in step 18. Missing assets fail closed.
 
 The evidence manifest cannot define its own required set. The versioned JSON
 policy does, and verification rejects missing, duplicate, unknown, failed,
@@ -337,9 +346,16 @@ If a release changes package-consumer behavior or authoring contracts, update th
 
 ## SwiftSyntax Upgrade Policy
 
-`swift-syntax` is constrained to a single toolchain line (for example `"603.0.0"..<"604.0.0"`) because InnoFlow ships compiler macros and macro diagnostics can drift across SwiftSyntax toolchain majors. The manifest range keeps consumer dependency graphs solvable next to other macro packages; the exact version maintainers and CI build against is recorded in `Package.resolved`. Move to a new toolchain line, or bump the resolved patch, only in an intentional release-hardening change that includes:
+`swift-syntax` is bounded to the reviewed `"603.0.0"..<"605.0.0"` range.
+All live maintainer/sample/DocC locks record 604.0.0; Swift 6.3 remains the
+minimum and Xcode 26.6 remains the primary. Mandatory CI also validates the
+603.0.0 floor on Swift 6.3 and the 604 line on Xcode 27 / Swift 6.4. Source
+fallback remains an existing supported path, with clean-build diagnostics;
+a green build is not evidence of matching prebuilt use. No runtime performance,
+coverage, job timeout, public API or 32-check release threshold is weakened.
+An intentional release-hardening dependency update includes:
 
-1. Updating `Package.swift` and `Package.resolved` together.
+1. Updating `Package.swift`, the root/sample/Xcode/DocC locks and DocC generator metadata together; regenerate SwiftPM locks from their actual manifests and verify the Xcode lock on hosted Apple CI.
 2. Running the macro test suite and compile-contract tests with warnings as errors.
 3. Running `swift format lint --strict --recursive Sources Tests Examples` with the Swift toolchain used by CI.
 4. Updating macro diagnostic expectations, migration notes, or release notes when the public authoring surface changes.

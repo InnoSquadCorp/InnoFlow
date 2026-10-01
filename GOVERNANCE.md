@@ -3,6 +3,8 @@
 InnoFlow is owned by InnoSquadCorp and developed in public. This document
 describes how project authority is exercised; GitHub repository permissions
 remain the source of truth for who can merge or publish.
+The [OSS operations policy](docs/OSS_POLICY.md) connects community, dependency,
+release, and package-index responsibilities.
 
 ## Roles
 

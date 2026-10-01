@@ -643,47 +643,56 @@ struct CompileContractTests {
       .replacingOccurrences(of: "\\", with: "\\\\")
       .replacingOccurrences(of: "\"", with: "\\\"")
 
-    let manifest = """
-      // swift-tools-version: 6.3
-      import PackageDescription
+    // These defines belong to the consumer fixture, not InnoFlow or SwiftSyntax.
+    // Keep target names and source paths stable so SwiftPM only rebuilds the
+    // fixture targets when a scenario changes; dependency compilation is shared.
+    func writeConsumerManifest(defines: [String] = []) throws {
+      let settings = defines.map { ".define(\"\($0)\")" }.joined(separator: ", ")
+      let manifest = """
+        // swift-tools-version: 6.3
+        import PackageDescription
 
-      let package = Package(
-          name: "PublicMacroClient",
-          platforms: [
-              .iOS(.v18),
-              .macOS(.v15),
-              .tvOS(.v18),
-              .watchOS(.v11),
-              .visionOS(.v2)
-          ],
-          products: [
-              .executable(name: "PublicMacroClient", targets: ["PublicMacroClient"])
-          ],
-          dependencies: [
-              .package(name: "InnoFlow", path: "\(escapedPackagePath)")
-          ],
-          targets: [
-              .target(
-                  name: "PublicFeatureKit",
-                  dependencies: [
-                      .product(name: "InnoFlow", package: "InnoFlow")
-                  ]
-              ),
-              .executableTarget(
-                  name: "PublicMacroClient",
-                  dependencies: [
-                      "PublicFeatureKit",
-                      .product(name: "InnoFlow", package: "InnoFlow")
-                  ]
-              )
-          ]
+        let package = Package(
+            name: "PublicMacroClient",
+            platforms: [
+                .iOS(.v18),
+                .macOS(.v15),
+                .tvOS(.v18),
+                .watchOS(.v11),
+                .visionOS(.v2)
+            ],
+            products: [
+                .executable(name: "PublicMacroClient", targets: ["PublicMacroClient"])
+            ],
+            dependencies: [
+                .package(name: "InnoFlow", path: "\(escapedPackagePath)")
+            ],
+            targets: [
+                .target(
+                    name: "PublicFeatureKit",
+                    dependencies: [
+                        .product(name: "InnoFlow", package: "InnoFlow")
+                    ],
+                    swiftSettings: [\(settings)]
+                ),
+                .executableTarget(
+                    name: "PublicMacroClient",
+                    dependencies: [
+                        "PublicFeatureKit",
+                        .product(name: "InnoFlow", package: "InnoFlow")
+                    ],
+                    swiftSettings: [\(settings)]
+                )
+            ]
+        )
+        """
+      try manifest.write(
+        to: clientRoot.appendingPathComponent("Package.swift"),
+        atomically: true,
+        encoding: .utf8
       )
-      """
-    try manifest.write(
-      to: clientRoot.appendingPathComponent("Package.swift"),
-      atomically: true,
-      encoding: .utf8
-    )
+    }
+    try writeConsumerManifest()
 
     let featureSource = """
       import InnoFlow
@@ -1212,6 +1221,7 @@ struct CompileContractTests {
     )
     #expect(runtimeResult.status == 0, Comment(rawValue: runtimeResult.normalizedOutput))
 
+    try writeConsumerManifest(defines: ["MANUAL_PATH"])
     let manualResult = try runProcess(
       executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
       arguments: [
@@ -1220,14 +1230,12 @@ struct CompileContractTests {
         "--package-path",
         clientRoot.path,
         "--build-path",
-        buildPath.appendingPathComponent("manual-path").path,
+        buildPath.path,
         "--product",
         "PublicMacroClient",
         "--disable-experimental-prebuilts",
         "-Xswiftc",
         "-warnings-as-errors",
-        "-Xswiftc",
-        "-DMANUAL_PATH",
       ]
     )
 
@@ -1242,7 +1250,7 @@ struct CompileContractTests {
       ["FEATURE_B", "FEATURE_C"],
       ["FEATURE_A", "FEATURE_B", "FEATURE_C"],
     ] {
-      let flagArguments = flags.flatMap { ["-Xswiftc", "-D\($0)"] }
+      try writeConsumerManifest(defines: flags)
       let conditionalResult = try runProcess(
         executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
         arguments: [
@@ -1251,13 +1259,13 @@ struct CompileContractTests {
           "--package-path",
           clientRoot.path,
           "--build-path",
-          buildPath.appendingPathComponent(flags.joined(separator: "-")).path,
+          buildPath.path,
           "--product",
           "PublicMacroClient",
           "--disable-experimental-prebuilts",
           "-Xswiftc",
           "-warnings-as-errors",
-        ] + flagArguments
+        ]
       )
       #expect(
         conditionalResult.status == 0,
@@ -1265,6 +1273,8 @@ struct CompileContractTests {
       )
     }
 
+    // The negative availability controls use the original no-flag consumer.
+    try writeConsumerManifest()
     let unavailableUseSource =
       executableSource + """
 
@@ -1303,6 +1313,8 @@ struct CompileContractTests {
       atomically: true,
       encoding: .utf8
     )
+    // Preserve the global extension-safety check for the entire dependency
+    // graph. Its compiler mode intentionally keeps a separate cold build tree.
     let applicationExtensionResult = try runProcess(
       executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
       arguments: [

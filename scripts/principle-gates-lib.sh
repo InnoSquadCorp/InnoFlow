@@ -1016,29 +1016,28 @@ run_macro_operations_checks() {
     exit 1
   fi
 
-  # The manifest must constrain swift-syntax to exactly one toolchain line
-  # ("NNN.0.0"..<"NNN+1.0.0"). An exact pin causes version-solving conflicts
-  # in consumer graphs that carry other macro packages; an open range risks
-  # macro diagnostic drift across toolchain majors.
+  # This upgrade deliberately admits only the reviewed 603/604 lines.
+  # CI keeps Swift 6.3 as the minimum and tests the 603 floor and 604
+  # resolution; arbitrary widening remains a policy failure.
   syntax_range="$(
     sed -nE 's/.*swift-syntax\.git", "([0-9]+)\.0\.0"\.\.<"([0-9]+)\.0\.0".*/\1:\2/p' Package.swift
   )"
   if [[ -z "$syntax_range" ]]; then
-    echo "[principle-gates] Failed: Package.swift must constrain swift-syntax to a single toolchain line (\"NNN.0.0\"..<\"NNN+1.0.0\")"
+    echo "[principle-gates] Failed: Package.swift must use the reviewed SwiftSyntax range"
     exit 1
   fi
   local syntax_line_lower="${syntax_range%%:*}"
   local syntax_line_upper="${syntax_range##*:}"
-  if [[ "$syntax_line_upper" -ne $((syntax_line_lower + 1)) ]]; then
-    echo "[principle-gates] Failed: swift-syntax range must span exactly one toolchain line (found ${syntax_line_lower}.0.0 ..< ${syntax_line_upper}.0.0)"
+  if [[ "$syntax_line_lower" != 603 || "$syntax_line_upper" != 605 ]]; then
+    echo "[principle-gates] Failed: swift-syntax range must retain the reviewed 603.0.0 ..< 605.0.0 bounds (found ${syntax_line_lower}.0.0 ..< ${syntax_line_upper}.0.0)"
     exit 1
   fi
   local resolved_syntax_version
   resolved_syntax_version="$(
     sed -nE '/"identity" : "swift-syntax"/,/"version"/ s/.*"version" : "([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' Package.resolved | head -1
   )"
-  if [[ "${resolved_syntax_version%%.*}" != "$syntax_line_lower" ]]; then
-    echo "[principle-gates] Failed: Package.resolved swift-syntax (${resolved_syntax_version:-missing}) must stay on the ${syntax_line_lower} toolchain line"
+  if [[ "${resolved_syntax_version%%.*}" != 603 && "${resolved_syntax_version%%.*}" != 604 ]]; then
+    echo "[principle-gates] Failed: Package.resolved swift-syntax (${resolved_syntax_version:-missing}) must stay on a reviewed 603/604 toolchain line"
     exit 1
   fi
   if ! grep -F "\"${syntax_line_lower}.0.0\"..<\"${syntax_line_upper}.0.0\"" "$operations_doc" >/dev/null; then
@@ -1178,9 +1177,14 @@ run_community_health_checks() {
   search_lines '^blank_issues_enabled:[[:space:]]*false$' .github/ISSUE_TEMPLATE/config.yml >/dev/null
   search_lines '^name:[[:space:]]*Usage question$' .github/ISSUE_TEMPLATE/question.md >/dev/null
   search_lines '^labels:[[:space:]]*question$' .github/ISSUE_TEMPLATE/question.md >/dev/null
-  search_lines 'package-ecosystem:[[:space:]]*github-actions' .github/dependabot.yml >/dev/null
-  search_lines 'package-ecosystem:[[:space:]]*swift' .github/dependabot.yml >/dev/null
+  ruby -ryaml -e '
+    config = YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)
+    ecosystems = config.fetch("updates").map { |update| update.fetch("package-ecosystem") }
+    abort "[principle-gates] Missing required Dependabot ecosystems" unless
+      %w[github-actions swift].all? { |ecosystem| ecosystems.include?(ecosystem) }
+  ' .github/dependabot.yml
   search_lines '@Ethan-IS' GOVERNANCE.md >/dev/null
+  python3 "$(dirname "${BASH_SOURCE[0]}")/check-package-index.py" "$ROOT_DIR"
 }
 
 run_workflow_security_checks() {

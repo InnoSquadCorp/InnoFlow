@@ -35,6 +35,7 @@ def strict_script_step!(steps, script, required_fragments, exact_invocations: 1)
     run.is_a?(String) && run.lines.any? { |line| line.strip.start_with?(script) }
   end
   fail_contract("#{script} must be invoked in exactly one step") unless matches.one?
+  fail_contract("#{script} must run unconditionally") if matches.first.key?("if")
   run = matches.first.fetch("run")
   lines = run.lines.map(&:strip).reject { |line| line.empty? || line.start_with?("#") }
   fail_contract("#{script} step must start fail-closed") unless lines.first == "set -euo pipefail"
@@ -80,6 +81,19 @@ begin
 
   cd = load_workflow(cd_path)
   jobs = cd.fetch("jobs")
+  fail_contract("release validation permissions must remain read-only") unless
+    cd["permissions"] == { "contents" => "read", "actions" => "read" }
+  fail_contract("release attempts must serialize per ref without cancellation") unless
+    cd["concurrency"] == { "group" => "innoflow-release-${{ github.ref }}", "cancel-in-progress" => false }
+  jobs.each do |name, job|
+    if name != "publish-release" && job.fetch("permissions", {}).values.any? { |level| level != "read" }
+      fail_contract("#{name} must not grant publication permissions")
+    end
+    checkout_steps(Array(job["steps"])).each do |step, _index|
+      fail_contract("#{name} checkout must use the exact event SHA without credentials") unless
+        step.dig("with", "ref") == "${{ github.sha }}" && step.dig("with", "persist-credentials") == false
+    end
+  end
   platform_builds = job!(jobs, "release-platform-builds")
   fail_contract("release SDK matrix changed") unless
     platform_builds.dig("strategy", "matrix", "platform") == %w[macOS iOS tvOS watchOS visionOS]
@@ -137,13 +151,38 @@ begin
     publish_input["default"] == false && publish_input["required"] == false
   publish_if = publish["if"].to_s
   fail_contract("publish-release requires explicit dispatch, tag, evidence success, and opt-in") unless
-    publish_if.include?("github.event_name == 'workflow_dispatch'") &&
-    publish_if.include?("inputs.publish_release == true") &&
-    publish_if.include?("refs/tags/") &&
-    publish_if.include?("needs.release-evidence.result == 'success'") &&
-    !publish_if.include?("always()")
+    publish_if == "github.event_name == 'workflow_dispatch' && inputs.publish_release == true && startsWith(github.ref, 'refs/tags/') && needs.release-evidence.result == 'success'"
   fail_contract("publish-release uses continue-on-error") if publish["continue-on-error"] == true
-  steps!(publish, "publish-release")
+  fail_contract("publication must enter the release environment") unless publish["environment"] == "release"
+  fail_contract("only publication may write repository contents") unless publish["permissions"] == { "contents" => "write" }
+  publish_steps = steps!(publish, "publish-release")
+  strict_script_step!(publish_steps, "scripts/verify-release-publication.sh", ['"$RELEASE_TAG" "$RELEASE_SHA"'])
+  tag_check = publish_steps.find { |step| step.fetch("run", "").include?("scripts/verify-release-publication.sh") }
+  fail_contract("publication tag check must bind the dispatch tag and SHA") unless
+    tag_check["env"] == { "RELEASE_TAG" => "${{ github.ref_name }}", "RELEASE_SHA" => "${{ github.sha }}" }
+  publishers = publish_steps.select { |step| step["uses"].to_s.start_with?("softprops/action-gh-release@") }
+  fail_contract("publication requires exactly one final release action after tag verification") unless publishers.one? &&
+    publish_steps.last == publishers.first && publish_steps[-2] == tag_check && !publishers.first.key?("if")
+  fail_contract("publication must require the exact release assets") unless
+    publishers.first["with"] == { "tag_name" => "${{ github.ref_name }}", "body_path" => "release-notes.md",
+      "fail_on_unmatched_files" => true, "files" => "release-assets/innoflow-docc.tar.gz\nrelease-assets/SHA256SUMS\n" }
+  artifact_name = "innoflow-release-gate-${{ github.sha }}"
+  gate_steps = steps!(job!(jobs, "release-gate"), "release-gate")
+  gate_uploads = gate_steps.select { |step| step["uses"].to_s.start_with?("actions/upload-artifact@") }
+  fail_contract("release assets must be candidate-bound, non-overwriting, and fail closed") unless gate_uploads.one? &&
+    gate_uploads.first.dig("with", "name") == artifact_name &&
+    gate_uploads.first.dig("with", "if-no-files-found") == "error" &&
+    gate_uploads.first.dig("with", "overwrite") == false &&
+    gate_uploads.first.dig("with", "path") == ".build/docc/innoflow-docc.tar.gz\n.build/docc/SHA256SUMS\n"
+  asset_downloads = publish_steps.select { |step| step["uses"].to_s.start_with?("actions/download-artifact@") }
+  fail_contract("publication must download only this run's exact candidate assets") unless asset_downloads.one? &&
+    !asset_downloads.first.key?("if") && asset_downloads.first["with"] == { "name" => artifact_name, "path" => "release-assets" }
+  strict_script_step!(publish_steps, "shasum", ["-a 256 -c SHA256SUMS"])
+  checksum_step = publish_steps.find { |step| step.fetch("run", "").include?("shasum -a 256 -c SHA256SUMS") }
+  fail_contract("asset checksum must run on the downloaded files before publication") unless
+    checksum_step["working-directory"] == "release-assets" &&
+    publish_steps.index(asset_downloads.first) < publish_steps.index(checksum_step) &&
+    publish_steps.index(checksum_step) < publish_steps.index(tag_check)
 
   producer = load_workflow(producer_path)
   producer_trigger = producer["on"] || producer[true]

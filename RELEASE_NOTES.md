@@ -42,6 +42,12 @@ validation workflows that previously required application-level adapters.
 
 ### Release hardening
 
+Dependency integration keeps Swift 6.3 and Xcode 26.6 while moving the root,
+sample and DocC SwiftSyntax locks together to 604.0.0. The reviewed range is
+`"603.0.0"..<"605.0.0"`; additional mandatory CI tests its 603.0.0 floor and the
+604 line on Swift 6.4. Existing release/runtime budgets stay unchanged. See
+[dependency validation evidence](docs/DEPENDENCY_INTEGRATION_2026_09_30.md).
+
 `IdentifiedArray` equality and hashing include stored identities and their
 positions, not just element values. Identity-only replacement now refreshes
 root and scoped selections. Custom identity projections must stay stable for

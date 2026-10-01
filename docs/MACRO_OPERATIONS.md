@@ -16,14 +16,14 @@ that deliberately hand-author `Reducer` conformances.
 - Runtime-only targets may depend on `InnoFlowCore`; that product does not
   expose macro declarations or compile SwiftSyntax products.
 
-The 6.0 development line requires Swift 6.3. `swift-syntax` is constrained to
-the single toolchain line `"603.0.0"..<"604.0.0"` so expansion and diagnostic
-output cannot drift across toolchain majors, while consumer graphs that carry
-other macro packages can still resolve a shared 603.x patch. Maintainer and CI
-reproducibility comes from `Package.resolved`, which records the exact
-SwiftSyntax version every gate runs against. Upgrade the toolchain and the
-SwiftSyntax line together through the policy in
-[`RELEASING.md`](../RELEASING.md).
+The 6.0 development line still requires Swift 6.3. The reviewed SwiftSyntax
+range is `"603.0.0"..<"605.0.0"`, admitting only the 603 and 604 lines.
+Maintainer, sample and DocC locks now record 604.0.0 together. Existing full
+CI runs that resolution on Xcode 26.6 / Swift 6.3; additional mandatory lanes
+exercise the 603.0.0 floor on Swift 6.3 and 604.0.0 on Xcode 27 / Swift 6.4.
+Macro diagnostics, external compile contracts and warnings-as-errors remain
+blocking. Do not widen the range or change the minimum compiler merely to make
+an update pass. Follow [`RELEASING.md`](../RELEASING.md).
 
 ## Output Case Paths
 
@@ -60,6 +60,13 @@ fixtures compile every non-empty combination of three feature flags in
 addition to the no-flag build; compiler-predicate fixtures also exercise active
 `arch`, `swift`, and `compiler` helpers. Changes to this model must keep those
 matrices and the active-collision diagnostic test green.
+
+The consumer matrix keeps one fresh package/build tree per test invocation and
+changes these fixture-only defines on both consumer targets. SwiftPM can reuse
+the unchanged InnoFlow/SwiftSyntax dependency build while recompiling each flag
+configuration; all combinations and negative controls still run. The separate
+application-extension check retains its global compiler flag and isolated build
+tree so extension-safety validation still includes the dependency graph.
 
 Availability is never weakened to make a helper compile. Introduced,
 deprecated, and conditional `@available` attributes are preserved on generated
@@ -118,7 +125,9 @@ consumer target before deleting global caches.
 
 ### Prebuilt SwiftSyntax mismatch
 
-Swift 6.3 enables prebuilt SwiftSyntax for macros by default. If a toolchain
+Swift 6.3 attempts prebuilt SwiftSyntax for macros by default when a matching,
+valid signed artifact is available. A successful default build does not prove
+that a prebuilt was used. If a toolchain
 update or cache produces a malformed macro response, missing host library, or
 SwiftSyntax compatibility failure, verify the source-built fallback:
 
@@ -171,8 +180,10 @@ Cache keys for a consumer should include the Swift/Xcode version,
 `Package.resolved`, build configuration, and destination platform. Never share
 macro build artifacts across incompatible host toolchains. InnoFlow's own
 GitHub workflows use fresh hosted runners rather than relying on a cross-job
-macro cache, then explicitly verify both the default prebuilt path and the
-source-built fallback.
+macro cache, then verify both the default SwiftPM path and the explicit
+source-built fallback. Record artifact/log evidence separately before claiming
+prebuilt use. The [dependency integration record](DEPENDENCY_INTEGRATION_2026_09_30.md)
+documents the 603.0.1/604.0.0 source-build comparison and availability limits.
 
 Run the repository's fast structural check with:
 

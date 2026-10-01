@@ -57,6 +57,15 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Changed
 
+- Dependency integration moves all live maintainer/sample/DocC SwiftSyntax
+  locks to 604.0.0 within the reviewed `"603.0.0"..<"605.0.0"` range. Swift 6.3
+  and Xcode 26.6 remain the minimum/primary toolchains. Mandatory CI additionally
+  checks the 603.0.0 floor and 604 on Swift 6.4; existing macro, external-consumer,
+  warnings-as-errors and performance gates remain blocking.
+- GitHub Actions pins move to checkout 7.0.1 and action-gh-release 3.0.3.
+  Pages retains PR 48's separated API-only publisher instead of reintroducing
+  the retired deploy-pages action.
+
 - Queued descendants recheck dispatch cancellation before reduction, and
   immediate outputs respect cancellation accepted during state observation.
 - Captured-output consumer task cancellation now cancels only the associated

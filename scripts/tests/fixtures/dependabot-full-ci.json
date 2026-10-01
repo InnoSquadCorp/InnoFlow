@@ -1,0 +1,373 @@
+{
+  "source": "Flow main CI run 36650186636 actual job/step inventory; new planner/policy/reusable Docs entries are expected-contract fixtures, not live CI proof.",
+  "jobs": {
+    "CI Plan": [
+      {
+        "name": "Plan exact changed paths",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify actual post-merge main origin",
+        "conclusion": "skipped"
+      }
+    ],
+    "CI and public operations policy": [
+      {
+        "name": "Verify CI selection and public operations",
+        "conclusion": "success"
+      }
+    ],
+    "Documentation / Build Documentation": [
+      {
+        "name": "Checkout",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build Documentation",
+        "conclusion": "success"
+      },
+      {
+        "name": "Upload Documentation Artifact",
+        "conclusion": "skipped"
+      }
+    ],
+    "Lint": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify CI-only release evidence contracts",
+        "conclusion": "success"
+      },
+      {
+        "name": "Lint sources",
+        "conclusion": "success"
+      },
+      {
+        "name": "Check Swift documentation fence syntax",
+        "conclusion": "success"
+      },
+      {
+        "name": "Require complete documentation example inventory",
+        "conclusion": "success"
+      },
+      {
+        "name": "Compile copyable documentation examples as external consumers",
+        "conclusion": "success"
+      }
+    ],
+    "Coverage Gate / coverage": [
+      {
+        "name": "Show toolchain",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify coverage negative controls",
+        "conclusion": "success"
+      },
+      {
+        "name": "Measure and enforce coverage",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preserve coverage evidence",
+        "conclusion": "success"
+      }
+    ],
+    "Public API Compatibility": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Check compatibility with the 6.0 public baseline",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run 5.1.1 to 6.0 external migration consumer",
+        "conclusion": "success"
+      }
+    ],
+    "Package Tests (Sample)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run sample package tests",
+        "conclusion": "success"
+      }
+    ],
+    "Package Tests (ThreadSanitizer)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run package tests with ThreadSanitizer",
+        "conclusion": "success"
+      }
+    ],
+    "Focused Runtime Tests (tvOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run focused scheduler, scope, diagnostics, and Output tests",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preserve failed focused runtime results",
+        "conclusion": "skipped"
+      }
+    ],
+    "Package Tests (Release)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run release configuration checks",
+        "conclusion": "success"
+      }
+    ],
+    "Package Tests (Core)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify macro source fallback",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run package tests including output lifetime and composition contracts",
+        "conclusion": "success"
+      }
+    ],
+    "Package Build (visionOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build package scheme for visionOS",
+        "conclusion": "success"
+      }
+    ],
+    "Package Build (iOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build package scheme for iOS",
+        "conclusion": "success"
+      }
+    ],
+    "Package Tests (AddressSanitizer)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run package tests with AddressSanitizer",
+        "conclusion": "success"
+      }
+    ],
+    "Package Build (macOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build package scheme for macOS",
+        "conclusion": "success"
+      }
+    ],
+    "Package Build (watchOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build package scheme for watchOS",
+        "conclusion": "success"
+      }
+    ],
+    "Focused Runtime Tests (iOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run focused scheduler, scope, diagnostics, and Output tests",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preserve failed focused runtime results",
+        "conclusion": "skipped"
+      }
+    ],
+    "Focused Runtime Tests (visionOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run focused scheduler, scope, diagnostics, and Output tests",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preserve failed focused runtime results",
+        "conclusion": "skipped"
+      }
+    ],
+    "Focused Runtime Tests (watchOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run focused scheduler, scope, diagnostics, and Output tests",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preserve failed focused runtime results",
+        "conclusion": "skipped"
+      }
+    ],
+    "Package Build (tvOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build package scheme for tvOS",
+        "conclusion": "success"
+      }
+    ],
+    "Canonical Sample Build": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build canonical sample",
+        "conclusion": "success"
+      }
+    ],
+    "Principle Gates (Static)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run static principle gates",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify gate negative controls",
+        "conclusion": "success"
+      }
+    ],
+    "Sample Package Build (tvOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build sample package for tvOS",
+        "conclusion": "success"
+      }
+    ],
+    "Sample Package Build (visionOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build sample package for visionOS",
+        "conclusion": "success"
+      }
+    ],
+    "Sample Package Build (watchOS)": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build sample package for watchOS",
+        "conclusion": "success"
+      }
+    ],
+    "Canonical Sample UI Smoke Tests": [
+      {
+        "name": "Show Xcode version",
+        "conclusion": "success"
+      },
+      {
+        "name": "Resolve iOS simulator destination",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preboot iOS simulator",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run canonical sample UI smoke tests",
+        "conclusion": "success"
+      }
+    ],
+    "CI Required": [
+      {
+        "name": "Require every planned CI result",
+        "conclusion": "success"
+      }
+    ],
+    "Build Documentation": [
+      {
+        "name": "Require planned documentation result",
+        "conclusion": "success"
+      }
+    ],
+    "SwiftSyntax Compatibility (Swift 6.3, 603.0.0)": [
+      {
+        "name": "Checkout exact compatibility candidate",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify pinned compatibility toolchain",
+        "conclusion": "success"
+      },
+      {
+        "name": "Resolve and verify audited SwiftSyntax",
+        "conclusion": "success"
+      },
+      {
+        "name": "Test macro and external compile contracts",
+        "conclusion": "success"
+      }
+    ],
+    "SwiftSyntax Compatibility (Swift 6.4, 604.0.0)": [
+      {
+        "name": "Checkout exact compatibility candidate",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify pinned compatibility toolchain",
+        "conclusion": "success"
+      },
+      {
+        "name": "Resolve and verify audited SwiftSyntax",
+        "conclusion": "success"
+      },
+      {
+        "name": "Test macro and external compile contracts",
+        "conclusion": "success"
+      }
+    ]
+  }
+}

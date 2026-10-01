@@ -10,91 +10,119 @@ end
 root = ARGV.fetch(0, File.expand_path("..", __dir__))
 workflow_dir = File.join(root, ".github", "workflows")
 load_yaml = ->(path) { YAML.safe_load(File.read(path), aliases: false) }
-
 ci = load_yaml.call(File.join(workflow_dir, "ci.yml"))
 ci_trigger = ci["on"] || ci[true]
-pull_request_types = Array(ci_trigger.dig("pull_request", "types"))
-check(!pull_request_types.include?("labeled"), "full CI must not restart for label events")
+check(Array(ci_trigger.dig("pull_request", "types")).sort == %w[opened synchronize reopened labeled unlabeled ready_for_review].sort,
+  "CI must replan current changes and opt-in labels for every supported PR transition")
+%w[push pull_request].each do |event|
+  check((ci_trigger.fetch(event).keys & %w[paths paths-ignore]).empty?,
+    "#{event}: required CI cannot disappear behind path filters")
+end
+check(ci_trigger.key?("workflow_dispatch") && ci_trigger.dig("merge_group", "types") == ["checks_requested"],
+  "manual recovery and merge queues must produce full CI")
 check(ci.dig("concurrency", "cancel-in-progress") == true,
-  "full CI must cancel superseded runs")
+  "CI must cancel superseded runs")
 check(ci.dig("concurrency", "group").to_s.include?("github.event.pull_request.number"),
-  "full CI concurrency must be scoped to a pull request or ref")
+  "CI concurrency must be scoped to a pull request or ref")
 
 jobs = ci.fetch("jobs")
+required_job_names = %w[
+  ci-plan policy docs-required documentation coverage lint tests release-tests api-compatibility thread-sanitizer
+  sample-tests package-builds focused-runtime-tests principle-gates
+  sample-package-builds sample-build address-sanitizer sample-ui-tests swift-syntax-compatibility
+]
+check((jobs.keys - ["ci-required"]).sort == required_job_names.sort,
+  "CI Required inventory must classify every non-aggregate CI job")
+# Original build/test dependency edges are kept; the planner is added as a
+# predecessor so a selected job can never start with incomplete change evidence.
+prior_dependencies = {
+  "documentation" => [], "coverage" => [], "lint" => [],
+  "tests" => ["lint"], "release-tests" => ["lint"], "api-compatibility" => ["lint"],
+  "thread-sanitizer" => ["lint"], "sample-tests" => ["lint"], "package-builds" => ["lint"],
+  "focused-runtime-tests" => ["lint"], "principle-gates" => %w[lint coverage],
+  "sample-package-builds" => ["sample-tests"], "sample-build" => ["lint"],
+  "address-sanitizer" => ["lint"], "sample-ui-tests" => ["sample-build"], "swift-syntax-compatibility" => ["lint"],
+}
+prior_dependencies.each do |name, prior|
+  job = jobs.fetch(name)
+  check(Array(job["needs"]).sort == (["ci-plan"] + prior).sort,
+    "#{name}: original dependencies plus CI Plan must be retained")
+  check(job["if"] == "fromJSON(needs.ci-plan.outputs.plan).jobs.#{name}",
+    "#{name}: selection must use exactly its fail-closed planned boolean")
+end
+jobs.each do |name, job|
+  check(!job.key?("continue-on-error"), "#{name}: job cannot ignore failures")
+  check(Array(job["steps"]).none? { |step| step.key?("continue-on-error") },
+    "#{name}: steps cannot ignore failures")
+end
+
+plan = jobs.fetch("ci-plan")
+check(plan["name"] == "CI Plan" && plan["if"] == "always()" && !plan.key?("needs"),
+  "CI Plan must always run independently")
+check(plan.dig("outputs", "plan") == '${{ steps.plan.outputs.plan }}', "CI Plan output must come from the planner")
+plan_step = plan.fetch("steps").find { |step| step["id"] == "plan" }
+check(plan_step && !plan_step.key?("if") &&
+  plan_step["run"] == 'python3 -B scripts/ci-policy.py plan --event "$GITHUB_EVENT_PATH" --output .build/ci-plan.json',
+  "CI Plan must execute exact changed-path planning unconditionally")
+check(plan.dig("outputs", "post_merge") == "${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dependabot_merge_pr != '')) }}",
+  "Pages artifact eligibility must be limited to successful main push/recovery plans")
+check(jobs.dig("documentation", "with", "publish_pages") == "${{ needs.ci-plan.outputs.post_merge == 'true' }}",
+  "documentation publication eligibility must come from the successful CI Plan")
+checkout = plan.fetch("steps").find { |step| step["uses"].to_s.start_with?("actions/checkout@") }
+check(checkout && checkout.dig("with", "fetch-depth") == 0 && checkout.dig("with", "persist-credentials") == false,
+  "CI Plan must fetch exact diff history without persisting credentials")
+
+policy = jobs.fetch("policy")
+check(Array(policy["needs"]) == ["ci-plan"] && !policy.key?("if"), "policy contracts must run for every valid plan")
+policy_runs = policy.fetch("steps").filter_map { |step| step["run"] }.join("\n")
+["python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'", "python3 -B scripts/check-public-operations.py",
+ "scripts/check-workflow-action-pins.sh", "scripts/check-workflow-job-timeouts.sh",
+ "scripts/check-macro-operations.sh", "scripts/check-community-health.sh"].each do |command|
+  check(policy_runs.lines.map(&:strip).include?(command), "policy must run #{command}")
+end
+
 api_runs = jobs.fetch("api-compatibility").fetch("steps").filter_map { |step| step["run"] }
 check(api_runs.include?('"$GITHUB_WORKSPACE/scripts/check-migration-consumer.sh"'),
   "CI must run the exact 5.1.1 to 6.0 external migration consumer")
-principle = jobs.fetch("principle-gates")
-check(Array(principle["needs"]).include?("coverage"),
-  "static principle gates must retain the coverage dependency")
-principle_runs = principle.fetch("steps").filter_map { |step| step["run"] }
+principle_runs = jobs.fetch("principle-gates").fetch("steps").filter_map { |step| step["run"] }
 check(principle_runs.any? { |run| run.include?("principle-gates.sh\" --static") },
   "CI principle gates must use the build-free static mode")
 check(principle_runs.include?('"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'),
   "CI must retain gate negative controls")
-
-release = jobs.fetch("release-tests")
-check(Array(release["needs"]) == ["lint"],
-  "Release tests must start after lint without waiting for Debug tests")
-check(release.fetch("steps").any? { |step| step["run"] == '"$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"' },
+check(jobs.fetch("release-tests").fetch("steps").any? { |step| step["run"] == '"$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"' },
   "Release tests must execute the Release-only configuration gate")
-
-check(Array(jobs.fetch("sample-build")["needs"]) == ["lint"],
-  "canonical sample build must not wait for the full validation graph")
-check(jobs.fetch("address-sanitizer")["if"] == "github.event_name == 'push'",
-  "full CI must reserve AddressSanitizer for branch pushes")
+{
+  "package-builds" => %w[macOS iOS tvOS watchOS visionOS],
+  "focused-runtime-tests" => %w[iOS tvOS watchOS visionOS],
+  "sample-package-builds" => %w[tvOS watchOS visionOS],
+}.each do |name, platforms|
+  check(jobs.dig(name, "strategy", "matrix", "platform") == platforms && jobs.dig(name, "strategy", "fail-fast") == false,
+    "#{name}: original complete platform matrix must be preserved")
+end
 
 asan = load_yaml.call(File.join(workflow_dir, "asan.yml"))
 asan_trigger = asan["on"] || asan[true]
-check(Array(asan_trigger.dig("pull_request", "types")).sort == %w[labeled opened reopened synchronize].sort,
-  "pull-request AddressSanitizer must follow label selection and subsequent PR revisions")
-asan_job = asan.fetch("jobs").fetch("address-sanitizer")
-asan_if = asan_job["if"].to_s
-check(asan_if.include?("contains(github.event.pull_request.labels.*.name, 'run-asan')") &&
-      asan_if.include?("github.event.action != 'labeled'") &&
-      asan_if.include?("github.event.label.name == 'run-asan'"),
-  "only selected PR revisions or the run-asan label event may start AddressSanitizer")
-check(asan["concurrency"].nil?,
-  "non-running label events must not enter the AddressSanitizer concurrency group")
-check(asan_job.dig("concurrency", "cancel-in-progress") == true &&
-      asan_job.dig("concurrency", "group").to_s.include?("github.event.pull_request.number"),
-  "eligible pull-request AddressSanitizer jobs must cancel only superseded runs for the same PR")
+check(asan_trigger.keys == ["workflow_dispatch"],
+  "standalone ASan is manual-only; planned CI owns source, bot and run-asan label checks")
 
-required_job_names = %w[
-  coverage lint tests release-tests api-compatibility thread-sanitizer
-  sample-tests package-builds focused-runtime-tests principle-gates
-  sample-package-builds sample-build address-sanitizer sample-ui-tests
-]
-final_gate = jobs.fetch("ci-required")
-check((jobs.keys - ["ci-required"]).sort == required_job_names.sort,
-  "CI Required inventory must classify every non-aggregate CI job")
-check(final_gate["name"] == "CI Required" && final_gate["if"] == "always()",
-  "CI Required must be a stable fail-closed aggregate job")
-check(Array(final_gate["needs"]).sort == required_job_names.sort,
-  "CI Required dependencies must match every mandatory CI job")
-check(!final_gate.key?("continue-on-error"),
-  "CI Required must not ignore failures")
-final_steps = final_gate.fetch("steps")
-check(final_steps.none? { |step| step.key?("continue-on-error") },
-  "CI Required steps must not ignore failures")
-checker_steps = final_steps.select { |step| step["run"].to_s.include?("check-required-ci-results.rb") }
-check(checker_steps.length == 1 && checker_steps.first.equal?(final_steps.last),
-  "CI Required must execute exactly one result verifier as its final step")
-checker_step = checker_steps.first
-check(checker_step["if"].nil?,
-  "CI Required result verifier must not have a step-level condition")
-expected_result_lines = [
-  "set -euo pipefail",
-  'ruby "$GITHUB_WORKSPACE/scripts/check-required-ci-results.rb" \\',
-  '"${{ github.event_name }}" \\',
-]
-required_job_names.each_with_index do |name, index|
-  continuation = index == required_job_names.length - 1 ? "" : " \\"
-  expected_result_lines << "\"#{name}=${{ needs.#{name}.result }}\"#{continuation}"
+# Both existing protected contexts stay always-running. A skipped selected job
+# is an error, never a successful no-op, including reused workflow/matrix jobs.
+{
+  "ci-required" => ["CI Required", required_job_names, "Require every planned CI result", "evaluate"],
+  "docs-required" => ["Build Documentation", %w[ci-plan documentation], "Require planned documentation result", "evaluate-documentation"],
+}.each do |id, (name, dependencies, step_name, command)|
+  final_gate = jobs.fetch(id)
+  check(final_gate["name"] == name && final_gate["if"] == "always()",
+    "#{name} must be a stable always-running aggregate")
+  check(Array(final_gate["needs"]).sort == dependencies.sort,
+    "#{name}: dependencies must match its complete result inventory")
+  steps = final_gate.fetch("steps")
+  verifier = steps.last
+  check(verifier["name"] == step_name && !verifier.key?("if") &&
+    verifier["run"] == "python3 -B scripts/ci-policy.py #{command}" &&
+    verifier["env"] == {"CI_PLAN" => '${{ needs.ci-plan.outputs.plan }}', "CI_NEEDS" => '${{ toJSON(needs) }}'},
+    "#{name}: final unconditional verifier must consume the exact plan and dependency results")
 end
-actual_result_lines = checker_step.fetch("run").lines.map(&:strip).reject(&:empty?)
-check(actual_result_lines == expected_result_lines,
-  "CI Required result verifier command must match the fail-closed canonical form")
 
 cd = load_yaml.call(File.join(workflow_dir, "cd.yml"))
 release_gate_runs = cd.fetch("jobs").fetch("release-gate").fetch("steps").filter_map { |step| step["run"] }
@@ -116,4 +144,4 @@ updates = dependabot.fetch("updates")
     "Dependabot #{ecosystem} updates must be grouped")
 end
 
-puts "[ci-efficiency] Trigger, dependency and duplicate-work contracts passed"
+puts "[ci-efficiency] Change-aware selection, protected contexts and complete existing gates passed"
