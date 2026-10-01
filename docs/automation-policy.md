@@ -101,6 +101,17 @@ with a write token. Ordinary branch/manual CI and PRs cannot publish docs.
 Standalone numeric-tag/manual Docs runs also must resolve to current main for
 publication; an old tag cannot roll back the single live documentation root.
 
+The Pages publisher accepts only `succeed` as completion and preserves its bounded
+polling, API-error budget and cancellation behavior. The official REST response
+schema additionally defines `syncing_files`, `finished_file_sync`, `updating_pages`
+and `purging_cdn` as intermediate states; these continue polling. Unrecognized
+values are diagnosed exactly with escaped representation and cancellation of the
+known deployment is requested once, without creating another one. `deployment_queued` is not added by
+inference. The historical failed publication did not log its actual response
+status, so its exact value remains unknown; local state-machine tests do not prove
+a subsequent live deployment succeeded.
+
+
 SPI configuration uses the existing external DocC site rather than promising that
 SPI runs Flow's custom multi-target generator. Registration and current-version
 indexing are separate facts; see [SPI policy](SWIFT_PACKAGE_INDEX.md). Existing

@@ -1,6 +1,7 @@
 """Offline source/provenance transcripts for the trusted Pages publisher."""
 import copy
 import importlib.util
+import io
 from pathlib import Path
 import re
 import unittest
@@ -75,8 +76,10 @@ class Transcript:
         elif suffix == 'pulls/45': value = self.pr
         elif suffix == 'pages': value = self.page
         elif suffix == f'pages/deployments/{HEAD}':
-            value = dict(status=self.statuses[0])
+            value = self.statuses[0]
             if len(self.statuses) > 1: self.statuses.pop(0)
+            if isinstance(value, Exception): raise value
+            if not isinstance(value, dict): value = dict(status=value)
         else: raise AssertionError('Unexpected read ' + route)
         return copy.deepcopy(value)
 
@@ -237,8 +240,168 @@ class PublisherProofTests(unittest.TestCase):
         with self.assertRaises(OSError): p.publish(api, api.notice, sleep=lambda _: None)
         self.assertEqual(len(api.mutations), 1)
 
+    def test_each_official_intermediate_status_waits_for_explicit_success(self):
+        # Independent API-schema expectations, not imported from the publisher.
+        # https://docs.github.com/en/rest/pages/pages#get-the-status-of-a-github-pages-deployment
+        for state in ['deployment_in_progress', 'syncing_files', 'finished_file_sync',
+                      'updating_pages', 'purging_cdn']:
+            with self.subTest(state=state):
+                api = Transcript()
+                api.statuses = [state, state, 'succeed', 'deployment_failed']
+                sleep = mock.Mock()
+                self.assertEqual(p.publish(api, api.notice, sleep=sleep), api.page['html_url'])
+                self.assertEqual(sleep.call_args_list, [mock.call(5), mock.call(5)])
+                self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 3)
+                self.assertEqual(len(api.mutations), 1)
+
+    def test_official_lifecycle_and_existing_temporary_statuses_recover(self):
+        api = Transcript()
+        api.statuses = ['queued', 'pending', 'unknown_status', 'not_found',
+                        'deployment_attempt_error', 'deployment_in_progress', 'syncing_files',
+                        'finished_file_sync', 'updating_pages', 'purging_cdn', 'succeed']
+        sleep = mock.Mock()
+        self.assertEqual(p.publish(api, api.notice, sleep=sleep), api.page['html_url'])
+        self.assertEqual(sleep.call_args_list, [mock.call(5)] * 10)
+        self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 11)
+        self.assertEqual(len(api.mutations), 1)
+
+    def test_every_terminal_failure_stops_without_retry_or_cancellation(self):
+        for state in ['deployment_failed', 'deployment_content_failed',
+                      'deployment_cancelled', 'deployment_lost']:
+            with self.subTest(state=state):
+                api = Transcript()
+                api.statuses = ['syncing_files', state, 'succeed']
+                sleep = mock.Mock()
+                with self.assertRaises(p.Rejected) as caught:
+                    p.publish(api, api.notice, sleep=sleep)
+                self.assertEqual(str(caught.exception), 'Pages deployment failed: ' + state)
+                sleep.assert_called_once_with(5)
+                self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 2)
+                self.assertEqual(len(api.mutations), 1)
+
+    def test_unknown_status_reports_exact_value_and_cancels_once(self):
+        # deployment_queued is not in the official schema; do not guess that a
+        # similar-looking or undocumented value is success or safe to poll.
+        for state in ['deployment_queued', 'success', 'SUCCEED', 'succeed ',
+                      'new_status', '', None, False, 1, ['succeed'], {'state': 'succeed'},
+                      'new\n::warning::status\r\t']:
+            with self.subTest(state=state):
+                api = Transcript()
+                api.statuses = [{'status': state}, 'succeed']
+                sleep = mock.Mock()
+                with self.assertRaises(p.Rejected) as caught:
+                    p.publish(api, api.notice, sleep=sleep)
+                self.assertEqual(str(caught.exception),
+                                 f'Unknown Pages status {state!r}; cancellation requested')
+                self.assertNotIn('\n', str(caught.exception))
+                sleep.assert_not_called()
+                self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 1)
+                self.assertEqual([path for path, _ in api.mutations],
+                                 [p.route('pages/deployments'), p.route('pages/deployments/' + HEAD + '/cancel')])
+                self.assertEqual(api.mutations[-1][1], {})
+
+    def test_missing_status_is_rejected_and_cancelled(self):
+        api = Transcript()
+        api.statuses = [{}, 'succeed']
+        with self.assertRaisesRegex(p.Rejected, 'Unknown Pages status None; cancellation requested'):
+            p.publish(api, api.notice, sleep=lambda _: None)
+        self.assertEqual([path for path, _ in api.mutations],
+                         [p.route('pages/deployments'), p.route('pages/deployments/' + HEAD + '/cancel')])
+        self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 1)
+
+    def test_every_new_intermediate_state_remains_bounded_by_poll_limit(self):
+        for state in ['syncing_files', 'finished_file_sync', 'updating_pages', 'purging_cdn']:
+            with self.subTest(state=state), mock.patch.object(p.time, 'monotonic', return_value=0):
+                api = Transcript()
+                api.statuses = [state] * 120 + ['succeed']
+                sleep = mock.Mock()
+                with self.assertRaisesRegex(p.Rejected, 'timed out and cancellation was requested'):
+                    p.publish(api, api.notice, sleep=sleep)
+                self.assertEqual(sleep.call_args_list, [mock.call(5)] * 120)
+                self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 120)
+                self.assertEqual([path for path, _ in api.mutations],
+                                 [p.route('pages/deployments'), p.route('pages/deployments/' + HEAD + '/cancel')])
+
+    def test_elapsed_deadline_cancels_before_reading_a_late_success(self):
+        api = Transcript()
+        api.statuses = ['syncing_files', 'succeed']
+        sleep = mock.Mock()
+        with mock.patch.object(p.time, 'monotonic', side_effect=[100, 100, 700]):
+            with self.assertRaisesRegex(p.Rejected, 'timed out and cancellation was requested'):
+                p.publish(api, api.notice, sleep=sleep)
+        sleep.assert_called_once_with(5)
+        self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 1)
+        self.assertEqual([path for path, _ in api.mutations],
+                         [p.route('pages/deployments'), p.route('pages/deployments/' + HEAD + '/cancel')])
+        api = Transcript()
+        with mock.patch.object(p.time, 'monotonic', side_effect=[100, 699.999]):
+            self.assertEqual(p.publish(api, api.notice), api.page['html_url'])
+        self.assertEqual(len(api.mutations), 1)
+
+    def test_status_request_error_budget_is_cumulative_and_never_recreates(self):
+        for errors in [9, 10]:
+            with self.subTest(errors=errors), mock.patch.object(p.time, 'monotonic', return_value=0):
+                api = Transcript()
+                api.statuses = []
+                for _ in range(errors):
+                    api.statuses.extend([p.urllib.error.URLError('status unavailable'), 'syncing_files'])
+                api.statuses.append('succeed')
+                sleep = mock.Mock()
+                if errors == 9:
+                    self.assertEqual(p.publish(api, api.notice, sleep=sleep), api.page['html_url'])
+                    self.assertEqual(len(api.mutations), 1)
+                else:
+                    with self.assertRaisesRegex(p.Rejected, 'Pages status unavailable; cancellation requested'):
+                        p.publish(api, api.notice, sleep=sleep)
+                    self.assertEqual([path for path, _ in api.mutations],
+                                     [p.route('pages/deployments'), p.route('pages/deployments/' + HEAD + '/cancel')])
+                self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 19)
+                self.assertEqual(sleep.call_args_list, [mock.call(5)] * 18)
+
+    def test_cancel_failure_does_not_retry_cancel_create_or_report_success(self):
+        for states in [['new_status'], ['syncing_files'], [p.urllib.error.URLError('status unavailable')]]:
+            with self.subTest(states=states), mock.patch.object(p.time, 'monotonic', return_value=0):
+                api = Transcript()
+                api.statuses = states
+                mutate = api.mutate
+                def failed_cancel(route, data):
+                    result = mutate(route, data)
+                    if route.endswith('/cancel'):
+                        raise p.urllib.error.URLError('cancel unavailable')
+                    return result
+                api.mutate = failed_cancel
+                with self.assertRaisesRegex(p.urllib.error.URLError, 'cancel unavailable'):
+                    p.publish(api, api.notice, sleep=lambda _: None)
+                self.assertEqual([path for path, _ in api.mutations],
+                                 [p.route('pages/deployments'), p.route('pages/deployments/' + HEAD + '/cancel')])
+
+    def test_unknown_status_is_logged_before_an_unsuccessful_cancel(self):
+        api = Transcript()
+        api.statuses = ['new\n::warning::status\r\t', 'succeed']
+        stderr = io.StringIO()
+        expected = "Unknown Pages status 'new\\n::warning::status\\r\\t'; requesting cancellation\n"
+        failure = p.urllib.error.URLError('cancel unavailable')
+        mutate = api.mutate
+        def failed_cancel(route, data):
+            result = mutate(route, data)
+            if route.endswith('/cancel'):
+                self.assertEqual(stderr.getvalue(), expected)
+                raise failure
+            return result
+        api.mutate = failed_cancel
+        sleep = mock.Mock()
+        with mock.patch.object(p.sys, 'stderr', stderr), self.assertRaises(p.urllib.error.URLError) as caught:
+            p.publish(api, api.notice, sleep=sleep)
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(stderr.getvalue(), expected)
+        sleep.assert_not_called()
+        self.assertEqual(api.reads.count(p.route('pages/deployments/' + HEAD)), 1)
+        self.assertEqual([path for path, _ in api.mutations],
+                         [p.route('pages/deployments'), p.route('pages/deployments/' + HEAD + '/cancel')])
+
     def test_last_main_read_and_status_read_errors_are_fail_closed(self):
         api = Transcript()
+        api.statuses = ['syncing_files', 'succeed']
         original = api.get
         main_reads = 0
         def moved_on_final_read(route):
@@ -248,8 +411,10 @@ class PublisherProofTests(unittest.TestCase):
                 if main_reads == 3: api.main['object']['sha'] = OLD
             return original(route)
         api.get = moved_on_final_read
-        with self.assertRaises(p.Rejected): p.publish(api, api.notice)
+        with self.assertRaisesRegex(p.Rejected, 'source is not current main'):
+            p.publish(api, api.notice)
         self.assertEqual(api.mutations, [])
+        self.assertNotIn(p.route('pages/deployments/' + HEAD), api.reads)
         for temporary in [True, False]:
             api = Transcript()
             original = api.get
