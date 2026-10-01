@@ -389,8 +389,10 @@ def validate_cache_tests(root, output, temporary, deadline):
     return result
 
 
-def git(root, *arguments):
-    return subprocess.check_output(["git", "-C", str(root), *arguments], text=True).strip()
+def git(root, *arguments, deadline):
+    remaining = deadline - time.monotonic()
+    require(remaining > 0, "measurement's total time budget exhausted")
+    return subprocess.check_output(["git", "-C", str(root), *arguments], text=True, timeout=remaining).strip()
 
 
 def verify_event(event, candidate_sha):
@@ -414,6 +416,7 @@ def main():
     output = arguments.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
+    deadline = started + BUDGET_SECONDS
     summary = {"schemaVersion": 1, "status": "running", "baselineSHA": BASELINE_SHA,
                "candidateSHA": arguments.candidate_sha, "budgetSeconds": BUDGET_SECONDS,
                "measurementOrder": ["baseline-clean", "candidate-clean", "candidate-warm", "baseline-warm"],
@@ -439,15 +442,14 @@ def main():
         require(roots["baseline"] != roots["candidate"], "separate revision checkouts required")
         for revision, root in roots.items():
             expected_sha = BASELINE_SHA if revision == "baseline" else arguments.candidate_sha
-            require(git(root, "rev-parse", "HEAD") == expected_sha, f"wrong {revision} checkout")
-            require(not git(root, "status", "--porcelain"), f"dirty {revision} checkout")
+            require(git(root, "rev-parse", "HEAD", deadline=deadline) == expected_sha, f"wrong {revision} checkout")
+            require(not git(root, "status", "--porcelain", deadline=deadline), f"dirty {revision} checkout")
             require(not (root / ".build").exists(), f"{revision} clean build already exists")
         require((roots["baseline"] / SUBPROCESS_PATH).read_bytes() == (roots["candidate"] / SUBPROCESS_PATH).read_bytes(),
                 "subprocess scenario assertions changed")
         titles = {revision: inventory(root) for revision, root in roots.items()}
         require(titles["baseline"] == titles["candidate"], "test inventory or titles changed")
         summary["testTitles"] = titles["baseline"]
-        deadline = started + BUDGET_SECONDS
         for name, command in (("xcode", ["/usr/bin/xcodebuild", "-version"]),
                               ("swift", ["/usr/bin/xcrun", "swift", "--version"])):
             receipt = run_command(command, roots["candidate"], os.environ, output / "toolchain" / name, deadline)
