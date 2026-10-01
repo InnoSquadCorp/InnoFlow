@@ -196,6 +196,16 @@ class InputCollectionTests(unittest.TestCase):
             with mock.patch.object(cache, "command", side_effect=[tracked, ""]), self.assertRaisesRegex(ValueError, "symlinked"):
                 cache.repository_inputs(root)
 
+    def test_sdk_inventory_rejection_preserves_actual_listing_for_diagnosis(self):
+        for listing in ("Unsupported SDK listing", "macOS -sdk macosx26.6\nmacOS alias -sdk macosx26.6"):
+            with self.subTest(listing=listing), mock.patch.object(cache, "command", return_value=listing):
+                with self.assertRaises(ValueError) as caught:
+                    cache.toolchain_identity()
+                self.assertIn("missing or duplicate SDK inventory", str(caught.exception))
+                self.assertIn(repr(listing), str(caught.exception))
+                self.assertIn("parsed=", str(caught.exception))
+                self.assertIn("duplicates=", str(caught.exception))
+
     def test_toolchain_collects_each_sdk_version_and_build_without_building(self):
         commands = []
 

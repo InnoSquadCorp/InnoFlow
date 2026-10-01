@@ -199,7 +199,10 @@ def repository_inputs(root):
 def toolchain_identity():
     listing = command("xcodebuild", "-showsdks")
     names = re.findall(r"-sdk\s+([a-z]+\d+(?:\.\d+)*)\s*$", listing, re.M)
-    require(names and len(names) == len(set(names)), "missing or duplicate SDK inventory")
+    require(names and len(names) == len(set(names)),
+            "missing or duplicate SDK inventory; parsed=" + repr(names) +
+            "; duplicates=" + repr(sorted(name for name in set(names) if names.count(name) > 1)) +
+            "; xcodebuild output=" + repr(listing))
     return {
         "swift": command("swift", "--version"), "swift-path": command("xcrun", "--find", "swift"),
         "xcode": command("xcodebuild", "-version"),
