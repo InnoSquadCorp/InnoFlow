@@ -76,7 +76,8 @@ policy = jobs.fetch("policy")
 check(Array(policy["needs"]) == ["ci-plan"] && !policy.key?("if"), "policy contracts must run for every valid plan")
 policy_runs = policy.fetch("steps").filter_map { |step| step["run"] }.join("\n")
 ["python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'", "python3 -B scripts/check-public-operations.py",
- "scripts/check-workflow-action-pins.sh", "scripts/check-workflow-job-timeouts.sh"].each do |command|
+ "scripts/check-workflow-action-pins.sh", "scripts/check-workflow-job-timeouts.sh",
+ "scripts/check-macro-operations.sh", "scripts/check-community-health.sh"].each do |command|
   check(policy_runs.lines.map(&:strip).include?(command), "policy must run #{command}")
 end
 

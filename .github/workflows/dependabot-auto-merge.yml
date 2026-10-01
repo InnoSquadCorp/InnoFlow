@@ -45,6 +45,7 @@ jobs:
     needs: inspect
     if: needs.inspect.result == 'success' && github.ref == 'refs/heads/main' && github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main' && needs.inspect.outputs.manual_prs != '[]' && needs.inspect.outputs.manual_prs != ''
     strategy:
+      fail-fast: false
       matrix:
         pr: ${{ fromJSON(needs.inspect.outputs.manual_prs) }}
     concurrency:

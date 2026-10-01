@@ -56,7 +56,16 @@ changes. Review events wake a zero-permission notice; the trusted coordinator
 re-reads APIs. Thread resolution has no dedicated Actions event and is checked on
 the next wake or hourly reconciliation. There is a review-event race between the
 last read and processing a new event; this is not an atomic review lock. Existing
-native review-thread resolution remains enforced independently.
+native review-thread resolution remains enforced independently. Activation also
+requires an applicable active repository-native `pull_request` rule, verified
+through the same source and visible-bypass checks as native CI rules, with
+`required_review_thread_resolution=true` in at least one applicable PR rule.
+GitHub's [native PR rule](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/reviewing-proposed-changes-in-a-pull-request#submitting-your-review)
+blocks `CHANGES_REQUESTED` from reviewers with write/admin/owner access. This does
+not impose a new positive approval count: the existing zero-approval policy is
+retained. Reviews from other readers remain sampled metadata checks, not a native
+atomic veto. Missing, inactive or unverifiable native PR protections block
+activation; this code never changes repository settings to satisfy the guard.
 
 Native active strict main rules must require **CI Required**, **Build Documentation**
 and **Dependabot Merge Ready**, each from Actions app `15368`. Visible bypass
@@ -101,6 +110,9 @@ Native auto-merge and post-merge delivery remain untested live until activation.
    Documentation, review-thread resolution and no bypass. Add only the new
    **Dependabot Merge Ready** Actions context to the main rule. Audit inherited
    and classic protections; inaccessible APIs are not evidence of absence
+   Verify the active native PR rule and thread-resolution requirement without
+   changing the existing approval count. Keep activation disabled if either
+   native rule proof or the separate owner no-bypass audit is incomplete
 4. Enable native auto-merge with squash retained. Inspect outstanding bot requests
    while the flag stays false. Do not arm unvalidated PRs manually
 5. Set `DEPENDABOT_AUTO_MERGE_ENABLED=true` last, dispatch the coordinator on main,
@@ -114,4 +126,4 @@ release-environment protection and token-scope activation need explicit approval
 References: [Dependabot automation](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions),
 [workflow events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows),
 [GITHUB_TOKEN recursion](https://docs.github.com/en/actions/concepts/security/github_token),
-[native expected-head input](https://docs.github.com/en/graphql/reference/input-objects#enablepullrequestautomergeinput).
+[native expected-head input](https://docs.github.com/en/graphql/reference/pulls#enablepullrequestautomergeinput).

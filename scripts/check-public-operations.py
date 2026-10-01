@@ -88,6 +88,9 @@ def workflow_boundaries(root):
     require(set(jobs) == set(PERMISSIONS), 'unexpected coordinator job')
     for name, expected in PERMISSIONS.items():
         job = jobs[name]
+        if name in {'manual-ready', 'bot-ready'}:
+            require(re.search(r'^    strategy:\n      fail-fast: false\n      matrix:', job, re.M),
+                    name + ': independent PR matrix must not fail fast')
         block = re.search(r'^    permissions:\n((?:^      [\w-]+: (?:read|write|none)\n)+)', job, re.M)
         require(block is not None, name + ': missing explicit dedicated permissions')
         found = dict(re.findall(r'^      ([\w-]+): (read|write|none)$', block[1], re.M))

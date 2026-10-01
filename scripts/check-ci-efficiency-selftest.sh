@@ -29,6 +29,8 @@ Dir.mktmpdir("innoflow-ci-efficiency") do |root|
   abort "Valid CI efficiency configuration rejected" unless run.call
 
   mutations = {
+    "policy omits macro contract" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["policy"]["steps"].each { |step| step["run"] = step["run"].lines.reject { |line| line.strip == "scripts/check-macro-operations.sh" }.join if step["run"] } }],
+    "policy omits community contract" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["policy"]["steps"].each { |step| step["run"] = step["run"].lines.reject { |line| line.strip == "scripts/check-community-health.sh" }.join if step["run"] } }],
     "label removal does not replan" => [".github/workflows/ci.yml", ->(doc) { (doc["on"] || doc[true])["pull_request"]["types"].delete("unlabeled") }],
     "stale runs survive" => [".github/workflows/ci.yml", ->(doc) { doc["concurrency"]["cancel-in-progress"] = false }],
     "full principle gate repeats tests" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["principle-gates"]["steps"].find { |step| step["run"].to_s.include?("principle-gates.sh") }["run"] = "scripts/principle-gates.sh" }],

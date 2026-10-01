@@ -3,6 +3,7 @@ import json
 import re
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -34,6 +35,39 @@ class PublicOperationsTests(unittest.TestCase):
         with self.assertRaises((ValueError, KeyError, TypeError)):
             p.validate(self.root)
         (self.root / path).write_text(original)
+
+    def test_readiness_matrices_cannot_cancel_unrelated_prs(self):
+        path = '.github/workflows/dependabot-auto-merge.yml'
+        for job in ['manual-ready', 'bot-ready']:
+            marker = '\n  ' + job + ':\n'
+            for replacement in ['      fail-fast: true\n', '']:
+                def mutate(text, marker=marker, replacement=replacement):
+                    before, after = text.split(marker, 1)
+                    return before + marker + after.replace('      fail-fast: false\n', replacement, 1)
+                with self.subTest(job=job, replacement=replacement):
+                    self.reject(path, mutate)
+
+    def test_documentation_contract_scripts_reject_missing_policy_text(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'InnoFlow'
+            shutil.copytree(ROOT, root, ignore=shutil.ignore_patterns('.git', '.build*', '__pycache__'))
+            cases = [
+                ('scripts/check-macro-operations.sh', 'docs/MACRO_OPERATIONS.md', '-skipMacroValidation'),
+                ('scripts/check-community-health.sh', 'SECURITY.md', 'initial acknowledgment within 7 calendar days'),
+            ]
+            for script, document, required in cases:
+                with self.subTest(script=script):
+                    result = subprocess.run(['bash', str(root / script)], cwd=root,
+                        capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    path = root / document
+                    original = path.read_text()
+                    self.assertIn(required, original)
+                    path.write_text(original.replace(required, 'removed-contract-marker'))
+                    result = subprocess.run(['bash', str(root / script)], cwd=root,
+                        capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    path.write_text(original)
 
     def test_current_contract(self):
         p.validate(self.root)

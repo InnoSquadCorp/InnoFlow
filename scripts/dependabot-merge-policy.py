@@ -170,13 +170,18 @@ def native_rules(api, repo):
     rules = api.pages(route("rules/branches/main"))
     status = [r for r in rules if r.get("type") == "required_status_checks"]
     require(bool(status), "native required checks absent")
+    pull_requests = [r for r in rules if r.get("type") == "pull_request"]
+    require(bool(pull_requests), "native pull-request rule absent")
+    require(any(r.get("parameters", {}).get("required_review_thread_resolution") is True
+                for r in pull_requests), "native review-thread resolution missing")
     contexts = set()
-    for rule in status:
+    for rule in status + pull_requests:
         parameters = rule.get("parameters", {})
-        require(parameters.get("strict_required_status_checks_policy") is True, "loose native CI policy")
-        for check in parameters.get("required_status_checks", []):
-            require(check.get("integration_id") == APP, "required check has wrong app or any source")
-            contexts.add(check.get("context"))
+        if rule.get("type") == "required_status_checks":
+            require(parameters.get("strict_required_status_checks_policy") is True, "loose native CI policy")
+            for check in parameters.get("required_status_checks", []):
+                require(check.get("integration_id") == APP, "required check has wrong app or any source")
+                contexts.add(check.get("context"))
         source = rule.get("ruleset_source")
         require(rule.get("ruleset_source_type") == "Repository" and source == REPOSITORY,
                 "unverified inherited protection")

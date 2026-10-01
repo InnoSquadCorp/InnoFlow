@@ -84,6 +84,8 @@ jobs:
           scripts/check-ci-efficiency-selftest.sh
           ruby scripts/check-coverage-workflow.rb
           bash scripts/check-coverage-workflow-selftest.sh
+          scripts/check-macro-operations.sh
+          scripts/check-community-health.sh
 
   documentation:
     name: Documentation

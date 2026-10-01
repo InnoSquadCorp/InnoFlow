@@ -28,6 +28,10 @@ class Transcript:
                            ruleset_id=123, parameters=dict(strict_required_status_checks_policy=True,
                            required_status_checks=[dict(context=n, integration_id=p.APP) for n in ['CI Required', 'Build Documentation', p.READY]]))]
         self.ruleset = dict(enforcement='active', bypass_actors=[], current_user_can_bypass='never')
+        self.review_ruleset = copy.deepcopy(self.ruleset)
+        self.rules.append(dict(type='pull_request', ruleset_source_type='Repository', ruleset_source=p.REPOSITORY,
+                               ruleset_id=124, parameters=dict(required_approving_review_count=0,
+                               required_review_thread_resolution=True)))
         self.workflow = dict(id=10, path=p.CI_PATH, state='active')
         self.run = dict(id=RUN, run_number=30, run_attempt=1, workflow_id=10, path=p.CI_PATH, check_suite_id=400,
                         event='pull_request', head_sha=HEAD, head_repository=self.repo, repository=self.repo,
@@ -57,6 +61,7 @@ class Transcript:
         elif suffix == 'git/ref/heads/main': value = dict(object=dict(sha=self.base))
         elif suffix == f'git/commits/{MERGE}': value = dict(parents=[dict(sha=BASE), dict(sha=HEAD)])
         elif suffix == 'rulesets/123': value = self.ruleset
+        elif suffix == 'rulesets/124': value = self.review_ruleset
         elif suffix == 'actions/workflows/ci.yml': value = self.workflow
         elif suffix == f'actions/runs/{RUN}': value = self.run
         elif suffix.startswith('check-runs/'): value = next(c for c in self.checks if c['id'] == int(suffix.rsplit('/', 1)[1]))
@@ -143,6 +148,51 @@ class DependabotPolicyTests(unittest.TestCase):
                    lambda a: a.rules[0]['parameters']['required_status_checks'][0].update(integration_id=None)]
         for change in changes:
             with self.subTest(change=change): self.reject(change)
+
+    def test_native_pull_request_rule_is_required_and_verified(self):
+        changes = [lambda a: a.rules.pop(),
+                   lambda a: a.rules[1]['parameters'].pop('required_review_thread_resolution'),
+                   lambda a: a.rules[1]['parameters'].update(required_review_thread_resolution=False),
+                   lambda a: a.rules[1]['parameters'].update(required_review_thread_resolution='true'),
+                   lambda a: a.rules[1].update(ruleset_source_type='Organization'),
+                   lambda a: a.rules[1].update(ruleset_source='other/repository'),
+                   lambda a: a.review_ruleset.update(enforcement='evaluate'),
+                   lambda a: a.review_ruleset.update(current_user_can_bypass='always'),
+                   lambda a: a.review_ruleset.update(bypass_actors=[dict(actor_id=p.APP, actor_type='Integration')])]
+        for change in changes:
+            with self.subTest(change=change): self.reject(change)
+
+    def test_native_pr_rule_preserves_zero_approval_and_redaction_contract(self):
+        self.assertEqual(self.api.rules[1]['parameters']['required_approving_review_count'], 0)
+        p.proof(self.api, NUMBER)
+        self.assertIn(p.route('rulesets/124'), self.api.reads)
+        # Native rules are additive: one applicable thread-resolution requirement is enough.
+        self.api.rules.append(dict(self.api.rules[1], parameters=dict(required_review_thread_resolution=False)))
+        self.api.review_ruleset.pop('bypass_actors')
+        self.api.review_ruleset.pop('current_user_can_bypass')
+        p.proof(self.api, NUMBER)  # Owner audit remains required; no admin credential is introduced.
+        self.assertFalse(self.api.mutations)
+
+    def test_missing_native_pr_rule_cannot_arm_auto_merge(self):
+        self.api.rules.pop()
+        result = p.coordinate(self.api, NUMBER, True)
+        self.assertIn('native pull-request rule absent', result)
+        self.assertFalse(any('enablePullRequestAutoMerge' in str(m) for m in self.api.mutations))
+        self.assertEqual(self.api.checks[-1]['conclusion'], 'failure')
+
+    def test_native_pr_rule_removed_after_enable_invalidates_and_cancels(self):
+        original = self.api.graphql
+        def graphql(query, variables):
+            result = original(query, variables)
+            if 'enablePullRequestAutoMerge' in query:
+                self.api.rules.pop()
+            return result
+        with mock.patch.object(self.api, 'graphql', side_effect=graphql):
+            result = p.coordinate(self.api, NUMBER, True)
+        self.assertIn('native pull-request rule absent', result)
+        self.assertIsNone(self.api.pr['auto_merge'])
+        self.assertIn('disablePullRequestAutoMerge', self.api.mutations[-1][1])
+        self.assertEqual(self.api.checks[-1]['conclusion'], 'failure')
 
     def test_wrong_or_stale_run_connections(self):
         changes = [lambda a: a.run.update(path='.github/workflows/release.yml'),
