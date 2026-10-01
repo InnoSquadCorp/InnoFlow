@@ -860,40 +860,58 @@ func runProcess(
   )
 }
 
+// Compiler inputs are stable during a test run; this cache never survives it.
+// Register normal-exit cleanup because process-wide Swift globals are not
+// guaranteed to be deinitialized when the test runner exits.
+private let compiledContractHarnesses: CompiledHarnessCache = {
+  let cache = CompiledHarnessCache()
+  atexit { compiledContractHarnesses.removeAll() }
+  return cache
+}()
+
+private func compiledContractHarness(
+  name: String,
+  source: String,
+  optimization: String,
+  compileFailure: (String) -> any Error
+) throws -> URL {
+  let sourcePaths = try innoFlowCoreSourcePaths(in: currentInnoFlowPackageRoot())
+  let arguments = ["swiftc", optimization, "-parse-as-library", "-package-name", "InnoFlow"]
+  let environment = ProcessInfo.processInfo.environment
+  let key = CompiledHarnessCache.Key(
+    name: name,
+    source: source,
+    compilerArguments: arguments,
+    inputSources: try sourcePaths.map {
+      .init(path: $0, contents: try Data(contentsOf: URL(fileURLWithPath: $0)))
+    },
+    toolchainEnvironment: ["DEVELOPER_DIR", "TOOLCHAINS", "SDKROOT"].map {
+      "\($0)=\(environment[$0] ?? "")"
+    }
+  )
+  return try compiledContractHarnesses.executable(for: key) { sourceFile, executable in
+    // Keep source-built, explicitly optimized probes independent of the outer
+    // swift test configuration. Linking arbitrary .build objects previously
+    // mixed debug and release artifacts and produced duplicate symbols.
+    let result = try runProcess(
+      executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+      arguments: arguments + [sourceFile.path] + sourcePaths + ["-o", executable.path]
+    )
+    guard result.status == 0 else {
+      throw compileFailure(result.normalizedOutput)
+    }
+  }
+}
+
 func runStaleScopedStoreHarness(
   scenario: StaleScopedStoreScenario
 ) throws -> ProcessResult {
-  let packageRoot = currentInnoFlowPackageRoot()
-  let temporaryDirectory = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString, isDirectory: true)
-  try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-  defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-
-  let sourceFile = temporaryDirectory.appendingPathComponent("StaleScopeProbe.swift")
-  let executableURL = temporaryDirectory.appendingPathComponent("StaleScopeProbe")
-  try staleScopedStoreHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
-
-  // Inline-compile InnoFlow sources with the probe at `-Onone` so debug-only
-  // `assertionFailure` traps are live and so the build is independent of the
-  // enclosing `swift test` configuration (previously we linked `.build/*/*.o`,
-  // which produced duplicate-symbol link errors under `swift test -c release`
-  // whenever both debug and release `.build/` directories existed).
-  let compileResult = try runProcess(
-    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: [
-      "swiftc",
-      "-Onone",
-      "-parse-as-library",
-      "-package-name", "InnoFlow",
-      sourceFile.path,
-    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
-      "-o", executableURL.path,
-    ]
+  let executableURL = try compiledContractHarness(
+    name: "StaleScopeProbe",
+    source: staleScopedStoreHarnessSource,
+    optimization: "-Onone",
+    compileFailure: { StaleScopeHarnessError.compileFailed(output: $0) }
   )
-
-  guard compileResult.status == 0 else {
-    throw StaleScopeHarnessError.compileFailed(output: compileResult.normalizedOutput)
-  }
 
   return try runProcess(
     executableURL: executableURL,
@@ -919,34 +937,12 @@ enum StaleScopedStoreReleaseScenario: String {
 func runStaleScopedStoreReleaseHarness(
   scenario: StaleScopedStoreReleaseScenario
 ) throws -> ProcessResult {
-  let packageRoot = currentInnoFlowPackageRoot()
-  let temporaryDirectory = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString, isDirectory: true)
-  try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-  defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-
-  let sourceFile = temporaryDirectory.appendingPathComponent("StaleScopeReleaseProbe.swift")
-  let executableURL = temporaryDirectory.appendingPathComponent("StaleScopeReleaseProbe")
-  try staleScopedStoreReleaseHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
-
-  let compileResult = try runProcess(
-    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: [
-      "swiftc",
-      "-O",
-      "-parse-as-library",
-      "-package-name",
-      "InnoFlow",
-      sourceFile.path,
-    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
-      "-o",
-      executableURL.path,
-    ]
+  let executableURL = try compiledContractHarness(
+    name: "StaleScopeReleaseProbe",
+    source: staleScopedStoreReleaseHarnessSource,
+    optimization: "-O",
+    compileFailure: { StaleScopeHarnessError.compileFailed(output: $0) }
   )
-
-  guard compileResult.status == 0 else {
-    throw StaleScopeHarnessError.compileFailed(output: compileResult.normalizedOutput)
-  }
 
   return try runProcess(
     executableURL: executableURL,
@@ -990,35 +986,12 @@ enum PhaseMapHarnessError: Error, CustomStringConvertible {
 func runConditionalReducerReleaseHarness(
   scenario: ConditionalReducerReleaseScenario
 ) throws -> ProcessResult {
-  let packageRoot = currentInnoFlowPackageRoot()
-  let temporaryDirectory = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString, isDirectory: true)
-  try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-  defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-
-  let sourceFile = temporaryDirectory.appendingPathComponent("ConditionalReducerProbe.swift")
-  let executableURL = temporaryDirectory.appendingPathComponent("ConditionalReducerProbe")
-  try conditionalReducerReleaseHarnessSource.write(
-    to: sourceFile, atomically: true, encoding: .utf8)
-
-  let compileResult = try runProcess(
-    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: [
-      "swiftc",
-      "-O",
-      "-parse-as-library",
-      "-package-name",
-      "InnoFlow",
-      sourceFile.path,
-    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
-      "-o",
-      executableURL.path,
-    ]
+  let executableURL = try compiledContractHarness(
+    name: "ConditionalReducerProbe",
+    source: conditionalReducerReleaseHarnessSource,
+    optimization: "-O",
+    compileFailure: { ConditionalReducerHarnessError.compileFailed(output: $0) }
   )
-
-  guard compileResult.status == 0 else {
-    throw ConditionalReducerHarnessError.compileFailed(output: compileResult.normalizedOutput)
-  }
 
   return try runProcess(
     executableURL: executableURL,
@@ -1042,38 +1015,12 @@ func innoFlowCoreSourcePaths(in packageRoot: URL) throws -> [String] {
 func runPhaseMapCrashHarness(
   scenario: PhaseMapCrashScenario
 ) throws -> ProcessResult {
-  let packageRoot = currentInnoFlowPackageRoot()
-  let temporaryDirectory = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString, isDirectory: true)
-  try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-  defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-
-  let sourceFile = temporaryDirectory.appendingPathComponent("PhaseMapCrashProbe.swift")
-  let executableURL = temporaryDirectory.appendingPathComponent("PhaseMapCrashProbe")
-  try phaseMapCrashHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
-
-  // Inline-compile InnoFlow sources with the probe at `-Onone` so the
-  // PhaseMap `assertionFailure` traps we are asserting on are live, and so
-  // the build is independent of the enclosing `swift test` configuration.
-  // Previously we linked `.build/*/*.o`, which surfaced duplicate-symbol
-  // link errors under `swift test -c release` whenever both debug and
-  // release `.build/` directories existed.
-  let compileResult = try runProcess(
-    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: [
-      "swiftc",
-      "-Onone",
-      "-parse-as-library",
-      "-package-name", "InnoFlow",
-      sourceFile.path,
-    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
-      "-o", executableURL.path,
-    ]
+  let executableURL = try compiledContractHarness(
+    name: "PhaseMapCrashProbe",
+    source: phaseMapCrashHarnessSource,
+    optimization: "-Onone",
+    compileFailure: { PhaseMapHarnessError.compileFailed(output: $0) }
   )
-
-  guard compileResult.status == 0 else {
-    throw PhaseMapHarnessError.compileFailed(output: compileResult.normalizedOutput)
-  }
 
   return try runProcess(
     executableURL: executableURL,
@@ -1085,34 +1032,12 @@ func runPhaseMapCrashHarness(
 func runPhaseMapReleaseHarness(
   scenario: PhaseMapReleaseScenario
 ) throws -> ProcessResult {
-  let packageRoot = currentInnoFlowPackageRoot()
-  let temporaryDirectory = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString, isDirectory: true)
-  try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-  defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-
-  let sourceFile = temporaryDirectory.appendingPathComponent("PhaseMapReleaseProbe.swift")
-  let executableURL = temporaryDirectory.appendingPathComponent("PhaseMapReleaseProbe")
-  try phaseMapReleaseHarnessSource.write(to: sourceFile, atomically: true, encoding: .utf8)
-
-  let compileResult = try runProcess(
-    executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-    arguments: [
-      "swiftc",
-      "-O",
-      "-parse-as-library",
-      "-package-name",
-      "InnoFlow",
-      sourceFile.path,
-    ] + (try innoFlowCoreSourcePaths(in: packageRoot)) + [
-      "-o",
-      executableURL.path,
-    ]
+  let executableURL = try compiledContractHarness(
+    name: "PhaseMapReleaseProbe",
+    source: phaseMapReleaseHarnessSource,
+    optimization: "-O",
+    compileFailure: { PhaseMapHarnessError.compileFailed(output: $0) }
   )
-
-  guard compileResult.status == 0 else {
-    throw PhaseMapHarnessError.compileFailed(output: compileResult.normalizedOutput)
-  }
 
   return try runProcess(
     executableURL: executableURL,
