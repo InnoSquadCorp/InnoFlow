@@ -1,13 +1,15 @@
 name: CI
+# Metadata-only events use a separate native identity and concurrency group.
+# No job in those runs can publish a new CI Required verdict.
 run-name: >-
-  ${{ inputs.dependabot_merge_pr != '' && format('CI / Dependabot merge #{0}', inputs.dependabot_merge_pr) || 'CI' }}
+  ${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) && format('CI metadata-only v1 pr:{0} head:{1} base:{2} action:{3} source:{4}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.action, github.workflow_sha) || (inputs.dependabot_merge_pr && format('CI / Dependabot merge #{0}', inputs.dependabot_merge_pr) || format('CI validation / {0} / {1}', github.event_name, github.event.pull_request.number || github.ref)) }}
 
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -23,7 +25,7 @@ on:
 # long after a newer commit has superseded their evidence. Recovery dispatches
 # cannot cancel a native push when main races forward before dispatch admission.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.dependabot_merge_pr != '' && format('dependabot-{0}', inputs.dependabot_merge_pr) || 'validation' }}
+  group: ci-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) && format('metadata-{0}', github.run_id) || (github.event.pull_request.number || github.ref) }}-${{ inputs.dependabot_merge_pr != '' && format('dependabot-{0}', inputs.dependabot_merge_pr) || 'validation' }}
   cancel-in-progress: true
 
 permissions:
@@ -32,7 +34,7 @@ permissions:
 jobs:
   ci-plan:
     name: CI Plan
-    if: always()
+    if: ${{ !(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -95,6 +97,7 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'
           python3 -B scripts/check-public-operations.py
+          python3 -B scripts/check-ci-workflows.py
           scripts/check-workflow-action-pins.sh
           scripts/check-workflow-job-timeouts.sh
           ruby scripts/check-ci-efficiency.rb
@@ -114,8 +117,8 @@ jobs:
 
   # Preserve the existing main ruleset context without changing live settings.
   docs-required:
-    name: Build Documentation
-    if: always()
+    name: ${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) && 'Documentation Metadata Only' || 'Build Documentation' }}
+    if: ${{ always() && !(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) }}
     needs: [ci-plan, documentation]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -861,8 +864,8 @@ jobs:
         run: python3 -B scripts/ci-cache.py report --profile swift-syntax-compatibility --variant '${{ matrix.syntax }}'
 
   ci-required:
-    name: CI Required
-    if: always()
+    name: ${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) && 'CI Metadata Only' || 'CI Required' }}
+    if: ${{ always() && !(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) }}
     needs:
       - ci-plan
       - policy

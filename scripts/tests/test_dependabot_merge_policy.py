@@ -849,6 +849,8 @@ def workflow_inventory():
                     re.findall(r"swift: '([^']+)'\n            syntax: '([^']+)'", job['block'])]
             for variant in variants:
                 name, steps = job['name'], list(job['steps'])
+                if name.startswith('${{ ') and "'CI Required'" in name: name = 'CI Required'
+                if name.startswith('${{ ') and "'Build Documentation'" in name: name = 'Build Documentation'
                 for key, value in variant.items():
                     token = '${{ matrix.' + key + ' }}'
                     name = name.replace(token, value)

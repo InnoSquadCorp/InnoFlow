@@ -12,7 +12,7 @@ workflow_dir = File.join(root, ".github", "workflows")
 load_yaml = ->(path) { YAML.safe_load(File.read(path), aliases: false) }
 ci = load_yaml.call(File.join(workflow_dir, "ci.yml"))
 ci_trigger = ci["on"] || ci[true]
-check(Array(ci_trigger.dig("pull_request", "types")).sort == %w[opened synchronize reopened labeled unlabeled].sort,
+check(Array(ci_trigger.dig("pull_request", "types")).sort == %w[opened synchronize reopened labeled unlabeled edited].sort,
   "CI must replan current changes and opt-in labels for every supported PR transition")
 %w[push pull_request].each do |event|
   check((ci_trigger.fetch(event).keys & %w[paths paths-ignore]).empty?,
@@ -58,9 +58,10 @@ jobs.each do |name, job|
     "#{name}: steps cannot ignore failures")
 end
 
+metadata_only = "(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base)))"
 plan = jobs.fetch("ci-plan")
-check(plan["name"] == "CI Plan" && plan["if"] == "always()" && !plan.key?("needs"),
-  "CI Plan must always run independently")
+check(plan["name"] == "CI Plan" && plan["if"] == "${{ !#{metadata_only} }}" && !plan.key?("needs"),
+  "CI Plan must run independently for validation events")
 check(plan.dig("outputs", "plan") == '${{ steps.plan.outputs.plan }}', "CI Plan output must come from the planner")
 plan_step = plan.fetch("steps").find { |step| step["id"] == "plan" }
 check(plan_step && !plan_step.key?("if") &&
@@ -90,7 +91,7 @@ policy = jobs.fetch("policy")
 check(Array(policy["needs"]) == ["ci-plan"] && !policy.key?("if"), "policy contracts must run for every valid plan")
 policy_runs = policy.fetch("steps").filter_map { |step| step["run"] }.join("\n")
 ["python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'", "python3 -B scripts/check-public-operations.py",
- "scripts/check-workflow-action-pins.sh", "scripts/check-workflow-job-timeouts.sh",
+ "python3 -B scripts/check-ci-workflows.py", "scripts/check-workflow-action-pins.sh", "scripts/check-workflow-job-timeouts.sh",
  "scripts/check-macro-operations.sh", "scripts/check-community-health.sh"].each do |command|
   check(policy_runs.lines.map(&:strip).include?(command), "policy must run #{command}")
 end
@@ -119,15 +120,17 @@ asan_trigger = asan["on"] || asan[true]
 check(asan_trigger.keys == ["workflow_dispatch"],
   "standalone ASan is manual-only; planned CI owns source, bot and run-asan label checks")
 
-# Both existing protected contexts stay always-running. A skipped selected job
+# Both existing protected contexts run for validation events. A skipped selected job
 # is an error, never a successful no-op, including reused workflow/matrix jobs.
 {
   "ci-required" => ["CI Required", required_job_names, "Require every planned CI result", "evaluate"],
   "docs-required" => ["Build Documentation", %w[ci-plan documentation], "Require planned documentation result", "evaluate-documentation"],
 }.each do |id, (name, dependencies, step_name, command)|
   final_gate = jobs.fetch(id)
-  check(final_gate["name"] == name && final_gate["if"] == "always()",
-    "#{name} must be a stable always-running aggregate")
+  noop = id == "ci-required" ? "CI Metadata Only" : "Documentation Metadata Only"
+  check(final_gate["name"] == "${{ #{metadata_only} && '#{noop}' || '#{name}' }}" &&
+    final_gate["if"] == "${{ always() && !#{metadata_only} }}",
+    "#{name} must aggregate validation without replacing protected contexts on metadata events")
   check(Array(final_gate["needs"]).sort == dependencies.sort,
     "#{name}: dependencies must match its complete result inventory")
   steps = final_gate.fetch("steps")
