@@ -18,7 +18,7 @@ META, SUITE, SOURCE = 9900, 9901, 'f' * 40
 
 
 class MetadataAPI:
-    def __init__(self, base, number, head, ancestor, current_source, *, expanded=False):
+    def __init__(self, base, number, head, ancestor, current_source, *, expanded=False, inventory=None):
         self.base, self.head, self.current_source = base, head, current_source
         repo = base.repo
         self.run = dict(id=META, run_number=99, run_attempt=1, workflow_id=base.workflow['id'],
@@ -30,7 +30,7 @@ class MetadataAPI:
         self.blob = '9' * 40
         self.expected_blob = self.blob
         self.jobs, self.checks = [], []
-        names = m.INVENTORIES[-1 if expanded else 0]
+        names = m.INVENTORIES[-1 if expanded else 0] if inventory is None else inventory
         for i, name in enumerate(sorted(names)):
             job = dict(id=20000+i, name=name, run_id=META, run_attempt=1, head_sha=head,
                        status='completed', conclusion='skipped', steps=[],
@@ -87,9 +87,9 @@ class MetadataAPI:
         self.jobs_by_attempt[attempt] = self.jobs
 
 
-def reuse_api(expanded=False):
+def reuse_api(expanded=False, inventory=None):
     t = reuse.Transcript()
-    return MetadataAPI(t, reuse.NUMBER, reuse.HEAD, reuse.BASE, reuse.MAIN, expanded=expanded)
+    return MetadataAPI(t, reuse.NUMBER, reuse.HEAD, reuse.BASE, reuse.MAIN, expanded=expanded, inventory=inventory)
 
 
 class MetadataProofTests(unittest.TestCase):
@@ -105,21 +105,24 @@ class MetadataProofTests(unittest.TestCase):
             else:
                 name = job['name']
                 if name.startswith('${{ '):
+                    native_expression = name.removeprefix('${{ ').removesuffix(' }}')
                     if "'CI Metadata Only' || 'CI Required'" in name:
                         name = 'CI Metadata Only'
                     else:
                         self.assertIn("'Documentation Metadata Only' || 'Build Documentation'", name)
                         name = 'Documentation Metadata Only'
-                direct.add(name)
+                    calls.append(({name}, {native_expression}))
+                else:
+                    direct.add(name)
         expected = {frozenset(direct.union(*children)) for children in itertools.product(*calls)}
         self.assertEqual({frozenset(names) for names in m.INVENTORIES}, expected)
 
     def test_latest_real_ci_is_preserved_for_main_reuse_and_bot_readiness(self):
-        for expanded in (False, True):
-            api = reuse_api(expanded)
+        for inventory in m.INVENTORIES:
+            api = reuse_api(inventory=inventory)
             proof = reuse.p.prove(api, api.base.event, reuse.CONTEXT, now=api.base.now)
             self.assertEqual(proof['run'], reuse.RUN)
-            b = MetadataAPI(bot.Transcript(), bot.NUMBER, bot.HEAD, bot.BASE, bot.MERGE, expanded=expanded)
+            b = MetadataAPI(bot.Transcript(), bot.NUMBER, bot.HEAD, bot.BASE, bot.MERGE, inventory=inventory)
             self.assertEqual(bot.p.proof(b, bot.NUMBER)['run'], bot.RUN)
             self.assertEqual(b.base.mutations, [])
 
@@ -144,7 +147,9 @@ class MetadataProofTests(unittest.TestCase):
             lambda a: a.commit['parents'][0].update(sha='0' * 40),
             lambda a: setattr(a, 'blob', '0' * 40), lambda a: setattr(a, 'expected_blob', ''),
             lambda a: a.jobs.pop(), lambda a: a.jobs.append(copy.deepcopy(a.jobs[0])),
-            lambda a: a.jobs[0].update(name='CI Required'), lambda a: a.jobs[0].update(conclusion='success'),
+            lambda a: a.jobs[0].update(name='CI Required'),
+            lambda a: a.jobs[0].update(name=m.METADATA_CONDITION + " && 'CI Metadata Only' || 'Forged Required'"),
+            lambda a: a.jobs[0].update(conclusion='success'),
             lambda a: a.jobs[0].update(steps=[{'name': 'executed'}]),
             lambda a: a.jobs[0].update(check_run_url='https://example.invalid/123'),
             lambda a: a.jobs[0].update(run_id=0), lambda a: a.jobs[0].update(run_attempt=2),

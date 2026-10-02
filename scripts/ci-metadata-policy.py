@@ -17,12 +17,18 @@ DIRECT = {'CI Plan', 'CI and public operations policy', 'Lint',
           'Focused Runtime Tests (${{ matrix.platform }})', 'Principle Gates (Static)',
           'Sample Package Build (${{ matrix.platform }})', 'Canonical Sample Build',
           'Package Tests (AddressSanitizer)', 'Canonical Sample UI Smoke Tests',
-          'SwiftSyntax Compatibility (Swift ${{ matrix.swift }}, ${{ matrix.syntax }})',
-          'CI Metadata Only', 'Documentation Metadata Only'}
+          'SwiftSyntax Compatibility (Swift ${{ matrix.swift }}, ${{ matrix.syntax }})'}
 # Skipped reusable workflows can report the call or their child job.
 CALLS = (({'Documentation'}, {'Documentation / Build Documentation'}),
          ({'Coverage Gate'}, {'Coverage Gate / coverage'}))
-INVENTORIES = [DIRECT.union(*children) for children in itertools.product(*CALLS)]
+# GitHub records skipped dynamic job names as expression source without ${{ }}.
+# Match only these exact reviewed expressions, still bound to the workflow blob;
+# a string mentioning a metadata label or a required context is not sufficient.
+METADATA_CONDITION = "(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base)))"
+AGGREGATES = (({'CI Metadata Only'}, {METADATA_CONDITION + " && 'CI Metadata Only' || 'CI Required'"}),
+              ({'Documentation Metadata Only'}, {METADATA_CONDITION + " && 'Documentation Metadata Only' || 'Build Documentation'"}),
+             )
+INVENTORIES = [DIRECT.union(*children) for children in itertools.product(*CALLS, *AGGREGATES)]
 
 
 def partition(api, runs, *, repository, repository_id, workflow_id, number, head, source, require):
