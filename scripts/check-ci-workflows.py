@@ -19,27 +19,30 @@ ARCHIVES = {
     ('Linux', 'aarch64'): ('linux_arm64', '325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6'),
     ('Linux', 'x86_64'): ('linux_amd64', '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'),
 }
-QUEUE_JOBS = {'ready-refresh', 'bot-ready', 'post-merge'}
+QUEUE_LOCATIONS = {('dependabot-auto-merge.yml', job): '      queue: max' for job in ('ready-refresh', 'bot-ready', 'post-merge')}
+QUEUE_LOCATIONS[('ci.yml', None)] = "  queue: ${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) && 'max' || 'single' }}"
 QUEUE_DIAGNOSTIC = 'unexpected key "queue" for "concurrency" section. expected one of "cancel-in-progress", "group"'
 
 
 def check_queue_compatibility(workflows):
-    # actionlint 1.7.12 predates concurrency.queue. Exempt only the three
+    # actionlint 1.7.12 predates concurrency.queue. Exempt only the explicitly
     # reviewed max queues; spelling/value/location changes must be reviewed.
     seen, locations = set(), set()
     for path in workflows:
         job = None
         for number, line in enumerate(path.read_text().splitlines(), 1):
+            if re.match(r'^\S', line):
+                job = None
             match = re.fullmatch(r'  ([\w-]+):', line)
             if match:
                 job = match[1]
             if re.match(r'''\s*["']?queue["']?\s*:''', line):
-                if (path.name != 'dependabot-auto-merge.yml' or job not in QUEUE_JOBS or
-                        line != '      queue: max' or job in seen):
+                key = (path.name, job)
+                if key not in QUEUE_LOCATIONS or line != QUEUE_LOCATIONS[key] or key in seen:
                     raise ValueError('unreviewed concurrency.queue exception: ' + str(path))
-                seen.add(job)
-                locations.add((str(path.resolve()), number, 7))
-    if seen != QUEUE_JOBS:
+                seen.add(key)
+                locations.add((str(path.resolve()), number, len(line) - len(line.lstrip()) + 1))
+    if seen != set(QUEUE_LOCATIONS):
         raise ValueError('review the actionlint queue exception when writer queues change')
     return locations
 
