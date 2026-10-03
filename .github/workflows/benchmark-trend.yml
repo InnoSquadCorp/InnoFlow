@@ -1,0 +1,179 @@
+name: Benchmark Trend (non-blocking)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'Benchmarks/**'
+      - 'Sources/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - '.github/workflows/benchmark-trend.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-trend-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  paired-apple-trend:
+    # Advisory only. Never add this job to the 32-check Release Preflight or
+    # treat a tolerated capture/build failure as green performance evidence.
+    continue-on-error: true
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      # Exact href observed on https://www.swift.org/install/macos/ (2026-10-03).
+      SWIFT_TOOLCHAIN_URL: https://download.swift.org/swift-6.4.0-release/xcode/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-osx.pkg
+    steps:
+      - name: Initialize failure evidence
+        run: |
+          mkdir -p "$RUNNER_TEMP/benchmark-trend"
+          printf '%s\n' '{"status":"not-started","results":{},"note":"Use capture/summary.json if present; otherwise inspect workflow setup failure."}' \
+            > "$RUNNER_TEMP/benchmark-trend/setup-status.json"
+
+      - name: Checkout exact source without saved credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Check cohort integrity controls
+        run: python3 -B Benchmarks/trend.py --self-test
+
+      - name: Verify and select official Swift 6.4.0 toolchain
+        # Xcode 26.6 supplies the SDK; TCA 1.26.2 requires Swift tools 6.4.
+        # No guessed bundle identifier, latest selector, or security bypass.
+        # Official .pkg checksum was not published on the inspected page:
+        # record the observed hash and require the documented signing identity.
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          export TOOLCHAIN_EVIDENCE="$RUNNER_TEMP/benchmark-trend/toolchain"
+          export TOOLCHAIN_STAGE=download
+          mkdir -p "$TOOLCHAIN_EVIDENCE"
+          record_toolchain_exit() {
+          code=$?
+          TOOLCHAIN_EXIT_CODE="$code" python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          evidence = Path(os.environ["TOOLCHAIN_EVIDENCE"])
+          checksum = evidence / "download.sha256"
+          observed = checksum.read_text().split() if checksum.exists() else []
+          (evidence / "receipt.json").write_text(json.dumps({
+              "status": "complete" if os.environ["TOOLCHAIN_EXIT_CODE"] == "0" else "incomplete",
+              "exit_code": int(os.environ["TOOLCHAIN_EXIT_CODE"]),
+              "stage": os.environ["TOOLCHAIN_STAGE"],
+              "release": "6.4.0",
+              "url": os.environ["SWIFT_TOOLCHAIN_URL"],
+              "expected_installer_identity": "Developer ID Installer: Swift Open Source (V9AUD2URP3)",
+              "expected_sha256": None,
+              "checksum_limitation": "No independently verified official .pkg checksum was available; this is an observed download hash, not a prevalidated checksum pin.",
+              "observed_sha256": observed[0] if observed else None,
+              "developer_dir": os.environ["DEVELOPER_DIR"],
+              "documentation": "https://www.swift.org/install/macos/package_installer/",
+          }, indent=2) + "\n")
+          PY
+          exit "$code"
+          }
+          trap record_toolchain_exit EXIT
+          pkg="$RUNNER_TEMP/swift-6.4.0-RELEASE-osx.pkg"
+          curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --location \
+            --retry 3 --connect-timeout 30 --max-time 900 \
+            --dump-header "$TOOLCHAIN_EVIDENCE/download.headers" \
+            --output "$pkg" "$SWIFT_TOOLCHAIN_URL" \
+            2> "$TOOLCHAIN_EVIDENCE/download.stderr"
+          shasum -a 256 "$pkg" | tee "$TOOLCHAIN_EVIDENCE/download.sha256"
+          TOOLCHAIN_STAGE=signature-verification
+          pkgutil --check-signature "$pkg" 2>&1 | tee "$TOOLCHAIN_EVIDENCE/signature.txt"
+          grep -Eq '^[[:space:]]*1\. Developer ID Installer: Swift Open Source \(V9AUD2URP3\)[[:space:]]*$' \
+            "$TOOLCHAIN_EVIDENCE/signature.txt"
+          spctl --assess --type install --verbose=4 "$pkg" \
+            2>&1 | tee "$TOOLCHAIN_EVIDENCE/gatekeeper.txt"
+          TOOLCHAIN_STAGE=installation
+          installer -target CurrentUserHomeDirectory -pkg "$pkg" \
+            2>&1 | tee "$TOOLCHAIN_EVIDENCE/installer.txt"
+          TOOLCHAIN_STAGE=selection
+          python3 -B - <<'PY'
+          import json, os, plistlib, re, shutil, subprocess
+          from pathlib import Path
+          evidence = Path(os.environ["TOOLCHAIN_EVIDENCE"])
+          matches, inventory = [], []
+          root = Path.home() / "Library/Developer/Toolchains"
+          for info in sorted(root.glob("*.xctoolchain/Info.plist")):
+              swift = info.parent / "usr/bin/swift"
+              if not swift.is_file():
+                  continue
+              result = subprocess.run([str(swift), "--version"], capture_output=True, text=True, timeout=30)
+              entry = {"path": str(info.parent), "stdout": result.stdout, "stderr": result.stderr,
+                       "returncode": result.returncode}
+              inventory.append(entry)
+              if (result.returncode == 0
+                  and re.search(r"\bSwift version 6\.4(?:\.0)?(?:\s|\()", result.stdout)
+                  and re.search(r"\(swift-6\.4(?:\.0)?-RELEASE(?:[ )])", result.stdout)):
+                  matches.append((info, entry))
+          (evidence / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
+          if len(matches) != 1:
+              raise SystemExit("Expected exactly one installed official Swift 6.4.0 release toolchain")
+          info, entry = matches[0]
+          identifier = plistlib.loads(info.read_bytes())["CFBundleIdentifier"]
+          if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", identifier):
+              raise SystemExit("Invalid installed toolchain identifier")
+          shutil.copyfile(info, evidence / "selected-Info.plist")
+          (evidence / "selected.json").write_text(json.dumps({**entry, "identifier": identifier}, indent=2) + "\n")
+          (evidence / "identifier.txt").write_text(identifier + "\n")
+          (evidence / "bin-path.txt").write_text(str(info.parent / "usr/bin") + "\n")
+          with Path(os.environ["GITHUB_ENV"]).open("a") as stream:
+              stream.write("TOOLCHAINS=" + identifier + "\n")
+          with Path(os.environ["GITHUB_PATH"]).open("a") as stream:
+              stream.write(str(info.parent / "usr/bin") + "\n")
+          PY
+          export TOOLCHAINS="$(cat "$TOOLCHAIN_EVIDENCE/identifier.txt")"
+          export PATH="$(cat "$TOOLCHAIN_EVIDENCE/bin-path.txt"):$PATH"
+          swift --version 2>&1 | tee "$TOOLCHAIN_EVIDENCE/selected-swift-version.txt"
+          grep -Eq 'Swift version 6\.4(\.0)?[[:space:]]' "$TOOLCHAIN_EVIDENCE/selected-swift-version.txt"
+          grep -Eq '\(swift-6\.4(\.0)?-RELEASE[ )]' "$TOOLCHAIN_EVIDENCE/selected-swift-version.txt"
+          xcrun --toolchain "$TOOLCHAINS" --find swift | tee "$TOOLCHAIN_EVIDENCE/xcrun-swift-path.txt"
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          evidence = Path(os.environ["TOOLCHAIN_EVIDENCE"])
+          expected = Path((evidence / "bin-path.txt").read_text().strip()) / "swift"
+          actual = Path((evidence / "xcrun-swift-path.txt").read_text().strip())
+          if expected.resolve() != actual.resolve():
+              raise SystemExit("xcrun selected a different compiler")
+          PY
+          TOOLCHAIN_STAGE=selected-and-verified
+
+      - name: Build independent packages and capture fixed paired cohort
+        # Committed lock candidates were resolved on Linux. The first Apple
+        # run must validate them; platform-dependent changes stay incomplete
+        # with both original and newly resolved files preserved for review.
+        run: |
+          python3 -B Benchmarks/trend.py \
+            --repo "$GITHUB_WORKSPACE" \
+            --output "$RUNNER_TEMP/benchmark-trend/capture"
+
+      - name: Report complete or incomplete capture
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/benchmark-trend/capture/summary.md" ]; then
+            cat "$RUNNER_TEMP/benchmark-trend/capture/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' 'Benchmark trend is incomplete: capture did not start. No timing metrics are available; inspect setup/toolchain evidence.' \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Preserve raw evidence including build and capture failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: benchmark-trend-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/benchmark-trend
+            !${{ runner.temp }}/benchmark-trend/capture/build
+          if-no-files-found: error
+          retention-days: 14

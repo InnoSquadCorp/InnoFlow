@@ -98,6 +98,8 @@ iOSInjectionProject/
 **/.swiftpm/
 **/Package.resolved
 !/Package.resolved
+!/Benchmarks/InnoFlowBenchmarks/Package.resolved
+!/Benchmarks/Comparison/Package.resolved
 !/Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.resolved
 !/Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
@@ -110,3 +112,7 @@ iOSInjectionProject/
 
 # DocC Documentation Build
 docs-build/
+
+# Python validation helpers generate disposable bytecode caches.
+__pycache__/
+*.pyc
