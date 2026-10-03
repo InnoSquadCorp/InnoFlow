@@ -33,7 +33,10 @@ private struct LifetimeChildState: Equatable, Sendable {
   var values: [Int] = []
 }
 private enum LifetimeChildAction: Equatable, Sendable {
-  case start(Int), scheduled(Int), done(Int), emitAndClose, cancel
+  case start(Int)
+  case scheduled(Int)
+  case done(Int)
+  case emitAndClose, cancel
 }
 private struct LifetimeParentState: Equatable, Sendable {
   var left: LifetimeChildState? = .init()
@@ -41,8 +44,12 @@ private struct LifetimeParentState: Equatable, Sendable {
   var parentValues: [Int] = []
 }
 private enum LifetimeParentAction: Equatable, Sendable {
-  case left(LifetimeChildAction), right(LifetimeChildAction)
-  case closeLeft, openLeft(Int), replaceLeft(Int), parentDone(Int)
+  case left(LifetimeChildAction)
+  case right(LifetimeChildAction)
+  case closeLeft
+  case openLeft(Int)
+  case replaceLeft(Int)
+  case parentDone(Int)
 }
 private let lifetimeLeftPath = CasePath<LifetimeParentAction, LifetimeChildAction>(
   embed: { .left($0) }, extract: { if case .left(let action) = $0 { action } else { nil } }
@@ -96,7 +103,8 @@ private func lifetimeReducer(
     return .none
   }
   .optionalChild(state: \.left, action: lifetimeLeftPath, instanceID: { $0.instance }, child: child)
-  .optionalChild(state: \.right, action: lifetimeRightPath, instanceID: { $0.instance }, child: child)
+  .optionalChild(
+    state: \.right, action: lifetimeRightPath, instanceID: { $0.instance }, child: child)
 }
 
 @Suite("Optional child lifetime consistency")
@@ -123,7 +131,8 @@ struct OptionalChildLifetimeConsistencyTests {
 
   @Test func closeKeepsSameDispatchParentAndSiblingAliveAndJoinsPhysicalChild() async {
     let gates = (0..<3).map { _ in LifetimeGate() }
-    let store = Store(reducer: lifetimeReducer(gates: gates, parentWork: true), initialState: .init())
+    let store = Store(
+      reducer: lifetimeReducer(gates: gates, parentWork: true), initialState: .init())
     let left = store.send(.left(.start(0)), capturingOutputs: .unbounded)
     let right = store.send(.right(.start(1)), capturingOutputs: .unbounded)
     await gates[0].waitUntilEntered()
@@ -227,7 +236,8 @@ struct OptionalChildLifetimeConsistencyTests {
   }
 
   @Test func repeatedCloseReopenReleasesActiveRegistrations() async {
-    let store = Store(reducer: lifetimeReducer(gates: []), initialState: .init(left: nil, right: nil))
+    let store = Store(
+      reducer: lifetimeReducer(gates: []), initialState: .init(left: nil, right: nil))
     for instance in 0..<1_000 {
       await store.send(.openLeft(instance)).finish()
       #expect(store.effectBridge.childLifetimeRegistry.activeOwnerCount == 1)
@@ -243,13 +253,15 @@ private struct LifetimeMiddleState: Equatable, Sendable {
   var values: [Int] = []
 }
 private enum LifetimeMiddleAction: Equatable, Sendable {
-  case child(LifetimeChildAction), start, done, closeChild
+  case child(LifetimeChildAction)
+  case start, done, closeChild
 }
 private struct LifetimeOuterState: Equatable, Sendable {
   var middle: LifetimeMiddleState? = .init()
 }
 private enum LifetimeOuterAction: Equatable, Sendable {
-  case middle(LifetimeMiddleAction), closeMiddle
+  case middle(LifetimeMiddleAction)
+  case closeMiddle
 }
 private let lifetimeMiddlePath = CasePath<LifetimeOuterAction, LifetimeMiddleAction>(
   embed: { .middle($0) }, extract: { if case .middle(let action) = $0 { action } else { nil } }
@@ -288,12 +300,14 @@ private func nestedLifetimeReducer(gates: [LifetimeGate])
     }
     return .none
   }
-  .optionalChild(state: \.child, action: lifetimeNestedPath, instanceID: { $0.instance }, child: child)
+  .optionalChild(
+    state: \.child, action: lifetimeNestedPath, instanceID: { $0.instance }, child: child)
   return Reduce<LifetimeOuterState, LifetimeOuterAction, Never> { state, action in
     if case .closeMiddle = action { state.middle = nil }
     return .none
   }
-  .optionalChild(state: \.middle, action: lifetimeMiddlePath, instanceID: { $0.instance }, child: middle)
+  .optionalChild(
+    state: \.middle, action: lifetimeMiddlePath, instanceID: { $0.instance }, child: middle)
 }
 
 extension OptionalChildLifetimeConsistencyTests {
@@ -388,7 +402,9 @@ extension OptionalChildLifetimeConsistencyTests {
       return .none
     }
     let reducer = CombineReducers {
-      IfLet(state: \LifetimeParentState.left, action: lifetimeLeftPath, reducer: child, onMissing: .ignore)
+      IfLet(
+        state: \LifetimeParentState.left, action: lifetimeLeftPath, reducer: child,
+        onMissing: .ignore)
       Reduce<LifetimeParentState, LifetimeParentAction, Never> { state, action in
         if case .closeLeft = action { state.left = nil }
         if case .left(.done(let value)) = action { state.parentValues.append(value) }
@@ -411,21 +427,26 @@ private struct LifetimePairState: Equatable, Sendable {
   var second = LifetimeParentState(right: nil)
 }
 private enum LifetimePairAction: Equatable, Sendable {
-  case first(LifetimeParentAction), second(LifetimeParentAction)
+  case first(LifetimeParentAction)
+  case second(LifetimeParentAction)
 }
 private func pairedLifetimeReducer(gates: [LifetimeGate])
   -> some Reducer<LifetimePairState, LifetimePairAction, String>
 {
   let child = lifetimeReducer(gates: gates)
   return CombineReducers<LifetimePairState, LifetimePairAction, String> {
-    Scope(state: \.first, action: CasePath(
-      embed: { .first($0) },
-      extract: { if case .first(let action) = $0 { action } else { nil } }
-    ), reducer: child)
-    Scope(state: \.second, action: CasePath(
-      embed: { .second($0) },
-      extract: { if case .second(let action) = $0 { action } else { nil } }
-    ), reducer: child)
+    Scope(
+      state: \.first,
+      action: CasePath(
+        embed: { .first($0) },
+        extract: { if case .first(let action) = $0 { action } else { nil } }
+      ), reducer: child)
+    Scope(
+      state: \.second,
+      action: CasePath(
+        embed: { .second($0) },
+        extract: { if case .second(let action) = $0 { action } else { nil } }
+      ), reducer: child)
   }
 }
 

@@ -17,8 +17,8 @@ cleanup() {
 trap cleanup EXIT
 
 echo "[innoflow-migrate] tool=$tool_package candidate=$candidate"
-swift test --package-path "$tool_package" --scratch-path "$temporary/tool-build" --jobs 1 -Xswiftc -warnings-as-errors
-swift build --package-path "$tool_package" --scratch-path "$temporary/tool-build" --jobs 1 -Xswiftc -warnings-as-errors
+swift test --package-path "$tool_package" --scratch-path "$temporary/tool-build" --disable-experimental-prebuilts --jobs 1 -Xswiftc -warnings-as-errors
+swift build --package-path "$tool_package" --scratch-path "$temporary/tool-build" --disable-experimental-prebuilts --jobs 1 -Xswiftc -warnings-as-errors
 bin_path="$(swift build --package-path "$tool_package" --scratch-path "$temporary/tool-build" --show-bin-path)"
 binary="$bin_path/innoflow-migrate"
 python3 "$script_dir/check-cli.py" "$binary"

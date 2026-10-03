@@ -4,6 +4,6 @@ import InnoFlowCore
 struct DirectFlowScopeInit {
   @MainActor
   static func main() async {
-    _ = FlowScope() // Expected compile failure: use withFlowScope.
+    _ = FlowScope()  // Expected compile failure: use withFlowScope.
   }
 }

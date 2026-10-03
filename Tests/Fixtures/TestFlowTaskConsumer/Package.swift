@@ -5,6 +5,16 @@ import PackageDescription
 let root = ProcessInfo.processInfo.environment["INNOFLOW_CONSUMER_PACKAGE_PATH"] ?? "../../.."
 let flowScopeNegative = ProcessInfo.processInfo.environment["INNOFLOW_FLOWSCOPE_NEGATIVE"] == "1"
 let negative = ProcessInfo.processInfo.environment["INNOFLOW_TESTFLOWTASK_NEGATIVE"] == "1"
+let fixtureSources = [
+  "Sources/Consumer/Feature.swift", "Sources/Consumer/Main.swift",
+  "Negative/LegacyVoidFunctionValue.swift", "Negative/DirectFlowScopeInit.swift",
+]
+let selectedSources =
+  flowScopeNegative
+  ? ["Negative/DirectFlowScopeInit.swift"]
+  : negative
+    ? ["Sources/Consumer/Feature.swift", "Negative/LegacyVoidFunctionValue.swift"]
+    : ["Sources/Consumer/Feature.swift", "Sources/Consumer/Main.swift"]
 let package = Package(
   name: "TestFlowTaskConsumer",
   platforms: [.macOS(.v15)],
@@ -17,13 +27,8 @@ let package = Package(
         .product(name: "InnoFlowTesting", package: "InnoFlow"),
       ],
       path: ".",
-      exclude: (negative || flowScopeNegative)
-        ? ["README.md", "Sources/Consumer/Main.swift"] : ["README.md", "Negative"],
-      sources: flowScopeNegative
-        ? ["Negative/DirectFlowScopeInit.swift"]
-        : negative
-          ? ["Sources/Consumer/Feature.swift", "Negative/LegacyVoidFunctionValue.swift"]
-          : ["Sources/Consumer/Feature.swift", "Sources/Consumer/Main.swift"]
+      exclude: ["README.md"] + fixtureSources.filter { !selectedSources.contains($0) },
+      sources: selectedSources
     )
   ]
 )

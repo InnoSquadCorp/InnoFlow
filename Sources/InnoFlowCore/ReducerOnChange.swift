@@ -36,6 +36,10 @@ public struct OnChangeReducer<Base: Reducer, Value: Equatable & Sendable>: Reduc
 extension Reducer {
   /// Observes one equatable state slice after this reducer handles each action.
   ///
+  /// The base effect and the change effect are merged concurrently. Neither
+  /// host promises declaration-order emissions; use concatenate explicitly
+  /// when an application needs sequencing.
+  ///
   /// Keep the observed value narrow. Comparing an entire app state on every
   /// action can turn an otherwise local effect boundary into global work.
   public func onChange<Value: Equatable & Sendable>(

@@ -110,6 +110,7 @@ private struct IdentifierPathFeature {
     case `123`(Int)
     case `étoile`(Int)
     case _loaded(Int)
+    // swift-format-ignore: AlwaysUseLowerCamelCase
     case __double(Int)
     case `child route`(`id`: Int, `action`: String)
     case `manual action`(value: Int)
@@ -126,6 +127,7 @@ private struct IdentifierPathFeature {
     case `123`(Int)
     case `étoile`(Int)
     case _loaded(Int)
+    // swift-format-ignore: AlwaysUseLowerCamelCase
     case __double(Int)
     case `tuple label`(`first value`: Int, `default`: String)
     case `manual output`(Int)

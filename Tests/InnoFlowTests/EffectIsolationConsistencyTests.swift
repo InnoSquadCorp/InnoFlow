@@ -5,12 +5,14 @@ import InnoFlowTesting
 import Testing
 
 private struct IsolationConsistencyState: Equatable, Sendable { var values: [Int] = [] }
-private enum IsolationConsistencyAction: Equatable, Sendable { case start, received(Int) }
+private enum IsolationConsistencyAction: Equatable, Sendable {
+  case start
+  case received(Int)
+}
 
 private func verifyEffectExecutor() {
   dispatchPrecondition(condition: .notOnQueue(.main))
 }
-
 
 private struct IsolationSequence: AsyncSequence, Sendable {
   typealias Element = Int
@@ -36,10 +38,11 @@ private func isolationConsistencyReducer()
           verifyEffectExecutor()
           await send(.received(1))
         },
-        .perform(operation: { _ in
-          verifyEffectExecutor()
-          return 2
-        }, success: { .received($0) }, failure: { _ in .received(-1) }),
+        .perform(
+          operation: { _ in
+            verifyEffectExecutor()
+            return 2
+          }, success: { .received($0) }, failure: { _ in .received(-1) }),
         .run(id: EffectID("executor"), policy: .latest) { send, _ in
           verifyEffectExecutor()
           await send(.received(3))

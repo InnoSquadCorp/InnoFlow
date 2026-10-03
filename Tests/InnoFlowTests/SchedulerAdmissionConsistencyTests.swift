@@ -26,7 +26,10 @@ private actor AdmissionGate {
   }
 }
 private struct AdmissionState: Equatable, Sendable { var values: [Int] = [] }
-private enum AdmissionAction: Equatable, Sendable { case old, newer, done(Int) }
+private enum AdmissionAction: Equatable, Sendable {
+  case old, newer
+  case done(Int)
+}
 private func admissionReducer(old: AdmissionGate, newer: AdmissionGate)
   -> some Reducer<AdmissionState, AdmissionAction, Never>
 {
@@ -57,7 +60,8 @@ struct SchedulerAdmissionConsistencyTests {
     let oldGate = AdmissionGate()
     let newGate = AdmissionGate()
     if useTestStore {
-      let store = TestStore(reducer: admissionReducer(old: oldGate, newer: newGate), initialState: .init())
+      let store = TestStore(
+        reducer: admissionReducer(old: oldGate, newer: newGate), initialState: .init())
       let old = await store.send(.old)
       await oldGate.waitUntilEntered()
       if preCancel { await store.cancelEffects(identifiedBy: EffectID("lane")) }
@@ -70,7 +74,8 @@ struct SchedulerAdmissionConsistencyTests {
       await newer.finish()
       await store.finish()
     } else {
-      let store = Store(reducer: admissionReducer(old: oldGate, newer: newGate), initialState: .init())
+      let store = Store(
+        reducer: admissionReducer(old: oldGate, newer: newGate), initialState: .init())
       let old = store.send(.old)
       await oldGate.waitUntilEntered()
       if preCancel { await store.cancelEffects(identifiedBy: EffectID("lane")) }
@@ -121,9 +126,15 @@ struct SchedulerAdmissionConsistencyTests {
       onCancellation: { _, _ in }, onStart: { _ in }, onPendingExit: { _ in },
       onAdmissionLifecycle: { _, admission in olderLifecycle.append(admission) }
     )
-    if case .accepted(let ticket) = newest { #expect(!ticket.cancellationState.isCancelled) }
-    else { Issue.record("First latest request must be admitted") }
-    if case .terminal(.superseded) = older {} else { Issue.record("Older sequence must be superseded") }
+    if case .accepted(let ticket) = newest {
+      #expect(!ticket.cancellationState.isCancelled)
+    } else {
+      Issue.record("First latest request must be admitted")
+    }
+    if case .terminal(.superseded) = older {
+    } else {
+      Issue.record("Older sequence must be superseded")
+    }
     #expect(olderLifecycle == [.superseded])
     #expect(scheduler.activeRequestCount == 1)
     scheduler.cancelAll()
@@ -144,7 +155,9 @@ struct SchedulerAdmissionConsistencyTests {
       onAdmissionLifecycle: { _, admission in secondLifecycle.append(admission) }
     )
     guard case .accepted(let firstTicket) = first, case .accepted(let secondTicket) = second else {
-      Issue.record("Both serial reservations must be admitted"); scheduler.cancelAll(); return
+      Issue.record("Both serial reservations must be admitted")
+      scheduler.cancelAll()
+      return
     }
     await scheduler.finish(firstTicket.token)
     #expect(starts == 0)
@@ -206,7 +219,9 @@ extension SchedulerAdmissionConsistencyTests {
       onCancellationEvent: { causes.append($0) }
     )
     guard case .accepted(let firstTicket) = first, case .accepted(let secondTicket) = second else {
-      Issue.record("Both reservations must be admitted"); scheduler.cancelAll(); return
+      Issue.record("Both reservations must be admitted")
+      scheduler.cancelAll()
+      return
     }
     scheduler.cancel(token: secondTicket.token)
     scheduler.cancel(token: secondTicket.token)
@@ -219,7 +234,8 @@ extension SchedulerAdmissionConsistencyTests {
     )
     guard case .accepted(let thirdTicket) = third else {
       Issue.record("Cancelled pending reservation must return capacity immediately")
-      scheduler.cancelAll(); return
+      scheduler.cancelAll()
+      return
     }
     #expect(thirdTicket.admission == .queued(position: 1))
     await scheduler.finish(firstTicket.token)
@@ -240,7 +256,10 @@ extension SchedulerAdmissionConsistencyTests {
       onCancellation: { _, _ in }, onStart: { _ in Issue.record("Cancelled reservation started") },
       onPendingExit: { _ in }, onAdmissionLifecycle: { _, value in admissions.append(value) }
     )
-    guard case .accepted(let ticket) = plan else { Issue.record("Admission failed"); return }
+    guard case .accepted(let ticket) = plan else {
+      Issue.record("Admission failed")
+      return
+    }
     let gate = AdmissionGate()
     let task = Task { await gate.wait() }
     await gate.waitUntilEntered()

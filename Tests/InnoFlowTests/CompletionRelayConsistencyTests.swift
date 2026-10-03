@@ -9,16 +9,16 @@ struct CompletionRelayConsistencyTests {
     let completion = FlowTaskCompletion()
     let diagnostics = StoreDiagnostics()
     var tracker: FlowTaskTracker? = FlowTaskTracker(onFinish: { diagnostics.recordTerminated($0) })
-    weak var weakTracker = tracker
+    let isTrackerAlive = { [weak tracker] in tracker != nil }
     let root = tracker!.beginActivity()
     tracker!.trackCompletion(of: completion)
     tracker!.endActivity(root)
     tracker = nil
-    #expect(weakTracker != nil)
+    #expect(isTrackerAlive())
     #expect(completion.observerCount == 1)
     completion.complete()
     completion.complete()
-    #expect(weakTracker == nil)
+    #expect(!isTrackerAlive())
     #expect(completion.observerCount == 0)
     #expect(diagnostics.snapshot().records.filter { $0.kind == .terminated }.count == 1)
   }
@@ -27,7 +27,7 @@ struct CompletionRelayConsistencyTests {
   func cancellationDetachesOnlyItsSubscription() {
     let completion = FlowTaskCompletion()
     var first: FlowTaskTracker? = FlowTaskTracker()
-    weak var weakFirst = first
+    let isFirstAlive = { [weak first] in first != nil }
     let second = FlowTaskTracker()
     first!.trackCompletion(of: completion)
     second.trackCompletion(of: completion)
@@ -37,7 +37,7 @@ struct CompletionRelayConsistencyTests {
     #expect(!second.isFinished)
     #expect(completion.observerCount == 1)
     first = nil
-    #expect(weakFirst == nil)
+    #expect(!isFirstAlive())
     completion.complete()
     #expect(second.isFinished)
     #expect(!second.isCancelled)

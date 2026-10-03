@@ -7,11 +7,14 @@ import Testing
 @Suite("Runtime completion and result consistency")
 @MainActor
 struct RuntimeConsistencyTests {
-  @Test("trailing dispatch completion is independent of handle retention", arguments: [false, true], [1, 1_000])
+  @Test(
+    "trailing dispatch completion is independent of handle retention", arguments: [false, true],
+    [1, 1_000])
   func trailingCompletion(retainsHandle: Bool, count: Int) async throws {
     let clock = ManualTestClock()
     let diagnostics = StoreDiagnostics(capacity: 32)
-    let store = Store(reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
+    let store = Store(
+      reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
 
     for value in 0..<count {
       var handle: FlowTask? = store.send(.request(value, .throttle))
@@ -19,7 +22,8 @@ struct RuntimeConsistencyTests {
       // The interpreter serializes root effects. Finishing this sentinel proves
       // that the preceding throttle admission has installed its runtime timer.
       await store.send(.barrier).finish()
-      let physicalTask = try #require(store.throttleState.trailingTask(for: CompletionConsistencyFeature.timingID))
+      let physicalTask = try #require(
+        store.throttleState.trailingTask(for: CompletionConsistencyFeature.timingID))
       try await clock.waitForSleepers(atLeast: 1)
       await clock.advance(by: .seconds(1))
       await physicalTask.value
@@ -32,11 +36,14 @@ struct RuntimeConsistencyTests {
     #expect(store.effectBridge.cancellationScopeMetrics.liveScopes == 0)
   }
 
-  @Test("discarded run and debounce handles complete as controls", arguments: [CompletionConsistencyFeature.Mode.run, .debounce])
+  @Test(
+    "discarded run and debounce handles complete as controls",
+    arguments: [CompletionConsistencyFeature.Mode.run, .debounce])
   func discardedControls(mode: CompletionConsistencyFeature.Mode) async throws {
     let clock = ManualTestClock()
     let diagnostics = StoreDiagnostics()
-    let store = Store(reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
+    let store = Store(
+      reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
     let finished = ConsistencySignal()
     discardControlDispatch(store, mode: mode, finished: finished)
     await store.send(.barrier).finish()
@@ -54,12 +61,14 @@ struct RuntimeConsistencyTests {
   func sharedThrottleCancellation() async throws {
     let clock = ManualTestClock()
     let diagnostics = StoreDiagnostics()
-    let store = Store(reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
+    let store = Store(
+      reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
     let first = store.send(.request(1, .throttle))
     await store.send(.barrier).finish()
     let second = store.send(.request(2, .throttle))
     await store.send(.barrier).finish()
-    let physicalTask = try #require(store.throttleState.trailingTask(for: CompletionConsistencyFeature.timingID))
+    let physicalTask = try #require(
+      store.throttleState.trailingTask(for: CompletionConsistencyFeature.timingID))
     first.cancel()
     await first.finish()
     #expect(first.isFinished)
@@ -78,12 +87,14 @@ struct RuntimeConsistencyTests {
   func discardedSharedThrottle(count: Int) async throws {
     let clock = ManualTestClock()
     let diagnostics = StoreDiagnostics(capacity: 16)
-    let store = Store(reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
+    let store = Store(
+      reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
     for value in 0..<count {
       store.send(.request(value, .throttle))
       await store.send(.barrier).finish()
     }
-    let physicalTask = try #require(store.throttleState.trailingTask(for: CompletionConsistencyFeature.timingID))
+    let physicalTask = try #require(
+      store.throttleState.trailingTask(for: CompletionConsistencyFeature.timingID))
     try await clock.waitForSleepers(atLeast: 1)
     await clock.advance(by: .seconds(1))
     await physicalTask.value
@@ -94,7 +105,9 @@ struct RuntimeConsistencyTests {
     #expect(store.effectBridge.cancellationScopeMetrics.liveScopes == 0)
   }
 
-  @Test("perform maps all errors while active in both hosts", arguments: PerformConsistencyFeature.Outcome.allCases)
+  @Test(
+    "perform maps all errors while active in both hosts",
+    arguments: PerformConsistencyFeature.Outcome.allCases)
   func performMapping(outcome: PerformConsistencyFeature.Outcome) async {
     let production = Store(reducer: PerformConsistencyFeature(outcome: outcome))
     await production.send(.start).finish()
@@ -118,17 +131,21 @@ struct RuntimeConsistencyTests {
     await testing.finish()
   }
 
-  @Test("accepted cancellation suppresses a later thrown error without faking physical completion", arguments: [false, true])
+  @Test(
+    "accepted cancellation suppresses a later thrown error without faking physical completion",
+    arguments: [false, true])
   func cancellationBeforeFailure(throwsCancellation: Bool) async throws {
     let started = ConsistencySignal()
     let release = ConsistencyGate()
     let diagnostics = StoreDiagnostics()
     let store = Store(
-      reducer: PerformConsistencyFeature(outcome: .failure, beforeResult: {
-        started.signal()
-        await release.wait()
-        if throwsCancellation { throw CancellationError() }
-      }),
+      reducer: PerformConsistencyFeature(
+        outcome: .failure,
+        beforeResult: {
+          started.signal()
+          await release.wait()
+          if throwsCancellation { throw CancellationError() }
+        }),
       diagnostics: diagnostics
     )
     let task = store.send(.start)
@@ -152,13 +169,14 @@ struct RuntimeConsistencyTests {
     let diagnostics = StoreDiagnostics()
     var store: Store<CompletionConsistencyFeature>? = Store(
       reducer: CompletionConsistencyFeature(), clock: .manual(clock), diagnostics: diagnostics)
-    weak var weakStore = store
+    let isStoreAlive = { [weak store] in store != nil }
     store?.send(.request(1, .throttle))
     await store?.send(.barrier).finish()
-    let physicalTask = try #require(store?.throttleState.trailingTask(for: CompletionConsistencyFeature.timingID))
+    let physicalTask = try #require(
+      store?.throttleState.trailingTask(for: CompletionConsistencyFeature.timingID))
     try await clock.waitForSleepers(atLeast: 1)
     store = nil
-    #expect(weakStore == nil)
+    #expect(!isStoreAlive())
     await physicalTask.value
     #expect(diagnostics.snapshot().activeDispatches.isEmpty)
     #expect(await clock.sleeperCount == 0)
@@ -181,7 +199,11 @@ struct CompletionConsistencyFeature: Reducer {
     init() {}
   }
   enum Mode: Sendable { case throttle, debounce, run }
-  enum Action: Sendable { case request(Int, Mode), commit(Int), barrier }
+  enum Action: Sendable {
+    case request(Int, Mode)
+    case commit(Int)
+    case barrier
+  }
   static let timingID = AnyEffectID(StaticEffectID("completion-consistency"))
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
@@ -189,12 +211,16 @@ struct CompletionConsistencyFeature: Reducer {
     case .request(let value, let mode):
       switch mode {
       case .throttle:
-        return .send(.commit(value)).throttle(Self.timingID, for: .seconds(1), leading: false, trailing: true)
+        return .send(.commit(value)).throttle(
+          Self.timingID, for: .seconds(1), leading: false, trailing: true)
       case .debounce:
         return .send(.commit(value)).debounce(Self.timingID, for: .seconds(1))
       case .run:
         return .run { send, context in
-          do { try await context.sleep(for: .seconds(1)); await send(.commit(value)) } catch {}
+          do {
+            try await context.sleep(for: .seconds(1))
+            await send(.commit(value))
+          } catch {}
         }
       }
     case .commit(let value):
@@ -211,7 +237,10 @@ struct PerformConsistencyFeature: Reducer {
     var results: [String] = []
     init() {}
   }
-  enum Action: Equatable, Sendable { case start, sequenceCancellation, result(String) }
+  enum Action: Equatable, Sendable {
+    case start, sequenceCancellation
+    case result(String)
+  }
   enum Outcome: Sendable, CaseIterable {
     case success, failure, cancellationError
     var expected: String {
@@ -229,16 +258,18 @@ struct PerformConsistencyFeature: Reducer {
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     switch action {
     case .start:
-      return .perform(operation: {
-        try await beforeResult()
-        switch outcome {
-        case .success: return 42
-        case .failure: throw Failure.unavailable
-        case .cancellationError: throw CancellationError()
-        }
-      }, success: { .result("success:\($0)") }, failure: {
-        .result($0 is CancellationError ? "failure:cancellation" : "failure:unavailable")
-      })
+      return .perform(
+        operation: {
+          try await beforeResult()
+          switch outcome {
+          case .success: return 42
+          case .failure: throw Failure.unavailable
+          case .cancellationError: throw CancellationError()
+          }
+        }, success: { .result("success:\($0)") },
+        failure: {
+          .result($0 is CancellationError ? "failure:cancellation" : "failure:unavailable")
+        })
     case .sequenceCancellation:
       return .run { _ in ConsistencyCancelledSequence<Action>() }
     case .result(let result):
@@ -256,7 +287,10 @@ private final class ConsistencySignal: Sendable {
     stream = pair.stream
     continuation = pair.continuation
   }
-  func signal() { continuation.yield(); continuation.finish() }
+  func signal() {
+    continuation.yield()
+    continuation.finish()
+  }
   func wait() async -> Bool {
     await withTaskGroup(of: Bool.self) { group in
       group.addTask { [stream] in
