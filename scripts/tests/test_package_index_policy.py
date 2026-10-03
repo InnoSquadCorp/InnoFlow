@@ -68,6 +68,12 @@ class PackageIndexPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             POLICY.validate(self.root)
 
+    def test_undocumented_inspector(self):
+        path = self.root / "docs/SWIFT_PACKAGE_INDEX.md"
+        path.write_text(path.read_text().replace("`InnoFlowInspector`", "diagnostic library"))
+        with self.assertRaises(ValueError):
+            POLICY.validate(self.root)
+
     def test_missing_configuration(self):
         (self.root / ".spi.yml").unlink()
         with self.assertRaises(OSError):

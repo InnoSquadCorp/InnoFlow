@@ -181,3 +181,17 @@ EffectExecutionPolicy.serial and EffectAdmissionRejection.queueFull capacities c
 ### Testing source-location and lexical-lifetime changes
 
 Canonical Testing call signatures use fileID/filePath/line/column; explicit legacy file: overloads remain. Stored function values must select an appropriate adapter. FlowScope.init is fileprivate; use withFlowScope. TestStoreScenario.advance requires an explicit onceSleepersReach argument. TestStoreDispatch.effectLedger and scoped output exact/predicate overloads are additive. XCTest's public failure API preserves path/line but has no column equivalent.
+
+### Process-local dispatch identity and timing records
+
+DispatchID.rawValue and EffectTimingRecorder.Entry.dispatchID intentionally change UUID to UInt64 (optional for Entry), and caller-provided DispatchID raw-value construction is removed. New timing JSONL uses schemaVersion2. Legacy absent-ID records remain readable; UUID strings require the explicit archived-file converter described in MIGRATION. Fresh public consumer/schema tests accompany this change; historical API counts above are not a final regenerated inventory.
+
+### Additional opt-in products and authoring surfaces
+
+InnoFlowInspector is a fifth public product with its own privacy manifest and Core-only runtime dependency. PhaseCoverageRecorder/TestStoreExplorer, anonymous lane snapshots and view-owned innoFlowTask are additive opt-ins. Alert/dialog overload sets now follow SwiftUI title categories; explicit stored function references may need a concrete title-type adapter. Concurrent operation function types pin execution semantics while preserving ordinary closure call syntax. The independent Apple title/task consumer and non-Apple execution consumer cover these distinct boundaries; final Apple digester and five-product symbol inventory are still required.
+
+PhaseMap initialization also adds defaulted source coordinates to identify coverage declarations. Ordinary trailing-closure construction remains source-compatible; a stored initializer function value must explicitly adapt the new argument list. Coverage never re-evaluates the transition matcher or resolver merely to observe it.
+
+### IfCaseLet lifetime declaration coordinates
+
+IfCaseLet.init(state:action:reducer:onMissing:) gains defaulted fileID, line and column parameters. Constructor call syntax remains source-compatible, but the old exact four-argument initializer function type no longer matches; use an explicit closure adapter. The overload with lifetimeID: EffectID<ID> is additive and distinguishes overlapping case reducers built at the same helper declaration. Existing CasePath identity and public collection ID constraints do not change. Tests/Fixtures/CollectionLifetimeConsumer provides a positive consumer and an exact old-signature negative compile control.

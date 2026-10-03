@@ -10,50 +10,12 @@ InnoFlow は、ビジネス/ドメイン状態遷移に集中した SwiftUI フ�
 候補を固定した時点の公開安定版は 5.1.1 でした。6.0.0 タグと GitHub Release の
 公開状態は GitHub で別途確認してください。
 
-## 基本方針
+## Level 1から始める
 
-- 公式な feature authoring では 3 つ目の reducer generic を明示します。
-  app-boundary output がなければ `Never`、送出する場合は feature の typed
-  `Output` を使用します。
-- 標準合成形ではない labeled/multi-payload の `Action` case は、canonical な
-  `<caseName>CasePath` の手動宣言または `@InnoFlowCasePathIgnored` で警告の意図を明示します。
-- 合成は `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer` を中心に行います。
-- `PhaseMap` は phase-heavy feature 向けの canonical runtime phase-transition layer です。
-- `PhaseTransitionGraph` は generic automata runtime ではなく、opt-in validation layer です。
-- binding は `@BindableField` と projected key path を通して明示的に接続します。
-- `TestStore.exhaustivity` のデフォルトは `.on` で、すべての状態遷移と effect action を漏れなく検証します。テストは `finish()` で終了し、未検証の作業を残した deinit はポリシーに従って失敗、警告、または無通知で処理されます。実行の cancellation が先に受理されていない場合、`EffectTask.run` から漏れた cancellation 以外のエラーは、このポリシーに関係なく元の action assertion 位置で一度失敗します。
-- `Store.send(_:)` は、その dispatch から派生した effect tree だけを完了またはキャンセルできる `FlowTask` を返します。
-- reducer は一度限りの app-boundary command を typed `Output` として送出でき、復元・描画する値は引き続き `State` に置きます。
-- 特定 dispatch の output が必要な場合、`send(_:capturingOutputs:)` は enqueue
-  前に single-consumer の `OutputFlowTask` stream を設定し、store-wide
-  `outputs()` broadcast とは分離します。
-- captured output を待つ consumer Task のキャンセルは、その dispatch だけを停止します。
-  正常終了や broadcast 購読解除は effect を停止しません。capture を保持したまま
-  `break` で抜ける場合、処理を停止するには `cancel()` を明示的に呼びます。
-- output のない子 reducer と effect helper は `promoteOutput(to:)` で再利用できます。
-  実際の output 型は引き続き `mapOutput(_:)` で明示的に変換します。
-- `TestStore.receiveOutput` は predicate と `CasePath` による非 `Equatable` output の検証も
-  サポートし、すべての形式が exhaustivity と合計 timeout を守ります。
-- `strictPhaseTotality: true` は直接宣言された `Phase` source/target の欠落を
-  compile error にし、動的 trigger semantics は `requireComplete(...)` で検証します。
-- `Store` は effect の cancellation と run failure を MainActor 境界で順序付けます。cancellation が先に受理された場合、非協調的な処理が後から投げたエラーを `didFailRun` として再分類しません。
-- ルーティング、transport、session lifecycle、構築時の依存グラフはアプリ境界の外側で所有します。
-
-境界ドキュメント:
-
-- [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
-- [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
-
-## Why InnoFlow over TCA?
-
-TCA は dependency system、navigation pattern、testing convention、大きな
-ecosystem まで含む広い application architecture が必要な場合に強い選択肢です。
-InnoFlow はより小さい境界を保ちたい場合に選びます。reducer は business
-transition だけを所有し、dependency は constructor-injected bundle として明示し、
-navigation/transport は app boundary に残し、SwiftUI 専用の convenience API は
-optional product の `InnoFlowSwiftUI` に置きます。
-
-詳しい比較は [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md) を参照してください。
+最初の機能は `Reduce`、`Store`、`@BindableField`、`TestStore` で完成できます。
+StateとActionを明示し、単純な `@InnoFlow` bodyには
+`some Reducer<State, Action, Never>` を宣言します。カウンター、フォーム、
+通常のリクエストから始め、必要になってから合成やライフタイム管理を追加してください。
 
 ## インストール
 
@@ -211,3 +173,57 @@ strict totality enforcement、optional metrics package などは、現時点で�
 ### キーワードとraw case名
 
 Phase totalityは省略可能なバッククォートを同じ論理識別子として比較します。ActionとOutputのcase pathは空白・記号・Unicodeを保持し、生成されたraw名はSwiftのバッククォートで参照します。通常の名前と先頭underscore一つの除去規則は変わりません。実際の不足とメンバー衝突は引き続き診断します。
+
+## 基本方針
+
+- 公式な feature authoring では 3 つ目の reducer generic を明示します。
+  app-boundary output がなければ `Never`、送出する場合は feature の typed
+  `Output` を使用します。
+- 標準合成形ではない labeled/multi-payload の `Action` case は、canonical な
+  `<caseName>CasePath` の手動宣言または `@InnoFlowCasePathIgnored` で警告の意図を明示します。
+- 合成は `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer` を中心に行います。
+- `PhaseMap` は phase-heavy feature 向けの canonical runtime phase-transition layer です。
+- `PhaseTransitionGraph` は generic automata runtime ではなく、opt-in validation layer です。
+- binding は `@BindableField` と projected key path を通して明示的に接続します。
+- `TestStore.exhaustivity` のデフォルトは `.on` で、すべての状態遷移と effect action を漏れなく検証します。テストは `finish()` で終了し、未検証の作業を残した deinit はポリシーに従って失敗、警告、または無通知で処理されます。実行の cancellation が先に受理されていない場合、`EffectTask.run` から漏れた cancellation 以外のエラーは、このポリシーに関係なく元の action assertion 位置で一度失敗します。
+- `Store.send(_:)` は、その dispatch から派生した effect tree だけを完了またはキャンセルできる `FlowTask` を返します。
+- reducer は一度限りの app-boundary command を typed `Output` として送出でき、復元・描画する値は引き続き `State` に置きます。
+- 特定 dispatch の output が必要な場合、`send(_:capturingOutputs:)` は enqueue
+  前に single-consumer の `OutputFlowTask` stream を設定し、store-wide
+  `outputs()` broadcast とは分離します。
+- captured output を待つ consumer Task のキャンセルは、その dispatch だけを停止します。
+  正常終了や broadcast 購読解除は effect を停止しません。capture を保持したまま
+  `break` で抜ける場合、処理を停止するには `cancel()` を明示的に呼びます。
+- output のない子 reducer と effect helper は `promoteOutput(to:)` で再利用できます。
+  実際の output 型は引き続き `mapOutput(_:)` で明示的に変換します。
+- `TestStore.receiveOutput` は predicate と `CasePath` による非 `Equatable` output の検証も
+  サポートし、すべての形式が exhaustivity と合計 timeout を守ります。
+- `strictPhaseTotality: true` は直接宣言された `Phase` source/target の欠落を
+  compile error にし、動的 trigger semantics は `requireComplete(...)` で検証します。
+- `Store` は effect の cancellation と run failure を MainActor 境界で順序付けます。cancellation が先に受理された場合、非協調的な処理が後から投げたエラーを `didFailRun` として再分類しません。
+- ルーティング、transport、session lifecycle、構築時の依存グラフはアプリ境界の外側で所有します。
+
+境界ドキュメント:
+
+- [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
+- [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
+
+## Why InnoFlow over TCA?
+
+TCA は dependency system、navigation pattern、testing convention、大きな
+ecosystem まで含む広い application architecture が必要な場合に強い選択肢です。
+InnoFlow はより小さい境界を保ちたい場合に選びます。reducer は business
+transition だけを所有し、dependency は constructor-injected bundle として明示し、
+navigation/transport は app boundary に残し、SwiftUI 専用の convenience API は
+optional product の `InnoFlowSwiftUI` に置きます。
+
+詳しい比較は [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md) を参照してください。
+
+
+### 三つのレベルで学ぶ
+
+- Level 1: Reduce、Store、BindableField、TestStoreでカウンター・フォームとテストを完成
+- Level 2: 必要に応じてScope、ForEach、select、typed Outputを追加
+- Level 3: FlowTask、optional childの寿命、run lane、withFlowScope、PhaseMap、diagnostics、任意のInnoFlowInspector
+
+SwiftUIヘルパーはsheet、macOS以外のfull-screen cover、navigation destination、対応環境のpopover、alert、confirmation dialogを提供します。タイトルはLocalizedStringKey・StringProtocol・Textに対応します。innoFlowTaskはビュー消失やID変更で自分のdispatchだけをキャンセルします。Inspectorはpayload-free診断と明示したphase labelを読み取り、DEBUGでの利用を推奨します。制約はdocs/SWIFTUI_DX_6_0.mdを参照してください。

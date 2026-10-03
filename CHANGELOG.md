@@ -11,6 +11,10 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- Observed PhaseMap coverage, seeded exploration with bounded cleanup/replay diagnostics, a conservative AST migration CLI, anonymous run-lane snapshots, and separate opt-in Flow Inspector product.
+- SwiftUI localized/StringProtocol/Text presentation titles and view-owned dispatch task modifiers; layered beginner-to-advanced examples and a search tutorial.
+- Explicit concurrent operation contracts, unsigned admission capacity, and process-local UInt64 dispatch correlation with versioned timing JSONL migration support.
+
 - Testing assertions preserve four-coordinate call sites across scoped and asynchronous work and route to the active testing framework. Dispatch handles expose bounded typed effect ledgers. Scoped output overloads, structural diffs and deterministic scenario waits improve test diagnostics; FlowScope construction is lexical.
 
 - OptionalChildLifetime and the parent optionalChild modifier bind optional-child effects to explicit instance identity, synchronously block stale actions/outputs, and isolate child scheduler/cancellation IDs without cancelling parent or sibling work.

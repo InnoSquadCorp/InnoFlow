@@ -9,48 +9,12 @@ InnoFlow 是一个面向业务/领域状态转换的 SwiftUI-first 单向架构�
 本文及下方安装示例描述 6.0.0 候选版本的 API 契约。候选版本冻结时的公开稳定基线为 5.1.1；
 6.0.0 标签和 GitHub Release 是否已公开，需在 GitHub 上另行确认。
 
-## 核心方向
+## 从Level 1开始
 
-- 官方 feature authoring 会显式声明第三个 reducer generic：没有 app-boundary
-  output 时使用 `Never`，需要发出 output 时使用 feature 的 typed `Output`。
-- 对于不符合标准合成形式的 labeled/multi-payload `Action` case，应通过 canonical
-  `<caseName>CasePath` 手动声明或 `@InnoFlowCasePathIgnored` 明确表达警告处理意图。
-- 组合以 `Reduce`、`CombineReducers`、`Scope`、`IfLet`、`IfCaseLet`、`ForEachReducer` 为核心。
-- `PhaseMap` 是 phase-heavy feature 的 canonical runtime phase-transition layer。
-- `PhaseTransitionGraph` 不是 generic automata runtime，而是 opt-in validation layer。
-- binding 通过 `@BindableField` 和 projected key path 显式连接。
-- `TestStore.exhaustivity` 默认为 `.on`，会完整验证所有状态转换和 effect action。测试应以 `finish()` 结束；若 deinit 时仍有未验证工作，则会按策略记录失败、警告或保持静默。若执行取消尚未先被接受，`EffectTask.run` 中除取消以外的未处理错误不受该策略影响，并会在原始 action assertion 位置记录一次失败。
-- `Store.send(_:)` 返回 `FlowTask`，可只等待或取消由该次 dispatch 派生的完整 effect tree。
-- reducer 可通过 typed `Output` 发出一次性的 app-boundary command；需要恢复或渲染的值仍应放在 `State` 中。
-- 当需要关联到特定 dispatch 的 output 时，`send(_:capturingOutputs:)` 会在
-  enqueue 前建立 single-consumer `OutputFlowTask` 流，并与全局
-  `outputs()` broadcast 分离。
-- 取消等待 captured output 的 consumer Task 只会取消对应的 dispatch。
-  正常结束或取消 broadcast 订阅不会停止 effect。若保留 capture 并通过 `break`
-  提前退出，需显式调用 `cancel()` 来停止工作。
-- 无 output 的子 reducer 和 effect helper 可通过 `promoteOutput(to:)` 复用。
-  实际的 output 类型仍须使用 `mapOutput(_:)` 显式转换，不能静默丢弃事件。
-- `TestStore.receiveOutput` 也支持 predicate 和 `CasePath`，可以验证非 `Equatable` output。
-  所有形式都遵守 exhaustivity 策略和总 timeout。
-- `strictPhaseTotality: true` 会把直接声明的 `Phase` source/target 缺失变为
-  编译错误；动态 trigger 语义仍通过 `requireComplete(...)` 验证。
-- `Store` 会在 MainActor 边界上对 effect 取消与 run failure 进行排序。若取消先被接受，非协作任务随后抛出的错误不会再被归类为 `didFailRun`。
-- 路由、transport、session lifecycle、构建期依赖图由应用边界之外负责。
-
-边界文档：
-
-- [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
-- [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
-
-## Why InnoFlow over TCA?
-
-当团队需要包含 dependency system、navigation pattern、testing convention 和大型
-ecosystem 的完整 application architecture 时，TCA 仍然是更强的默认选择。InnoFlow
-适合希望保持更小框架边界的项目：reducer 只负责业务转换，dependency 通过构造期
-bundle 显式传入，navigation/transport 留在 app boundary，SwiftUI 专用便捷 API
-放在可选 product `InnoFlowSwiftUI` 中。
-
-更完整的比较见 [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md)。
+第一个功能只需 `Reduce`、`Store`、`@BindableField` 和 `TestStore`。
+显式定义State和Action，简单的 `@InnoFlow` body声明
+`some Reducer<State, Action, Never>`。从计数器、表单和普通请求开始，
+等功能确实需要时，再加入组合与生命周期控制。
 
 ## 安装
 
@@ -207,3 +171,55 @@ strict totality enforcement、optional metrics package 等目前都属于条件�
 ### 关键字和raw case名称
 
 Phase totality将可选反引号视为同一逻辑标识符。Action和Output的case path保留空格、标点和Unicode，引用生成的raw名称时使用Swift反引号。普通名称和仅移除一个前导underscore的规则保持不变。真正缺失的case和成员冲突仍会产生诊断。
+
+## 核心方向
+
+- 官方 feature authoring 会显式声明第三个 reducer generic：没有 app-boundary
+  output 时使用 `Never`，需要发出 output 时使用 feature 的 typed `Output`。
+- 对于不符合标准合成形式的 labeled/multi-payload `Action` case，应通过 canonical
+  `<caseName>CasePath` 手动声明或 `@InnoFlowCasePathIgnored` 明确表达警告处理意图。
+- 组合以 `Reduce`、`CombineReducers`、`Scope`、`IfLet`、`IfCaseLet`、`ForEachReducer` 为核心。
+- `PhaseMap` 是 phase-heavy feature 的 canonical runtime phase-transition layer。
+- `PhaseTransitionGraph` 不是 generic automata runtime，而是 opt-in validation layer。
+- binding 通过 `@BindableField` 和 projected key path 显式连接。
+- `TestStore.exhaustivity` 默认为 `.on`，会完整验证所有状态转换和 effect action。测试应以 `finish()` 结束；若 deinit 时仍有未验证工作，则会按策略记录失败、警告或保持静默。若执行取消尚未先被接受，`EffectTask.run` 中除取消以外的未处理错误不受该策略影响，并会在原始 action assertion 位置记录一次失败。
+- `Store.send(_:)` 返回 `FlowTask`，可只等待或取消由该次 dispatch 派生的完整 effect tree。
+- reducer 可通过 typed `Output` 发出一次性的 app-boundary command；需要恢复或渲染的值仍应放在 `State` 中。
+- 当需要关联到特定 dispatch 的 output 时，`send(_:capturingOutputs:)` 会在
+  enqueue 前建立 single-consumer `OutputFlowTask` 流，并与全局
+  `outputs()` broadcast 分离。
+- 取消等待 captured output 的 consumer Task 只会取消对应的 dispatch。
+  正常结束或取消 broadcast 订阅不会停止 effect。若保留 capture 并通过 `break`
+  提前退出，需显式调用 `cancel()` 来停止工作。
+- 无 output 的子 reducer 和 effect helper 可通过 `promoteOutput(to:)` 复用。
+  实际的 output 类型仍须使用 `mapOutput(_:)` 显式转换，不能静默丢弃事件。
+- `TestStore.receiveOutput` 也支持 predicate 和 `CasePath`，可以验证非 `Equatable` output。
+  所有形式都遵守 exhaustivity 策略和总 timeout。
+- `strictPhaseTotality: true` 会把直接声明的 `Phase` source/target 缺失变为
+  编译错误；动态 trigger 语义仍通过 `requireComplete(...)` 验证。
+- `Store` 会在 MainActor 边界上对 effect 取消与 run failure 进行排序。若取消先被接受，非协作任务随后抛出的错误不会再被归类为 `didFailRun`。
+- 路由、transport、session lifecycle、构建期依赖图由应用边界之外负责。
+
+边界文档：
+
+- [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
+- [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
+
+## Why InnoFlow over TCA?
+
+当团队需要包含 dependency system、navigation pattern、testing convention 和大型
+ecosystem 的完整 application architecture 时，TCA 仍然是更强的默认选择。InnoFlow
+适合希望保持更小框架边界的项目：reducer 只负责业务转换，dependency 通过构造期
+bundle 显式传入，navigation/transport 留在 app boundary，SwiftUI 专用便捷 API
+放在可选 product `InnoFlowSwiftUI` 中。
+
+更完整的比较见 [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md)。
+
+
+### 按三个层级学习
+
+- Level 1: 用Reduce、Store、BindableField、TestStore完成计数器、表单及测试
+- Level 2: 按需加入Scope、ForEach、select与typed Output
+- Level 3: FlowTask、optional child生命周期、run lane、withFlowScope、PhaseMap、diagnostics及可选InnoFlowInspector
+
+SwiftUI辅助方法包括sheet、非macOS的full-screen cover、navigation destination、受支持平台的popover、alert和confirmation dialog。标题支持LocalizedStringKey、StringProtocol与Text。innoFlowTask在视图消失或ID变化时只取消自己的dispatch。Inspector只读取payload-free诊断和显式phase label，建议在DEBUG中使用。平台限制见docs/SWIFTUI_DX_6_0.md。

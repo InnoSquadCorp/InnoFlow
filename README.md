@@ -6,65 +6,16 @@ English | [한국어](./README.kr.md) | [日本語](./README.jp.md) | [简体中
 
 InnoFlow is a SwiftUI-first unidirectional architecture framework for business and domain state transitions.
 
-## InnoFlow 6.0.0
+## Start with Level 1
 
-This source revision documents the 6.0.0 release candidate and target API.
-Version 5.1.1 was the published stable baseline at candidate freeze; verify
-the live 6.0.0 tag and GitHub Release status before treating it as published.
+Build your first feature with `Reduce`, `Store`, `@BindableField`, and `TestStore`.
+Keep state and actions explicit; a simple `@InnoFlow` body declares
+`some Reducer<State, Action, Never>`. You do not need phase graphs or scheduling
+policies for a counter, form, or ordinary request.
 
-The framework now treats the following as source-of-truth principles:
-
-- Official feature authoring declares the third reducer generic explicitly:
-  use `Never` when no app-boundary output is emitted, or the feature's typed
-  `Output` when it is.
-- `@InnoFlow` features implement `Reducer` through `body`, and the macro generates the required `reduce(into:action:)` entry point from that composition.
-- Composition happens through `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`.
-- `PhaseTransitionGraph` is an opt-in validation layer, not a generic automata runtime.
-- Binding remains explicit opt-in through `@BindableField`, and SwiftUI bindings use projected key paths such as `\.$step`.
-- The `TestStore.exhaustivity` contract defaults to `.on`, requiring complete state-transition and effect-action assertions; uncancelled runtime effect errors always fail independently of that policy.
-- Every `Store.send(_:)` returns a `FlowTask` that can finish or cancel only that dispatch's complete descendant effect tree.
-- Reducers may emit typed, ephemeral `Output` values to a live app-boundary stream without putting navigation commands in restorable state.
-- `Store` serializes effect cancellation and run-failure arbitration on the MainActor. Once cancellation wins, a late error from uncooperative work is not reclassified as `didFailRun`.
-- InnoFlow owns business/domain transitions only.
-
-Cross-framework ownership stays explicit:
-
-- App-layer navigation state or another navigation library owns concrete route stacks.
-- Transport and session lifecycle stay outside InnoFlow.
-- Construction-time dependency graphs stay outside InnoFlow and enter reducers as explicit bundles.
-
-Boundary references:
-
-- [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bridges dependencies, instrumentation, and cross-framework boundaries for non-trivial features
-- [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
-- [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
-- [`MIGRATION.md`](MIGRATION.md) for 6.0.0 changes and prior release migrations
-- [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md) for `.sink`, `.osLog`, `.signpost`, and `.combined` examples
-- [`docs/PERFORMANCE_BASELINES.md`](docs/PERFORMANCE_BASELINES.md) for maintainer baseline policy
-- [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for TCA, ReactorKit, ReSwift, and SwiftRex positioning
-- [InnoFlow API reference](https://innosquadcorp.github.io/InnoFlow/documentation/innoflow/) for the facade, core runtime, composition, and phase symbols
-- [InnoFlowTesting API reference](https://innosquadcorp.github.io/InnoFlow/testing/documentation/innoflowtesting/) for the public test harness, clock, and instrumentation symbols
-
-For stable framework guarantees that should not drift with scorecards or line counts, see
-[`ARCHITECTURE_CONTRACT.md`](./ARCHITECTURE_CONTRACT.md).
-
-Project stewardship is documented in [`GOVERNANCE.md`](GOVERNANCE.md).
-Before opening an issue or pull request, see [`SUPPORT.md`](SUPPORT.md),
-[`CONTRIBUTING.md`](CONTRIBUTING.md), the
-[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and [`SECURITY.md`](SECURITY.md).
-
-## Why InnoFlow over TCA?
-
-TCA remains the stronger default when a team wants a broad application
-architecture with integrated dependency management, navigation patterns,
-testing conventions, and a large ecosystem. Choose InnoFlow when the framework
-boundary should stay smaller: reducers own business transitions, dependencies
-are constructor-injected bundles, navigation and transport stay at the app
-boundary, and SwiftUI-specific conveniences live in the optional
-`InnoFlowSwiftUI` product.
-
-See [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for the
-longer comparison against TCA, ReactorKit, ReSwift, and SwiftRex.
+Follow the counter and deterministic test below, then add concepts only when
+that feature needs them. This documentation describes the 6.0.0 candidate;
+5.1.1 remains the stable baseline until publication is verified.
 
 ## Installation
 
@@ -1210,3 +1161,72 @@ canonical sample.
 ### Keyword and raw case names
 
 Phase totality treats optional backticks as the same logical identifier. Action and Output case paths preserve spaces, punctuation, and Unicode; use Swift backticks when referencing a generated raw-name member. Ordinary names and the removal of exactly one leading underscore are unchanged. Real missing cases and member collisions still diagnose.
+
+## InnoFlow 6.0.0
+
+This source revision documents the 6.0.0 release candidate and target API.
+Version 5.1.1 was the published stable baseline at candidate freeze; verify
+the live 6.0.0 tag and GitHub Release status before treating it as published.
+
+The framework now treats the following as source-of-truth principles:
+
+- Official feature authoring declares the third reducer generic explicitly:
+  use `Never` when no app-boundary output is emitted, or the feature's typed
+  `Output` when it is.
+- `@InnoFlow` features implement `Reducer` through `body`, and the macro generates the required `reduce(into:action:)` entry point from that composition.
+- Composition happens through `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`.
+- `PhaseTransitionGraph` is an opt-in validation layer, not a generic automata runtime.
+- Binding remains explicit opt-in through `@BindableField`, and SwiftUI bindings use projected key paths such as `\.$step`.
+- The `TestStore.exhaustivity` contract defaults to `.on`, requiring complete state-transition and effect-action assertions; uncancelled runtime effect errors always fail independently of that policy.
+- Every `Store.send(_:)` returns a `FlowTask` that can finish or cancel only that dispatch's complete descendant effect tree.
+- Reducers may emit typed, ephemeral `Output` values to a live app-boundary stream without putting navigation commands in restorable state.
+- `Store` serializes effect cancellation and run-failure arbitration on the MainActor. Once cancellation wins, a late error from uncooperative work is not reclassified as `didFailRun`.
+- InnoFlow owns business/domain transitions only.
+
+Cross-framework ownership stays explicit:
+
+- App-layer navigation state or another navigation library owns concrete route stacks.
+- Transport and session lifecycle stay outside InnoFlow.
+- Construction-time dependency graphs stay outside InnoFlow and enter reducers as explicit bundles.
+
+Boundary references:
+
+- [`docs/ADVANCED_AUTHORING.md`](docs/ADVANCED_AUTHORING.md) bridges dependencies, instrumentation, and cross-framework boundaries for non-trivial features
+- [`docs/CROSS_FRAMEWORK.md`](docs/CROSS_FRAMEWORK.md) for navigation / transport / DI ownership
+- [`docs/DEPENDENCY_PATTERNS.md`](docs/DEPENDENCY_PATTERNS.md) for reducer-facing dependency construction patterns
+- [`MIGRATION.md`](MIGRATION.md) for 6.0.0 changes and prior release migrations
+- [`docs/INSTRUMENTATION_COOKBOOK.md`](docs/INSTRUMENTATION_COOKBOOK.md) for `.sink`, `.osLog`, `.signpost`, and `.combined` examples
+- [`docs/PERFORMANCE_BASELINES.md`](docs/PERFORMANCE_BASELINES.md) for maintainer baseline policy
+- [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for TCA, ReactorKit, ReSwift, and SwiftRex positioning
+- [InnoFlow API reference](https://innosquadcorp.github.io/InnoFlow/documentation/innoflow/) for the facade, core runtime, composition, and phase symbols
+- [InnoFlowTesting API reference](https://innosquadcorp.github.io/InnoFlow/testing/documentation/innoflowtesting/) for the public test harness, clock, and instrumentation symbols
+
+For stable framework guarantees that should not drift with scorecards or line counts, see
+[`ARCHITECTURE_CONTRACT.md`](./ARCHITECTURE_CONTRACT.md).
+
+Project stewardship is documented in [`GOVERNANCE.md`](GOVERNANCE.md).
+Before opening an issue or pull request, see [`SUPPORT.md`](SUPPORT.md),
+[`CONTRIBUTING.md`](CONTRIBUTING.md), the
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and [`SECURITY.md`](SECURITY.md).
+
+## Why InnoFlow over TCA?
+
+TCA remains the stronger default when a team wants a broad application
+architecture with integrated dependency management, navigation patterns,
+testing conventions, and a large ecosystem. Choose InnoFlow when the framework
+boundary should stay smaller: reducers own business transitions, dependencies
+are constructor-injected bundles, navigation and transport stay at the app
+boundary, and SwiftUI-specific conveniences live in the optional
+`InnoFlowSwiftUI` product.
+
+See [`docs/FRAMEWORK_COMPARISON.md`](docs/FRAMEWORK_COMPARISON.md) for the
+longer comparison against TCA, ReactorKit, ReSwift, and SwiftRex.
+
+
+### Learn in three levels
+
+- Level 1: Reduce, Store, BindableField and TestStore; use the existing counter/form and test examples
+- Level 2: Scope, ForEach, select and typed Output when a feature grows
+- Level 3: FlowTask, optional child lifetimes, run lanes, withFlowScope, PhaseMap, diagnostics and the optional InnoFlowInspector product
+
+SwiftUI presentation helpers cover sheet, full-screen cover (non-macOS), navigation destination, popover where supported, alert and confirmation dialog. Alert/dialog titles accept LocalizedStringKey, StringProtocol and Text; literals retain SwiftUI localization behavior. innoFlowTask ties only its own dispatch to disappearance or ID changes. Inspector reads payload-free diagnostics and explicit phase labels and is recommended behind DEBUG. See docs/SWIFTUI_DX_6_0.md for platform limits and examples.

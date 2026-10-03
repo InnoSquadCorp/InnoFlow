@@ -550,7 +550,7 @@ The runtime owns shared throttle completion even when callers discard every hand
 
 ### Optional child ownership
 
-Use opt-in `OptionalChildLifetime` / `.optionalChild(state:action:instanceID:child:)` to bind child effects to an explicit instance ID. Child reduction precedes the complete parent; all owner invalidations apply before effect execution. Instance IDs must change on reopening. Slots, nested owners and Stores isolate equal raw effect IDs. Parent/sibling work survives child closure, and noncooperative tasks remain physically active until return. Existing IfLet is unchanged. See docs/OPTIONAL_CHILD_LIFETIME.md.
+Use opt-in `OptionalChildLifetime` / `.optionalChild(state:action:instanceID:child:)` to bind child effects to an explicit instance ID. Child reduction precedes the complete parent; all owner invalidations apply before effect execution. Instance IDs must change on reopening. Slots, collection elements, nested owners and Stores isolate equal raw effect IDs. Final composed state revalidates active ownership after parent collection removal or replacement. Instance-ID projections must be pure and stable. IfCaseLet lifetime identity uses declaration source coordinates; same-helper overlapping paths require distinct stable lifetimeID values. Parent/sibling work survives child closure, and noncooperative tasks remain physically active until return. Existing IfLet is unchanged. See docs/OPTIONAL_CHILD_LIFETIME.md.
 
 ### Macro migration diagnostics
 

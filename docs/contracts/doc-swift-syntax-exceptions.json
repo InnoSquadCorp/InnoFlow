@@ -17,6 +17,7 @@
     {"file":"docs/MIGRATION_3_1.md","sha256":"d8624b7647bfbf3d40dab0e23c4049174dbdc36340c94cb46501d8ee0acbb267","reason":"Versioned historical pseudocode"},
     {"file":"docs/MIGRATION_3_1.md","sha256":"452d458b606baafbbea5d3286e395e9674cd2664f7a0cafff745e91c2b81e58c","reason":"Versioned historical pseudocode"},
     {"file":"docs/REMEDIATION_FOURTH_FOLLOWUP_PLAN_6_0.md","sha256":"419fa5655df6b7a85a47a88ef2636489be704d908bcd1f60580d287555e26722","reason":"Review-only conditional-compilation fragment"},
-    {"file":"docs/REMEDIATION_FOURTH_FOLLOWUP_PLAN_6_0.md","sha256":"7a26674121d179f391c4d4606bfedd0a41e7ce7aff89307ec28fdbcdb1cf9a95","reason":"Review-only conditional-compilation fragment"}
+    {"file":"docs/REMEDIATION_FOURTH_FOLLOWUP_PLAN_6_0.md","sha256":"7a26674121d179f391c4d4606bfedd0a41e7ce7aff89307ec28fdbcdb1cf9a95","reason":"Review-only conditional-compilation fragment"},
+    {"file":"docs/RUN_LANE_SNAPSHOTS.md","sha256":"398b641760f834b47fc1e76c80d234b561c7976528a4178290db79eb48ef28b6","reason":"Closure-expression fragment; exact typed provider context checked by doc-copyable-examples"}
   ]
 }

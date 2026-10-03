@@ -2,7 +2,11 @@
 
 InnoFlow is a reducer-first state management framework for SwiftUI.
 
-## Overview
+## Level 1: a complete small feature
+
+Start with Reduce, Store, BindableField and TestStore. The counter and test in
+<doc:GettingStarted> are a complete starting point. Add composition and lifetime
+concepts only when the feature needs them.
 
 Use InnoFlow when you want:
 
@@ -19,6 +23,8 @@ SwiftUI app targets that use the `@InnoFlow` macro should use `InnoFlow` plus
 alone. `InnoFlowSwiftUI` and `InnoFlowTesting` reexport `InnoFlowCore`, but
 macro declarations stay in `InnoFlow`.
 
+## Level 2: composition and outputs
+
 `@InnoFlow` synthesizes action paths for unlabeled single-payload cases and
 `id:action:` collection routes. For other labeled or multi-payload cases,
 declare the canonical static `<caseName>CasePath` inside `Action`, or add
@@ -32,6 +38,8 @@ attached macro cannot inspect.
 `ReducerEffect.concatenate(_:)` preserves declaration order, and
 `ReducerEffect.merge(_:)` emits in
 child completion order.
+
+## Level 3: explicit lifetimes and diagnostics
 
 Every ``/InnoFlowCore/Store/send(_:)`` returns a
 ``/InnoFlowCore/FlowTask``. Ignore it for fire-and-forget UI events, await
@@ -144,6 +152,7 @@ the same graph to documentation with `mermaidDiagram()` or `dotGraph(name:)`.
 ### Essentials
 
 - <doc:GettingStarted>
+- <doc:SearchFeatureTutorial>
 - <doc:AsyncSequenceEffects>
 - <doc:EffectTimingBaseline>
 - <doc:PhaseDrivenModeling>

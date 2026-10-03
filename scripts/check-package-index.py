@@ -6,7 +6,7 @@ import re
 import sys
 
 DOCUMENTATION_URL = "https://innosquadcorp.github.io/InnoFlow/documentation/innoflow/"
-PRODUCTS = {"InnoFlowCore", "InnoFlow", "InnoFlowSwiftUI", "InnoFlowTesting"}
+PRODUCTS = {"InnoFlowCore", "InnoFlow", "InnoFlowSwiftUI", "InnoFlowTesting", "InnoFlowInspector"}
 
 
 def validate(root: Path) -> None:

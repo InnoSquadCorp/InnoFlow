@@ -13,6 +13,24 @@ module DocExampleContexts
     bb0c32e1cd20a4428ea162be6e1a55aa15155b5e7af704c875bee6e4e2948bf9
   ].freeze
   EXAMPLES = {
+    "SearchTutorial" => [
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "c1b3adcc39fee5d2158ff9371e4c5d22a30930bb6201f891b0de811a7ad69a88"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "31e684074ea0990c8653675636583aff714a8be0b72a878f8b16ae52d39ff1d6"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "c06d00ef47661c4b40a20fbc3bd719b5b40e1ca7033699c72821dea9f5af8eb5"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "9ffc339ab6a3e292910750cf8ae060363fa4cc15485728411990c7497071dd4b"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "11ff189242790535c10fc7f9d337384fb48e180db5b49905e9f739edd11b9476"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "af57cbba52804257e623d9bb2d1ba28ed253158f8e87bd970c9ac6126c9e9ebc"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "aab46bc173360125c136f3600bdf2cb4b2f18cf3351072df4a606bcdb2fe89e6"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "46b552d7f948b24f7c23cb56a30bfa53462584fd3b2f04b9d16b5915a4daf1a8"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "c2a851f3a2532811846185f528f09fe743e15f21d73009a8ef3c2daaebeac82d"],
+    ],
+    "SearchTutorialView" => [
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "c1b3adcc39fee5d2158ff9371e4c5d22a30930bb6201f891b0de811a7ad69a88"],
+      ["Sources/InnoFlow/InnoFlow.docc/SearchFeatureTutorial.md", "c5810337b7b818be08769491fb252439a083fd202574e2a425c7e657b754b15d"],
+    ],
+    "RunLaneSnapshots" => [
+      ["docs/RUN_LANE_SNAPSHOTS.md", "398b641760f834b47fc1e76c80d234b561c7976528a4178290db79eb48ef28b6"],
+    ],
     "ReadmeComposition" => [
       ["README.md", "d9ce80e2c34c8b2cb09bd6902dd44d8eec1bc9ffb919e19e25419d6dc439862c"],
       ["README.md", "7621e28cbba9006155abace1eab761d5437340381f786cc46f6aaafe8812a86f"],
@@ -125,6 +143,8 @@ module DocExampleContexts
   }.freeze
 
   TEST_NAMES = {
+    "SearchTutorial" => %w[searchTutorialLevelOne() searchTutorialComposition() searchTutorialPhaseCoverage() searchTutorialDispatchOwnership() searchTutorialExploration()],
+    "RunLaneSnapshots" => %w[runLaneSnapshotProvider()],
     "ReadmeComposition" => %w[readmeComposition()],
     "ReadmeOutputs" => %w[readmeOutputBroadcast() readmeOutputCapture()],
     "ReadmeLifetimes" => %w[readmeDispatchLifetime() migrationDispatchLifetime() migrationMethodValue() readmeFlowScope()],
@@ -187,9 +207,26 @@ module DocExampleContexts
   end
 
   def self.source(root, name, blocks)
+    # Complete tutorial declarations/tests are the source of truth; keep the UI
+    # target separate so non-UI consumer probes do not silently import SwiftUI.
+    return blocks if %w[SearchTutorial SearchTutorialView].include?(name)
+
     header = "import Foundation\nimport InnoFlow\nimport InnoFlowSwiftUI\nimport SwiftUI\n"
     header += "import InnoFlowTesting\nimport Testing\n" if TEST_NAMES.key?(name)
     content = case name
+    when "RunLaneSnapshots"
+      feature + function("runLaneSnapshotProvider", blocks.fetch(0),
+        context: <<~SWIFT, suffix: <<~SWIFT)
+          var store: Store<Feature>? = Store(reducer: Feature())
+          weak var weakStore = store
+          let provider: @MainActor () -> [EffectRunLaneSnapshot] =
+        SWIFT
+          #expect(provider().isEmpty)
+          store = nil
+          #expect(weakStore == nil)
+          #expect(provider().isEmpty)
+          weakStore = nil
+        SWIFT
     when "ReadmeComposition"
       reduce, combine, scope, parent, optional, enum_case, collection = blocks
       path, enum_reducer = enum_case.split("\nIfCaseLet(", 2)

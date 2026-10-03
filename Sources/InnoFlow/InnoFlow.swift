@@ -14,7 +14,8 @@
 /// `@InnoFlow` requires:
 /// 1. Nested `State` type
 /// 2. Nested `Action` type
-/// 3. `var body: some Reducer<State, Action, Never>`
+/// 3. `var body: some Reducer<State, Action, Never>` without a nested `Output`,
+///    or `some Reducer<State, Action, Output>` when a nested `Output` is declared
 ///
 /// When the nested `Action` enum exposes:
 /// - `case child(ChildAction)` the macro synthesizes `Action.childCasePath`

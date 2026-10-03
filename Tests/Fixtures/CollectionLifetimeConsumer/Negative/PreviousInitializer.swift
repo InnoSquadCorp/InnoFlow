@@ -7,9 +7,10 @@ typealias CaseReducer = IfCaseLet<Selection, Action, ChildReducer>
 
 // The previous exact function signature omits source coordinates.
 @MainActor func previousFactory() {
-  let previousInitializer: (
-    CasePath<Selection, Int>, CasePath<Action, Int>, ChildReducer, OnMissingPolicy
-  ) -> CaseReducer = CaseReducer.init
+  let previousInitializer:
+    (
+      CasePath<Selection, Int>, CasePath<Action, Int>, ChildReducer, OnMissingPolicy
+    ) -> CaseReducer = CaseReducer.init
   _ = previousInitializer
 }
 

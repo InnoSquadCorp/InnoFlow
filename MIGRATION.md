@@ -16,6 +16,10 @@ serial(maxPending:) and queueFull(maxPending:) now carry UInt. Nonnegative liter
 
 Existing IfLet keeps its behavior. To adopt state-owned cancellation, replace duplicate child composition with OptionalChildLifetime or the parent optionalChild modifier. Provide a fresh explicit instance ID on reopening; keeping the ID preserves the same lifetime. The wrapper already reduces the child before its complete parent. Lift typed outputs explicitly. Raw effect IDs inside a child are owner-local, so outside raw-ID cancellation no longer reaches opt-in child work. This is an additive opt-in API; see docs/OPTIONAL_CHILD_LIFETIME.md.
 
+### IfCaseLet declaration identity
+
+IfCaseLet now captures defaulted fileID, line and column parameters so optional-child lifetimes remain stable when a computed reducer body rebuilds manual CasePath values. Existing constructor calls continue to compile. A stored initializer function value with the previous four-argument signature needs a closure adapter that calls the initializer. Helpers that create separate overlapping case reducers at one declaration must supply a stable, distinct lifetimeID: EffectID<ID> for each namespace. CasePath cache identity is unchanged. The independent CollectionLifetimeConsumer checks ordinary calls, the explicit-ID overload, a function-value adapter, and rejection of the old direct initializer reference.
+
 ### Testing send return value and output progress
 
 `TestStore.send`, `ScopedTestStore.send`, and phase helper sends return `TestStoreDispatch`. `TestFlowTask` remains a typealias for the earlier draft name. Existing statement calls need no change. Explicit async Void method values and protocol adapters must wrap the call and discard its result. A dispatch handle's finish diagnoses only its own unverified work without consuming it; global store finish retains its whole-store role. In `.off`, receiveOutput now reduces intermediate actions and their follow-up effects while seeking the output under the original deadline. Exhaustive global finish reports both pending action and output counts together.
@@ -230,6 +234,21 @@ Use an uncancelled task to test immediate completion, and separately assert
 cancellation propagation. Nonpositive sleeps do not register a sleeper;
 positive waits still use the deterministic registration APIs before advancing
 manual time. These corrections do not require source-signature changes.
+
+
+### Nested Output is an authoring declaration
+
+A nested type named Output opts the feature into the typed-output contract. A previously unrelated nested Output in a 5.x feature must be renamed or deliberately adopted; it is not silently ignored. The body diagnostic names the expected output type. EffectTask remains the Never-output typealias, so its generic extensions do not become arbitrary-output helpers. Live Store.outputs streams do not replay prior values; dispatch capture buffers from before its send is enqueued.
+
+### Dispatch correlation and timing JSONL
+
+DispatchID.rawValue is now a process-local monotonic UInt64 and init(rawValue:) is unavailable. Use your own domain or tracing identifier for persisted and cross-process correlation. JSON consumers must retain integer precision beyond JavaScript's safe-integer range; use a lossless UInt64-capable parser instead of converting to a floating-point number.
+
+EffectTimingRecorder.Entry.dispatchID is UInt64? and new JSONL records declare schemaVersion 2. Older records without dispatch correlation still decode. UUID-string records fail with an explicit migration diagnostic rather than silently losing identity. The offline scripts/migrate-effect-timing-jsonl.py takes explicit input and a new output path; it preserves the original file and maps each archived UUID to a collision-free file-local integer while retaining legacyDispatchID in the raw converted JSON. These imported numbers are archival correlation only, not live DispatchID values. Keep both raw files; decoding and re-encoding Entry retains its public fields, not the converter's extra provenance field. Numeric IDs are not globally unique and separate process/file captures must not be concatenated as one correlation namespace.
+
+OnChange merges the base and change effects concurrently. Neither Store nor TestStore promises declaration-order emissions from those branches. If the application requires ordered work, express that order with concatenate; completing one branch earlier is not a host mismatch.
+
+PhaseMap's defaulted source coordinates distinguish coverage declaration sites without requiring new arguments at ordinary call sites. If you store the initializer as a function value, use an explicit closure adapter. On Swift6.3, a TestStoreExplorer factory with multiple statements may need an explicit TestStoreExplorer<YourFeature> generic argument; its behavior is unchanged.
 
 ## 5.1.1
 
