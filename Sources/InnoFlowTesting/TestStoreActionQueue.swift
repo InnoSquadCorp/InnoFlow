@@ -47,7 +47,7 @@ private final class ActionQueueWaiterResolution: Sendable {
 /// Explicit release is idempotent; deinitialization covers discard and store teardown.
 package final class TestStoreDispatchActivity: Sendable {
   let tracker: FlowTaskTracker
-  let token: UUID
+  let token: FlowTaskActivityID
 
   init(_ tracker: FlowTaskTracker) {
     self.tracker = tracker

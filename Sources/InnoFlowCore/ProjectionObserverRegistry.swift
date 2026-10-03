@@ -150,6 +150,7 @@ package final class ProjectionObserverRegistry<Snapshot> {
 
   package func refresh(from oldSnapshot: Snapshot, to newSnapshot: Snapshot) {
     refreshPassCount &+= 1
+    guard !alwaysObservers.isEmpty || !dependencyBuckets.isEmpty else { return }
     staleObserverHints &+= refresh(observers: &alwaysObservers)
 
     var firstChangedDependencyKey: ProjectionDependencyKey?
@@ -354,15 +355,10 @@ package final class ProjectionObserverRegistry<Snapshot> {
     // predicate is honored. Always-refresh and memoized selectors must use
     // separate keys: they can originate at the same dynamic call site but
     // cannot share the first-registered bucket predicate.
-    if var bucket = dependencyBuckets[dependencyKey] {
-      bucket.observers[observerID] = weakObserver
-      dependencyBuckets[dependencyKey] = bucket
-    } else {
-      dependencyBuckets[dependencyKey] = DependencyBucket(
-        observers: [observerID: weakObserver],
-        hasChanged: hasChanged
-      )
-    }
+    dependencyBuckets[
+      dependencyKey,
+      default: DependencyBucket(observers: [:], hasChanged: hasChanged)
+    ].observers[observerID] = weakObserver
   }
 
   private func compactIfNeeded() {

@@ -207,15 +207,22 @@ package final class FlowTaskCompletion: Sendable {
 
 /// Thread-safe ownership shared by a root action, its effect interpreters, and
 /// every follow-up action they enqueue.
+package typealias FlowTaskActivityID = UInt64
+
 package final class FlowTaskTracker: Sendable {
+  private struct SharedCompletion {
+    let source: FlowTaskCompletion
+    let observer: UUID
+  }
   private struct WeakCancellationScope {
     weak var value: EffectCancellationScope?
   }
 
   private struct State {
-    var activities: Set<UUID> = []
-    var tasks: [UUID: Task<Void, Never>] = [:]
-    var sharedCompletions: [UUID: FlowTaskCompletion] = [:]
+    var nextActivity: FlowTaskActivityID = 0
+    var activities: Set<FlowTaskActivityID> = []
+    var tasks: [FlowTaskActivityID: Task<Void, Never>] = [:]
+    var sharedCompletions: [FlowTaskActivityID: SharedCompletion] = [:]
     var cancellationScopes: [UUID: WeakCancellationScope] = [:]
     var waiters: [CheckedContinuation<Void, Never>] = []
     var completionObservers: [UUID: @Sendable () -> Void] = [:]
@@ -249,16 +256,17 @@ package final class FlowTaskTracker: Sendable {
     state.withLock(\.isFinished)
   }
 
-  package func beginActivity() -> UUID {
-    let token = UUID()
-    _ = state.withLock { state in
-      guard state.isFinished == false else { return false }
-      return state.activities.insert(token).inserted
+  package func beginActivity() -> FlowTaskActivityID {
+    state.withLock { state in
+      precondition(state.nextActivity < .max, "FlowTask activity counter exhausted")
+      state.nextActivity += 1
+      let token = state.nextActivity
+      if !state.isFinished { state.activities.insert(token) }
+      return token
     }
-    return token
   }
 
-  package func attach(_ task: Task<Void, Never>, to token: UUID) {
+  package func attach(_ task: Task<Void, Never>, to token: FlowTaskActivityID) {
     let shouldCancel = state.withLock { state in
       guard state.activities.contains(token) else { return true }
       state.tasks[token] = task
@@ -275,16 +283,17 @@ package final class FlowTaskTracker: Sendable {
   /// their FlowTask; cancellation releases it without awaiting shared work.
   package func trackCompletion(of completion: FlowTaskCompletion) {
     let token = beginActivity()
-    completion.observe(token) { [self] in
+    let observerID = UUID()
+    completion.observe(observerID) { [self] in
       endActivity(token)
     }
     let shouldDetach = state.withLock { state in
       guard state.activities.contains(token), !state.isCancelled else { return true }
-      state.sharedCompletions[token] = completion
+      state.sharedCompletions[token] = SharedCompletion(source: completion, observer: observerID)
       return false
     }
     if shouldDetach {
-      completion.removeObserver(token)
+      completion.removeObserver(observerID)
       endActivity(token)
     }
   }
@@ -308,13 +317,13 @@ package final class FlowTaskTracker: Sendable {
     outputCapture?.yield(output)
   }
 
-  package func endActivity(_ token: UUID) {
+  package func endActivity(_ token: FlowTaskActivityID) {
     let completion:
       (
         waiters: [CheckedContinuation<Void, Never>],
         observers: [@Sendable () -> Void],
         finishesOutput: Bool,
-        sharedCompletion: FlowTaskCompletion?
+        sharedCompletion: SharedCompletion?
       ) =
         state.withLock { state in
           guard state.activities.remove(token) != nil else { return ([], [], false, nil) }
@@ -329,7 +338,7 @@ package final class FlowTaskTracker: Sendable {
           state.completionObservers.removeAll(keepingCapacity: false)
           return (waiters, observers, true, sharedCompletion)
         }
-    completion.sharedCompletion?.removeObserver(token)
+    if let shared = completion.sharedCompletion { shared.source.removeObserver(shared.observer) }
     if completion.finishesOutput {
       outputCapture?.finish()
       onFinish?(dispatchID)
@@ -360,7 +369,7 @@ package final class FlowTaskTracker: Sendable {
       (
         tasks: [Task<Void, Never>],
         scopes: [EffectCancellationScope],
-        sharedCompletions: [UUID: FlowTaskCompletion],
+        sharedCompletions: [FlowTaskActivityID: SharedCompletion],
         didCancel: Bool
       ) = state.withLock { state in
         guard state.isCancelled == false, state.isFinished == false else {
@@ -383,7 +392,7 @@ package final class FlowTaskTracker: Sendable {
       task.cancel()
     }
     for (token, completion) in snapshot.sharedCompletions {
-      completion.removeObserver(token)
+      completion.source.removeObserver(completion.observer)
       endActivity(token)
     }
   }

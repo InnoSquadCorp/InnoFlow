@@ -137,8 +137,9 @@ package struct TestStoreUnverifiedSnapshot: Equatable, Sendable {
 }
 
 extension TestStore {
-  package func makeDispatch() -> (tracker: FlowTaskTracker, activity: UUID, task: TestStoreDispatch)
-  {
+  package func makeDispatch() -> (
+    tracker: FlowTaskTracker, activity: FlowTaskActivityID, task: TestStoreDispatch
+  ) {
     let activity = finishActivity
     let ledger = TestEffectLedgerStorage()
     let ledgers = effectLedgers

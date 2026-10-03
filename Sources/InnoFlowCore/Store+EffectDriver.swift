@@ -428,16 +428,20 @@ extension Store: EffectDriver {
   package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
     let sequence = effectBridge.markCancelled(id: id, upTo: context?.sequence)
     recordCancellation(id: id, sequence: sequence, dispatchID: context?.dispatchID)
-    let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
-    recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    if diagnostics != nil {
+      let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
+      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    }
     await effectBridge.cancelEffects(id: id, upTo: sequence)
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
     let sequence = effectBridge.markCancelledInFlight(id: id, upTo: context?.sequence)
     recordCancellation(id: id, sequence: sequence, dispatchID: context?.dispatchID)
-    let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
-    recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    if diagnostics != nil {
+      let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
+      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    }
     await effectBridge.cancelInFlightEffects(id: id, upTo: sequence)
   }
 

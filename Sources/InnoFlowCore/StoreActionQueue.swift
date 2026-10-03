@@ -11,7 +11,7 @@ package struct StoreQueuedAction<Action> {
   package let action: Action
   package let animation: EffectAnimation?
   package let flowTaskTracker: FlowTaskTracker?
-  package let flowTaskActivity: UUID?
+  package let flowTaskActivity: FlowTaskActivityID?
 }
 
 package struct StoreActionQueueDrainSnapshot: Sendable, Equatable {
@@ -36,7 +36,10 @@ package final class StoreActionQueue<Action> {
   private var pendingActionHighWaterMark = 0
   private var storageHighWaterMark = 0
 
-  package init() {}
+  private let collectingMetrics: Bool
+  private let actionStride = MemoryLayout<StoreQueuedAction<Action>>.stride
+
+  package init(collectingMetrics: Bool = true) { self.collectingMetrics = collectingMetrics }
 
   package func enqueue(
     _ action: Action,
@@ -53,8 +56,10 @@ package final class StoreActionQueue<Action> {
         flowTaskActivity: flowTaskTracker?.beginActivity()
       )
     )
-    pendingActionHighWaterMark = max(pendingActionHighWaterMark, buffered.count - head)
-    storageHighWaterMark = max(storageHighWaterMark, buffered.count)
+    if collectingMetrics {
+      pendingActionHighWaterMark = max(pendingActionHighWaterMark, buffered.count - head)
+      storageHighWaterMark = max(storageHighWaterMark, buffered.count)
+    }
   }
 
   package func beginDrain() -> Bool {
@@ -67,25 +72,13 @@ package final class StoreActionQueue<Action> {
     guard head < buffered.count else { return nil }
     let action = buffered[head]
     head += 1
-    processedActionCount += 1
+    if collectingMetrics { processedActionCount += 1 }
     compactBufferIfNeeded()
     return action
   }
 
   package func finishDrain() -> StoreActionQueueDrainSnapshot {
-    isDraining = false
-
-    let retainedBytesBeforeClear = estimatedBytes(forCapacity: buffered.capacity)
-    let didReleaseExcessCapacity =
-      retainedBytesBeforeClear > storeActionQueueRetainedStorageBudget
-
-    if didReleaseExcessCapacity {
-      buffered = []
-    } else {
-      buffered.removeAll(keepingCapacity: true)
-    }
-    head = 0
-
+    let didReleaseExcessCapacity = clearBufferAfterDrain()
     let snapshot = StoreActionQueueDrainSnapshot(
       processedActionCount: processedActionCount,
       pendingActionHighWaterMark: pendingActionHighWaterMark,
@@ -94,10 +87,28 @@ package final class StoreActionQueue<Action> {
       retainedByteEstimate: estimatedBytes(forCapacity: buffered.capacity),
       didReleaseExcessCapacity: didReleaseExcessCapacity
     )
+    resetMetrics()
+    return snapshot
+  }
+
+  package func finishDrainDiscardingMetrics() {
+    _ = clearBufferAfterDrain()
+    resetMetrics()
+  }
+
+  private func resetMetrics() {
     processedActionCount = 0
     pendingActionHighWaterMark = 0
     storageHighWaterMark = 0
-    return snapshot
+  }
+
+  private func clearBufferAfterDrain() -> Bool {
+    isDraining = false
+    let oversized =
+      estimatedBytes(forCapacity: buffered.capacity) > storeActionQueueRetainedStorageBudget
+    if oversized { buffered = [] } else { buffered.removeAll(keepingCapacity: true) }
+    head = 0
+    return oversized
   }
 
   private func compactBufferIfNeeded() {
@@ -108,7 +119,7 @@ package final class StoreActionQueue<Action> {
 
   private func estimatedBytes(forCapacity capacity: Int) -> Int {
     let result = capacity.multipliedReportingOverflow(
-      by: MemoryLayout<StoreQueuedAction<Action>>.stride
+      by: actionStride
     )
     return result.overflow ? .max : result.partialValue
   }

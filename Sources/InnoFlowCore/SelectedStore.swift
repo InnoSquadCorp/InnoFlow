@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import Observation
+public import Observation
 
 private func selectedStoreFailureMessage(
   parentType: Any.Type,
@@ -23,13 +23,31 @@ private func selectedStoreFailureMessage(
 @MainActor
 @dynamicMemberLookup
 public final class SelectedStore<Value: Equatable & Sendable> {
-  private var cachedValue: Value
+  @ObservationIgnored private var storedCachedValue: Value
+  @ObservationIgnored private let cachedValueKeyPath: KeyPath<SelectedStore<Value>, Value> =
+    \SelectedStore<Value>.cachedValue
+  private var cachedValue: Value {
+    get {
+      access(keyPath: cachedValueKeyPath)
+      return storedCachedValue
+    }
+    set { withMutation(keyPath: cachedValueKeyPath) { storedCachedValue = newValue } }
+  }
   @ObservationIgnored private weak var parentObject: AnyObject?
   @ObservationIgnored private let sourceIsAlive: @MainActor () -> Bool
   @ObservationIgnored private let valueResolver: @MainActor () -> Value?
   @ObservationIgnored private let inactiveMessage: @MainActor () -> String
   @ObservationIgnored private let parentReleasedMessage: @MainActor () -> String
-  private var isActive = true
+  @ObservationIgnored private var storedIsActive: Bool = true
+  @ObservationIgnored private let isActiveKeyPath: KeyPath<SelectedStore<Value>, Bool> =
+    \SelectedStore<Value>.isActive
+  private var isActive: Bool {
+    get {
+      access(keyPath: isActiveKeyPath)
+      return storedIsActive
+    }
+    set { withMutation(keyPath: isActiveKeyPath) { storedIsActive = newValue } }
+  }
 
   /// Whether this selection is still backed by a live source projection.
   ///
@@ -88,7 +106,7 @@ public final class SelectedStore<Value: Equatable & Sendable> {
     inactiveMessage: @escaping @MainActor () -> String,
     parentReleasedMessage: @escaping @MainActor () -> String
   ) {
-    self.cachedValue = initialValue
+    self.storedCachedValue = initialValue
     self.parentObject = parentObject
     self.sourceIsAlive = sourceIsAlive
     self.valueResolver = valueResolver

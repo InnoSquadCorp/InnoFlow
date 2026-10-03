@@ -1,18 +1,19 @@
-// MARK: - DispatchContext.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
+import os
 
-/// Stable identity for one root `Store.send` dispatch and all descendants.
+/// Process-local, monotonic identity for a root dispatch and its descendants.
+/// It is correlation metadata, never a persisted/domain or cross-process ID.
 public struct DispatchID: Hashable, Sendable, CustomStringConvertible {
-  public let rawValue: UUID
+  private static let counter = OSAllocatedUnfairLock(initialState: UInt64(0))
+  public let rawValue: UInt64
 
-  public init(rawValue: UUID = UUID()) {
-    self.rawValue = rawValue
+  public init() {
+    rawValue = Self.counter.withLock { value in
+      precondition(value < .max, "DispatchID counter exhausted")
+      value += 1
+      return value
+    }
   }
 
-  public var description: String {
-    rawValue.uuidString
-  }
+  public var description: String { String(rawValue) }
 }

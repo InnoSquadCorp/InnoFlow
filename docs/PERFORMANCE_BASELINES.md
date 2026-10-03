@@ -125,3 +125,27 @@ swift test --package-path . \
   -c release \
   --filter PhaseMapPerfTests
 ```
+
+## 2026-10-03 Linux optimization qualification
+
+A fixed product-only Swift6.4/NSLock-mirror experiment compared a frozen expanded
+implementation before and after the isolated optimization bundle. Thirty AB/BA
+pairs per workload plus two warmups per side produced512 processes. An
+independent implementation reproduced every paired median and10,000-resample
+bootstrap interval. The median/95% upper ratio gates for S1/S2 were at most0.95;
+every supported workload also had to stay at most1.05 by paired median. All eight
+supported workloads passed. S5 and TCA/Apple targets were not evaluated.
+
+S1/S2 paired ratios were0.125717 [0.123917,0.127665] and0.106217
+[0.101454,0.107891]. These describe the complete optimization bundle, not any
+individual change. S2 is one root plus ten synchronous descendant reductions.
+The timer is ContinuousClock elapsed time, not CPU time. Reported per-operation
+values are process-average elapsed time divided by iteration count, then the
+median across processes, not the latency distribution of individual requests.
+
+The first completed capture had asymmetric testability flags and is excluded in
+full. Its samples are not merged with the admitted experiment. Later collection
+lifetime fixes require a separately frozen final-source regression check; this
+intermediate receipt must not be relabeled as final-SHA certification. See the
+implementation ledger/status and the separate benchmark packages for the
+remaining Apple, SDK, rendering, profiler and exact-source boundaries.
