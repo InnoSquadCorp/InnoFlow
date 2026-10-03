@@ -1,0 +1,294 @@
+---
+date: 2026-10-03
+project: InnoFlow
+design: InnoFlow 6.0.0 pre-release defects and lifetime consistency
+owner: Codex design draft
+decision-owner: Repository owner
+status: Draft
+reviewed-by: []
+approved-by:
+document-depth: standard
+---
+
+# InnoFlow 6.0.0 출시 전 결함 수정 및 핵심 기능 일관성 계획
+
+## 목적과 범위
+
+사용자가 제시한 D1·D2·T1·T2·M1·M2를 개선하고, Store와 TestStore가 같은 action/effect 소유권을 적용하며, 선택적으로 자식 상태의 수명과 작업 수명을 연결한다. 여섯 항목, TestFlowTask, optional child lifetime, 공통 시나리오 검증을 **모두 6.0.0 출시 전 완료 범위**로 잡는다. 이 문서는 요청된 구현 계획이며 구현 완료·API 승인·배포 승인을 뜻하지 않는다.
+
+공개 API와 취소 의미, 두 driver 및 queue에 걸친 변경이므로 standard 깊이를 선택했다. navigation stack, DI graph, 공유 상태/persistence, 새 SwiftUI 화면은 범위 밖이다. 실제 코드 변경 없이 기존 검토 artifact 옆에 작성했다.
+
+기준 revision: `138992674025cb6faa69d224c30580e0fce63e85`. 설계의 현재 구조 설명은 이 revision에 한정한다. 구현 시작 시 원격 최신 및 기존 작업을 다시 확인해야 한다.
+
+계획 담당은 Codex, 최종 범위/API 결정자는 저장소 소유자다. 실제 구현 담당과 리뷰어는 착수 시 기록한다. 목표 배포일은 지정되지 않았으므로 일정 대신 단계별 완료 조건으로 관리한다. 이 범위를 유지하는 한 미완료 항목은 출시 전에 닫으며, 일정에 맞춰 다음 minor로 자동 이관하지 않는다.
+
+## 확인된 구조
+
+| 사실 | 기준 소스 |
+|---|---|
+| Store.send는 FlowTaskTracker를 만들고 FlowTask를 반환 | Sources/InnoFlowCore/Store.swift:86 |
+| FlowTaskTracker가 activity/task/취소 scope 및 완료 observer를 관리 | Sources/InnoFlowCore/FlowTask.swift |
+| EffectWalker와 EffectRunScheduler는 이미 두 driver가 공유 | Sources/InnoFlowCore/EffectWalker.swift, EffectRunScheduler.swift |
+| TestStore.send는 async Void이며 새로운 effect context를 만듦 | Sources/InnoFlowTesting/TestStore+Public.swift:18 |
+| TestStore queue는 action과 context를 함께 저장 | Sources/InnoFlowTesting/TestStoreActionQueue.swift:52 |
+| receive 후 reduction 경로는 새 context를 생성 | Sources/InnoFlowTesting/TestStore+Public.swift:274 |
+| IfLet은 optional child의 action/state를 scope하지만 parent reduction 전후를 감싸지 않음 | Sources/InnoFlowCore/ReducerComposition.swift:260 |
+| FlowScope는 명시적으로 track한 dispatch만 소유 | Sources/InnoFlowCore/FlowScope.swift |
+
+증거 상태: 기존 구조와 여섯 항목의 관련 코드를 읽어 대조했다. 여섯 항목의 실행 재현은 사용자가 제공한 결과이며, 이 계획 작업에서 새로 실행하지 않았다. 각 항목의 실패 재현과 통과 대조군을 구현 첫 단계에서 고정한다. 기존 검토의 테스트/CI 결과는 이전 후보에 대한 이력이며 이번 변경의 통과 증거가 아니다. 아래 API와 동작은 제안이며 현재 API로 복사해 사용할 수 없다.
+
+이 문서의 D1·D2는 2026-10-03에 전달된 throttle/perform 문제다. 저장소의 과거 문서에 나오는 동명 D1·D2와 구분해 구현·증거 장부에는 `2026-10-03/D1` 같은 접두사를 사용한다.
+
+## 0. 여섯 발견 사항의 처리
+
+| ID | 요구사항 및 수정 방향 | 주된 변경 경계 | 완료 증거 |
+|---|---|---|---|
+| D1 | 반환 핸들을 버려도 dispatch 완료 추적이 유지된다. runtime이 완료 관찰 책임을 보유하고 terminal 처리를 정확히 한 번 실행한다. | FlowTask.swift, EffectWalker.swift의 throttle, StoreDiagnostics.swift | 폐기/보관 핸들 모두 trailing 1건 및 반복 요청 종료 후 active=0; run/debounce 통과 대조; shared window 취소 격리 |
+| D2 | perform은 실제 취소 상태가 아니면 모든 thrown error를 failure로 매핑한다. 오류 타입만으로 결과를 버리지 않는다. | EffectTask.swift, EffectContext와 두 driver의 취소 확인 | 직접 던진 CancellationError→failure 1회; 일반 오류→failure 1회; 정상→success 1회; 취소 수락 이후→둘 다 0회 |
+| T1 | .off receiveOutput은 출력에 필요한 effect action과 후속 effect를 진행시킨다. .on의 명시적 action 검증은 유지한다. | TestStore+Output/Receive/Exhaustivity, ActionQueue, effect context | 직접 output/action→output/후속 action→output, 총 deadline, 취소, 두 큐 동시 도착 및 출력 기아 방지 |
+| T2 | exhaustive finish는 미처리 action과 output을 같은 시점의 결과로 함께 보고한다. | TestStore+Finish 및 terminal verification | action만/output만/둘 다/둘 다 없음, 실패 진단 후 정리 및 중복 보고 방지 |
+| M1 | Phase case 선언과 참조를 동일한 논리 식별자로 비교한다. | InnoFlowMacro+PhaseTotalityDiagnostics.swift | default 등 키워드의 백틱 표기 조합 실제 컴파일 성공; 실제 누락은 계속 실패 |
+| M2 | 생성 멤버명과 enum case 참조를 유효한 Swift 식별자로 출력한다. | InnoFlowMacro+OutputPathSynthesis.swift 및 공통 이름 처리 | raw identifier의 기본 enum 컴파일 통과 대조 + macro consumer 컴파일; 충돌/수동 경로/조건부 선언 검증 |
+
+### D1·D2: 수명과 종료 규칙부터 고치기
+
+- D1은 weak를 strong으로 바꾸는 한 줄 수정으로 완료 처리하지 않는다. tracker→observer→tracker 순환, 취소됐지만 공유 Task가 끝나지 않는 경우, Store 해제, 다른 dispatch가 공유 중인 throttle window를 함께 검증한다.
+- 완료 관찰 등록은 정상 종료/취소/대체/Store 종료에 대해 멱등적으로 해제한다. 공유 작업에서 한 dispatch가 이탈해도 다른 dispatch의 작업은 살아 있어야 한다. diagnostics를 지우는 것만으로 실제 cleanup을 대체하지 않는다.
+- D2는 `EffectContext`의 권위 있는 취소 상태(Task 취소와 runtime 경계 포함)를 기준으로 한다. 취소와 실패 전달이 경쟁하면 실제 action 전달 직전에도 유효성을 검사한다. 이미 적용한 action을 뒤늦게 회수하지 않는다.
+- 일반 `.run`/AsyncSequence의 기존 CancellationError 정상 종료 규칙은 별도다. `perform`의 결과 매핑을 고치며 모든 run overload의 계약까지 일괄 변경하지 않는다. 차이를 문서와 대조 fixture로 고정한다.
+
+### M1·M2: 비교와 코드 출력을 분리하기
+
+논리 이름 추출, 생성 멤버명 도출, Swift source escaping을 분리한 공통 도구를 사용한다. 공백을 임의로 underscore로 치환하면 서로 다른 이름이 합쳐지므로 채택하지 않는다. 현재 일반 case의 `fooCasePath`와 선행 underscore 변환은 호환성을 확인해 유지하며, 변경이 필요하면 API 분류에 남긴다.
+
+Phase/Action/Output의 관련 이름 처리 호출부도 조사하되, 전체 매크로를 재작성하지 않는다. 기존 수동 case path, ignore attribute, 조건부/availability 선언, 이름 충돌 진단이 같은 논리 이름 규칙을 사용해야 한다. 각 지원 toolchain에서 macro 없는 원본 enum이 유효한지 먼저 확인한다. 언어 자체가 지원하지 않는 raw spelling은 macro 결함으로 오분류하지 않는다.
+
+## 먼저 고정할 공통 계약
+
+1. 루트 send 하나가 dispatch 하나를 만든다. effect가 보낸 action을 receive한 뒤 생기는 후속 effect도 같은 dispatch를 따른다. sequence/order 정보는 별개로 증가할 수 있으며, dispatch ID와 혼동하지 않는다.
+2. 취소는 소유한 작업에만 적용한다. 형제 dispatch, 다른 Store, 다른 child 인스턴스의 작업을 취소하지 않는다.
+3. 취소 수락 뒤 늦은 action/Output은 reduce/deliver 전에 걸러진다. 이미 적용한 상태 변화는 rollback하지 않는다.
+4. 취소 요청과 물리적 완료를 구분한다. 불응하는 작업을 강제 종료했다고 표시하지 않는다. serial/drop slot도 작업이 실제 끝나기 전에 재사용하지 않는다.
+5. 테스트의 기다림이 검증을 대신하지 않는다. effect action/Output은 기존 단일 queue에서 명시적으로 검증하며, task handle이 검증되지 않은 일을 몰래 소비하지 않는다.
+6. 자식의 업무 ID와 수명 ID는 다르다. 같은 업무 항목을 닫았다 다시 열어도 이전 인스턴스 작업이 새 상태에 반영되지 않아야 한다.
+7. 공개 핸들은 작업을 제어·관찰하는 수단이다. 사용자가 핸들을 보관해야만 runtime의 완료/cleanup이 정상 동작하는 구조를 허용하지 않는다.
+8. perform의 성공/실패 매핑과 수락된 취소는 구분한다. 테스트의 종료 진단은 action과 Output 중 하나를 누락하지 않는다.
+9. 지원 toolchain에서 유효한 식별자는 macro 의미 비교에서도 같게 인식되고, 생성 코드에도 유효하게 표현된다.
+
+## A. TestStore dispatch handle와 T1·T2 통합
+
+제안: `@discardableResult TestStore.send(...) async -> TestFlowTask`. 공개 이름은 초안이다. 기존 statement 호출은 유지되지만 Void 반환 함수값·프로토콜 래핑 코드는 영향을 받을 수 있어 migration/API 검증 대상이다.
+
+```swift
+// 제안 API — 현재는 지원하지 않음
+let task = await store.send(.load)
+await store.receive(.loaded(items)) {
+  $0.items = items
+}
+await task.finish()
+await store.finish()
+```
+
+- TestFlowTask는 Core의 기존 dispatch tracking/cancellation을 재사용하는 testing adapter다. 새로운 별도 effect interpreter를 만들지 않는다.
+- `cancel`, `isCancelled`, `isFinished`는 같은 소유권 계약을 사용한다. `finish(timeout:)`는 테스트 위치와 유한 deadline을 가진 dispatch 완료 검증이다.
+- root/ScopedTestStore/PhaseMap·PhaseTransitionGraph helper/scenario 경로가 모두 같은 dispatch를 전달한다. scoped helper가 두 번째 root dispatch를 만들면 안 된다.
+- queue matching 결과는 action만 남기지 않고 원래 context와 activity ownership을 보존한다. receive/자동 정리/실패/취소 경로에서 ownership을 정확히 한 번 이전 또는 해제한다.
+- enqueue 전에 activity를 등록하고, receive된 action의 reduction·후속 effect 등록이 끝난 뒤 이전 activity를 해제한다. effect 종료와 receive 사이 빈 구간에 조기 완료가 발생하지 않게 한다.
+- output은 기존 root queue에서 한 번만 검증한다. 1차 범위에서는 테스트용 capture stream을 추가하지 않는다. output delivery의 runtime 완료와 테스트 미검증 output 기록은 분리하되, task.finish는 자기 dispatch의 미검증 output도 검사한다.
+
+### finish의 테스트 의미
+
+권고 계약: task.finish는 해당 dispatch의 완료를 검증하며 queue를 drain하지 않는다. 미수신 action/Output이 있으면 해당 위치를 가리키는 진단을 내고, 다른 dispatch의 항목을 건너뛰거나 순서를 바꾸지 않는다. active task를 기다리는 중 자기 dispatch의 action이 도착해도 이를 소비하지 않고 receive 필요성을 보고한다. timeout은 하나의 총 deadline으로 처리한다.
+
+이 원칙은 `.off`에서도 task 단위 finish에 적용한다. `.off`의 중간 action 처리는 receive 계열과 기존 global finish에서 수행한다. task.finish 자체는 검증을 생략하는 API가 아니다. 따라서 사용자는 명시적 receive, 개선된 .off receiveOutput, 또는 기존 global finish로 queue를 진행한 뒤 task finish를 사용할 수 있다. 이 구분을 문서와 반례 fixture로 검증한 뒤 공개 이름을 확정한다.
+
+실제 Store의 FlowTask.finish는 runtime이 action을 자동 reduce하는 동안 기다리고, TestFlowTask.finish는 사람이 진행시키는 테스트가 같은 종료 조건에 도달했는지 확인한다. 동작을 복제하는 대신 소유권/종료 계약을 공유한다. TestFlowTask는 store를 강하게 유지하지 않으며 store 해제 후 stale handle 동작도 명시한다.
+
+### .off receiveOutput과 finish의 역할
+
+| 호출 | action 처리 | Output 처리 | 실패/취소 범위 |
+|---|---|---|---|
+| receiveOutput, .on | 자동 reduce 없음; 필요한 action은 사용자가 receive | FIFO 첫 출력 검증 | 불일치/총 timeout 진단, 다른 dispatch 취소 금지 |
+| receiveOutput, .off | 필요한 동안 FIFO action을 한 단계씩 reduce하고 후속 effect 실행 | FIFO 출력 매칭, 불일치 출력은 .off 정책으로 생략 | 하나의 총 deadline; 대기 호출 취소는 waiter를 정리하고 가짜 timeout 금지 |
+| TestFlowTask.finish, on/off | 소비·자동 reduce 없음 | 소비·자동 생략 없음; 자기 dispatch 미검증 항목 진단 | 자기 dispatch만 검사; timeout 시 자기 작업 취소 요청, 완료로 위장하지 않음 |
+| TestStore.finish, .on | 미처리 action 수집 | 같은 terminal snapshot에 미처리 output도 수집 | 전체 테스트 종료 진단 후 기존 전체 cleanup |
+| TestStore.finish, .off | 기존 전체 자동 처리 유지 | 기존 생략 정책 유지 | 전체가 idle 될 때까지 하나의 총 deadline |
+
+T1의 loop는 이미 도착한 output을 우선 검사하고, 없으면 action 하나를 처리한 뒤 다시 output을 검사한다. 각 queue의 FIFO를 보존하며 새 전역 action/output 순서를 약속하지 않는다. action 폭주 때문에 도착한 output을 무한히 미루면 안 된다. 비어 있을 때는 두 queue의 변경을 관찰하는 비소비성 신호/revision을 기다린다. 두 개의 `next()`를 경쟁시켜 패배한 쪽의 값을 잃는 구현과 busy polling은 배제한다. 기다림 등록과 queue 확인 사이 lost wakeup이 없도록 한다.
+
+최초의 이미 buffered 값 처리와 zero timeout 규칙은 기존 receive/finish 정책과 대조해 고정한다. 재귀 action, skipped output, invalidated event 때문에 deadline이 갱신되어서는 안 된다. showSkippedAssertions, 취소 유효성, runtime error 진단도 기존 정책을 따른다.
+
+T2는 cleanup 전에 같은 MainActor 시점에서 action/output 양쪽을 수집한 internal terminal result로 보고한다. diagnostics의 개별 값 미리보기는 제한하고 전체 개수는 정확히 남긴다. 기존 assertion 위치를 유지하며 deinit에서 같은 실패가 중복 보고되지 않게 terminal revision을 닫는다. snapshot 이후 새 오류/작업이 생기면 별도로 미검증 상태가 다시 열려야 한다.
+
+### handle 경계 동작
+
+- `isFinished`는 runtime dispatch 완료이고 검증 완료와 같지 않다. queued action은 아직 runtime 진행이 필요하므로 완료를 막지만, 전달된 output의 미검증 의무는 별도 ledger가 보유한다. runtime이 끝났어도 task.finish는 미검증 output을 진단한다.
+- finish 중 caller가 취소되면 그 dispatch 취소를 요청하고 테스트 대기 자원을 정리한다. 비협조적 작업은 실제 완료할 때까지 별도로 추적한다. 취소된 테스트 대기가 영원히 멈추거나 물리적 완료를 거짓 표시하지 않는다.
+- 단순 미검증 항목 진단은 queue를 소비하거나 다른 dispatch를 취소하지 않는다. receive 후 다시 finish할 수 있어야 한다. timeout/명시적 취소/전체 finish 실패 cleanup의 범위는 각각 구분한다.
+- Store 해제 뒤 handle이 남아도 store를 부활시키지 않는다. 해제 시 미검증 의무를 먼저 진단/이관하고 stale handle은 이미 보고한 오류를 반복하지 않는다. 취소 및 남은 physical activity에 대한 안전한 상태를 유지한다.
+- FlowScope 연결이 필요하면 Testing→Core adapter로 처리한다. Core→Testing 역의존이나 별도의 수명 해석기를 만들지 않는다.
+
+## B. optional child lifecycle composition
+
+기존 IfLet의 의미는 유지하고 opt-in 조합을 추가한다. public spelling은 미정이며, 의미상 **parent reducer 전체와 child reducer를 함께 감싸는 wrapper**를 권고한다. 기존 IfLet에 단순 `.cancellable(childID)`를 붙이는 방식으로는 parent가 child를 제거한 전이를 볼 수 없다.
+
+한 reduction의 순서:
+
+1. reduction 전 child의 instance identity를 관찰한다.
+2. child action이면 기존 child를 먼저 reduce하고 그 effect에 owner를 지정한다.
+3. parent를 reduce한다. parent가 child를 제거·교체할 수 있다.
+4. 전후 instance identity를 비교해 종료된 owner를 runtime에 전달한다.
+5. action drain의 다음 action 및 모든 effect/output 전달 전에 종료 owner의 cancellation boundary가 반영되게 한다. 동일 action에서 나온 child effect라도 child가 종료됐다면 실행/출력되지 않아야 한다.
+
+보통의 merge effect 뒤에 cancel effect 하나를 붙이는 구현만으로는 5번의 순서를 보장하지 못한다. dispatch와 child owner 메타데이터를 공유 execution context에 넣고, 두 driver의 공통 reduction/effect 진입 경계에서 종료 처리를 해야 한다. reducer가 Task를 직접 만들거나 취소하는 구조는 채택하지 않는다.
+
+### identity와 소유권
+
+- opt-in API는 stable하고 Hashable/Sendable한 **child instance ID**를 요구한다. 업무 ID를 재사용하는 앱은 새로운 instance ID를 생성해야 한다. 같은 ID를 유지하며 payload만 바꾸는 것은 같은 수명으로 해석한다.
+- 내부 owner는 Store + composition 위치/부모 owner + instance identity/등록 generation으로 구분한다. 다른 Store나 다른 optional slot에서 같은 raw ID를 써도 충돌하지 않는다.
+- 닫힌 owner는 늦게 도착한 이벤트가 새 owner로 재해석되지 않도록 폐기 상태를 유지한다. 새 상태를 읽어서 과거 이벤트에 현재 ID를 붙이지 않는다.
+- owner별 cancellation은 user-visible EffectID와 별개다. opt-in child scope 내 scheduler/cancellation ID의 namespace 정책을 정해야 한다. 같은 raw ID를 쓰는 sibling의 lane/취소가 섞이지 않는 것이 필수 합격 조건이다.
+- 부모 dispatch는 child 바깥의 작업도 소유할 수 있다. child 제거를 이유로 루트 FlowTask 전체를 취소하지 않는다. child lifetime과 root dispatch lifetime은 교차하는 두 소유 범위다.
+- same-action remove/recreate가 동일 instance ID로 표현되면 전후 snapshot만으로 구분할 수 없다. 앱은 새로운 instance ID를 표현해야 하며 이를 helper가 추측하지 않는다.
+
+1차 공개 범위는 optional child다. enum/collection에는 같은 primitive와 동일성 규칙을 재사용하되 optional+중첩+sibling 검증 후 별도 단위로 추가한다. 필요 없는 형태를 한 번에 모두 API로 굳히지 않는다.
+
+wrapper는 child reduction을 직접 합성하므로 같은 child에 기존 IfLet을 중복 설치하지 않는 사용 예제를 제공한다. typed child Output은 기존 mapOutput/promoteOutput 조합으로 부모 Output에 맞춘다. 공용으로 쓸 수 없는 generic 제약이나 macro 작성 방식과 충돌하는 public spelling은 S0 consumer sketch에서 걸러낸다.
+
+owner token은 reduction 결과의 수명 변경 메타데이터와 effect context로 전달하고, action/output admission에서 공통으로 검사한다. reducer가 Store에 직접 접근하거나 임의 Task를 만드는 방식은 채택하지 않는다. 모든 invalidation은 child effect 실행보다 먼저 적용되는 전용 경계여야 하며, 비동기 `.cancel` effect를 뒤에 배치하는 것으로 대신하지 않는다.
+
+opt-in child 내부의 effect ID/lane은 child owner namespace에 둔다. 중첩 child 종료는 그 하위 owner까지 취소하며 parent/sibling은 유지한다. parent 전체 dispatch 취소와 Store 전체 취소는 종전 범위를 유지한다. child 밖에서 raw EffectID로 child 작업까지 우연히 취소하는 동작에 의존하지 않도록 새 API 문서에 경계를 명시한다.
+
+무제한으로 종료 owner ID를 보관하지 않는다. queued event/run이 invalidation 상태를 직접 참조하고, 마지막 참조가 정리되면 owner 등록도 해제한다. 같은 composition slot을 반복 열고 닫아도 과거 tombstone이 계속 쌓이지 않아야 한다.
+
+## C. 공통 검증 행렬
+
+하나의 시나리오 명세를 Store adapter와 TestStore adapter 양쪽에서 실행한다. 구현 자체를 두 개 비교하는 대신 최종 상태·Output 순서·소유권·취소/완료를 비교한다. assertion stepping 차이는 adapter에 한정한다.
+
+| 영역 | 필수 정상·실패 대조 |
+|---|---|
+| dispatch | root→effect→action→후속 effect; 독립 sibling 두 개; 한쪽만 취소 |
+| 완료 | enqueue된 action이 남아 있으면 조기 완료 금지; receive 후 완료; 남은 Output 진단 |
+| 취소 | 시작 전/실행 중/queue 대기 중; caller cancellation; 이미 완료한 handle 재취소 |
+| effect 조합 | merge/concatenate/debounce/throttle; 최신 요청 교체; inherited ID 취소 |
+| scheduler | latest/drop/serial, pending capacity 즉시 반환, 실행 중 physical slot 유지 |
+| child | nil→있음/있음→nil/ID 교체/같은 ID 유지/닫고 업무 ID 재사용 |
+| 격리 | 같은 raw ID의 sibling·nested child·다른 Store; child 종료 후 parent 작업 유지 |
+| late event | 취소 불응 작업의 action과 Output 차단; 동일 reduction에서 child 출력+parent 제거 |
+| 테스트 | root/scoped helper 일치, exhaustive/off, receive timeout/cancellation, 순서 보존, scenario 중단 |
+| 자원·관측 | 종료 후 owned task/scope/queue lease 등록 0, 중복 cleanup 안전, payload-free 진단 |
+| 오류 결과 | perform 성공/일반 오류/직접 CancellationError/실제 취소/취소와 실패 경쟁; 일반 run 대조 |
+| output 진행 | .off 직접 output/중간 action/후속 effect/두 queue 동시 도착; .on 명시 검증 대조 |
+| terminal 진단 | action만/output만/둘 다/없음; 늦은 새 오류; task finish의 다른 dispatch 비간섭 |
+| 매크로 | 일반/키워드/raw 식별자, 누락/충돌/수동 path/ignore/조건부 선언, 실제 소비자 컴파일 |
+
+계약 테스트는 ManualTestClock/명시적 gate로 순서를 만든다. 임의 sleep/polling으로 통과를 기다리지 않는다. 비협조적 작업 fixture는 종료 gate를 열어 실제 cleanup까지 확인한다. 설정된 검증 timeout을 넘으면 완료를 위장하지 않고 실패 증거를 남긴다.
+
+성능 목표는 측정 전 수치로 단정하지 않는다. 동일 runner/toolchain·동일 부하로 변경 전후 dispatch/queue cost와 메모리 회수 추세를 비교한다. 기본 Store가 새 진단 기능을 사용하지 않을 때에도 전체 child state 스캔이나 무제한 종료 이력 저장이 생기지 않는지 확인한다.
+
+구체적인 자원 회귀 기준은 다음과 같다. 이는 측정 결과가 아닌 검증 목표다.
+
+- ManualTestClock과 종료 gate를 사용해 1회 및 1,000회 trailing dispatch/child 열기·닫기를 수행한다. 모든 협조적 작업을 끝낸 뒤 active dispatch, owner, queue waiter, 완료 observer 등록이 시작 수준으로 복귀해야 한다. 진단 history는 설정 capacity 이하를 유지한다.
+- 비협조적 run은 취소 직후 늦은 action/output=0이고 physical slot/실행 추적은 유지되어야 한다. fixture의 종료 gate를 연 뒤에만 physical activity=0을 요구한다.
+- 모든 terminal 경로는 completion/diagnostic을 중복 발행하지 않는다. shared throttle에서 살아 있는 다른 dispatch의 관측을 종료 처리하지 않는다.
+- timeout 검증은 전달된 remaining budget과 제어 가능한 이벤트 순서로 확인한다. CI scheduler의 밀리초 단위 실행 시간으로 성패를 결정하지 않는다.
+- TSAN/ASAN과 위 등록 수 검증을 병행한다. RSS가 바로 줄어야 한다는 불안정한 기준으로 메모리 회수를 판정하지 않는다.
+
+변경 전후 latency/할당 비교의 수치 허용 범위는 S0에서 동일 환경 baseline을 수집한 뒤 기록한다. 그 전에는 성능 개선률이나 손실이 없다고 주장하지 않는다. 최소 기준은 반복 횟수에 비례해 남는 등록/observer가 없고, hot path에 전체 과거 이력 스캔이 추가되지 않는 것이다.
+
+## D. 실행 순서와 변경 단위
+
+각 단위는 리뷰 가능한 patch/commit 경계의 제안이다. 이 계획 작성 중 commit이나 PR을 만들지는 않는다. D1을 토대로 수명 추적을 고친 뒤 TestFlowTask와 자식 수명 기능을 올린다. M1·M2는 runtime 변경과 의존성이 낮아 분리 검증한다.
+
+| 단위 | 작업과 주요 파일 | 의존성 | 완료 조건 |
+|---|---|---|---|
+| S0 | 현재 HEAD/dirty/remote/pins 보존, 여섯 재현과 대조군 고정, 공통 계약 및 외부 API sketch | 없음 | 실제 실패/통과 증거 구분, 아래 공개 API 결정 기록, 변경 전 자원/성능 baseline |
+| S1 | D1·D2 및 Core 수명 정리. FlowTask/EffectTask/EffectWalker/StoreDiagnostics | S0 | 핸들 폐기·shared throttle·취소 경쟁 회귀 통과, Store 종료 및 물리적 작업 cleanup 확인 |
+| S2 | M1·M2의 식별자 공통 처리와 컴파일 fixture | S0 | 지원 toolchain의 정상 consumer 통과, 실제 누락/충돌 negative fixture 실패, 기존 이름 호환 |
+| S3a | queued action의 context/dispatch/owner 전달과 TestFlowTask. Public/Receive/Exhaustivity/ActionQueue/EffectDriver, scoped·phase helpers | S1 | root→receive→후속 effect가 같은 dispatch, 조기 완료 없음, 한 dispatch만 취소, root/scoped 동작 일치 |
+| S3b | T1의 .off 출력 진행, T2의 복합 terminal 진단, task/store finish 경계 | S3a | 두 큐 동시 도착·시간 제한·취소·미검증 action/output·다른 dispatch 비간섭 fixture 통과 |
+| S4 | opt-in optional child wrapper와 owner invalidation. ReducerComposition/EffectExecutionContext/EffectRuntime/EffectDriver 및 두 host | S3b | 제거/교체/재진입/중첩/형제/동일 action 출력/late event 검증, 기존 IfLet 대조 통과 |
+| S5 | 공통 시나리오 확대, 공개 문서·consumer·sample·API migration, 최종 후보 동결/CI | S2, S4 | 아래 출시 조건 전체 충족 및 exact-SHA 증거 장부 완성 |
+
+공통 Store/TestStore scenario adapter는 S0부터 작은 fixture로 만들고 S1·S3·S4마다 확장한다. S5에서 처음 통합하지 않는다. 각 단계는 해당 회귀와 관련 integration을 통과한 뒤 다음 의존 단계로 간다. 이미 통과한 무관 테스트를 매번 전부 반복하는 대신 영향 범위를 기록하고, 마지막 동결 후보에서 필수 전체 검증을 수행한다.
+
+### 요구사항과 검증의 연결
+
+| 요구사항 | 구현 단위 | 검증 묶음 | 출시 판단 |
+|---|---|---|---|
+| 2026-10-03/D1 | S1 | 핸들 보관/폐기 × 1회/반복 × 완료/취소/공유 대체 + run/debounce 대조 | 실패 시 미완료 |
+| 2026-10-03/D2 | S1 | 성공/일반 오류/직접 취소 오류/실제 취소/경쟁 × Store/TestStore | 실패 시 미완료 |
+| 2026-10-03/T1 | S3b | action→output 및 후속 체인 × on/off × FIFO/timeout/cancel/skipped assertions | 실패 시 미완료 |
+| 2026-10-03/T2 | S3b | action/output 잔여 조합 4종 + terminal revision/중복 cleanup | 실패 시 미완료 |
+| 2026-10-03/M1 | S2 | 논리 이름 일치 positive + 실제 Phase 누락 negative | 실패 시 미완료 |
+| 2026-10-03/M2 | S2 | 원본 enum/확장 코드 compile + path 호출/추출 + 충돌 negative | 실패 시 미완료 |
+| 주석: TestFlowTask | S3a/S3b | descendant tracking/선택 취소/미검증 항목/다른 dispatch/호출자 취소 | 실패 시 미완료 |
+| 주석: optional child lifetime | S4 | remove/replace/reenter/sibling/nested 및 물리적 cleanup | 실패 시 미완료 |
+| 주석: 두 host의 의미 일치 | S1~S5 | 같은 scenario의 상태/Output/취소/완료 관측 trace | 한쪽만 통과하면 미완료 |
+
+trace 비교는 scheduling의 우연한 interleaving이나 임의 UUID 값을 비교하지 않는다. gate로 순서가 정해진 causal event, 최종 상태, Output 순서, owner 격리, 완료 조건을 비교한다. test stepping과 assertion 진단은 TestStore 전용 검증으로 별도 유지한다.
+
+## E. 공개 API·문서·호환성
+
+- `TestStore.send`/`ScopedTestStore.send` 및 action을 새로 dispatch하는 phase helper는 같은 handle을 반환하게 맞춘다. 내부 helper가 중복 dispatch를 만들지 않는다. `TestStoreScenario`처럼 의도적으로 handle을 저장하지 않는 DSL은 명시적으로 버리고 내부 전파는 유지한다.
+- 반환값을 쓰지 않는 일반 호출은 `@discardableResult`로 유지한다. `async -> Void` 함수값, protocol wrapper, overload resolution, actor isolation/Sendable, generic consumer는 실제 외부 package에서 컴파일해 6.0 API 변경으로 분류한다.
+- TestFlowTask는 Testing product에 둔다. Core-only 사용자가 Testing/Swift Testing 또는 compiler plugin을 요구받지 않게 product 경계를 검증한다.
+- 기존 IfLet의 기본 동작은 유지하고 수명 관리 wrapper는 명시적으로 선택한다. 신규 wrapper의 parent/child 순서, instance ID 책임, sibling namespace, typed Output 연결을 예제로 보여준다.
+- `CLAUDE.md`, `ARCHITECTURE_CONTRACT.md`, README/번역본, DocC, `MIGRATION.md`, `CHANGELOG.md`, 공개 API 분류, sample, 문서 fence 장부를 최종 구현과 함께 갱신한다. 계약 변경은 tests와 principle gates/CI 검사에 같은 branch로 반영한다.
+- sample에는 load→result→output, optional child 닫기/다시 열기, 늦은 응답 차단을 확인하는 작은 시나리오를 넣는다. 앱별 navigation/DI/영속화 기능을 추가하지 않는다.
+
+### 비용이 큰 선택과 대안
+
+| 선택 | 권고 | 강한 대안과 선택하지 않는 이유 | 재검토 시점 |
+|---|---|---|---|
+| 테스트 handle | TestFlowTask adapter + 기존 Core tracker | FlowTask 그대로 반환하면 유한 timeout과 미검증 항목 진단 의미가 드러나지 않음 | S0 API sketch에서 지나친 중복이 발견될 때 |
+| 테스트 runtime | 공통 walker/scheduler와 context 유지 | production Store로 TestStore 전면 교체는 assertion stepping까지 바꾸어 변경 폭이 큼 | 현재 구조로 의미 일치가 불가능하다는 재현이 있을 때 |
+| .off 출력 검증 | 중간 action을 진행하되 총 deadline 유지 | 항상 수동 receive만 요구하면 선택적 Output 테스트의 사용성이 약함 | FIFO/취소/순환 처리 fixture에서 계약 충돌 시 |
+| child 수명 | opt-in parent wrapper + 별도 owner token | IfLet 기본 자동 취소는 기존 사용 의미를 바꾸고 parent 전후 관측도 부족 | S0/S4 consumer와 동작 검증 |
+| macro 이름 | 논리 이름과 source escaping 분리 | 임의 이름 치환은 충돌·호환성 위험, raw 이름 전면 금지는 유효한 언어 입력을 제한 | 지원 compiler 또는 명명 정책 변경 시 |
+
+## F. 출시 통과 조건과 복구
+
+**이번 범위에서의 출시 추천 조건**은 다음을 모두 충족하는 것이다. P2/P3 분류만으로 미완료 항목을 자동 면제하지 않는다.
+
+1. 여섯 항목 각각에 실제 구현을 통한 실패 재현, 통과 대조군, 수정 후 회귀 증거가 있다. T1은 새로 확정한 .off 계약을 기준으로 판정한다.
+2. TestFlowTask/child lifecycle 공통 행렬이 Store와 TestStore에서 통과하고, 미검증 Output과 늦은 이벤트를 숨기는 경로가 없다.
+3. API consumer, 5.1.1→6.0 migration, Core-only 경계, sample, macro compile, 문서 fence 실행이 최종 소스와 맞는다. Swift 6.3/6.4 등 저장소가 요구하는 정확한 toolchain과 플랫폼을 사용한다.
+4. 고정된 최종 candidate SHA에 대해 현행 필수 CI, coverage/module inventory, sanitizers, 문서/API 검사 및 **32개 Release Preflight check**가 CI에서 통과한다. 누락 runtime, queued job, 과거 SHA의 PASS는 통과로 세지 않는다.
+5. 증거 장부는 각 행의 fresh/reused/static-only/blocked 상태와 정확한 SHA, 명령/실행 ID, raw 결과 위치를 기록한다. known defect, 남은 후보, 선택 개선, 환경 미검증을 분리한다.
+
+Release Preflight는 `main`의 동결 후보에서 GitHub-hosted runner로만 실행한다. 개발 Mac에서는 정적 검사와 집중 fixture/진단만 수행한다. 전체 matrix의 local execute/resume 또는 old simulator 설치는 하지 않는다. 새 commit이 후보에 들어가면 영향을 받는 증거를 다시 열고 최종 후보의 전체 필수 receipt를 다시 확보한다.
+
+현재 CI/preflight의 실시간 상태는 이 계획 작업에서 다시 조회하지 않았다. 과거 검토의 queued/부분 통과 상태를 현재 상태로 단정하지 않는다. 구현 착수와 최종 동결 때 각각 최신 remote 상태를 확인한다.
+
+정식 tag와 GitHub Release 공개는 구현/계획 완료와 별도 단계다. 현재 저장소 정책대로 동결 후보의 `STABLE_VERSION=5.1.1`을 유지하고, 정확한 `6.0.0` tag 및 tag-triggered Release Gate를 검증한다. 공개 전 최종 의사결정에 필요한 자료를 먼저 완성한다.
+
+구현은 기존 dirty checkout을 보존한 별도 적합한 worktree에서 수행한다. 원격 조회 전 계정을 검증하고 변경 경로를 정확히 stage한다. 실제 push가 요청되어 성공하면 remote parity와 worktree 보존 검사를 먼저 마친 뒤 전역 AGENTS의 XcodeBuildMCP cleanup을 수행하고 회수 용량/남은 공간을 보고한다.
+
+실패 시 수정 단위별로 patch를 되돌려 원인을 분리할 수 있다. 다만 예전 후보로 돌아갔다고 이번 완료 범위가 충족되는 것은 아니다. public API를 tag에 넣기 전에는 API sketch를 수정할 수 있고, 공개 후 API 제거는 별도 compatibility 정책을 따른다. 영속 데이터/schema migration은 없다. runtime 진단에 action/state/output payload를 새로 기록하지 않으며 테스트 failure의 기존 값 출력과 구분한다.
+
+## G. 남은 설계 확인과 결정 기록
+
+아래는 착수 전에 모든 질문을 사용자에게 되묻겠다는 목록이 아니다. 구현 담당이 권고안을 compile sketch와 fixture로 먼저 검증하고, 공개 의미가 달라져야 하는 경우 결정 근거를 제시한다.
+
+| 항목 | 현재 권고 / 남은 증거 | 담당·결정 시점 |
+|---|---|---|
+| 공개 이름 및 generic 제약 | TestFlowTask, opt-in parent wrapper. child wrapper 이름은 실제 reducer authoring/Output consumer 컴파일 후 확정 | 구현 담당 제안, 저장소 소유자 API 검토 / S0 |
+| finish 후 상태 | runtime isFinished와 assertion 의무를 구분. 미검증 진단은 비소비성, timeout/caller cancel은 자기 dispatch만 취소 | 구현 담당 / S0 sketch, S3b 회귀 |
+| Store 해제·FlowScope 연동 | store 비보유 handle, 미검증 의무 누락/중복 금지, Testing 측 adapter | 구현 담당 / S3a |
+| owner 경계와 namespace | slot/parent/instance generation으로 격리, child 밖 raw EffectID 취소 의미 명시 | 구현 담당 / S0 의미 고정, S4 회귀 |
+| raw identifier 지원 범위 | 지원 toolchain별 원본 enum과 macro consumer 대조 | 구현 담당 / S0·S2 |
+| 성능 허용 범위 | baseline 측정 후 latency/할당 비교 기준 기록; 무제한 등록 증가 금지 | 구현 담당 제안 및 리뷰 / S0·S5 |
+
+확정된 범위 변화:
+
+- v1에서는 TestFlowTask를 먼저 배포하고 child lifetime을 다음 minor로 분리하는 대안이 있었다. 2026-10-03 사용자 요청에 따라 둘과 여섯 항목을 모두 6.0.0 전 완료 범위로 변경했다.
+- T1은 기존 문서의 해석만으로 결함 여부를 강하게 단정하지 않고, 이번 개선에서 .off 출력 검증이 중간 action을 진행하는 계약을 명시한다.
+- scoped output capture stream, enum/collection lifetime의 새 public wrapper, Navigation/DI/persistence 확대는 주석에서 약속한 optional child 범위를 넘어가므로 이번 계획에 추가하지 않는다. 기존 해당 조합이 영향을 받는 회귀는 검증한다.
+
+| 개정 | 내용 | 상태 |
+|---|---|---|
+| v1, 2026-10-03 | dispatch/child lifetime 최초 설계 | Draft, 구현 증거 없음 |
+| v2, 2026-10-03 | 여섯 발견 사항, T1/T2와 handle 통합, 전체 6.0 범위, 단계별 검증/출시 기준 추가 | Draft, 사용자 요청 범위를 반영한 계획 |
+
+문서 리뷰어/승인자는 아직 기록되지 않았다. 이 작업에서 생산 코드 변경이나 새 테스트 실행은 하지 않았다. 다음 구현 작업의 첫 단위는 S0이며, 성공 여부를 계획 문구가 아닌 revision에 묶인 실행 증거로 판정한다.
