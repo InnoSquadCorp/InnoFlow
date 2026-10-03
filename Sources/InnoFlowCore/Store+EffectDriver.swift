@@ -543,7 +543,9 @@ extension Store: EffectDriver {
     let generation = throttleState.nextGeneration(for: id)
 
     let clock = self.clock
+    let completion = FlowTaskCompletion()
     let task = Task { [weak self] in
+      defer { completion.complete() }
       do {
         try await clock.sleep(interval)
       } catch {
@@ -583,11 +585,11 @@ extension Store: EffectDriver {
       )
     }
 
-    throttleState.setTrailingTask(task, for: id)
+    throttleState.setTrailingTask(task, completion: completion, for: id)
     // A trailing timer can outlive and serve more than one dispatch. The
     // runtime owns the shared timer; each dispatch tracks only its completion
     // so cancelling an older FlowTask cannot cancel a newer pending effect.
-    schedulingContext.flowTaskTracker?.trackCompletion(of: task)
+    schedulingContext.flowTaskTracker?.trackCompletion(of: completion)
     return task
   }
 
@@ -597,12 +599,12 @@ extension Store: EffectDriver {
   ) {
     guard
       let flowTaskTracker = context.flowTaskTracker,
-      let trailingTask = throttleState.trailingTask(for: id)
+      let completion = throttleState.trailingCompletion(for: id)
     else { return }
 
     // The timer is runtime-owned. Mirror its completion into the latest
     // dispatch without granting that dispatch authority over the shared task.
-    flowTaskTracker.trackCompletion(of: trailingTask)
+    flowTaskTracker.trackCompletion(of: completion)
   }
 
   package var now: ContinuousClock.Instant {

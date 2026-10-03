@@ -95,6 +95,8 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Fixed
 
+- Shared throttle completion now survives discarded handles and releases independent observers on cancellation. `perform` maps directly thrown CancellationError as failure when the host has not accepted cancellation.
+
 - Phase totality compares logical keyword/raw identifiers; Action and Output path synthesis emits valid escaped Swift names without collapsing distinct spellings. Actual compiler consumers cover ordinary-name compatibility and collision/missing-case negative controls.
 
 - `IdentifiedArray` equality and hashing now include the stored ID-to-position

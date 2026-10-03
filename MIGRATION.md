@@ -4,6 +4,10 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ## 6.0.0
 
+### perform cancellation errors
+
+`perform` now maps every thrown error, including a directly thrown `CancellationError`, to its failure action while the host remains active. Accepted task/dispatch/runtime cancellation remains silent. General `run` and AsyncSequence cancellation-error behavior is unchanged. Code that used a thrown CancellationError to abandon an active request should use explicit cancellation instead.
+
 ### Identifier corrections
 
 Keyword Phase cases no longer fail strict totality merely because declaration and reference use different optional backticks. Raw Action/Output names retain spaces and punctuation in generated CasePath names; reference those members with Swift backticks. Existing ordinary and leading-underscore path names are unchanged. Missing Phase cases and actual generated-member collisions still diagnose.

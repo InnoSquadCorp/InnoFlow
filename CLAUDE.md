@@ -539,3 +539,7 @@ If a change violates the documented authoring model or ownership rules, update:
 - CI
 
 Do not leave the rule enforced only by prose.
+
+### Runtime completion and result mapping
+
+The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.

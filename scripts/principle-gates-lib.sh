@@ -523,6 +523,9 @@ run_authoring_surface_checks() {
   search_lines "func originalEnumControl" Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift >/dev/null
   search_lines "func missingPhaseStillDiagnoses" Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift >/dev/null
 
+  search_lines "package final class FlowTaskCompletion" Sources/InnoFlowCore/FlowTask.swift >/dev/null
+  search_lines "func trailingCompletion" Tests/InnoFlowTests/RuntimeConsistencyTests.swift >/dev/null
+
   echo "[principle-gates] Checking official composition primitives"
   search_lines "public struct Reduce<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
   search_lines "public struct CombineReducers<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null

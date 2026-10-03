@@ -60,6 +60,7 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
   private var windowEndByID: [AnyEffectID: ContinuousClock.Instant] = [:]
   private var pendingByID: [AnyEffectID: PendingTrailing] = [:]
   private var trailingTaskByID: [AnyEffectID: Task<Void, Never>] = [:]
+  private var trailingCompletionByID: [AnyEffectID: FlowTaskCompletion] = [:]
   private var generationByID: [AnyEffectID: UInt64] = [:]
   private var scopeByID: [AnyEffectID: DelayedEffectScope] = [:]
   private var admissionStateByID: [AnyEffectID: AdmissionState] = [:]
@@ -94,8 +95,17 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
     pendingByID[id]
   }
 
-  package func setTrailingTask(_ task: Task<Void, Never>, for id: AnyEffectID) {
+  package func setTrailingTask(
+    _ task: Task<Void, Never>,
+    completion: FlowTaskCompletion? = nil,
+    for id: AnyEffectID
+  ) {
     trailingTaskByID[id] = task
+    trailingCompletionByID[id] = completion
+  }
+
+  package func trailingCompletion(for id: AnyEffectID) -> FlowTaskCompletion? {
+    trailingCompletionByID[id]
   }
 
   package func scope(for id: AnyEffectID) -> DelayedEffectScope? {
@@ -168,6 +178,7 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
 
   package func cancelTrailingTask(for id: AnyEffectID) {
     trailingTaskByID.removeValue(forKey: id)?.cancel()
+    trailingCompletionByID.removeValue(forKey: id)
   }
 
   package func generation(for id: AnyEffectID) -> UInt64? {
@@ -220,6 +231,7 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
   package func finishState(for id: AnyEffectID, generation: UInt64) -> Bool {
     guard generationByID[id] == generation else { return false }
     trailingTaskByID.removeValue(forKey: id)
+    trailingCompletionByID.removeValue(forKey: id)
     generationByID.removeValue(forKey: id)
     pendingByID.removeValue(forKey: id)
     windowEndByID.removeValue(forKey: id)
@@ -232,6 +244,7 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
       task.cancel()
     }
     trailingTaskByID.removeAll(keepingCapacity: true)
+    trailingCompletionByID.removeAll(keepingCapacity: true)
     pendingByID.removeAll(keepingCapacity: true)
     windowEndByID.removeAll(keepingCapacity: true)
     generationByID.removeAll(keepingCapacity: true)

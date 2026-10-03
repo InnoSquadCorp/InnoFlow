@@ -452,7 +452,9 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   /// Performs one throwing async operation and maps its terminal result to an action.
   ///
   /// Cancellation is terminal and silent: neither `success` nor `failure` is
-  /// invoked after cancellation has been accepted by the host store.
+  /// invoked after cancellation has been accepted by the host store. A thrown
+  /// `CancellationError` from an otherwise active operation is mapped to
+  /// `failure`, just like any other error; its type does not request cancellation.
   public static func perform<Success: Sendable>(
     priority: TaskPriority? = nil,
     operation: @escaping @Sendable (EffectContext) async throws -> Success,
@@ -465,8 +467,6 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
         let value = try await operation(context)
         try await context.checkCancellation()
         await send(success(value))
-      } catch is CancellationError {
-        return
       } catch {
         guard await context.isCancellationRequested() == false else { return }
         await send(failure(error))
