@@ -17,8 +17,8 @@ public enum EffectExecutionPolicy: Sendable, Equatable {
 
   /// Runs requests in admission order with a bounded number of waiting runs.
   ///
-  /// `maxPending` excludes the currently-running request and must be non-negative.
-  case serial(maxPending: Int)
+  /// `maxPending` excludes the currently-running request and is an unsigned capacity.
+  case serial(maxPending: UInt)
 }
 
 /// The observable admission state of a scheduled effect run.
@@ -31,6 +31,12 @@ public enum EffectAdmission: Sendable, Equatable {
 
   /// The operation was not accepted and will never execute.
   case rejected(EffectAdmissionRejection)
+
+  /// The request was cancelled before start admission.
+  case cancelledBeforeStart
+
+  /// A newer request owns the latest lane; this request cannot emit further work.
+  case superseded
 }
 
 /// Why a scheduled run was rejected before execution.
@@ -39,20 +45,18 @@ public enum EffectAdmissionRejection: Sendable, Equatable {
   case busy
 
   /// A serial lane already contains its configured number of pending requests.
-  case queueFull(maxPending: Int)
+  case queueFull(maxPending: UInt)
 
   /// The same live lane was reused with a different execution policy.
   case conflictingPolicy
 
-  /// A serial policy was created with a negative pending capacity.
-  case invalidCapacity(Int)
 }
 
 extension EffectExecutionPolicy {
   package enum Kind: Sendable, Equatable {
     case latest
     case dropWhileRunning
-    case serial(maxPending: Int)
+    case serial(maxPending: UInt)
   }
 
   package var kind: Kind {

@@ -173,3 +173,7 @@ TestStore, ScopedTestStore and phase-send helpers return TestStoreDispatch; Test
 ### Optional child adoption
 
 OptionalChildLifetime and Reducer.optionalChild are additive, opt-in wrappers. Existing IfLet remains unchanged. Child instance identity is Hashable/Sendable; parent and child Output must match after explicit lifting. Public examples compile from Core-only generic and macro authoring consumers.
+
+### Scheduler 6.0 signature changes
+
+EffectExecutionPolicy.serial and EffectAdmissionRejection.queueFull capacities change from Int to UInt; invalidCapacity is removed. EffectAdmission adds cancelledBeforeStart and superseded. Typed nonnegative constants migrate directly; signed variables need explicit validation. Public enum case additions are reviewed as major-version changes within this compatibility policy.

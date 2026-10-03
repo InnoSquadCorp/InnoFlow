@@ -336,13 +336,7 @@ extension Store: EffectDriver {
           hasEffectID: true
         )
       },
-      onStart: { [weak self] scheduledToken in
-        self?.diagnostics?.recordAdmission(
-          .started,
-          dispatchID: context?.dispatchID,
-          sequence: context?.sequence,
-          scheduledToken: scheduledToken
-        )
+      onStart: { [weak self] _ in
         guard let action = onAdmission?(.started) else { return }
         self?.deliverAction(action, context: context)
       },
@@ -352,25 +346,25 @@ extension Store: EffectDriver {
           sequence: context?.sequence,
           scheduledToken: scheduledToken
         )
+      },
+      context: context,
+      onAdmissionLifecycle: { [weak self] token, admission in
+        self?.diagnostics?.recordAdmission(
+          admission, dispatchID: context?.dispatchID,
+          sequence: context?.sequence, scheduledToken: token
+        )
       }
     )
 
     guard case .accepted(let ticket) = plan else {
-      if case .rejected(let reason) = plan,
-        let action = onAdmission?(.rejected(reason))
-      {
-        diagnostics?.recordAdmission(
-          .rejected(reason),
-          dispatchID: context?.dispatchID,
-          sequence: context?.sequence
-        )
+      let admission: EffectAdmission
+      switch plan {
+      case .rejected(let reason): admission = .rejected(reason)
+      case .terminal(let terminal): admission = terminal
+      case .accepted: preconditionFailure("Accepted request must have a ticket")
+      }
+      if !Task.isCancelled, let action = onAdmission?(admission) {
         deliverAction(action, context: context)
-      } else if case .rejected(let reason) = plan {
-        diagnostics?.recordAdmission(
-          .rejected(reason),
-          dispatchID: context?.dispatchID,
-          sequence: context?.sequence
-        )
       }
       return nil
     }
@@ -382,20 +376,7 @@ extension Store: EffectDriver {
     if case .queued = ticket.admission,
       let action = onAdmission?(ticket.admission)
     {
-      diagnostics?.recordAdmission(
-        ticket.admission,
-        dispatchID: context?.dispatchID,
-        sequence: context?.sequence,
-        scheduledToken: ticket.token
-      )
       deliverAction(action, context: context)
-    } else if case .queued = ticket.admission {
-      diagnostics?.recordAdmission(
-        ticket.admission,
-        dispatchID: context?.dispatchID,
-        sequence: context?.sequence,
-        scheduledToken: ticket.token
-      )
     }
 
     let flowTaskTracker = context?.flowTaskTracker

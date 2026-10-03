@@ -99,6 +99,8 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Fixed
 
+- Scheduled admission rejects pre-cancelled contexts, protects newer latest sequences, and emits exactly one start after attachment. Serial pending cleanup retains physical running slots. Unsigned capacities and explicit cancelled-before-start/superseded admission states complete the 6.0 public contract.
+
 - Authoring diagnostics provide typed third-generic and explicit-reduce Fix-Its, accept Swift.Never, normalize OS conditional aliases, and validate active conditional Phase coverage. Generated path availability no longer copies constructor-specific renamed metadata.
 
 - Shared throttle completion now survives discarded handles and releases independent observers on cancellation. `perform` maps directly thrown CancellationError as failure when the host has not accepted cancellation.

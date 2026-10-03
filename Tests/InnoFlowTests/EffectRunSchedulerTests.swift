@@ -88,22 +88,18 @@ struct EffectRunSchedulerTests {
     #expect(await probe.startedValues() == [1, 2])
   }
 
-  @Test("negative serial capacity is reported without trapping")
-  func serialRejectsInvalidCapacity() async {
+  @Test("maximum unsigned serial capacity does not overflow")
+  func serialAcceptsMaximumCapacity() async {
     let probe = ScheduledRunProbe()
     let store = Store(
-      reducer: SchedulingFeature(policy: .serial(maxPending: -1), probe: probe)
+      reducer: SchedulingFeature(policy: .serial(maxPending: .max), probe: probe)
     )
-
-    let rejected = store.send(.request(1))
-    await rejected.finish()
-
-    #expect(
-      store.state.admissions == [
-        .init(request: 1, admission: .rejected(.invalidCapacity(-1)))
-      ]
-    )
-    #expect(await probe.startedValues().isEmpty)
+    let request = store.send(.request(1))
+    await probe.waitUntilStarted(count: 1)
+    await probe.release(1)
+    await request.finish()
+    #expect(store.state.admissions == [.init(request: 1, admission: .started)])
+    #expect(await probe.startedValues() == [1])
   }
 
   @Test("serial cancellation waits for physical termination before advancing")

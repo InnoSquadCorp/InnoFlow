@@ -236,7 +236,7 @@ public final class StoreDiagnostics: Sendable {
         if let runToken {
           active?.queuedRunTokens.insert(runToken)
         }
-      case .admission(.started):
+      case .admission(.started), .admission(.cancelledBeforeStart), .admission(.superseded):
         if let runToken {
           active?.queuedRunTokens.remove(runToken)
         }

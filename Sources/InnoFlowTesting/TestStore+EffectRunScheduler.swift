@@ -27,13 +27,18 @@ extension TestStore {
         guard let action = onAdmission?(.started) else { return }
         self?.deliverAction(action, context: context)
       },
-      onPendingExit: { _ in }
+      onPendingExit: { _ in },
+      context: context
     )
 
     guard case .accepted(let ticket) = plan else {
-      if case .rejected(let reason) = plan,
-        let action = onAdmission?(.rejected(reason))
-      {
+      let admission: EffectAdmission
+      switch plan {
+      case .rejected(let reason): admission = .rejected(reason)
+      case .terminal(let terminal): admission = terminal
+      case .accepted: preconditionFailure("Accepted request must have a ticket")
+      }
+      if !Task.isCancelled, let action = onAdmission?(admission) {
         deliverAction(action, context: context)
       }
       return nil

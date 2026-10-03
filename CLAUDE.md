@@ -555,3 +555,7 @@ Use opt-in `OptionalChildLifetime` / `.optionalChild(state:action:instanceID:chi
 ### Macro migration diagnostics
 
 Third-generic diagnostics offer source Fix-Its using the feature's actual Output or Never. Swift.Never is accepted as the same output-free type. Explicit-reduce repairs never silently discard typed output. Strict Phase totality evaluates active Phase and phaseMap conditional branches using the compiler build configuration; unavailable configuration is an explicit strict error, not fail-open coverage. Synthesized path helpers preserve availability but do not copy constructor-specific renamed metadata.
+
+### Scheduler admission completeness
+
+Scheduled runs recheck their exact cancellation context before reserving capacity. A delayed older sequence cannot supersede the current latest lane. Start admission occurs exactly once after task attachment; serial promotion skips invalid pending reservations without releasing a still-running physical slot. EffectAdmission includes cancelledBeforeStart and superseded. serial(maxPending:) and queueFull capacities use UInt, removing runtime invalidCapacity rejection. Public enum cases are fixed within 6.x; additions require a major-version review.

@@ -4,6 +4,10 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ## 6.0.0
 
+### Scheduler capacity and terminal admission
+
+serial(maxPending:) and queueFull(maxPending:) now carry UInt. Nonnegative literals continue to work; validate signed application input before converting it with UInt(exactly:), rather than trapping or clamping implicitly. invalidCapacity is removed. Exhaustive EffectAdmission switches must handle cancelledBeforeStart and superseded. A delayed older latest request no longer evicts a newer live request. Terminal admission observations never authorize action delivery after accepted cancellation.
+
 ### Optional-child lifetime adoption
 
 Existing IfLet keeps its behavior. To adopt state-owned cancellation, replace duplicate child composition with OptionalChildLifetime or the parent optionalChild modifier. Provide a fresh explicit instance ID on reopening; keeping the ID preserves the same lifetime. The wrapper already reduces the child before its complete parent. Lift typed outputs explicitly. Raw effect IDs inside a child are owner-local, so outside raw-ID cancellation no longer reaches opt-in child work. This is an additive opt-in API; see docs/OPTIONAL_CHILD_LIFETIME.md.
