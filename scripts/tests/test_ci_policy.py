@@ -17,7 +17,7 @@ spec.loader.exec_module(policy)
 
 
 def pr(labels=(), action="opened", author="contributor"):
-    return {"action": action, "pull_request": {
+    return {"action": action, **({"changes": {"base": {"ref": {"from": "develop"}}}} if action == "edited" else {}), "pull_request": {
         "labels": [{"name": x} for x in labels], "user": {"login": author},
     }}
 
@@ -34,6 +34,52 @@ def selected(plan):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_retarget_replans_the_new_base_without_running_title_edits(self):
+        with tempfile.TemporaryDirectory(prefix='innoflow-retarget-ci-') as directory:
+            root = Path(directory)
+            env = dict(os.environ, GIT_AUTHOR_NAME='Fixture', GIT_COMMITTER_NAME='Fixture',
+                       GIT_AUTHOR_EMAIL='fixture@example.invalid', GIT_COMMITTER_EMAIL='fixture@example.invalid')
+            def git(*args):
+                return subprocess.check_output(['git', '-C', directory, '-c', 'commit.gpgsign=false', *args], env=env, text=True).strip()
+            git('init', '-q', '-b', 'main')
+            (root / 'README.md').write_text('base\n')
+            git('add', 'README.md'); git('commit', '-qm', 'main')
+            main = git('rev-parse', 'HEAD')
+            (root / 'Sources').mkdir()
+            (root / 'Sources/Changed.swift').write_text('struct Changed {}\n')
+            git('add', 'Sources/Changed.swift'); git('commit', '-qm', 'integration')
+            integration = git('rev-parse', 'HEAD')
+            (root / 'README.md').write_text('docs\n')
+            git('add', 'README.md'); git('commit', '-qm', 'head')
+            head = git('rev-parse', 'HEAD')
+            before = policy.make_plan('pull_request', pr(), policy.changed_paths(root, integration, head))
+            self.assertFalse(before['jobs']['tests'])
+            event = pr(action='edited')
+            event['pull_request'].update(base={'sha': main}, head={'sha': head})
+            (root / 'event.json').write_text(json.dumps(event))
+            result = subprocess.run(['python3', str(ROOT / 'scripts/ci-policy.py'), 'plan',
+                '--event', str(root / 'event.json'), '--root', directory, '--output', str(root / 'plan.json')],
+                env={**env, 'GITHUB_EVENT_NAME': 'pull_request'}, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            after = json.loads((root / 'plan.json').read_text())
+            for job in policy.JOBS:
+                self.assertTrue(after['jobs'][job])
+            policy.evaluate(after, results(after))
+            event['changes'] = {'title': {'from': 'old title'}}
+            with self.assertRaisesRegex(ValueError, 'metadata-only'):
+                policy.make_plan('pull_request', event, ['README.md'])
+
+    def test_reserved_labels_follow_native_case_insensitive_comparison(self):
+        for label in ('release-validation', 'Release-Validation', 'RELEASE-VALIDATION'):
+            plan = policy.make_plan('pull_request', pr([label], 'labeled'), ['.github/dependabot.yml'])
+            self.assertEqual(selected(plan), set(policy.JOBS))
+        for label in ('run-asan', 'Run-ASan', 'RUN-ASAN'):
+            plan = policy.make_plan('pull_request', pr([label], 'labeled'), ['.github/dependabot.yml'])
+            self.assertEqual(selected(plan), {'policy', 'docs-required', 'lint', 'address-sanitizer'})
+        for label in ('run-asan-other', 'run-asan ', 'release-validation-other', 'release-validation '):
+            plan = policy.make_plan('pull_request', pr([label], 'labeled'), ['.github/dependabot.yml'])
+            self.assertEqual(selected(plan), {'policy', 'docs-required'})
+
     def test_impact_matrix(self):
         docs = {"policy", "docs-required", "lint", "documentation"}
         cases = [

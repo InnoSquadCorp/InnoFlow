@@ -39,7 +39,7 @@ The bot identity must match login `dependabot[bot]`, ID `49699333`, type `Bot`.
 The PR must be open, non-draft, conflict-free, same-repository, and based on main.
 Actor, labels, title, branch prefix and semver category are not authorization.
 
-The coordinator validates the latest exact-head `pull_request` CI run and latest
+The coordinator validates the latest actual exact-head `pull_request` CI run and latest
 attempt: active workflow ID/path, repository IDs, unique PR association, head/base
 SHAs and current test-merge parents must agree. Every expanded Flow job in `CORE`
 must succeed, including both sanitizers, all platform/runtime/sample matrix cells,
@@ -55,6 +55,14 @@ foreign, stale, pending, failed, cancelled, neutral and unexpected skipped resul
 fail closed. Earlier completed runs/attempts can be superseded only by the fully
 validated latest attempt. Additional current-head checks/statuses must succeed.
 Ready does not wait on itself.
+
+An entirely skipped metadata event is exempt only after `ci-metadata-policy.py`
+verifies its immutable workflow, merge parents, all job/check identities and every
+attempt. Its completion is a wake-up, never validation evidence; reconciliation
+rechecks current full CI and native Ready before arming. Pending, forged or
+unrecognized no-ops fail closed. The shared metadata verifier is included in the
+Ready reporter's source-compatibility proof. Empty Ready target lists allocate
+no planner, while main/schedule/manual post-merge recovery remains independent.
 
 Requested reviews, unresolved threads, effective changes-requested/pending reviews
 and native review decisions block readiness. A comment does not clear requested

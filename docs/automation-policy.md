@@ -7,7 +7,7 @@ interchangeable. Runtime APIs and release/performance thresholds are unchanged.
 
 ## Validation and changed paths
 
-Every CI invocation creates **CI Plan**, **CI Required**, and the existing native
+Every validation event creates **CI Plan**, **CI Required**, and the existing native
 **Build Documentation** check. Workflow-level path filters are deliberately absent.
 The planner uses the exact event base/head and Git's NUL-delimited name/status
 stream. It includes deleted paths and both old/new names of renames or copies.
@@ -29,7 +29,7 @@ duplicate, unknown, failed, cancelled, or unexpectedly skipped job results.
   groups. Shared orchestration, manifests/locks and unclassified tooling select
   the full graph. See the executable map in `scripts/ci-policy.py`
 - Selected jobs must succeed. Unselected jobs must be skipped. **Build
-  Documentation** is an always-running compatibility aggregate for the existing
+  Documentation** is an always-running validation aggregate for the existing
   protected context; it verifies the plan and the selected reusable DocC result
 - Policy and planner changes are themselves tested with positive/negative fixtures.
   Matrices remain `fail-fast: false`, and no existing check uses `continue-on-error`
@@ -147,8 +147,33 @@ matrix-name expressions.
 
 `ready_for_review` is metadata eligibility only. It invokes the trusted native
 **Dependabot Ready** reporter, not the heavy CI graph. Open, synchronize, reopen,
-label and label removal still plan ordinary PR validation. Making a PR Ready does
-not grant a CI success, invalidate an actual failure, or bypass native review rules.
+base retargeting and changes to `release-validation` or `run-asan` still plan PR
+validation. Reserved label names are compared case-insensitively, matching native
+workflow expressions. Making a PR Ready does not grant CI success, invalidate an
+actual failure, or bypass native review rules.
+
+Title/body edits and unrelated label additions/removals create an entirely skipped
+`CI metadata-only v1` run with its own per-run concurrency key. They cannot cancel
+real validation or publish a new **CI Required** / **Build Documentation** verdict;
+the aggregate names become **CI Metadata Only** / **Documentation Metadata Only**.
+Base edits and missing label identity select real validation. No-op recognition
+binds the immutable workflow blob, merge parents, run/attempt, complete skipped
+job inventory and native check provenance. Titles alone are never proof. Pending
+or unverifiable newer metadata blocks bot readiness and makes main reuse fall
+back to full validation. Verified completion wakes reconciliation of the latest
+real CI and native Ready, including when Ready was already green.
+
+The coordinator skips non-PR CI notifications before allocating an inspector and
+skips the Ready planner when its authoritative target list is empty. Main push,
+schedule and manual post-merge recovery retain their separate admission path.
+
+The existing required policy job runs `scripts/check-ci-workflows.py`, pinning
+**actionlint 1.7.12** and the platform archive SHA-256. It bounds downloads, extracts
+only the verified regular executable, and disables optional host-dependent
+shellcheck/pyflakes integration. Its three `concurrency.queue: max` compatibility
+exceptions match exact diagnostic file, line, column, kind and text; other
+workflow errors remain blocking. All runner job timeouts were already explicit
+and are retained without lowering validation budgets.
 
 Dependency caches contain only SwiftPM repository mirrors and downloaded prebuilts.
 They never contain `.build` products, test results, coverage output, DerivedData,
