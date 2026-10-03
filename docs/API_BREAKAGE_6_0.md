@@ -161,3 +161,7 @@ safe. The final candidate-bound four-product inventory and owner approval
 remain open. Patch and minor
 releases must not reuse this classification to waive new breakage; they require
 a fresh comparison and no unexplained consumer-facing diagnostics.
+
+### 2026-10-03 identifier correction
+
+M1/M2 normalize logical identifiers separately from source escaping. Ordinary generated path names and one-leading-underscore removal are retained. Previously invalid generated raw-name members now compile; this is a compiler-correctness correction, not a renamed ordinary API. Current consumer and negative diagnostic fixtures supplement the historical inventory above; they do not regenerate its historical symbol counts.

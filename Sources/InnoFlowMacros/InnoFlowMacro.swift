@@ -193,7 +193,7 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       return []
     }
 
-    switch nestedEnum.name.text {
+    switch logicalIdentifier(nestedEnum.name) {
     case "Action":
       return ["@_InnoFlowActionPaths"]
     case "Output":

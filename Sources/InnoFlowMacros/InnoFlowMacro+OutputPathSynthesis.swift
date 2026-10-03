@@ -373,7 +373,7 @@ extension InnoFlowMacro {
           conditionalContext: conditionalContext
         )
         for element in enumCaseDecl.elements {
-          let memberName = "\(outputPathBaseName(from: element.name.text))CasePath"
+          let memberName = "\(generatedPathBaseName(from: element.name))CasePath"
           let manualContexts = manualPathNames.contexts(
             memberName,
             overlapping: conditionalContext
@@ -484,7 +484,8 @@ extension InnoFlowMacro {
     seenGeneratedNames: inout OutputNameTable,
     context: some MacroExpansionContext
   ) -> [String]? {
-    let caseName = element.name.text
+    let caseName = logicalIdentifier(element.name)
+    let caseSource = identifierSource(element.name)
     let parameters = Array(element.parameterClause?.parameters ?? [])
 
     if parameters.contains(where: { $0.secondName != nil }) {
@@ -499,7 +500,7 @@ extension InnoFlowMacro {
 
     let labels = parameters.compactMap { parameter -> String? in
       guard let name = parameter.firstName?.text, name != "_" else { return nil }
-      return name
+      return logicalIdentifier(name)
     }
     if Set(labels).count != labels.count {
       context.diagnose(
@@ -518,17 +519,17 @@ extension InnoFlowMacro {
     switch parameters.count {
     case 0:
       valueType = "Void"
-      embedBody = ".\(caseName)"
+      embedBody = ".\(caseSource)"
       extractBody =
-        "guard case .\(caseName) = output else { return nil }\nreturn .some(())"
+        "guard case .\(caseSource) = output else { return nil }\nreturn .some(())"
 
     case 1:
       let parameter = parameters[0]
       valueType = parameter.type.trimmedDescription
-      let label = outputParameterLabel(parameter)
-      embedBody = label.map { ".\(caseName)(\($0): value)" } ?? ".\(caseName)(value)"
+      let label = outputParameterLabel(parameter, asArgumentLabel: true)
+      embedBody = label.map { ".\(caseSource)(\($0): value)" } ?? ".\(caseSource)(value)"
       extractBody =
-        "guard case .\(caseName)(let value) = output else { return nil }\nreturn .some(value)"
+        "guard case .\(caseSource)(let value) = output else { return nil }\nreturn .some(value)"
 
     default:
       valueType =
@@ -539,15 +540,17 @@ extension InnoFlowMacro {
         }.joined(separator: ", ") + ")"
       let arguments = parameters.enumerated().map { index, parameter in
         let access = outputParameterLabel(parameter).map { "value.\($0)" } ?? "value.\(index)"
-        return outputParameterLabel(parameter).map { "\($0): \(access)" } ?? access
+        return outputParameterLabel(parameter, asArgumentLabel: true).map { "\($0): \(access)" }
+          ?? access
       }.joined(separator: ", ")
-      embedBody = ".\(caseName)(\(arguments))"
+      embedBody = ".\(caseSource)(\(arguments))"
       let bindings = parameters.indices.map { "value\($0)" }.joined(separator: ", ")
       let tupleValues = parameters.enumerated().map { index, parameter in
-        outputParameterLabel(parameter).map { "\($0): value\(index)" } ?? "value\(index)"
+        outputParameterLabel(parameter, asArgumentLabel: true).map { "\($0): value\(index)" }
+          ?? "value\(index)"
       }.joined(separator: ", ")
       extractBody =
-        "guard case let .\(caseName)(\(bindings)) = output else { return nil }\nreturn .some((\(tupleValues)))"
+        "guard case let .\(caseSource)(\(bindings)) = output else { return nil }\nreturn .some((\(tupleValues)))"
     }
 
     let declaration: String
@@ -560,9 +563,9 @@ extension InnoFlowMacro {
       )
       declaration =
         """
-        \(accessPrefix)static var \(memberName): CasePath<Self, \(valueType)> {
+        \(accessPrefix)static var \(generatedIdentifierSource(memberName)): CasePath<Self, \(valueType)> {
           CasePath<Self, \(valueType)>._innoFlowGenerated(
-            marker: \(markerName).self,
+            marker: \(generatedIdentifierSource(markerName)).self,
             embed: { value in
               \(embedBody)
             },
@@ -572,12 +575,15 @@ extension InnoFlowMacro {
           )
         }
         """
-      return ["private enum \(markerName) {}", availabilityPrefix + declaration]
+      return [
+        "private enum \(generatedIdentifierSource(markerName)) {}",
+        availabilityPrefix + declaration,
+      ]
     }
 
     declaration =
       """
-      \(accessPrefix)static let \(memberName) = CasePath<Self, \(valueType)>(
+      \(accessPrefix)static let \(generatedIdentifierSource(memberName)) = CasePath<Self, \(valueType)>(
         embed: { value in
           \(embedBody)
         },
@@ -589,9 +595,12 @@ extension InnoFlowMacro {
     return [availabilityPrefix + declaration]
   }
 
-  private static func outputParameterLabel(_ parameter: EnumCaseParameterSyntax) -> String? {
-    guard let name = parameter.firstName?.text, name != "_" else { return nil }
-    return name
+  private static func outputParameterLabel(
+    _ parameter: EnumCaseParameterSyntax,
+    asArgumentLabel: Bool = false
+  ) -> String? {
+    guard let name = parameter.firstName, name.text != "_" else { return nil }
+    return identifierSource(name, asArgumentLabel: asArgumentLabel)
   }
 
   private static func outputExistingMemberNames(in outputEnum: EnumDeclSyntax) -> OutputNameTable {
@@ -655,7 +664,7 @@ extension InnoFlowMacro {
         return []
       }()
       for name in memberNames {
-        names.insert(name, context: conditionalContext)
+        names.insert(logicalIdentifier(name), context: conditionalContext)
       }
 
       guard let ifConfig = member.decl.as(IfConfigDeclSyntax.self) else { continue }
@@ -802,10 +811,10 @@ extension InnoFlowMacro {
 
   private static func outputAttributeName(_ attribute: AttributeSyntax) -> String? {
     if let identifier = attribute.attributeName.as(IdentifierTypeSyntax.self) {
-      return identifier.name.text
+      return logicalIdentifier(identifier.name)
     }
     if let member = attribute.attributeName.as(MemberTypeSyntax.self) {
-      return member.name.text
+      return logicalIdentifier(member.name)
     }
     return nil
   }
@@ -937,18 +946,6 @@ extension InnoFlowMacro {
       }
       return false
     }
-  }
-
-  private static func outputPathBaseName(from caseName: String) -> String {
-    let identifier: String
-    if caseName.hasPrefix("`"), caseName.hasSuffix("`"), caseName.count >= 2 {
-      identifier = String(caseName.dropFirst().dropLast())
-    } else {
-      identifier = caseName
-    }
-    return identifier.hasPrefix("_") && identifier.count > 1
-      ? String(identifier.dropFirst())
-      : identifier
   }
 
   private static func diagnoseOutputPathCollision(

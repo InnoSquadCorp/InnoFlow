@@ -4,6 +4,10 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ## 6.0.0
 
+### Identifier corrections
+
+Keyword Phase cases no longer fail strict totality merely because declaration and reference use different optional backticks. Raw Action/Output names retain spaces and punctuation in generated CasePath names; reference those members with Swift backticks. Existing ordinary and leading-underscore path names are unchanged. Missing Phase cases and actual generated-member collisions still diagnose.
+
 ### Who is affected
 
 - Every `@InnoFlow` feature body must add the reducer output generic. Use

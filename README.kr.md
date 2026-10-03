@@ -224,3 +224,7 @@ scope한 row는 새 path로 라우팅됩니다. 매크로가 생성한 path는 �
 - reducer 내부에 `state.phase = ...`가 여러 branch에 흩어져 있을 때
 
 반대로 strict totality enforcement, optional metrics package 같은 항목은 현재 코어 요구사항이 아니라 조건부 roadmap입니다.
+
+### 키워드와 raw case 이름
+
+Phase totality는 선택적인 백틱 표기를 같은 논리 식별자로 비교합니다. Action과 Output case path는 공백·구두점·Unicode를 보존하며, 생성된 raw 이름은 Swift 백틱으로 참조합니다. 일반 이름과 선행 underscore 하나 제거 규칙은 유지됩니다. 실제 누락과 멤버 충돌은 계속 진단합니다.

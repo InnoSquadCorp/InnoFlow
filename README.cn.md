@@ -203,3 +203,7 @@ macro 合成的 Output case path。这些能力不替代持久化 transaction、
 - reducer 中有多处分散的 `state.phase = ...`
 
 strict totality enforcement、optional metrics package 等目前都属于条件触发的 roadmap 项目，而不是当前的核心必做项。
+
+### 关键字和raw case名称
+
+Phase totality将可选反引号视为同一逻辑标识符。Action和Output的case path保留空格、标点和Unicode，引用生成的raw名称时使用Swift反引号。普通名称和仅移除一个前导underscore的规则保持不变。真正缺失的case和成员冲突仍会产生诊断。

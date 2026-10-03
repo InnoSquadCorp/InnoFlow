@@ -519,6 +519,10 @@ run_authoring_surface_checks() {
     exit 1
   fi
 
+  search_lines "static func logicalIdentifier" Sources/InnoFlowMacros/InnoFlowMacro+Identifiers.swift >/dev/null
+  search_lines "func originalEnumControl" Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift >/dev/null
+  search_lines "func missingPhaseStillDiagnoses" Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift >/dev/null
+
   echo "[principle-gates] Checking official composition primitives"
   search_lines "public struct Reduce<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
   search_lines "public struct CombineReducers<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null

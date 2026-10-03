@@ -95,6 +95,8 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Fixed
 
+- Phase totality compares logical keyword/raw identifiers; Action and Output path synthesis emits valid escaped Swift names without collapsing distinct spellings. Actual compiler consumers cover ordinary-name compatibility and collision/missing-case negative controls.
+
 - `IdentifiedArray` equality and hashing now include the stored ID-to-position
   mapping, so replacing equal element values with different identities refreshes
   root/scoped selections and keeps distinct collection keys in sets and dictionaries.

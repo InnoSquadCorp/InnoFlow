@@ -53,3 +53,5 @@ For every W0–W9 requirement, distinguish implementation, VM verification, Appl
 - S0: this ledger and immutable plans; full input read, remote baseline check, 18 controls and six baseline failures established through the stated mirror/consumer boundary
 
 - W0-5/W0-6 local: date validation rejects Unreleased, malformed/impossible/duplicate dates and accepts a valid dated heading; Ruby 2.6 negative control and current Ruby control pass. Untagged release-sync passes. CI static job selects pinned official Ruby setup action; remote run remains pending. No release date or stable version was changed.
+
+- S2 M1/M2: Swift 6.4 Linux macro build with warnings-as-errors, nine diagnostic test declarations, four positive and four intentionally rejected external consumers, raw-language controls, and an executable with 18 round-trip/phase preconditions pass. Actual original-source failures remain preserved separately. The pinned SwiftSyntax SPM/Apple/Swift 6.3 matrix remains unverified.

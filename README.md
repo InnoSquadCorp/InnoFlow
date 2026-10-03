@@ -1206,3 +1206,7 @@ For visionOS-specific guidance, keep the same ownership split:
 See [VisionOSIntegration](Sources/InnoFlow/InnoFlow.docc/VisionOSIntegration.md) for the docs-only
 visionOS integration contract. Dedicated immersive samples are intentionally outside the current
 canonical sample.
+
+### Keyword and raw case names
+
+Phase totality treats optional backticks as the same logical identifier. Action and Output case paths preserve spaces, punctuation, and Unicode; use Swift backticks when referencing a generated raw-name member. Ordinary names and the removal of exactly one leading underscore are unchanged. Real missing cases and member collisions still diagnose.

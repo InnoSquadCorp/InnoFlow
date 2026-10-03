@@ -73,12 +73,12 @@ extension InnoFlowMacro {
 
     let referencedNames = collectPhaseMapDSLPhaseReferences(in: phaseMapMember)
 
-    for element in phaseElements where !referencedNames.contains(element.name.text) {
+    for element in phaseElements where !referencedNames.contains(logicalIdentifier(element.name)) {
       context.diagnose(
         Diagnostic(
           node: Syntax(element.name),
           message: PhaseTotalityDiagnosticMessage.unreferencedCase(
-            caseName: element.name.text,
+            caseName: logicalIdentifier(element.name),
             strict: strict
           )
         )
@@ -124,7 +124,7 @@ extension InnoFlowMacro {
   ) -> EnumDeclSyntax? {
     memberBlock.members
       .compactMap { $0.decl.as(EnumDeclSyntax.self) }
-      .first(where: { $0.name.text == typeName })
+      .first(where: { logicalIdentifier($0.name) == typeName })
   }
 
   private static func findStaticPhaseMapVariable(in declaration: StructDeclSyntax)
@@ -136,7 +136,8 @@ extension InnoFlowMacro {
         guard variable.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) })
         else { return false }
         return variable.bindings.contains { binding in
-          binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "phaseMap"
+          binding.pattern.as(IdentifierPatternSyntax.self).map { logicalIdentifier($0.identifier) }
+            == "phaseMap"
         }
       }
   }
@@ -166,7 +167,8 @@ extension InnoFlowMacro {
     from call: FunctionCallExprSyntax,
     into names: inout Set<String>
   ) {
-    let callee = call.calledExpression.trimmedDescription
+    let callee = call.calledExpression.as(DeclReferenceExprSyntax.self)
+      .map { logicalIdentifier($0.baseName) }
 
     if callee == "From", let firstArgument = call.arguments.first {
       collectMemberAccessNames(in: Syntax(firstArgument.expression), into: &names)
@@ -175,7 +177,8 @@ extension InnoFlowMacro {
 
     guard callee == "On" else { return }
     for argument in call.arguments {
-      guard let label = argument.label?.text, label == "to" || label == "targets" else {
+      guard let label = argument.label.map(logicalIdentifier), label == "to" || label == "targets"
+      else {
         continue
       }
       collectMemberAccessNames(in: Syntax(argument.expression), into: &names)
@@ -190,7 +193,7 @@ extension InnoFlowMacro {
 
   private static func collectMemberAccessNames(in node: Syntax, into names: inout Set<String>) {
     if let memberAccess = node.as(MemberAccessExprSyntax.self) {
-      names.insert(memberAccess.declName.baseName.text)
+      names.insert(logicalIdentifier(memberAccess.declName.baseName))
     }
 
     for child in node.children(viewMode: .sourceAccurate) {
@@ -205,7 +208,7 @@ extension InnoFlowMacro {
   private static func containsPhaseMapCall(in node: Syntax) -> Bool {
     if let call = node.as(FunctionCallExprSyntax.self),
       let memberAccess = call.calledExpression.as(MemberAccessExprSyntax.self),
-      memberAccess.declName.baseName.text == "phaseMap"
+      logicalIdentifier(memberAccess.declName.baseName) == "phaseMap"
     {
       return true
     }

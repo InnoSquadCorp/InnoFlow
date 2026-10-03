@@ -207,3 +207,7 @@ payload-free な `StoreDiagnostics` を使います。テストでは `TestStore
 - reducer の複数 branch に `state.phase = ...` が散らばっている
 
 strict totality enforcement、optional metrics package などは、現時点ではコア要件ではなく条件付き roadmap 項目です。
+
+### キーワードとraw case名
+
+Phase totalityは省略可能なバッククォートを同じ論理識別子として比較します。ActionとOutputのcase pathは空白・記号・Unicodeを保持し、生成されたraw名はSwiftのバッククォートで参照します。通常の名前と先頭underscore一つの除去規則は変わりません。実際の不足とメンバー衝突は引き続き診断します。

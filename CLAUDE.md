@@ -248,6 +248,8 @@ honors exhaustivity and one total deadline; cancellation is not a test timeout.
 
 ### CasePath auto-synthesis
 
+Macro identifier comparison uses logical names, independent of optional backticks. Generated members preserve raw identifier spelling (with source escaping), strip exactly one leading underscore, and never replace spaces or punctuation. Phase totality and collision/manual-path checks use the same logical identity. Actual compiler consumers and negative diagnostics enforce this contract.
+
 `@InnoFlow` auto-generates CasePath for standard patterns:
 - `case child(ChildAction)` → `Action.childCasePath`
 - `case todo(id: ID, action: ChildAction)` → `Action.todoActionPath`

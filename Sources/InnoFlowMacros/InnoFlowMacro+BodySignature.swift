@@ -44,14 +44,14 @@ extension InnoFlowMacro {
     let constraintName: String
     let genericArgumentClause: GenericArgumentClauseSyntax?
     if let identifierType = someOrAny.constraint.as(IdentifierTypeSyntax.self) {
-      constraintName = identifierType.name.text
+      constraintName = logicalIdentifier(identifierType.name)
       genericArgumentClause = identifierType.genericArgumentClause
     } else if let memberType = someOrAny.constraint.as(MemberTypeSyntax.self),
       let base = memberType.baseType.as(IdentifierTypeSyntax.self),
-      base.name.text == "InnoFlow" || base.name.text == "InnoFlowCore",
+      logicalIdentifier(base.name) == "InnoFlow" || logicalIdentifier(base.name) == "InnoFlowCore",
       base.genericArgumentClause == nil
     {
-      constraintName = memberType.name.text
+      constraintName = logicalIdentifier(memberType.name)
       genericArgumentClause = memberType.genericArgumentClause
     } else {
       issues.append(
@@ -96,7 +96,7 @@ extension InnoFlowMacro {
           "third generic parameter must be `Output` (or `Self.Output`), found `\(outputArgument.trimmedDescription)`"
         )
       }
-    } else if outputArgument.trimmedDescription != "Never" {
+    } else if logicalIdentifier(outputArgument.trimmedDescription) != "Never" {
       issues.append(
         "third generic parameter must be `Never` when the feature declares no nested `Output`, found `\(outputArgument.trimmedDescription)`"
       )
@@ -131,13 +131,14 @@ extension InnoFlowMacro {
     named expected: String
   ) -> Bool {
     if let identifier = argument.as(IdentifierTypeSyntax.self) {
-      return identifier.name.text == expected && identifier.genericArgumentClause == nil
+      return logicalIdentifier(identifier.name) == expected
+        && identifier.genericArgumentClause == nil
     }
     if let member = argument.as(MemberTypeSyntax.self),
-      member.name.text == expected,
+      logicalIdentifier(member.name) == expected,
       member.genericArgumentClause == nil,
       let base = member.baseType.as(IdentifierTypeSyntax.self),
-      base.name.text == "Self",
+      logicalIdentifier(base.name) == "Self",
       base.genericArgumentClause == nil
     {
       return true

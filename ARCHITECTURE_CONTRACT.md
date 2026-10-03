@@ -321,3 +321,7 @@ removes that sleeper and leaves the clock reusable.
 - Canonical sample interactions keep stable `accessibilityIdentifier` values for hub rows, modal dismiss actions, destructive actions, and cancellation actions.
 - Prefer explicit VoiceOver semantics over relying on button text alone.
 - Prefer Dynamic Type-friendly system layout over fixed sizing.
+
+## Macro identifier contract
+
+Phase declarations and references compare the same logical Swift identifier, regardless of optional backticks. Action and Output path names preserve raw spelling and strip exactly one leading underscore. Code emission separately escapes generated members, case references, and payload labels. Missing cases and active-context member collisions remain errors; manual paths and ignored cases keep their existing meaning. Valid language spellings are tested through real consumers, including keywords, spaces, punctuation, numbers, and Unicode.
