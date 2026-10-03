@@ -65,6 +65,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package var terminalVerificationSource: (file: StaticString, line: UInt)?
 
   package var runningTasks: [UUID: TrackedEffectTask] = [:]
+  package var cancelledTaskTokens: Set<UUID> = []
   package var taskIDsByEffectID: [AnyEffectID: Set<UUID>] = [:]
   package var debounceTasksByID: [AnyEffectID: TrackedDebounceTask] = [:]
   package var throttleActivityTokenByID: [AnyEffectID: UUID] = [:]
@@ -134,6 +135,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     }
     runScheduler.cancelAll()
     throttleState.clearAll()
+    // Wake handle waiters so they can observe the weak store has gone away.
+    finishActivity.noteProgress()
 
     guard let diagnostic else { return }
     switch diagnostic.severity {
@@ -167,11 +170,13 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package func nextEffectContext(
     for effect: ReducerEffect<R.Action, R.Output>,
     file: StaticString,
-    line: UInt
+    line: UInt,
+    flowTaskTracker: FlowTaskTracker? = nil
   ) -> EffectExecutionContext {
     effectBoundaries.nextContext(
       potentialCancellationIDs: effect.potentialCancellationIDs,
-      origin: .init(file: file, line: line)
+      origin: .init(file: file, line: line),
+      flowTaskTracker: flowTaskTracker
     )
   }
 

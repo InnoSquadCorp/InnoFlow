@@ -15,7 +15,7 @@ extension TestStore {
     var skippedActionDescriptions: [String] = []
     var didDrainAction = false
 
-    while let action = await popBufferedAction() {
+    while let action = popBufferedQueuedAction() {
       // Give one already-buffered action a chance to recover even when the
       // configured timeout is zero, then bound recursive synchronous sends.
       if didDrainAction, wallClock.now >= deadline {
@@ -33,7 +33,7 @@ extension TestStore {
           \(actionList)
 
           Next unhandled action:
-          \(action)
+          \(action.action)
 
           Remaining effect work was cancelled before reducing the new action.
           """,
@@ -43,7 +43,7 @@ extension TestStore {
         return
       }
       if skippedActionDescriptions.count < 20 {
-        skippedActionDescriptions.append(String(describing: action))
+        skippedActionDescriptions.append(String(describing: action.action))
       }
       skippedActionCount += 1
       await applyUnassertedAction(action, file: file, line: line)
@@ -97,10 +97,13 @@ extension TestStore {
   }
 
   package func applyUnassertedAction(
-    _ action: R.Action,
+    _ queuedAction: ActionQueue<R.Action>.QueuedAction,
     file: StaticString,
     line: UInt
   ) async {
+    defer { queuedAction.finish() }
+    guard shouldProceed(context: queuedAction.context) else { return }
+    let action = queuedAction.action
     let effect = reduceAction(
       action,
       source: .automatic,
@@ -109,7 +112,8 @@ extension TestStore {
     )
     await walker.walk(
       effect,
-      context: nextEffectContext(for: effect, file: file, line: line),
+      context: nextEffectContext(
+        for: effect, file: file, line: line, flowTaskTracker: queuedAction.context?.flowTaskTracker),
       awaited: false
     )
   }

@@ -72,7 +72,7 @@ scenario APIs; a count match alone is not approval of their runtime semantics.
    statement-style calls remain source-compatible, while stored or passed
    method values explicitly typed as returning `Void` must be adjusted.
 3. `TestStore` now checks typed outputs during exhaustive finishing.
-   `TestStoreFinishResult` gains `unhandledOutputs`, and callers use
+   The package-only `TestStoreFinishResult` now uses one bounded combined snapshot, and callers use
    `receiveOutput(_:)` to consume them.
 4. `TestStore.assertNoMoreActions()` and its scoped forwarding overload are
    removed after their 5.x deprecation window. Use `finish()` or
@@ -165,3 +165,7 @@ a fresh comparison and no unexplained consumer-facing diagnostics.
 ### 2026-10-03 identifier correction
 
 M1/M2 normalize logical identifiers separately from source escaping. Ordinary generated path names and one-leading-underscore removal are retained. Previously invalid generated raw-name members now compile; this is a compiler-correctness correction, not a renamed ordinary API. Current consumer and negative diagnostic fixtures supplement the historical inventory above; they do not regenerate its historical symbol counts.
+
+### 2026-10-03 testing dispatch signature
+
+TestStore, ScopedTestStore and phase-send helpers return TestStoreDispatch; TestFlowTask aliases the same type. Statement calls remain compatible via discardable results. Assigning an unwrapped method value to async Void is intentionally source-breaking and is tested by an external Core+Testing consumer with a positive explicit adapter. This adds a consumer migration to the historical list above.

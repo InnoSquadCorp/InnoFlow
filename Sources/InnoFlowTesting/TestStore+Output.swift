@@ -9,7 +9,8 @@ extension TestStore {
   /// Receives the next reducer output and verifies its exact value.
   ///
   /// In non-exhaustive mode, skips mismatches under one total timeout, just
-  /// like `receive`. An already-buffered match can be received with `.zero`.
+  /// like `receive`, and advances intermediate FIFO actions and their effects.
+  /// An already-buffered match can be received with `.zero`.
   public func receiveOutput(
     _ expectedOutput: R.Output,
     timeout: Duration? = nil,
@@ -84,7 +85,7 @@ extension TestStore {
     noteTestInteraction(file: file, line: line)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
-    var didSkipOutput = false
+    var didProgress = false
 
     func reportTimeout() {
       assertionFailureReporter(
@@ -96,14 +97,42 @@ extension TestStore {
 
     while true {
       guard !Task.isCancelled else { return nil }
-      if didSkipOutput, wallClock.now >= deadline {
+      if didProgress, wallClock.now >= deadline {
         reportTimeout()
         return nil
       }
 
+      // Capture before inspecting either queue; waiting never consumes a value.
+      let revision = finishActivity.snapshot.revision
       let queuedOutput: ActionQueue<R.Output>.QueuedAction
       if let buffered = outputQueue.popBuffered() {
         queuedOutput = buffered
+      } else if !exhaustivity.isOn {
+        // Prefer an already-delivered output, then advance exactly one FIFO
+        // action before checking outputs again. An action flood cannot starve
+        // the output side, and the original deadline covers all progress.
+        if let action = queue.popBuffered() {
+          guard shouldProceed(context: action.context) else {
+            action.finish()
+            didProgress = true
+            continue
+          }
+          reportSkippedAction(action.action, context: "receiving an output", file: file, line: line)
+          await applyUnassertedAction(action, file: file, line: line)
+          didProgress = true
+          continue
+        }
+        guard wallClock.now < deadline else {
+          reportTimeout()
+          return nil
+        }
+        let changed = await finishActivity.waitForChange(after: revision, until: deadline)
+        if !changed {
+          if !Task.isCancelled { reportTimeout() }
+          return nil
+        }
+        didProgress = true
+        continue
       } else {
         let remaining = wallClock.now.duration(to: deadline)
         guard remaining > .zero,
@@ -116,7 +145,7 @@ extension TestStore {
       }
 
       guard shouldProceed(context: queuedOutput.context) else {
-        didSkipOutput = true
+        didProgress = true
         continue
       }
       switch matcher(queuedOutput.action) {
@@ -141,7 +170,7 @@ extension TestStore {
           line
         )
       }
-      didSkipOutput = true
+      didProgress = true
     }
   }
 

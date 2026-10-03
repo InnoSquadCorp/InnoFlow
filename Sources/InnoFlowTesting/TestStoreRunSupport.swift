@@ -73,10 +73,13 @@ actor TestStoreRunBridge<Action: Sendable> {
   }
 
   func emit(_ action: Action) async {
-    guard await endpoint.isTaskActive(token: token) else { return }
-    guard await endpoint.shouldProceed(context: context) else { return }
-    await queue.enqueue(action, context: context)
-    await endpoint.didEnqueueAction()
+    await MainActor.run {
+      guard endpoint.isTaskActive(token: token), endpoint.shouldProceed(context: context) else {
+        return
+      }
+      queue.enqueue(action, context: context)
+      endpoint.didEnqueueAction()
+    }
   }
 
   func finish() async {

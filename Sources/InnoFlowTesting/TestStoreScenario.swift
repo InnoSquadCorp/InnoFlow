@@ -44,7 +44,7 @@ public struct TestStoreScenarioStep<R: Reducer>: Sendable where R.State: Equatab
     assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
   ) -> Self {
     .init(label ?? "send \(String(describing: action))") { store in
-      await store.send(action, assert: assert, file: file, line: line)
+      _ = await store.send(action, assert: assert, file: file, line: line)
     }
   }
 

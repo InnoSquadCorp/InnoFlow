@@ -15,13 +15,16 @@ extension TestStore {
   /// emit warnings according to ``exhaustivity``. Recovery is bounded by the
   /// store's effect timeout so a recursively emitted action cannot block the
   /// send forever.
+  @discardableResult
   public func send(
     _ action: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     file: StaticString = #file,
     line: UInt = #line
-  ) async {
+  ) async -> TestStoreDispatch {
     await prepareForSend(file: file, line: line)
+    let dispatch = makeDispatch()
+    defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousState = state
 
     let effect = reduceAction(
@@ -45,9 +48,11 @@ extension TestStore {
 
     await walker.walk(
       effect,
-      context: nextEffectContext(for: effect, file: file, line: line),
+      context: nextEffectContext(
+        for: effect, file: file, line: line, flowTaskTracker: dispatch.tracker),
       awaited: false
     )
+    return dispatch.task
   }
 
   public func receive(
@@ -133,7 +138,7 @@ extension TestStore {
         Received action did not match \(expectation).
 
         Received:
-        \(action)
+        \(action.action)
         """,
         file,
         line
@@ -180,7 +185,7 @@ extension TestStore {
     switch result {
     case .matched(let action, _):
       let stateAssertion: ((inout R.State) -> Void)? = updateExpectedState.map { update in
-        { state in update(&state, action) }
+        { state in update(&state, action.action) }
       }
       await applyReceivedAction(
         action,
@@ -188,7 +193,7 @@ extension TestStore {
         file: file,
         line: line
       )
-      return .some(action)
+      return .some(action.action)
 
     case .mismatched(let action):
       assertionFailureReporter(
@@ -196,7 +201,7 @@ extension TestStore {
         Received action did not satisfy \(expectation).
 
         Received:
-        \(action)
+        \(action.action)
         """,
         file,
         line
@@ -249,7 +254,7 @@ extension TestStore {
         \(expectedAction)
 
         Received:
-        \(action)
+        \(action.action)
         """,
         file,
         line
@@ -273,11 +278,14 @@ extension TestStore {
   }
 
   private func applyReceivedAction(
-    _ action: R.Action,
+    _ queuedAction: ActionQueue<R.Action>.QueuedAction,
     assert updateExpectedState: ((inout R.State) -> Void)?,
     file: StaticString,
     line: UInt
   ) async {
+    defer { queuedAction.finish() }
+    guard shouldProceed(context: queuedAction.context) else { return }
+    let action = queuedAction.action
     let previousState = state
 
     let effect = reduceAction(
@@ -301,7 +309,8 @@ extension TestStore {
 
     await walker.walk(
       effect,
-      context: nextEffectContext(for: effect, file: file, line: line),
+      context: nextEffectContext(
+        for: effect, file: file, line: line, flowTaskTracker: queuedAction.context?.flowTaskTracker),
       awaited: false
     )
   }
@@ -311,15 +320,15 @@ extension TestStore {
     line: UInt = #line
   ) async {
     if let buffered = await popBufferedAction() {
-      testStoreAssertionFailure(
+      assertionFailureReporter(
         """
         Unhandled buffered action:
         \(buffered)
 
         All already-buffered effect actions should be verified with `receive(_:assert:)`.
         """,
-        file: file,
-        line: line
+        file,
+        line
       )
     }
   }
@@ -468,12 +477,16 @@ extension TestStore {
 
   package func walkScopedEffect(
     _ effect: ReducerEffect<R.Action, R.Output>,
+    context: EffectExecutionContext? = nil,
+    flowTaskTracker: FlowTaskTracker? = nil,
     file: StaticString,
     line: UInt
   ) async {
     await walker.walk(
       effect,
-      context: nextEffectContext(for: effect, file: file, line: line),
+      context: nextEffectContext(
+        for: effect, file: file, line: line,
+        flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker),
       awaited: false
     )
   }

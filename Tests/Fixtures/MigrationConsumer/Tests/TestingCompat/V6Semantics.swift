@@ -43,10 +43,12 @@ struct V6Semantics {
   func completion() async throws {
     let clock = ManualTestClock()
     let store = TestStore(reducer: TimedFeature(), clock: clock)
-    await store.send(.start)
+    let task: TestStoreDispatch = await store.send(.start)
     try await clock.waitForSleepers(atLeast: 1)
     await clock.advance(by: .seconds(1))
     await store.receive(.done) { $0.completed = 1 }
+    await task.finish()
+    #expect(task.isFinished)
     await store.finish()
     #expect(store.state.completed == 1)
   }

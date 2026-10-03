@@ -103,6 +103,7 @@ extension TestStore {
         self?.shouldProceed(context: context) ?? false
       },
       didEnqueueAction: { [weak self] in
+        self?.noteUnverifiedWorkAfterTerminalVerification()
         self?.finishActivity.noteProgress()
       },
       reportRunFailure: { [weak self] message, origin in
@@ -139,7 +140,9 @@ extension TestStore {
     let manualClock = self.manualClock
     let wallClock = self.wallClock
 
+    let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
     let task = Task(priority: priority) {
+      defer { dispatchActivity?.finish() }
       guard await startGate.wait() else {
         await runBridge.finish()
         return
@@ -214,6 +217,7 @@ extension TestStore {
       await runBridge.finish()
     }
 
+    dispatchActivity?.attach(task)
     trackEffectTask(token: token, task: task, context: context)
 
     Task { @MainActor in
@@ -250,7 +254,7 @@ extension TestStore {
         || trackedTask.context?.isCancelled(id: id) == true
       guard isPastBoundary else { continue }
       trackedTask.task.cancel()
-      removeTrackedTask(token: token)
+      markTrackedTaskCancelled(token: token)
     }
   }
 
@@ -264,7 +268,7 @@ extension TestStore {
     }
     for token in tokens {
       runningTasks[token]?.task.cancel()
-      removeTrackedTask(token: token)
+      markTrackedTaskCancelled(token: token)
     }
     cancelDebounceTasks { scope in
       scope.sequence <= sequence
@@ -276,7 +280,19 @@ extension TestStore {
     }
   }
 
+  private func markTrackedTaskCancelled(token: UUID) {
+    // Cancellation closes delivery immediately, while the task remains in the
+    // physical registry until its completion callback actually arrives.
+    cancelledTaskTokens.insert(token)
+    removeTaskIDIndexes(token: token)
+    for id in Array(throttleActivityTokenByID.keys)
+    where throttleActivityTokenByID[id] == token {
+      throttleActivityTokenByID.removeValue(forKey: id)
+    }
+  }
+
   private func removeTrackedTask(token: UUID) {
+    cancelledTaskTokens.remove(token)
     runningTasks.removeValue(forKey: token)
     removeTaskIDIndexes(token: token)
 
@@ -300,25 +316,31 @@ extension TestStore {
 
   // MARK: - Receiving
 
-  package func nextActionWithinTimeout() async -> R.Action? {
-    let queue = self.queue
-    while let queuedAction = await queue.next(timeout: effectTimeout) {
-      guard shouldProceed(context: queuedAction.context) else { continue }
-      return queuedAction.action
+  package func popBufferedQueuedAction() -> ActionQueue<R.Action>.QueuedAction? {
+    while let entry = queue.popBuffered() {
+      guard shouldProceed(context: entry.context) else {
+        entry.finish()
+        continue
+      }
+      return entry
     }
     return nil
   }
 
   package func popBufferedAction() async -> R.Action? {
-    while let queuedAction = queue.popBuffered() {
-      guard shouldProceed(context: queuedAction.context) else { continue }
-      return queuedAction.action
-    }
-    return nil
+    guard let entry = popBufferedQueuedAction() else { return nil }
+    defer { entry.finish() }
+    return entry.action
+  }
+
+  package func discardInvalidatedActions() {
+    queue.removeBuffered { !shouldProceed(context: $0.context) }
+    outputQueue.removeBuffered { !shouldProceed(context: $0.context) }
+    finishActivity.noteProgress()
   }
 
   private func isRunTaskActive(token: UUID) -> Bool {
-    runningTasks[token] != nil
+    runningTasks[token] != nil && !cancelledTaskTokens.contains(token)
   }
 
   func finishTrackedRunTask(token: UUID) {

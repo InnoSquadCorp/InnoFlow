@@ -45,6 +45,7 @@ public func assertValidGraph<Phase: Hashable & Sendable>(
 extension TestStore {
   /// Sends an action and verifies that the observed phase transition is allowed
   /// by the provided graph.
+  @discardableResult
   public func send<Phase: Hashable & Sendable>(
     _ action: R.Action,
     tracking phase: KeyPath<R.State, Phase>,
@@ -52,12 +53,12 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     file: StaticString = #file,
     line: UInt = #line
-  ) async {
+  ) async -> TestStoreDispatch {
     let previousPhase = state[keyPath: phase]
-    await send(action, assert: updateExpectedState, file: file, line: line)
+    let task = await send(action, assert: updateExpectedState, file: file, line: line)
     let nextPhase = state[keyPath: phase]
 
-    guard previousPhase != nextPhase else { return }
+    guard previousPhase != nextPhase else { return task }
 
     guard graph.allows(from: previousPhase, to: nextPhase) else {
       testStoreAssertionFailure(
@@ -79,8 +80,9 @@ extension TestStore {
         file: file,
         line: line
       )
-      return
+      return task
     }
+    return task
   }
 
   /// Receives an action from an effect and verifies the phase transition.

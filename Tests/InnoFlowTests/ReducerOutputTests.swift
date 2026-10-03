@@ -300,11 +300,11 @@ struct ReducerOutputTests {
       $0.selection = 19
     }
 
-    guard case .unhandledOutputs(let outputs) = await store.finishResult(timeout: .zero) else {
+    guard case .unhandledWork(let pending) = await store.finishResult(timeout: .zero) else {
       Issue.record("Expected an unhandled output result")
       return
     }
-    #expect(outputs == ["openDetail(19)"])
+    #expect(pending.outputs == ["openDetail(19)"])
   }
 
   @Test("TestStore non-exhaustive output draining honors the total deadline")

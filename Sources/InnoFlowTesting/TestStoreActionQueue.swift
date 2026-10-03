@@ -43,11 +43,37 @@ private final class ActionQueueWaiterResolution: Sendable {
   }
 }
 
+/// An entry owns dispatch progress until reduction has registered all descendants.
+/// Explicit release is idempotent; deinitialization covers discard and store teardown.
+package final class TestStoreDispatchActivity: Sendable {
+  let tracker: FlowTaskTracker
+  let token: UUID
+
+  init(_ tracker: FlowTaskTracker) {
+    self.tracker = tracker
+    token = tracker.beginActivity()
+  }
+
+  func attach(_ task: Task<Void, Never>) { tracker.attach(task, to: token) }
+  func finish() { tracker.endActivity(token) }
+  deinit { finish() }
+}
+
 @MainActor
 package final class ActionQueue<Action: Sendable> {
-  struct QueuedAction: Sendable {
+  package struct QueuedAction: Sendable {
     let action: Action
     let context: EffectExecutionContext?
+    private let activity: TestStoreDispatchActivity?
+
+    init(action: Action, context: EffectExecutionContext?, tracksActivity: Bool) {
+      self.action = action
+      self.context = context?.frozenForExecution()
+      activity =
+        tracksActivity ? (context?.flowTaskTracker).map(TestStoreDispatchActivity.init) : nil
+    }
+
+    func finish() { activity?.finish() }
   }
 
   private struct Waiter {
@@ -84,10 +110,11 @@ package final class ActionQueue<Action: Sendable> {
   // coupling tests to scheduler-dependent wall-clock completion thresholds.
   var waitTimeoutObserver: ((Duration) -> Void)?
 
-  func enqueue(_ action: Action, context: EffectExecutionContext?) {
+  func enqueue(_ action: Action, context: EffectExecutionContext?, tracksActivity: Bool = true) {
     let queuedAction = QueuedAction(
       action: action,
-      context: context?.frozenForExecution()
+      context: context,
+      tracksActivity: tracksActivity
     )
     while !waiters.isEmpty {
       let head = waiters.removeFirst()
@@ -101,6 +128,16 @@ package final class ActionQueue<Action: Sendable> {
     }
 
     buffer.append(queuedAction)
+  }
+
+  func removeBuffered(where predicate: (QueuedAction) -> Bool) {
+    let remaining = buffer.dropFirst(headIndex).filter { entry in
+      guard predicate(entry) else { return true }
+      entry.finish()
+      return false
+    }
+    buffer = remaining
+    headIndex = 0
   }
 
   func next(timeout: Duration) async -> QueuedAction? {

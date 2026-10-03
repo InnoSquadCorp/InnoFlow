@@ -11,6 +11,8 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- TestStore sends return TestStoreDispatch (TestFlowTask alias), preserving descendant ownership and selective cancellation. Its finite finish verifies without consuming queues. Non-exhaustive output reception progresses intermediate actions, and exhaustive global finish reports actions and outputs together.
+
 - `Store.send(_:)` and `ScopedStore.send(_:)` now return a `FlowTask`. Its
   `finish()` waits for the complete descendant action/effect tree, while
   `cancel()` cancels only work descended from that dispatch.

@@ -63,13 +63,16 @@ where Root.State: Equatable {
 
   /// Sends a child action after applying the parent harness's exhaustivity
   /// policy to any buffered effect actions.
+  @discardableResult
   public func send(
     _ action: ChildAction,
     assert updateExpectedState: ((inout ChildState) -> Void)? = nil,
     file: StaticString = #filePath,
     line: UInt = #line
-  ) async {
+  ) async -> TestStoreDispatch {
     await parent.prepareForSend(file: file, line: line)
+    let dispatch = parent.makeDispatch()
+    defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousRootState = parent.state
     // Preserve the stale-handle contract before routing any action. A valid
     // collection child may remove itself during reduction; that distinct
@@ -93,7 +96,8 @@ where Root.State: Equatable {
       line: line
     )
 
-    await parent.walkScopedEffect(effect, file: file, line: line)
+    await parent.walkScopedEffect(effect, flowTaskTracker: dispatch.tracker, file: file, line: line)
+    return dispatch.task
   }
 
   public func receive(
@@ -167,7 +171,7 @@ where Root.State: Equatable {
 
     case .matched(let rootAction, .mismatchedParent), .mismatched(let rootAction):
       reportScopedParentMismatch(
-        rootAction: rootAction,
+        rootAction: rootAction.action,
         expectation: expectation,
         file: file,
         line: line
@@ -262,7 +266,7 @@ where Root.State: Equatable {
 
     case .matched(let rootAction, .mismatchedParent), .mismatched(let rootAction):
       reportScopedParentMismatch(
-        rootAction: rootAction,
+        rootAction: rootAction.action,
         expectation: expectation,
         file: file,
         line: line
@@ -327,7 +331,7 @@ where Root.State: Equatable {
           \(expectedAction)
 
           Received parent action:
-          \(rootAction)
+          \(rootAction.action)
           """
         ),
         file,
@@ -376,12 +380,12 @@ where Root.State: Equatable {
     line: UInt,
     matching matcher: (ChildAction) -> TestStoreActionMatch<Value>
   ) async -> TestStoreReceiveResult<
-    Root.Action,
+    ActionQueue<Root.Action>.QueuedAction,
     ScopedTestStoreActionMatch<ChildAction, Value>
   > {
     _ = stateReader(parent.state)
     var lastMismatch: ScopedTestStoreActionMatch<ChildAction, Value>?
-    let result: TestStoreReceiveResult<Root.Action, Value> =
+    let result: TestStoreReceiveResult<ActionQueue<Root.Action>.QueuedAction, Value> =
       await parent.receiveMatchingResult(
         timeout: timeout,
         file: file,
@@ -418,11 +422,14 @@ where Root.State: Equatable {
   }
 
   private func applyReceivedRootAction(
-    _ rootAction: Root.Action,
+    _ queuedAction: ActionQueue<Root.Action>.QueuedAction,
     assert updateExpectedState: ((inout ChildState) -> Void)?,
     file: StaticString,
     line: UInt
   ) async {
+    defer { queuedAction.finish() }
+    guard parent.shouldProceed(context: queuedAction.context) else { return }
+    let rootAction = queuedAction.action
     let previousRootState = parent.state
     _ = stateReader(previousRootState)
 
@@ -443,7 +450,7 @@ where Root.State: Equatable {
       line: line
     )
 
-    await parent.walkScopedEffect(effect, file: file, line: line)
+    await parent.walkScopedEffect(effect, context: queuedAction.context, file: file, line: line)
   }
 
   private func reportScopedParentMismatch(

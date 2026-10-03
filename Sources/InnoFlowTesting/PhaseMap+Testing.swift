@@ -28,13 +28,14 @@ public func assertPhaseMapCovers<State: Sendable, Action: Sendable, Phase: Hasha
 }
 
 extension TestStore {
+  @discardableResult
   public func send<Phase: Hashable & Sendable>(
     _ action: R.Action,
     through phaseMap: PhaseMap<R.State, R.Action, Phase>,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     file: StaticString = #file,
     line: UInt = #line
-  ) async {
+  ) async -> TestStoreDispatch {
     await send(
       action,
       tracking: phaseMap.phaseKeyPath,

@@ -543,3 +543,7 @@ Do not leave the rule enforced only by prose.
 ### Runtime completion and result mapping
 
 The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
+
+### Testing dispatch ownership
+
+`TestStore.send`, scoped sends, and phase sends return discardable `TestStoreDispatch` (`TestFlowTask` is its compatibility alias). Effect actions retain their originating context and a queue activity lease through reduction and descendant registration. Task `finish(timeout:)` is non-consuming and diagnoses only its own unverified actions/outputs in both exhaustivity modes. It never drains another dispatch. Global store finish remains the terminal/draining API. In `.off`, receiveOutput progresses necessary FIFO actions, checks output between actions, and shares one total deadline. Exhaustive global finish snapshots actions and outputs together before cleanup.

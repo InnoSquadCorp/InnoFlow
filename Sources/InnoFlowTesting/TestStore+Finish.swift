@@ -64,13 +64,18 @@ package final class TestStoreFinishActivity {
     )
   }
 
+  package var pendingWaiterCount: Int { waiters.count }
+  package var waitTimeoutObserver: ((Duration) -> Void)?
+
   package func waitForChange(
     after expectedRevision: UInt64,
     until deadline: ContinuousClock.Instant
   ) async -> Bool {
+    guard !Task.isCancelled else { return false }
     guard revision == expectedRevision else { return true }
     guard clock.now < deadline else { return false }
 
+    waitTimeoutObserver?(max(clock.now.duration(to: deadline), .zero))
     let waiterID = UUID()
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
@@ -124,8 +129,7 @@ package final class TestStoreFinishActivity {
 
 package enum TestStoreFinishResult: Equatable, Sendable {
   case success
-  case unhandledActions([String])
-  case unhandledOutputs([String])
+  case unhandledWork(TestStoreUnverifiedSnapshot)
   case timedOut(TestStoreFinishActivity.Snapshot)
   case cancelled
 }
@@ -187,28 +191,10 @@ extension TestStore {
     case .success, .cancelled:
       return
 
-    case .unhandledActions(let actions):
-      let actionList = actions.map { "- \($0)" }.joined(separator: "\n")
+    case .unhandledWork(let snapshot):
       assertionFailureReporter(
-        """
-        TestStore finished with \(actions.count) unhandled effect action(s):
-        \(actionList)
-
-        Every effect-emitted action must be verified with `receive(_:assert:)` before the test finishes.
-        """,
-        file,
-        line
-      )
-
-    case .unhandledOutputs(let outputs):
-      let outputList = outputs.map { "- \($0)" }.joined(separator: "\n")
-      assertionFailureReporter(
-        """
-        TestStore finished with \(outputs.count) unhandled output(s):
-        \(outputList)
-
-        Every reducer output must be verified with `receiveOutput(_:)` before the test finishes.
-        """,
+        "TestStore finished with unverified work.\n\n" + snapshot.description
+          + "\n\nEvery effect action and reducer output must be verified with `receive` and `receiveOutput` before the test finishes.",
         file,
         line
       )
@@ -238,7 +224,7 @@ extension TestStore {
     file: StaticString = #file,
     line: UInt = #line
   ) async -> TestStoreFinishResult {
-    let terminalRevision = beginTerminalVerification(file: file, line: line)
+    _ = beginTerminalVerification(file: file, line: line)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
     var didDrainWork = false
@@ -246,35 +232,30 @@ extension TestStore {
     while true {
       if Task.isCancelled {
         cancelRemainingEffectsForFinish()
-        markTerminalVerificationHandled(terminalRevision)
+        markTerminalVerificationHandled(terminalVerificationRevision)
         return .cancelled
       }
 
       if exhaustivity.isOn {
-        let actions = await takeAllBufferedActionDescriptions()
-        if actions.isEmpty == false {
+        // Snapshot both queues before cancellation invalidates either side.
+        let pending = unverifiedSnapshot()
+        if !pending.isEmpty {
           cancelRemainingEffectsForFinish()
-          markTerminalVerificationHandled(terminalRevision)
-          return .unhandledActions(actions)
+          markTerminalVerificationHandled(terminalVerificationRevision)
+          return .unhandledWork(pending)
         }
-        let outputs = await takeAllBufferedOutputDescriptions()
-        if outputs.isEmpty == false {
-          cancelRemainingEffectsForFinish()
-          markTerminalVerificationHandled(terminalRevision)
-          return .unhandledOutputs(outputs)
-        }
-      } else if let action = await popBufferedAction() {
+      } else if let action = popBufferedQueuedAction() {
         // Always allow one already-buffered action to be reduced, even for a
         // zero timeout. Subsequent actions remain bounded by the total
         // deadline so a self-reenqueuing reducer cannot trap finish forever.
         if didDrainWork, wallClock.now >= deadline {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
-          markTerminalVerificationHandled(terminalRevision)
+          markTerminalVerificationHandled(terminalVerificationRevision)
           return .timedOut(snapshot)
         }
         reportSkippedAction(
-          action,
+          action.action,
           context: "finishing",
           file: file,
           line: line
@@ -288,7 +269,7 @@ extension TestStore {
         if didDrainWork, wallClock.now >= deadline {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
-          markTerminalVerificationHandled(terminalRevision)
+          markTerminalVerificationHandled(terminalVerificationRevision)
           return .timedOut(snapshot)
         }
         if exhaustivity.showsSkippedAssertions {
@@ -304,13 +285,13 @@ extension TestStore {
 
       let snapshot = finishActivity.snapshot
       if snapshot.activeCount == 0 {
-        markTerminalVerificationHandled(terminalRevision)
+        markTerminalVerificationHandled(terminalVerificationRevision)
         return .success
       }
 
       if wallClock.now >= deadline {
         cancelRemainingEffectsForFinish()
-        markTerminalVerificationHandled(terminalRevision)
+        markTerminalVerificationHandled(terminalVerificationRevision)
         return .timedOut(snapshot)
       }
 
@@ -321,25 +302,11 @@ extension TestStore {
     }
   }
 
-  private func takeAllBufferedActionDescriptions() async -> [String] {
-    var actions: [String] = []
-    while let action = await popBufferedAction() {
-      actions.append(String(describing: action))
-    }
-    return actions
-  }
-
-  private func takeAllBufferedOutputDescriptions() async -> [String] {
-    var outputs: [String] = []
-    while let output = await popBufferedOutput() {
-      outputs.append(String(describing: output))
-    }
-    return outputs
-  }
-
   private func cancelRemainingEffectsForFinish() {
     let sequence = markCancelledAll()
     cancelAllEffectsSynchronously(upTo: sequence)
+    queue.removeBuffered { _ in true }
+    outputQueue.removeBuffered { _ in true }
   }
 
   package func noteTestInteraction(
@@ -464,6 +431,7 @@ extension TestStore {
         """
         \(activityLabel):
         - run: \(activity.runCount)
+        - scheduled: \(activity.scheduledCount)
         - composite: \(activity.compositeCount)
         - debounce: \(activity.debounceCount)
         - throttle: \(activity.throttleCount)

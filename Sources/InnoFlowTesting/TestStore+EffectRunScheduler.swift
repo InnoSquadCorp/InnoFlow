@@ -53,8 +53,10 @@ extension TestStore {
     beginFinishActivity(.scheduled, token: token, context: context)
     let endpoint = makeRunEndpoint()
     let scheduler = runScheduler
+    let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
     let task = Task { @MainActor [weak self] in
       defer {
+        dispatchActivity?.finish()
         endpoint.finishTrackedTask(token: token)
       }
       let shouldStart = await withTaskCancellationHandler {
@@ -87,6 +89,7 @@ extension TestStore {
       await scheduler.finish(token)
     }
 
+    dispatchActivity?.attach(task)
     trackEffectTask(token: token, task: task, context: context)
     _ = await runScheduler.attach(task, to: ticket)
     return task

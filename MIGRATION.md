@@ -4,6 +4,10 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ## 6.0.0
 
+### Testing send return value and output progress
+
+`TestStore.send`, `ScopedTestStore.send`, and phase helper sends return `TestStoreDispatch`. `TestFlowTask` remains a typealias for the earlier draft name. Existing statement calls need no change. Explicit async Void method values and protocol adapters must wrap the call and discard its result. A dispatch handle's finish diagnoses only its own unverified work without consuming it; global store finish retains its whole-store role. In `.off`, receiveOutput now reduces intermediate actions and their follow-up effects while seeking the output under the original deadline. Exhaustive global finish reports both pending action and output counts together.
+
 ### perform cancellation errors
 
 `perform` now maps every thrown error, including a directly thrown `CancellationError`, to its failure action while the host remains active. Accepted task/dispatch/runtime cancellation remains silent. General `run` and AsyncSequence cancellation-error behavior is unchanged. Code that used a thrown CancellationError to abandon an active request should use explicit cancellation instead.

@@ -26,7 +26,7 @@ extension TestStore {
     file: StaticString,
     line: UInt,
     matching matcher: (R.Action) -> TestStoreActionMatch<Value>
-  ) async -> TestStoreReceiveResult<R.Action, Value> {
+  ) async -> TestStoreReceiveResult<ActionQueue<R.Action>.QueuedAction, Value> {
     noteTestInteraction(file: file, line: line)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
@@ -39,7 +39,7 @@ extension TestStore {
       }
 
       let remaining = max(wallClock.now.duration(to: deadline), .zero)
-      let result = await receiveResult(timeout: remaining, matching: matcher)
+      let result = await receiveQueuedResult(timeout: remaining, matching: matcher)
 
       switch result {
       case .matched:
@@ -51,7 +51,7 @@ extension TestStore {
           return .mismatched(action: action)
         }
         reportSkippedAction(
-          action,
+          action.action,
           context: "receiving another action",
           file: file,
           line: line
@@ -70,10 +70,10 @@ extension TestStore {
   /// Dequeues one valid effect action and evaluates it without applying the
   /// reducer. Invalidated actions are skipped under a single wall-clock
   /// deadline; a valid mismatch is consumed and returned immediately.
-  package func receiveResult<Value>(
+  package func receiveQueuedResult<Value>(
     timeout: Duration? = nil,
     matching matcher: (R.Action) -> TestStoreActionMatch<Value>
-  ) async -> TestStoreReceiveResult<R.Action, Value> {
+  ) async -> TestStoreReceiveResult<ActionQueue<R.Action>.QueuedAction, Value> {
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
     var didDiscardInvalidatedAction = false
@@ -102,16 +102,34 @@ extension TestStore {
       }
 
       guard shouldProceed(context: queuedAction.context) else {
+        queuedAction.finish()
         didDiscardInvalidatedAction = true
         continue
       }
 
       switch matcher(queuedAction.action) {
       case .matched(let value):
-        return .matched(action: queuedAction.action, value: value)
+        return .matched(action: queuedAction, value: value)
       case .mismatched:
-        return .mismatched(action: queuedAction.action)
+        return .mismatched(action: queuedAction)
       }
     }
   }
+  // Value-only inspection helper. Runtime reduction always uses the owned entry.
+  package func receiveResult<Value>(
+    timeout: Duration? = nil,
+    matching matcher: (R.Action) -> TestStoreActionMatch<Value>
+  ) async -> TestStoreReceiveResult<R.Action, Value> {
+    switch await receiveQueuedResult(timeout: timeout, matching: matcher) {
+    case .matched(let entry, let value):
+      entry.finish()
+      return .matched(action: entry.action, value: value)
+    case .mismatched(let entry):
+      entry.finish()
+      return .mismatched(action: entry.action)
+    case .timedOut(let timeout): return .timedOut(timeout: timeout)
+    case .cancelled: return .cancelled
+    }
+  }
+
 }

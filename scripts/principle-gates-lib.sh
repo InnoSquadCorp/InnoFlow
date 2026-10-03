@@ -526,6 +526,9 @@ run_authoring_surface_checks() {
   search_lines "package final class FlowTaskCompletion" Sources/InnoFlowCore/FlowTask.swift >/dev/null
   search_lines "func trailingCompletion" Tests/InnoFlowTests/RuntimeConsistencyTests.swift >/dev/null
 
+  search_lines "public struct TestStoreDispatch" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null
+  search_lines "public typealias TestFlowTask = TestStoreDispatch" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null
+
   echo "[principle-gates] Checking official composition primitives"
   search_lines "public struct Reduce<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
   search_lines "public struct CombineReducers<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
