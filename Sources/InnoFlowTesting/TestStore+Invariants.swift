@@ -57,7 +57,14 @@ extension TestStore {
     location: TestStoreSourceLocation
   ) -> ReducerEffect<R.Action, R.Output> {
     let previousState = state
-    let effect = childLifetimeRegistry.prepare(reducer.reduce(into: &state, action: action)) { id in
+    let observation = TestStorePhaseObservation(coverage: phaseCoverageObserver)
+    let reduced = PhaseMapRuntimeObservation.$observer.withValue(observation) {
+      reducer.reduce(into: &state, action: action)
+    }
+    for message in observation.violations {
+      issueReporter(message, location)
+    }
+    let effect = childLifetimeRegistry.prepare(reduced) { id in
       let sequence = markCancelled(id: id)
       cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
     }

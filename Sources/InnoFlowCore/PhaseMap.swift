@@ -83,6 +83,7 @@ public struct PhaseMapDiagnostics<Action: Sendable, Phase: Hashable & Sendable>:
 }
 
 public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Sendable> {
+  package let observationID: String
   package let phaseKeyPath: WritableKeyPath<State, Phase>
   package let rules: [PhaseRule<State, Action, Phase>]
   package let rulesBySourcePhase: [Phase: [PhaseRule<State, Action, Phase>]]
@@ -100,11 +101,26 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
   public init(
     _ phaseKeyPath: WritableKeyPath<State, Phase>,
     diagnostics: PhaseMapDiagnostics<Action, Phase> = .disabled,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column,
     @PhaseRuleBuilder<State, Action, Phase> _ rules: () -> [PhaseRule<State, Action, Phase>]
   ) {
+    self.observationID = "\(fileID):\(line):\(column)"
     self.phaseKeyPath = phaseKeyPath
     self.diagnostics = diagnostics
-    let declaredRules = rules()
+    var nextDeclarationIndex = 0
+    let declaredRules = rules().map { rule in
+      PhaseRule<State, Action, Phase>(
+        sourcePhase: rule.sourcePhase,
+        transitions: rule.transitions.map { transition in
+          var indexed = transition
+          indexed.declarationIndex = nextDeclarationIndex
+          nextDeclarationIndex += 1
+          return indexed
+        }
+      )
+    }
     self.rules = declaredRules
     self.rulesBySourcePhase = Self.makeRulesBySourcePhase(from: declaredRules)
     self.duplicateSourcePhases = Self.findDuplicateSourcePhases(in: declaredRules)
@@ -544,6 +560,7 @@ public struct PhaseRule<State: Sendable, Action: Sendable, Phase: Hashable & Sen
 public struct AnyPhaseTransition<State: Sendable, Action: Sendable, Phase: Hashable & Sendable>:
   Sendable
 {
+  package var declarationIndex: Int = -1
   package let matches: @Sendable (Action) -> Bool
   package let resolve: @Sendable (State, Action) -> Phase?
   package let declaredTargets: Set<Phase>
@@ -578,7 +595,7 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
           postReducePhase: postReducePhase
         )
       )
-      assertionFailure(
+      PhaseMapRuntimeObservation.violation(
         """
         Base reducer must not mutate phase directly when PhaseMap is active.
         The entire state has been reverted to its pre-reduce value to keep
@@ -587,7 +604,8 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
         previousPhase: \(String(reflecting: previousPhase))
         postReducePhase: \(String(reflecting: postReducePhase))
         phaseKeyPath: \(String(reflecting: phaseMap.phaseKeyPath))
-        """
+        """,
+        declaration: phaseMap.observationID
       )
       // Atomic revert: the base reducer's effect was contingent on the
       // mutation we are throwing away, so the only sound choice is to
@@ -622,17 +640,22 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
             phaseMap.diagnostics.report(
               .illegalSelfTransition(action: action, phase: previousPhase)
             )
-            assertionFailure(
+            PhaseMapRuntimeObservation.violation(
               """
               PhaseMap transition resolved to the source phase while \
               selfTransitionPolicy was `.forbid`.
               action: \(String(reflecting: action))
               phase: \(String(reflecting: previousPhase))
-              """
+              """,
+              declaration: phaseMap.observationID
             )
             return effect
           case .allow:
             state[keyPath: phaseMap.phaseKeyPath] = target
+            PhaseMapRuntimeObservation.observer?.applied(
+              map: phaseMap, declarationIndex: transition.declarationIndex,
+              from: previousPhase, to: target
+            )
             return effect
           }
         }
@@ -646,19 +669,24 @@ private struct PhaseMappedReducer<Base: Reducer, Phase: Hashable & Sendable>: Re
               declaredTargets: transition.declaredTargets
             )
           )
-          assertionFailure(
+          PhaseMapRuntimeObservation.violation(
             """
             PhaseMap resolved a target outside the declared targets.
             action: \(String(reflecting: action))
             sourcePhase: \(String(reflecting: previousPhase))
             target: \(String(reflecting: target))
             declaredTargets: \(String(reflecting: transition.declaredTargets))
-            """
+            """,
+            declaration: phaseMap.observationID
           )
           return effect
         }
 
         state[keyPath: phaseMap.phaseKeyPath] = target
+        PhaseMapRuntimeObservation.observer?.applied(
+          map: phaseMap, declarationIndex: transition.declarationIndex,
+          from: previousPhase, to: target
+        )
         return effect
       }
     }

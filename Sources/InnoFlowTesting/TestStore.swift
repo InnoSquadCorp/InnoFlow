@@ -97,6 +97,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let throttleState = ThrottleStateMap<R.Action, R.Output>()
   package let runScheduler = EffectRunScheduler()
   package var invariants: [TestStoreInvariant<R.State>] = []
+  package var phaseCoverageObserver: (any PhaseMapRuntimeObserver)?
 
   package var walker: EffectWalker<TestStore<R>> {
     EffectWalker(driver: self)
