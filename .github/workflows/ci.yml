@@ -101,6 +101,7 @@ jobs:
           python3 -B scripts/check-ci-workflows.py
           scripts/check-workflow-action-pins.sh
           scripts/check-workflow-job-timeouts.sh
+          scripts/check-validation-prerequisites-selftest.sh
           ruby scripts/check-ci-efficiency.rb
           scripts/check-ci-efficiency-selftest.sh
           ruby scripts/check-coverage-workflow.rb
@@ -549,6 +550,11 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Select supported Ruby
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+        with:
+          ruby-version: '3.4.4'
 
       - name: Run static principle gates
         run: |
