@@ -44,6 +44,15 @@ struct Consumer {
     )
     await store.receiveOutput(1)
     await phaseTask.finish()
+    await withFlowScope { scope in
+      let owned = await scope.track(
+        await store.send(
+          .output, fileID: "Consumer/Main.swift", filePath: "/Consumer/Main.swift", line: 100,
+          column: 20))
+      await child.receiveOutput(
+        1, fileID: "Consumer/Main.swift", filePath: "/Consumer/Main.swift", line: 101, column: 20)
+      await owned.finish()
+    }
     let legacy: @MainActor (ConsumerFeature.Action) async -> Void = harness.legacyVoidAdapter
     await legacy(.output)
     await store.receiveOutput(1)

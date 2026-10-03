@@ -54,15 +54,37 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let queue = ActionQueue<R.Action>()
   package let outputQueue = ActionQueue<R.Output>()
   package let finishActivity = TestStoreFinishActivity()
-  package var assertionFailureReporter: (String, StaticString, UInt) -> Void = {
-    testStoreAssertionFailure($0, file: $1, line: $2)
+  package let effectLedgers = TestEffectLedgerRegistry()
+  package var issueReporter: (String, TestStoreSourceLocation) -> Void = {
+    testStoreAssertionFailure($0, location: $1)
   }
-  package var skippedAssertionReporter: (String, StaticString, UInt) -> Void = {
-    testStoreAssertionWarning($0, file: $1, line: $2)
+  package var warningReporter: (String, TestStoreSourceLocation) -> Void = {
+    testStoreAssertionWarning($0, location: $1)
+  }
+
+  // Preserve existing package-level test interception while production paths
+  // and scenario decoration retain all four source-location coordinates.
+  package var assertionFailureReporter: (String, StaticString, UInt) -> Void {
+    get {
+      let report = issueReporter
+      return { report($0, .init(fileID: $1, filePath: $1, line: $2, column: 1)) }
+    }
+    set {
+      issueReporter = { message, location in newValue(message, location.filePath, location.line) }
+    }
+  }
+  package var skippedAssertionReporter: (String, StaticString, UInt) -> Void {
+    get {
+      let report = warningReporter
+      return { report($0, .init(fileID: $1, filePath: $1, line: $2, column: 1)) }
+    }
+    set {
+      warningReporter = { message, location in newValue(message, location.filePath, location.line) }
+    }
   }
   package var terminalVerificationRevision: UInt64 = 0
   package var lastHandledTerminalVerificationRevision: UInt64?
-  package var terminalVerificationSource: (file: StaticString, line: UInt)?
+  package var terminalVerificationSource: TestStoreSourceLocation?
 
   package var runningTasks: [UUID: TrackedEffectTask] = [:]
   package var cancelledTaskTokens: Set<UUID> = []
@@ -125,9 +147,10 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   isolated deinit {
     childLifetimeRegistry.removeAll()
     let diagnostic = makeTerminalVerificationDiagnostic()
-    let failureReporter = assertionFailureReporter
-    let warningReporter = skippedAssertionReporter
+    let failureReporter = issueReporter
+    let warningReporter = self.warningReporter
 
+    for ledger in effectLedgers.values { ledger.record(.cancelled(.storeReleased)) }
     _ = markCancelledAll()
     for trackedTask in runningTasks.values {
       trackedTask.task.cancel()
@@ -143,9 +166,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     guard let diagnostic else { return }
     switch diagnostic.severity {
     case .failure:
-      failureReporter(diagnostic.message, diagnostic.file, diagnostic.line)
+      failureReporter(diagnostic.message, diagnostic.location)
     case .warning:
-      warningReporter(diagnostic.message, diagnostic.file, diagnostic.line)
+      warningReporter(diagnostic.message, diagnostic.location)
     }
   }
 
@@ -171,13 +194,12 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   package func nextEffectContext(
     for effect: ReducerEffect<R.Action, R.Output>,
-    file: StaticString,
-    line: UInt,
+    location: TestStoreSourceLocation,
     flowTaskTracker: FlowTaskTracker? = nil
   ) -> EffectExecutionContext {
     effectBoundaries.nextContext(
       potentialCancellationIDs: effect.potentialCancellationIDs,
-      origin: .init(file: file, line: line),
+      origin: .init(location: location),
       flowTaskTracker: flowTaskTracker
     )
   }
@@ -186,14 +208,13 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     sequence: UInt64,
     cancellationIDs: [AnyEffectID] = [],
     potentialCancellationIDs: Set<AnyEffectID> = [],
-    file: StaticString = #file,
-    line: UInt = #line
+    location: TestStoreSourceLocation = .init()
   ) -> EffectExecutionContext {
     effectBoundaries.makeContext(
       sequence: sequence,
       cancellationIDs: cancellationIDs,
       potentialCancellationIDs: potentialCancellationIDs,
-      origin: .init(file: file, line: line)
+      origin: .init(location: location)
     )
   }
 

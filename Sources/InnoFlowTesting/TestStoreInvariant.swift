@@ -7,19 +7,41 @@ import Foundation
 /// A named predicate checked after every state transition performed by TestStore.
 public struct TestStoreInvariant<State: Equatable>: Sendable {
   public let name: String
-  package let file: StaticString
-  package let line: UInt
+  package let location: TestStoreSourceLocation
   package let predicate: @MainActor @Sendable (State) -> Bool
 
   public init(
     _ name: String,
-    file: StaticString = #filePath,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column,
+    predicate: @escaping @MainActor @Sendable (State) -> Bool
+  ) {
+    self.init(
+      name, location: .init(fileID: fileID, filePath: filePath, line: line, column: column),
+      predicate: predicate)
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public init(
+    _ name: String,
+    file: StaticString,
     line: UInt = #line,
     predicate: @escaping @MainActor @Sendable (State) -> Bool
   ) {
+    self.init(
+      name, location: .init(fileID: file, filePath: file, line: line, column: 1),
+      predicate: predicate)
+  }
+
+  package init(
+    _ name: String,
+    location: TestStoreSourceLocation,
+    predicate: @escaping @MainActor @Sendable (State) -> Bool
+  ) {
     self.name = name
-    self.file = file
-    self.line = line
+    self.location = location
     self.predicate = predicate
   }
 }

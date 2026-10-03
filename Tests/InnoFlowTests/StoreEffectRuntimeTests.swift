@@ -1383,40 +1383,31 @@ struct StoreEffectRuntimeTests {
   }
 
   @Test("Store combinator composition keeps debounce and throttle semantics")
-  func storeCombinatorComposition() async {
+  func storeCombinatorComposition() async throws {
     let clock = ManualTestClock()
+    let firstEmission = AsyncTestSignal()
     let store = Store(
       reducer: CombinatorCompositionFeature(),
       initialState: .init(),
-      clock: .manual(clock)
+      clock: .manual(clock),
+      instrumentation: .init(didEmitAction: { event in
+        if event.action == ._throttled(1) { firstEmission.signal() }
+      })
     )
 
-    store.send(.start(1))
-    // Wait for the first merge to fully dispatch: throttle emits its leading
-    // value and debounce registers its sleeper. Under release optimization a
-    // fixed yield count is fragile — poll for the observable outcome.
-    for _ in 0..<200 {
-      let count = await clock.sleeperCount
-      if store.throttled == [1] && count >= 1 { break }
-      await Task.yield()
-    }
+    let first = store.send(.start(1))
+    try #require(await firstEmission.wait())
+    try await clock.waitForNowReads(toReach: 1)
+    try await clock.waitForSleepRegistrations(toReach: 2)
 
-    store.send(.start(2))
-    // The second merge's throttle must run and see the still-open window BEFORE
-    // we advance the clock. If we advance first, the window is treated as
-    // expired and the throttle emits the second value as a new leading emission.
-    // Neither throttle_2's suppression nor debounce_2's replacement registration
-    // produces a distinct observable state change (sleeperCount stays at 1
-    // across the cancel+re-register), so we can only wait for the merge's
-    // MainActor walker work to drain. A small wall-clock sleep on the system
-    // ContinuousClock gives the cooperative executor a real chance to run
-    // other tasks — more reliable than a fixed yield count on saturated CI.
-    try? await Task.sleep(for: .milliseconds(100))
-
+    let second = store.send(.start(2))
+    // Capture the second throttle's original window time and the replacement
+    // debounce registration before advancing either deterministic sleeper.
+    try await clock.waitForNowReads(toReach: 2)
+    try await clock.waitForSleepRegistrations(toReach: 3)
     await clock.advance(by: .milliseconds(50))
-    await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
-      store.debounced == [2]
-    }
+    await first.finish()
+    await second.finish()
 
     #expect(store.debounced == [2])
     #expect(store.throttled == [1])

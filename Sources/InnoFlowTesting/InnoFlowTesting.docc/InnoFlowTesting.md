@@ -82,6 +82,27 @@ index and label instead of reporting normal completion. Scoped output reception
 consumes the same root queue and therefore
 retains root ordering, exhaustivity, and total-deadline behavior.
 
+## Failure locations and test frameworks
+
+Canonical assertion helpers accept `fileID`, `filePath`, `line`, and `column`,
+all defaulted at the calling test. Root/scoped/phase helpers, scenario decoration,
+invariants, terminal verification, and asynchronous run failures preserve the
+complete origin. The legacy `file:` overload remains supported when explicitly
+supplied; it uses the same value for file ID/path and column 1.
+
+While a Swift Testing test is current, failures use `Issue.record` with the
+actual `SourceLocation`. Otherwise they use XCTest's `XCTFail` when XCTest is
+available. XCTest's public failure interface supports file path and line;
+column precision is available through Swift Testing. Skipped assertions remain
+warnings and never become XCTest failures.
+
+Scoped output reception supports the same exact-value, predicate, and case-path
+forms as root reception, with one shared root queue and total timeout. Structural
+state diffs include nested collection paths, missing elements, and enum-case
+changes without relying on a container's potentially redacted description.
+
+Read <doc:AdvancedTesting> for phase coverage and reproducible seeded exploration.
+
 ## Topics
 
 ### Reducer Harness
@@ -93,6 +114,10 @@ retains root ordering, exhaustivity, and total-deadline behavior.
 - ``Exhaustivity``
 - ``TestStoreInvariant``
 - ``TestStoreScenario``
+- ``PhaseCoverageRecorder``
+- ``TestStoreExplorer``
+- ``SplitMix64``
+- ``TestEffectLedger``
 
 ### Time and Instrumentation
 

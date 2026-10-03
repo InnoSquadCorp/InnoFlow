@@ -177,3 +177,7 @@ OptionalChildLifetime and Reducer.optionalChild are additive, opt-in wrappers. E
 ### Scheduler 6.0 signature changes
 
 EffectExecutionPolicy.serial and EffectAdmissionRejection.queueFull capacities change from Int to UInt; invalidCapacity is removed. EffectAdmission adds cancelledBeforeStart and superseded. Typed nonnegative constants migrate directly; signed variables need explicit validation. Public enum case additions are reviewed as major-version changes within this compatibility policy.
+
+### Testing source-location and lexical-lifetime changes
+
+Canonical Testing call signatures use fileID/filePath/line/column; explicit legacy file: overloads remain. Stored function values must select an appropriate adapter. FlowScope.init is fileprivate; use withFlowScope. TestStoreScenario.advance requires an explicit onceSleepersReach argument. TestStoreDispatch.effectLedger and scoped output exact/predicate overloads are additive. XCTest's public failure API preserves path/line but has no column equivalent.

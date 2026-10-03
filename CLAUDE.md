@@ -559,3 +559,7 @@ Third-generic diagnostics offer source Fix-Its using the feature's actual Output
 ### Scheduler admission completeness
 
 Scheduled runs recheck their exact cancellation context before reserving capacity. A delayed older sequence cannot supersede the current latest lane. Start admission occurs exactly once after task attachment; serial promotion skips invalid pending reservations without releasing a still-running physical slot. EffectAdmission includes cancelledBeforeStart and superseded. serial(maxPending:) and queueFull capacities use UInt, removing runtime invalidCapacity rejection. Public enum cases are fixed within 6.x; additions require a major-version review.
+
+### Testing diagnostics and reproducible lifetimes
+
+Canonical Testing assertions carry fileID, filePath, line and column through asynchronous and scoped paths. Explicit legacy file: calls remain supported without default-call ambiguity. Active Swift Testing records a source-located Issue; XCTest uses XCTFail at filePath/line because XCTest exposes no column parameter. Public FlowScope construction is lexical via withFlowScope only. Scenario advance requires onceSleepersReach explicitly. Dispatch effectLedger is testing-only, bounded, typed, and closes after physical completion; it never changes reducer/runtime semantics.

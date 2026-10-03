@@ -6,10 +6,9 @@ import Foundation
 
 extension TestStore {
   package func prepareForSend(
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) async {
-    noteTestInteraction(file: file, line: line)
+    noteTestInteraction(location: location)
     let deadline = wallClock.now.advanced(by: effectTimeout)
     var skippedActionCount = 0
     var skippedActionDescriptions: [String] = []
@@ -25,7 +24,7 @@ extension TestStore {
           skippedActionDescriptions,
           totalCount: skippedActionCount
         )
-        assertionFailureReporter(
+        issueReporter(
           """
           Timed out draining effect actions before a new action after \(effectTimeout).
 
@@ -37,8 +36,7 @@ extension TestStore {
 
           Remaining effect work was cancelled before reducing the new action.
           """,
-          file,
-          line
+          location
         )
         return
       }
@@ -46,7 +44,7 @@ extension TestStore {
         skippedActionDescriptions.append(String(describing: action.action))
       }
       skippedActionCount += 1
-      await applyUnassertedAction(action, file: file, line: line)
+      await applyUnassertedAction(action, location: location)
       didDrainAction = true
     }
 
@@ -58,28 +56,26 @@ extension TestStore {
     )
     switch exhaustivity {
     case .on:
-      assertionFailureReporter(
+      issueReporter(
         """
         TestStore received \(skippedActionCount) effect action(s) before a new action was sent:
         \(actionList)
 
         Receive every effect action before sending another action. The skipped actions were reduced to preserve runtime order.
         """,
-        file,
-        line
+        location
       )
 
     case .off(let showSkippedAssertions):
       guard showSkippedAssertions else { return }
-      skippedAssertionReporter(
+      warningReporter(
         """
         TestStore skipped \(skippedActionCount) effect action(s) before sending a new action:
         \(actionList)
 
         The skipped actions were reduced to preserve runtime order.
         """,
-        file,
-        line
+        location
       )
     }
   }
@@ -98,8 +94,7 @@ extension TestStore {
 
   package func applyUnassertedAction(
     _ queuedAction: ActionQueue<R.Action>.QueuedAction,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) async {
     defer { queuedAction.finish() }
     guard shouldProceed(context: queuedAction.context) else { return }
@@ -107,13 +102,12 @@ extension TestStore {
     let effect = reduceAction(
       action,
       source: .automatic,
-      file: file,
-      line: line
+      location: location
     )
     await walker.walk(
       effect,
       context: nextEffectContext(
-        for: effect, file: file, line: line, flowTaskTracker: queuedAction.context?.flowTaskTracker),
+        for: effect, location: location, flowTaskTracker: queuedAction.context?.flowTaskTracker),
       awaited: false
     )
   }
@@ -121,19 +115,17 @@ extension TestStore {
   package func reportSkippedAction(
     _ action: R.Action,
     context: String,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) {
     guard exhaustivity.showsSkippedAssertions else { return }
-    skippedAssertionReporter(
+    warningReporter(
       """
       TestStore skipped effect action while \(context):
       \(action)
 
       The skipped action was reduced to preserve runtime order.
       """,
-      file,
-      line
+      location
     )
   }
 
@@ -144,8 +136,7 @@ extension TestStore {
     eventDescription: String,
     failureContext: String? = nil,
     exhaustiveGuidance: String? = nil,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) {
     switch exhaustivity {
     case .on:
@@ -155,8 +146,7 @@ extension TestStore {
           eventDescription: eventDescription,
           failureContext: failureContext,
           guidance: exhaustiveGuidance,
-          file: file,
-          line: line
+          location: location
         )
         return
       }
@@ -169,8 +159,7 @@ extension TestStore {
         eventDescription: eventDescription,
         failureContext: failureContext,
         guidance: exhaustiveGuidance,
-        file: file,
-        line: line
+        location: location
       )
 
     case .off(let showSkippedAssertions):
@@ -181,8 +170,7 @@ extension TestStore {
             eventDescription: eventDescription,
             failureContext: failureContext,
             guidance: exhaustiveGuidance,
-            file: file,
-            line: line
+            location: location
           )
           return
         }
@@ -194,8 +182,7 @@ extension TestStore {
             eventDescription: eventDescription,
             failureContext: failureContext,
             guidance: nil,
-            file: file,
-            line: line
+            location: location
           )
           return
         }
@@ -209,8 +196,7 @@ extension TestStore {
         actual: state,
         eventDescription: eventDescription,
         failureContext: failureContext,
-        file: file,
-        line: line
+        location: location
       )
     }
   }
@@ -219,11 +205,10 @@ extension TestStore {
     eventDescription: String,
     failureContext: String?,
     guidance: String?,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) {
     let guidanceSection = guidance.map { "\n\n\($0)" } ?? ""
-    assertionFailureReporter(
+    issueReporter(
       decorate(
         """
         Could not evaluate the scoped state assertion \(eventDescription)
@@ -232,8 +217,7 @@ extension TestStore {
         """,
         with: failureContext
       ),
-      file,
-      line
+      location
     )
   }
 
@@ -244,8 +228,7 @@ extension TestStore {
     eventDescription: String,
     failureContext: String?,
     guidance: String?,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) {
     let diffSection = formattedDiff(expected: expected, actual: actual)
     let guidanceSection = guidance.map { "\n\n\($0)" } ?? ""
@@ -260,10 +243,9 @@ extension TestStore {
       \(actual)\(guidanceSection)
       """
 
-    assertionFailureReporter(
+    issueReporter(
       decorate(message, with: failureContext),
-      file,
-      line
+      location
     )
   }
 
@@ -272,8 +254,7 @@ extension TestStore {
     actual: R.State,
     eventDescription: String,
     failureContext: String?,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) {
     let message =
       """
@@ -288,10 +269,9 @@ extension TestStore {
       \(actual)
       """
 
-    skippedAssertionReporter(
+    warningReporter(
       decorate(message, with: failureContext),
-      file,
-      line
+      location
     )
   }
 

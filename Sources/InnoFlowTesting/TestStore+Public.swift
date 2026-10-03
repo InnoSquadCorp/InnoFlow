@@ -19,10 +19,36 @@ extension TestStore {
   public func send(
     _ action: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async -> TestStoreDispatch {
+    await send(
+      action, assert: updateExpectedState,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  @discardableResult
+  public func send(
+    _ action: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString,
     line: UInt = #line
   ) async -> TestStoreDispatch {
-    await prepareForSend(file: file, line: line)
+    await send(
+      action, assert: updateExpectedState,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  @discardableResult
+  package func send(
+    _ action: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    location: TestStoreSourceLocation
+  ) async -> TestStoreDispatch {
+    await prepareForSend(location: location)
     let dispatch = makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousState = state
@@ -30,8 +56,7 @@ extension TestStore {
     let effect = reduceAction(
       action,
       source: .send,
-      file: file,
-      line: line
+      location: location
     )
     assertStateTransition(
       from: previousState,
@@ -42,14 +67,13 @@ extension TestStore {
         }
       },
       eventDescription: "mismatch after action.",
-      file: file,
-      line: line
+      location: location
     )
 
     await walker.walk(
       effect,
       context: nextEffectContext(
-        for: effect, file: file, line: line, flowTaskTracker: dispatch.tracker),
+        for: effect, location: location, flowTaskTracker: dispatch.tracker),
       awaited: false
     )
     return dispatch.task
@@ -58,15 +82,38 @@ extension TestStore {
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async where R.Action: Equatable {
+    await receive(
+      expectedAction, assert: updateExpectedState,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public func receive(
+    _ expectedAction: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString,
     line: UInt = #line
+  ) async where R.Action: Equatable {
+    await receive(
+      expectedAction, assert: updateExpectedState,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package func receive(
+    _ expectedAction: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    location: TestStoreSourceLocation
   ) async where R.Action: Equatable {
     await receiveExact(
       expectedAction,
       timeout: nil,
       assert: updateExpectedState,
-      file: file,
-      line: line
+      location: location
     )
   }
 
@@ -79,15 +126,40 @@ extension TestStore {
     _ expectedAction: R.Action,
     timeout: Duration,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async where R.Action: Equatable {
+    await receive(
+      expectedAction, timeout: timeout, assert: updateExpectedState,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public func receive(
+    _ expectedAction: R.Action,
+    timeout: Duration,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString,
     line: UInt = #line
+  ) async where R.Action: Equatable {
+    await receive(
+      expectedAction, timeout: timeout, assert: updateExpectedState,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package func receive(
+    _ expectedAction: R.Action,
+    timeout: Duration,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    location: TestStoreSourceLocation
   ) async where R.Action: Equatable {
     await receiveExact(
       expectedAction,
       timeout: timeout,
       assert: updateExpectedState,
-      file: file,
-      line: line
+      location: location
     )
   }
 
@@ -105,10 +177,40 @@ extension TestStore {
     caseName: String? = nil,
     timeout: Duration? = nil,
     assert updateExpectedState: ((inout R.State, Value) -> Void)? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async -> Value? {
+    await receive(
+      path, caseName: caseName, timeout: timeout, assert: updateExpectedState,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  @discardableResult
+  public func receive<Value>(
+    _ path: CasePath<R.Action, Value>,
+    caseName: String? = nil,
+    timeout: Duration? = nil,
+    assert updateExpectedState: ((inout R.State, Value) -> Void)? = nil,
+    file: StaticString,
     line: UInt = #line
   ) async -> Value? {
-    let result = await receiveMatchingResult(timeout: timeout, file: file, line: line) { action in
+    await receive(
+      path, caseName: caseName, timeout: timeout, assert: updateExpectedState,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  @discardableResult
+  package func receive<Value>(
+    _ path: CasePath<R.Action, Value>,
+    caseName: String? = nil,
+    timeout: Duration? = nil,
+    assert updateExpectedState: ((inout R.State, Value) -> Void)? = nil,
+    location: TestStoreSourceLocation
+  ) async -> Value? {
+    let result = await receiveMatchingResult(timeout: timeout, location: location) { action in
       switch path.extract(action) {
       case .some(let value):
         return .matched(value)
@@ -127,33 +229,30 @@ extension TestStore {
       await applyReceivedAction(
         action,
         assert: stateAssertion,
-        file: file,
-        line: line
+        location: location
       )
       return .some(value)
 
     case .mismatched(let action):
-      assertionFailureReporter(
+      issueReporter(
         """
         Received action did not match \(expectation).
 
         Received:
         \(action.action)
         """,
-        file,
-        line
+        location
       )
       return nil
 
     case .timedOut(let resolvedTimeout):
-      assertionFailureReporter(
+      issueReporter(
         """
         Expected to receive an action matching \(expectation).
 
         But timed out after \(resolvedTimeout).
         """,
-        file,
-        line
+        location
       )
       return nil
 
@@ -174,10 +273,40 @@ extension TestStore {
     description: String? = nil,
     timeout: Duration? = nil,
     assert updateExpectedState: ((inout R.State, R.Action) -> Void)? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async -> R.Action? {
+    await receive(
+      where: predicate, description: description, timeout: timeout, assert: updateExpectedState,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  @discardableResult
+  public func receive(
+    where predicate: (R.Action) -> Bool,
+    description: String? = nil,
+    timeout: Duration? = nil,
+    assert updateExpectedState: ((inout R.State, R.Action) -> Void)? = nil,
+    file: StaticString,
     line: UInt = #line
   ) async -> R.Action? {
-    let result = await receiveMatchingResult(timeout: timeout, file: file, line: line) { action in
+    await receive(
+      where: predicate, description: description, timeout: timeout, assert: updateExpectedState,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  @discardableResult
+  package func receive(
+    where predicate: (R.Action) -> Bool,
+    description: String? = nil,
+    timeout: Duration? = nil,
+    assert updateExpectedState: ((inout R.State, R.Action) -> Void)? = nil,
+    location: TestStoreSourceLocation
+  ) async -> R.Action? {
+    let result = await receiveMatchingResult(timeout: timeout, location: location) { action in
       predicate(action) ? .matched(action) : .mismatched
     }
     let expectation = description.map { "predicate '\($0)'" } ?? "the supplied predicate"
@@ -190,33 +319,30 @@ extension TestStore {
       await applyReceivedAction(
         action,
         assert: stateAssertion,
-        file: file,
-        line: line
+        location: location
       )
       return .some(action.action)
 
     case .mismatched(let action):
-      assertionFailureReporter(
+      issueReporter(
         """
         Received action did not satisfy \(expectation).
 
         Received:
         \(action.action)
         """,
-        file,
-        line
+        location
       )
       return nil
 
     case .timedOut(let resolvedTimeout):
-      assertionFailureReporter(
+      issueReporter(
         """
         Expected to receive an action satisfying \(expectation).
 
         But timed out after \(resolvedTimeout).
         """,
-        file,
-        line
+        location
       )
       return nil
 
@@ -229,10 +355,9 @@ extension TestStore {
     _ expectedAction: R.Action,
     timeout: Duration?,
     assert updateExpectedState: ((inout R.State) -> Void)?,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) async where R.Action: Equatable {
-    let result = await receiveMatchingResult(timeout: timeout, file: file, line: line) { action in
+    let result = await receiveMatchingResult(timeout: timeout, location: location) { action in
       action == expectedAction ? .matched(()) : .mismatched
     }
 
@@ -241,12 +366,11 @@ extension TestStore {
       await applyReceivedAction(
         action,
         assert: updateExpectedState,
-        file: file,
-        line: line
+        location: location
       )
 
     case .mismatched(let action):
-      assertionFailureReporter(
+      issueReporter(
         """
         Received unexpected action.
 
@@ -256,20 +380,18 @@ extension TestStore {
         Received:
         \(action.action)
         """,
-        file,
-        line
+        location
       )
 
     case .timedOut(let resolvedTimeout):
-      assertionFailureReporter(
+      issueReporter(
         """
         Expected to receive action:
         \(expectedAction)
 
         But timed out after \(resolvedTimeout).
         """,
-        file,
-        line
+        location
       )
 
     case .cancelled:
@@ -280,8 +402,7 @@ extension TestStore {
   private func applyReceivedAction(
     _ queuedAction: ActionQueue<R.Action>.QueuedAction,
     assert updateExpectedState: ((inout R.State) -> Void)?,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) async {
     defer { queuedAction.finish() }
     guard shouldProceed(context: queuedAction.context) else { return }
@@ -291,8 +412,7 @@ extension TestStore {
     let effect = reduceAction(
       action,
       source: .receive,
-      file: file,
-      line: line
+      location: location
     )
     assertStateTransition(
       from: previousState,
@@ -303,32 +423,48 @@ extension TestStore {
         }
       },
       eventDescription: "mismatch after receiving action.",
-      file: file,
-      line: line
+      location: location
     )
 
     await walker.walk(
       effect,
       context: nextEffectContext(
-        for: effect, file: file, line: line, flowTaskTracker: queuedAction.context?.flowTaskTracker),
+        for: effect, location: location, flowTaskTracker: queuedAction.context?.flowTaskTracker),
       awaited: false
     )
   }
 
   public func assertNoBufferedActions(
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async {
+    await assertNoBufferedActions(
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public func assertNoBufferedActions(
+    file: StaticString,
     line: UInt = #line
   ) async {
+    await assertNoBufferedActions(
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package func assertNoBufferedActions(
+    location: TestStoreSourceLocation
+  ) async {
     if let buffered = await popBufferedAction() {
-      assertionFailureReporter(
+      issueReporter(
         """
         Unhandled buffered action:
         \(buffered)
 
         All already-buffered effect actions should be verified with `receive(_:assert:)`.
         """,
-        file,
-        line
+        location
       )
     }
   }
@@ -469,31 +605,29 @@ extension TestStore {
   package func applyScopedAction(
     _ action: R.Action,
     source: TestStoreReductionSource,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) -> ReducerEffect<R.Action, R.Output> {
-    reduceAction(action, source: source, file: file, line: line)
+    reduceAction(action, source: source, location: location)
   }
 
   package func walkScopedEffect(
     _ effect: ReducerEffect<R.Action, R.Output>,
     context: EffectExecutionContext? = nil,
     flowTaskTracker: FlowTaskTracker? = nil,
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) async {
     await walker.walk(
       effect,
       context: nextEffectContext(
-        for: effect, file: file, line: line,
+        for: effect, location: location,
         flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker),
       awaited: false
     )
   }
 
   package func walkScopedEffect(_ effect: ReducerEffect<R.Action, R.Output>) async {
-    let source = terminalVerificationSource ?? (#file, #line)
-    await walkScopedEffect(effect, file: source.file, line: source.line)
+    let source = terminalVerificationSource ?? .init()
+    await walkScopedEffect(effect, location: source)
   }
 
   package var resolvedDiffLineLimit: Int {

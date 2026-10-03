@@ -1,68 +1,99 @@
-// MARK: - TestStore+Assertions.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
+package import InnoFlowCore
 
 #if canImport(Testing)
   import Testing
-#elseif canImport(XCTest)
+#endif
+#if canImport(XCTest)
   import XCTest
 #endif
 
-// MARK: - Assertion Helper
+/// The complete user call site, passed as one value through assertion stepping
+/// and asynchronous effect origins. This never records a framework call site.
+package struct TestStoreSourceLocation: Sendable {
+  package let fileID: StaticString
+  package let filePath: StaticString
+  package let line: UInt
+  package let column: UInt
 
-func testStoreAssertionFailure(
-  _ message: String,
-  file: StaticString,
-  line: UInt
-) {
-  #if DEBUG
-    print("❌ TestStore Assertion Failed:")
-    print(message)
-    print("File: \(file), Line: \(line)")
-  #endif
+  package init(
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) {
+    self.fileID = fileID
+    self.filePath = filePath
+    self.line = line
+    self.column = column
+  }
+
+  package init(_ origin: EffectOrigin) {
+    self.init(
+      fileID: origin.fileID, filePath: origin.file, line: origin.line, column: origin.column)
+  }
 
   #if canImport(Testing)
-    Issue.record(
-      TestStoreAssertionIssue(
-        message: "\(file):\(line): \(message)"
+    var testingLocation: SourceLocation {
+      SourceLocation(
+        fileID: fileID.description,
+        filePath: filePath.description,
+        line: Int(clamping: line),
+        column: Int(clamping: column)
       )
-    )
-  #elseif canImport(XCTest)
-    XCTFail(message, file: file, line: line)
-  #else
-    Swift.assertionFailure(message, file: file, line: line)
+    }
   #endif
 }
 
-func testStoreAssertionWarning(
-  _ message: String,
-  file: StaticString,
-  line: UInt
-) {
-  #if DEBUG
-    print("⚠️ TestStore Assertion Skipped:")
-    print(message)
-    print("File: \(file), Line: \(line)")
-  #endif
-
-  #if canImport(Testing)
-    Issue.record(
-      Comment(rawValue: "\(file):\(line): \(message)"),
-      severity: .warning,
-      sourceLocation: SourceLocation(
-        fileID: String(describing: file),
-        filePath: String(describing: file),
-        line: Int(line),
-        column: 1
-      )
+extension EffectOrigin {
+  init(location: TestStoreSourceLocation) {
+    self.init(
+      file: location.filePath, line: location.line, fileID: location.fileID, column: location.column
     )
-  #elseif canImport(XCTest)
-    print("⚠️ \(file):\(line): \(message)")
-  #else
-    print("⚠️ \(file):\(line): \(message)")
+  }
+}
+
+func testStoreAssertionFailure(_ message: String, location: TestStoreSourceLocation) {
+  #if DEBUG
+    print(
+      "❌ TestStore Assertion Failed:\n\(message)\nFile: \(location.filePath), Line: \(location.line), Column: \(location.column)"
+    )
   #endif
+  #if canImport(Testing)
+    if Test.current != nil {
+      Issue.record(
+        TestStoreAssertionIssue(message: message), sourceLocation: location.testingLocation)
+      return
+    }
+  #endif
+  #if canImport(XCTest)
+    XCTFail(message, file: location.filePath, line: location.line)
+  #else
+    Swift.assertionFailure(message, file: location.filePath, line: location.line)
+  #endif
+}
+
+func testStoreAssertionWarning(_ message: String, location: TestStoreSourceLocation) {
+  #if canImport(Testing)
+    if Test.current != nil {
+      Issue.record(
+        Comment(rawValue: message), severity: .warning, sourceLocation: location.testingLocation)
+      return
+    }
+  #endif
+  print("⚠️ \(location.filePath):\(location.line):\(location.column): \(message)")
+}
+
+// Legacy package hooks intentionally lack column information. Public canonical
+// assertions always enter the complete-location path above.
+func testStoreAssertionFailure(_ message: String, file: StaticString, line: UInt) {
+  testStoreAssertionFailure(
+    message, location: .init(fileID: file, filePath: file, line: line, column: 1))
+}
+
+func testStoreAssertionWarning(_ message: String, file: StaticString, line: UInt) {
+  testStoreAssertionWarning(
+    message, location: .init(fileID: file, filePath: file, line: line, column: 1))
 }
 
 func scopedTestStoreFailureContext(stableID: AnyHashable?) -> String? {

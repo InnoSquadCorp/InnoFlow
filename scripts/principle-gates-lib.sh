@@ -532,6 +532,8 @@ run_authoring_surface_checks() {
   search_lines "public struct OptionalChildLifetime" Sources/InnoFlowCore/OptionalChildLifetime.swift >/dev/null
   search_lines "func reusedReducerInDifferentScopesHasIndependentLifetimes" Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift >/dev/null
 
+  python3 scripts/check-testing-contracts.py
+
   echo "[principle-gates] Checking official composition primitives"
   search_lines "public struct Reduce<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
   search_lines "public struct CombineReducers<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null

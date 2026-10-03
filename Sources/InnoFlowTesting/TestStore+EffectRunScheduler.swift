@@ -28,7 +28,19 @@ extension TestStore {
         self?.deliverAction(action, context: context)
       },
       onPendingExit: { _ in },
-      context: context
+      context: context,
+      onAdmissionLifecycle: { [weak self] _, admission in
+        guard let self else { return }
+        switch admission {
+        case .rejected(let reason): self.recordEffectEvent(.rejected(reason), context: context)
+        case .superseded: self.recordEffectEvent(.superseded, context: context)
+        default: self.recordEffectEvent(.admitted(admission), context: context)
+        }
+      },
+      onCancellationEvent: { [weak self] cause in
+        self?.recordEffectEvent(
+          .cancelled(cause == .superseded ? .superseded : .effect), context: context)
+      }
     )
 
     guard case .accepted(let ticket) = plan else {

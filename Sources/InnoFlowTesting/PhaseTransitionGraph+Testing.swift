@@ -6,8 +6,36 @@ public func assertValidGraph<Phase: Hashable & Sendable>(
   allPhases: Set<Phase>,
   root: Phase,
   terminalPhases: Set<Phase> = [],
-  file: StaticString = #file,
+  fileID: StaticString = #fileID,
+  filePath: StaticString = #filePath,
+  line: UInt = #line,
+  column: UInt = #column
+) {
+  assertValidGraph(
+    graph, allPhases: allPhases, root: root, terminalPhases: terminalPhases,
+    location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+}
+
+/// Compatibility overload for an explicitly supplied legacy source file.
+public func assertValidGraph<Phase: Hashable & Sendable>(
+  _ graph: PhaseTransitionGraph<Phase>,
+  allPhases: Set<Phase>,
+  root: Phase,
+  terminalPhases: Set<Phase> = [],
+  file: StaticString,
   line: UInt = #line
+) {
+  assertValidGraph(
+    graph, allPhases: allPhases, root: root, terminalPhases: terminalPhases,
+    location: .init(fileID: file, filePath: file, line: line, column: 1))
+}
+
+package func assertValidGraph<Phase: Hashable & Sendable>(
+  _ graph: PhaseTransitionGraph<Phase>,
+  allPhases: Set<Phase>,
+  root: Phase,
+  terminalPhases: Set<Phase> = [],
+  location: TestStoreSourceLocation
 ) {
   let report = graph.validationReport(
     allPhases: allPhases,
@@ -35,8 +63,7 @@ public func assertValidGraph<Phase: Hashable & Sendable>(
       Issues:
       \(report.issues)
       """,
-      file: file,
-      line: line
+      location: location
     )
     return
   }
@@ -51,11 +78,41 @@ extension TestStore {
     tracking phase: KeyPath<R.State, Phase>,
     through graph: PhaseTransitionGraph<Phase>,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async -> TestStoreDispatch {
+    await send(
+      action, tracking: phase, through: graph, assert: updateExpectedState,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  @discardableResult
+  public func send<Phase: Hashable & Sendable>(
+    _ action: R.Action,
+    tracking phase: KeyPath<R.State, Phase>,
+    through graph: PhaseTransitionGraph<Phase>,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString,
     line: UInt = #line
   ) async -> TestStoreDispatch {
+    await send(
+      action, tracking: phase, through: graph, assert: updateExpectedState,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  @discardableResult
+  package func send<Phase: Hashable & Sendable>(
+    _ action: R.Action,
+    tracking phase: KeyPath<R.State, Phase>,
+    through graph: PhaseTransitionGraph<Phase>,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    location: TestStoreSourceLocation
+  ) async -> TestStoreDispatch {
     let previousPhase = state[keyPath: phase]
-    let task = await send(action, assert: updateExpectedState, file: file, line: line)
+    let task = await send(action, assert: updateExpectedState, location: location)
     let nextPhase = state[keyPath: phase]
 
     guard previousPhase != nextPhase else { return task }
@@ -77,8 +134,7 @@ extension TestStore {
         Allowed next phases:
         \(graph.successors(from: previousPhase))
         """,
-        file: file,
-        line: line
+        location: location
       )
       return task
     }
@@ -91,11 +147,39 @@ extension TestStore {
     tracking phase: KeyPath<R.State, Phase>,
     through graph: PhaseTransitionGraph<Phase>,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async where R.Action: Equatable {
+    await receive(
+      expectedAction, tracking: phase, through: graph, assert: updateExpectedState,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public func receive<Phase: Hashable & Sendable>(
+    _ expectedAction: R.Action,
+    tracking phase: KeyPath<R.State, Phase>,
+    through graph: PhaseTransitionGraph<Phase>,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString,
     line: UInt = #line
   ) async where R.Action: Equatable {
+    await receive(
+      expectedAction, tracking: phase, through: graph, assert: updateExpectedState,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package func receive<Phase: Hashable & Sendable>(
+    _ expectedAction: R.Action,
+    tracking phase: KeyPath<R.State, Phase>,
+    through graph: PhaseTransitionGraph<Phase>,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    location: TestStoreSourceLocation
+  ) async where R.Action: Equatable {
     let previousPhase = state[keyPath: phase]
-    await receive(expectedAction, assert: updateExpectedState, file: file, line: line)
+    await receive(expectedAction, assert: updateExpectedState, location: location)
     let nextPhase = state[keyPath: phase]
 
     guard previousPhase != nextPhase else { return }
@@ -117,8 +201,7 @@ extension TestStore {
         Allowed next phases:
         \(graph.successors(from: previousPhase))
         """,
-        file: file,
-        line: line
+        location: location
       )
       return
     }
@@ -132,16 +215,47 @@ extension TestStore {
     through graph: PhaseTransitionGraph<Phase>,
     timeout: Duration,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async where R.Action: Equatable {
+    await receive(
+      expectedAction, tracking: phase, through: graph, timeout: timeout,
+      assert: updateExpectedState,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public func receive<Phase: Hashable & Sendable>(
+    _ expectedAction: R.Action,
+    tracking phase: KeyPath<R.State, Phase>,
+    through graph: PhaseTransitionGraph<Phase>,
+    timeout: Duration,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    file: StaticString,
     line: UInt = #line
+  ) async where R.Action: Equatable {
+    await receive(
+      expectedAction, tracking: phase, through: graph, timeout: timeout,
+      assert: updateExpectedState,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package func receive<Phase: Hashable & Sendable>(
+    _ expectedAction: R.Action,
+    tracking phase: KeyPath<R.State, Phase>,
+    through graph: PhaseTransitionGraph<Phase>,
+    timeout: Duration,
+    assert updateExpectedState: ((inout R.State) -> Void)? = nil,
+    location: TestStoreSourceLocation
   ) async where R.Action: Equatable {
     let previousPhase = state[keyPath: phase]
     await receive(
       expectedAction,
       timeout: timeout,
       assert: updateExpectedState,
-      file: file,
-      line: line
+      location: location
     )
     let nextPhase = state[keyPath: phase]
 
@@ -164,8 +278,7 @@ extension TestStore {
         Allowed next phases:
         \(graph.successors(from: previousPhase))
         """,
-        file: file,
-        line: line
+        location: location
       )
       return
     }

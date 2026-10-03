@@ -48,11 +48,15 @@ package struct EffectAnimation: Sendable, CustomStringConvertible {
 /// interaction happened most recently.
 package struct EffectOrigin: Sendable {
   package let file: StaticString
+  package let fileID: StaticString
   package let line: UInt
+  package let column: UInt
 
-  package init(file: StaticString, line: UInt) {
+  package init(file: StaticString, line: UInt, fileID: StaticString? = nil, column: UInt = 1) {
     self.file = file
+    self.fileID = fileID ?? file
     self.line = line
+    self.column = column
   }
 }
 

@@ -102,17 +102,21 @@ extension TestStore {
       shouldProceed: { [weak self] context in
         self?.shouldProceed(context: context) ?? false
       },
+      didStartRun: { [weak self] context in
+        self?.recordEffectEvent(.started, context: context)
+      },
       didEnqueueAction: { [weak self] in
         self?.noteUnverifiedWorkAfterTerminalVerification()
         self?.finishActivity.noteProgress()
       },
-      reportRunFailure: { [weak self] message, origin in
+      reportRunFailure: { [weak self] message, origin, context in
         guard let self else { return }
+        self.recordEffectEvent(.failed(message), context: context)
         let source =
-          origin.map { ($0.file, $0.line) }
+          origin.map(TestStoreSourceLocation.init)
           ?? self.terminalVerificationSource
-          ?? (#file, #line)
-        self.assertionFailureReporter(message, source.0, source.1)
+          ?? .init()
+        self.issueReporter(message, source)
       },
       finishTrackedTask: { [weak self] token in
         self?.finishTrackedRunTask(token: token)
@@ -155,6 +159,7 @@ extension TestStore {
         await runBridge.finish()
         return
       }
+      endpoint.didStartRun(context: context)
 
       let send = Send<R.Action> { action in
         await runBridge.emit(action)
@@ -283,7 +288,8 @@ extension TestStore {
   private func markTrackedTaskCancelled(token: UUID) {
     // Cancellation closes delivery immediately, while the task remains in the
     // physical registry until its completion callback actually arrives.
-    cancelledTaskTokens.insert(token)
+    guard cancelledTaskTokens.insert(token).inserted else { return }
+    recordEffectEvent(.cancelled(.effect), context: runningTasks[token]?.context)
     removeTaskIDIndexes(token: token)
     for id in Array(throttleActivityTokenByID.keys)
     where throttleActivityTokenByID[id] == token {

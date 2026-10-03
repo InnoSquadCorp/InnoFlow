@@ -9,24 +9,30 @@ public import InnoFlowCore
 /// The handle does not retain its test store.
 public struct TestStoreDispatch: Sendable {
   private let flowTask: FlowTask
+  private let ledger: TestEffectLedgerStorage
   private let timeout: Duration
   private let activity: TestStoreFinishActivity
   private let snapshot: @MainActor @Sendable () -> TestStoreUnverifiedSnapshot?
-  private let reportFailure: @MainActor @Sendable (String, StaticString, UInt) -> Void
+  private let reportFailure: @MainActor @Sendable (String, TestStoreSourceLocation) -> Void
 
   package init(
     tracker: FlowTaskTracker,
+    ledger: TestEffectLedgerStorage,
     timeout: Duration,
     activity: TestStoreFinishActivity,
     snapshot: @escaping @MainActor @Sendable () -> TestStoreUnverifiedSnapshot?,
-    reportFailure: @escaping @MainActor @Sendable (String, StaticString, UInt) -> Void
+    reportFailure: @escaping @MainActor @Sendable (String, TestStoreSourceLocation) -> Void
   ) {
     flowTask = FlowTask(tracker: tracker)
+    self.ledger = ledger
     self.timeout = timeout
     self.activity = activity
     self.snapshot = snapshot
     self.reportFailure = reportFailure
   }
+
+  /// A bounded, non-consuming snapshot of this dispatch's typed effect events.
+  public var effectLedger: TestEffectLedger { ledger.snapshot }
 
   package var flowTaskReference: FlowTask { flowTask }
 
@@ -46,8 +52,31 @@ public struct TestStoreDispatch: Sendable {
   @MainActor
   public func finish(
     timeout: Duration? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async {
+    await finish(
+      timeout: timeout,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  @MainActor
+  public func finish(
+    timeout: Duration? = nil,
+    file: StaticString,
     line: UInt = #line
+  ) async {
+    await finish(
+      timeout: timeout, location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  @MainActor
+  package func finish(
+    timeout: Duration? = nil,
+    location: TestStoreSourceLocation
   ) async {
     let timeout = timeout ?? self.timeout
     let clock = ContinuousClock()
@@ -65,8 +94,7 @@ public struct TestStoreDispatch: Sendable {
             "TestStoreDispatch finished with unverified work in its dispatch.\n\n"
               + unverified.description
               + "\n\nReceive these values before finishing this task. No values were consumed.",
-            file,
-            line
+            location
           )
           return
         }
@@ -75,8 +103,7 @@ public struct TestStoreDispatch: Sendable {
           cancel()
           reportFailure(
             "Timed out waiting for TestStoreDispatch after \(timeout). Cancellation was requested only for this dispatch; physically running work may remain.",
-            file,
-            line
+            location
           )
           return
         }
@@ -113,22 +140,29 @@ extension TestStore {
   package func makeDispatch() -> (tracker: FlowTaskTracker, activity: UUID, task: TestStoreDispatch)
   {
     let activity = finishActivity
+    let ledger = TestEffectLedgerStorage()
+    let ledgers = effectLedgers
     let tracker = FlowTaskTracker(
-      onFinish: { [weak activity] _ in
+      onFinish: { [weak ledgers, weak activity] dispatchID in
+        ledger.record(.finished)
+        ledgers?.remove(dispatchID)
         Task { @MainActor in activity?.noteProgress() }
       },
       onCancel: { [weak self] _ in
+        ledger.record(.cancelled(.dispatch))
         Task { @MainActor in self?.discardInvalidatedActions() }
       }
     )
+    effectLedgers.insert(ledger, for: tracker.dispatchID)
     let token = tracker.beginActivity()
     let task = TestStoreDispatch(
       tracker: tracker,
+      ledger: ledger,
       timeout: effectTimeout,
       activity: activity,
       snapshot: { [weak self] in self?.unverifiedSnapshot(dispatchID: tracker.dispatchID) },
-      reportFailure: { [weak self] message, file, line in
-        self?.assertionFailureReporter(message, file, line)
+      reportFailure: { [weak self] message, location in
+        self?.issueReporter(message, location)
       }
     )
     return (tracker, token, task)

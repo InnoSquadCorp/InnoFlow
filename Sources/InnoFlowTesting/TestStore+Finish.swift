@@ -142,8 +142,9 @@ package struct TestStoreTerminalVerificationDiagnostic {
 
   package let severity: Severity
   package let message: String
-  package let file: StaticString
-  package let line: UInt
+  package let location: TestStoreSourceLocation
+  package var file: StaticString { location.filePath }
+  package var line: UInt { location.line }
 }
 
 extension TestStore {
@@ -177,14 +178,34 @@ extension TestStore {
   ///   - line: The source line reported when terminal verification fails.
   public func finish(
     timeout: Duration? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async {
+    await finish(
+      timeout: timeout,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public func finish(
+    timeout: Duration? = nil,
+    file: StaticString,
     line: UInt = #line
+  ) async {
+    await finish(
+      timeout: timeout, location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package func finish(
+    timeout: Duration? = nil,
+    location: TestStoreSourceLocation
   ) async {
     let resolvedTimeout = timeout ?? effectTimeout
     let result = await finishResult(
       timeout: resolvedTimeout,
-      file: file,
-      line: line
+      location: location
     )
 
     switch result {
@@ -192,15 +213,14 @@ extension TestStore {
       return
 
     case .unhandledWork(let snapshot):
-      assertionFailureReporter(
+      issueReporter(
         "TestStore finished with unverified work.\n\n" + snapshot.description
           + "\n\nEvery effect action and reducer output must be verified with `receive` and `receiveOutput` before the test finishes.",
-        file,
-        line
+        location
       )
 
     case .timedOut(let snapshot):
-      assertionFailureReporter(
+      issueReporter(
         """
         Timed out waiting for TestStore to become idle after \(resolvedTimeout).
 
@@ -213,18 +233,16 @@ extension TestStore {
 
         Complete or cancel long-running effects before finishing. A continuously emitted action chain can also prevent the harness from becoming idle. When using `ManualTestClock`, advance it far enough for delayed effects to fire before calling `finish()`.
         """,
-        file,
-        line
+        location
       )
     }
   }
 
   package func finishResult(
     timeout: Duration? = nil,
-    file: StaticString = #file,
-    line: UInt = #line
+    location: TestStoreSourceLocation = .init()
   ) async -> TestStoreFinishResult {
-    _ = beginTerminalVerification(file: file, line: line)
+    _ = beginTerminalVerification(location: location)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
     var didDrainWork = false
@@ -257,10 +275,9 @@ extension TestStore {
         reportSkippedAction(
           action.action,
           context: "finishing",
-          file: file,
-          line: line
+          location: location
         )
-        await applyUnassertedAction(action, file: file, line: line)
+        await applyUnassertedAction(action, location: location)
         didDrainWork = true
         continue
       } else if let output = await popBufferedOutput() {
@@ -273,10 +290,9 @@ extension TestStore {
           return .timedOut(snapshot)
         }
         if exhaustivity.showsSkippedAssertions {
-          skippedAssertionReporter(
+          warningReporter(
             "TestStore skipped reducer output while finishing:\n\(output)",
-            file,
-            line
+            location
           )
         }
         didDrainWork = true
@@ -310,11 +326,10 @@ extension TestStore {
   }
 
   package func noteTestInteraction(
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) {
     terminalVerificationRevision &+= 1
-    terminalVerificationSource = (file, line)
+    terminalVerificationSource = location
   }
 
   package func noteUnverifiedWorkAfterTerminalVerification() {
@@ -337,10 +352,9 @@ extension TestStore {
   }
 
   private func beginTerminalVerification(
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) -> UInt64 {
-    terminalVerificationSource = (file, line)
+    terminalVerificationSource = location
     return terminalVerificationRevision
   }
 
@@ -440,12 +454,11 @@ extension TestStore {
     }
     sections.append(guidance)
 
-    let source = terminalVerificationSource ?? (#file, #line)
+    let source = terminalVerificationSource ?? .init()
     return TestStoreTerminalVerificationDiagnostic(
       severity: severity,
       message: sections.joined(separator: "\n\n"),
-      file: source.file,
-      line: source.line
+      location: source
     )
   }
 }

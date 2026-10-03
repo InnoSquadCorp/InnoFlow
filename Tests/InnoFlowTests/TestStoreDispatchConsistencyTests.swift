@@ -446,14 +446,15 @@ struct TestStoreDispatchConsistencyTests {
   func flowScopeAdapter() async throws {
     let gate = DispatchConsistencyGate()
     let store = TestStore(reducer: DispatchConsistencyFeature(gates: [1: gate]))
-    let scope = FlowScope()
-    let task = await scope.track(await store.send(.wait(1)))
-    let run = try #require(store.runningTasks.values.first?.task)
-    task.cancel()
-    await gate.open()
-    _ = await run.result
-    await scope.cancelAndFinish()
-    await task.finish()
+    try await withFlowScope { scope in
+      let task = await scope.track(await store.send(.wait(1)))
+      let run = try #require(store.runningTasks.values.first?.task)
+      task.cancel()
+      await gate.open()
+      _ = await run.result
+      await scope.cancelAndFinish()
+      await task.finish()
+    }
     await store.finish()
   }
 }

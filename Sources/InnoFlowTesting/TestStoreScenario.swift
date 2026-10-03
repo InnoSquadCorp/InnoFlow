@@ -39,35 +39,58 @@ public struct TestStoreScenarioStep<R: Reducer>: Sendable where R.State: Equatab
   public static func send(
     _ action: R.Action,
     label: String? = nil,
-    file: StaticString = #filePath,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column,
+    assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
+  ) -> Self {
+    send(
+      action, label: label,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column),
+      assert: assert)
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public static func send(
+    _ action: R.Action,
+    label: String? = nil,
+    file: StaticString,
     line: UInt = #line,
     assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
   ) -> Self {
+    send(
+      action, label: label, location: .init(fileID: file, filePath: file, line: line, column: 1),
+      assert: assert)
+  }
+
+  package static func send(
+    _ action: R.Action,
+    label: String? = nil,
+    location: TestStoreSourceLocation,
+    assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
+  ) -> Self {
     .init(label ?? "send \(String(describing: action))") { store in
-      _ = await store.send(action, assert: assert, file: file, line: line)
+      _ = await store.send(action, assert: assert, location: location)
     }
   }
 
   public static func advance(
     _ clock: ManualTestClock,
     by duration: Duration,
-    onceSleepersReach count: Int? = nil,
+    onceSleepersReach count: Int,
     label: String? = nil
   ) -> Self {
     .init(
       label ?? "advance \(duration)",
       cancellationAwareOperation: { _ in
         guard Task.isCancelled == false else { return .cancelled }
-        if let count {
-          do {
-            try await clock.advance(by: duration, onceSleepersReach: count)
-          } catch is CancellationError {
-            return .cancelled
-          } catch {
-            return Task.isCancelled ? .cancelled : .completed
-          }
-        } else {
-          await clock.advance(by: duration)
+        do {
+          try await clock.advance(by: duration, onceSleepersReach: count)
+        } catch is CancellationError {
+          return .cancelled
+        } catch {
+          return Task.isCancelled ? .cancelled : .completed
         }
         return Task.isCancelled ? .cancelled : .completed
       })
@@ -76,11 +99,35 @@ public struct TestStoreScenarioStep<R: Reducer>: Sendable where R.State: Equatab
   public static func finish(
     timeout: Duration? = nil,
     label: String = "finish",
-    file: StaticString = #filePath,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) -> Self {
+    finish(
+      timeout: timeout, label: label,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public static func finish(
+    timeout: Duration? = nil,
+    label: String = "finish",
+    file: StaticString,
     line: UInt = #line
   ) -> Self {
+    finish(
+      timeout: timeout, label: label,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package static func finish(
+    timeout: Duration? = nil,
+    label: String = "finish",
+    location: TestStoreSourceLocation
+  ) -> Self {
     .init(label) { store in
-      await store.finish(timeout: timeout, file: file, line: line)
+      await store.finish(timeout: timeout, location: location)
     }
   }
 }
@@ -90,15 +137,44 @@ extension TestStoreScenarioStep where R.Action: Equatable {
     _ action: R.Action,
     timeout: Duration? = nil,
     label: String? = nil,
-    file: StaticString = #filePath,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
     line: UInt = #line,
+    column: UInt = #column,
+    assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
+  ) -> Self {
+    receive(
+      action, timeout: timeout, label: label,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column),
+      assert: assert)
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public static func receive(
+    _ action: R.Action,
+    timeout: Duration? = nil,
+    label: String? = nil,
+    file: StaticString,
+    line: UInt = #line,
+    assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
+  ) -> Self {
+    receive(
+      action, timeout: timeout, label: label,
+      location: .init(fileID: file, filePath: file, line: line, column: 1), assert: assert)
+  }
+
+  package static func receive(
+    _ action: R.Action,
+    timeout: Duration? = nil,
+    label: String? = nil,
+    location: TestStoreSourceLocation,
     assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
   ) -> Self {
     .init(label ?? "receive \(String(describing: action))") { store in
       if let timeout {
-        await store.receive(action, timeout: timeout, assert: assert, file: file, line: line)
+        await store.receive(action, timeout: timeout, assert: assert, location: location)
       } else {
-        await store.receive(action, assert: assert, file: file, line: line)
+        await store.receive(action, assert: assert, location: location)
       }
     }
   }
@@ -109,11 +185,37 @@ extension TestStoreScenarioStep where R.Output: Equatable {
     _ output: R.Output,
     timeout: Duration? = nil,
     label: String? = nil,
-    file: StaticString = #filePath,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) -> Self {
+    receiveOutput(
+      output, timeout: timeout, label: label,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public static func receiveOutput(
+    _ output: R.Output,
+    timeout: Duration? = nil,
+    label: String? = nil,
+    file: StaticString,
     line: UInt = #line
   ) -> Self {
+    receiveOutput(
+      output, timeout: timeout, label: label,
+      location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package static func receiveOutput(
+    _ output: R.Output,
+    timeout: Duration? = nil,
+    label: String? = nil,
+    location: TestStoreSourceLocation
+  ) -> Self {
     .init(label ?? "receive output \(String(describing: output))") { store in
-      await store.receiveOutput(output, timeout: timeout, file: file, line: line)
+      await store.receiveOutput(output, timeout: timeout, location: location)
     }
   }
 }
@@ -137,11 +239,11 @@ public struct TestStoreScenario<R: Reducer>: Sendable where R.State: Equatable {
 
   @MainActor
   public func run(on store: TestStore<R>) async -> TestStoreScenarioResult {
-    let originalFailureReporter = store.assertionFailureReporter
-    let originalSkippedReporter = store.skippedAssertionReporter
+    let originalFailureReporter = store.issueReporter
+    let originalSkippedReporter = store.warningReporter
     defer {
-      store.assertionFailureReporter = originalFailureReporter
-      store.skippedAssertionReporter = originalSkippedReporter
+      store.issueReporter = originalFailureReporter
+      store.warningReporter = originalSkippedReporter
     }
 
     var completedLabels: [String] = []
@@ -157,11 +259,11 @@ public struct TestStoreScenario<R: Reducer>: Sendable where R.State: Equatable {
         )
       }
       let prefix = "Scenario step \(offset + 1)/\(steps.count): \(step.label)"
-      store.assertionFailureReporter = { message, file, line in
-        originalFailureReporter("\(prefix)\n\n\(message)", file, line)
+      store.issueReporter = { message, location in
+        originalFailureReporter("\(prefix)\n\n\(message)", location)
       }
-      store.skippedAssertionReporter = { message, file, line in
-        originalSkippedReporter("\(prefix)\n\n\(message)", file, line)
+      store.warningReporter = { message, location in
+        originalSkippedReporter("\(prefix)\n\n\(message)", location)
       }
       let outcome = await step.operation(store)
       guard case .completed = outcome, Task.isCancelled == false else {

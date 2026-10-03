@@ -102,6 +102,7 @@ jobs:
           scripts/check-workflow-action-pins.sh
           scripts/check-workflow-job-timeouts.sh
           scripts/check-validation-prerequisites-selftest.sh
+          python3 scripts/check-testing-contracts-selftest.py
           ruby scripts/check-ci-efficiency.rb
           scripts/check-ci-efficiency-selftest.sh
           ruby scripts/check-coverage-workflow.rb

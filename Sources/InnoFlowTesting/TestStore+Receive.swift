@@ -23,11 +23,10 @@ extension TestStore {
   /// are reduced and their effects are walked before matching continues.
   package func receiveMatchingResult<Value>(
     timeout: Duration? = nil,
-    file: StaticString,
-    line: UInt,
+    location: TestStoreSourceLocation,
     matching matcher: (R.Action) -> TestStoreActionMatch<Value>
   ) async -> TestStoreReceiveResult<ActionQueue<R.Action>.QueuedAction, Value> {
-    noteTestInteraction(file: file, line: line)
+    noteTestInteraction(location: location)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
     var didSkipMismatch = false
@@ -46,15 +45,14 @@ extension TestStore {
         return result
 
       case .mismatched(let action):
-        await applyUnassertedAction(action, file: file, line: line)
+        await applyUnassertedAction(action, location: location)
         guard exhaustivity.isOn == false else {
           return .mismatched(action: action)
         }
         reportSkippedAction(
           action.action,
           context: "receiving another action",
-          file: file,
-          line: line
+          location: location
         )
         didSkipMismatch = true
 

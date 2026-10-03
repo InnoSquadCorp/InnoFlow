@@ -4,6 +4,10 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ## 6.0.0
 
+### Testing source locations and lexical scopes
+
+New canonical assertion parameters are fileID, filePath, line and column, all defaulted at the caller. Explicit old file: calls remain accepted and map to column 1. Stored method values may need an adapter for the expanded signature. Direct FlowScope construction is now unavailable: move owned work into withFlowScope. Scenario.advance requires onceSleepersReach to make clock progression deterministic. TestStoreDispatch.effectLedger reports bounded typed lifecycle events separately from action/output assertions.
+
 ### Scheduler capacity and terminal admission
 
 serial(maxPending:) and queueFull(maxPending:) now carry UInt. Nonnegative literals continue to work; validate signed application input before converting it with UInt(exactly:), rather than trapping or clamping implicitly. invalidCapacity is removed. Exhaustive EffectAdmission switches must handle cancelledBeforeStart and superseded. A delayed older latest request no longer evicts a newer live request. Terminal admission observations never authorize action delivery after accepted cancellation.

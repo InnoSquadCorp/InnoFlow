@@ -9,19 +9,22 @@ import InnoFlowCore
 final class TestStoreRunEndpoint<Action: Sendable> {
   private let isTaskActiveImpl: (UUID) -> Bool
   private let shouldProceedImpl: (EffectExecutionContext?) -> Bool
+  private let didStartRunImpl: (EffectExecutionContext?) -> Void
   private let didEnqueueActionImpl: () -> Void
-  private let reportRunFailureImpl: (String, EffectOrigin?) -> Void
+  private let reportRunFailureImpl: (String, EffectOrigin?, EffectExecutionContext?) -> Void
   private let finishTrackedTaskImpl: (UUID) -> Void
 
   init(
     isTaskActive: @escaping (UUID) -> Bool,
     shouldProceed: @escaping (EffectExecutionContext?) -> Bool,
+    didStartRun: @escaping (EffectExecutionContext?) -> Void,
     didEnqueueAction: @escaping () -> Void,
-    reportRunFailure: @escaping (String, EffectOrigin?) -> Void,
+    reportRunFailure: @escaping (String, EffectOrigin?, EffectExecutionContext?) -> Void,
     finishTrackedTask: @escaping (UUID) -> Void
   ) {
     self.isTaskActiveImpl = isTaskActive
     self.shouldProceedImpl = shouldProceed
+    self.didStartRunImpl = didStartRun
     self.didEnqueueActionImpl = didEnqueueAction
     self.reportRunFailureImpl = reportRunFailure
     self.finishTrackedTaskImpl = finishTrackedTask
@@ -35,6 +38,10 @@ final class TestStoreRunEndpoint<Action: Sendable> {
     shouldProceedImpl(context)
   }
 
+  func didStartRun(context: EffectExecutionContext?) {
+    didStartRunImpl(context)
+  }
+
   func didEnqueueAction() {
     didEnqueueActionImpl()
   }
@@ -46,7 +53,7 @@ final class TestStoreRunEndpoint<Action: Sendable> {
     context: EffectExecutionContext?
   ) {
     guard isTaskActiveImpl(token), shouldProceedImpl(context) else { return }
-    reportRunFailureImpl(message, origin)
+    reportRunFailureImpl(message, origin, context)
   }
 
   func finishTrackedTask(token: UUID) {

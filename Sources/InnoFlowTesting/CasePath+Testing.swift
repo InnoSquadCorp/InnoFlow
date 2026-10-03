@@ -36,7 +36,21 @@ public func assertCasePathExtracts<Root, Value>(
   via path: CasePath<Root, Value>,
   caseName: String? = nil,
   fileID: StaticString = #fileID,
-  line: UInt = #line
+  filePath: StaticString = #filePath,
+  line: UInt = #line,
+  column: UInt = #column
+) -> Value? {
+  assertCasePathExtracts(
+    root, via: path, caseName: caseName,
+    location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+}
+
+@discardableResult
+package func assertCasePathExtracts<Root, Value>(
+  _ root: Root,
+  via path: CasePath<Root, Value>,
+  caseName: String? = nil,
+  location: TestStoreSourceLocation
 ) -> Value? {
   if let value = path.extract(root) {
     return value
@@ -44,8 +58,7 @@ public func assertCasePathExtracts<Root, Value>(
 
   testStoreAssertionFailure(
     casePathExtractionFailureMessage(root: root, caseName: caseName),
-    file: fileID,
-    line: line
+    location: location
   )
   return nil
 }
