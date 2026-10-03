@@ -126,7 +126,7 @@ extension TestStore {
 
   func startRunTask(
     priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) -> Task<Void, Never> {
     let context = context?.frozenForExecution()

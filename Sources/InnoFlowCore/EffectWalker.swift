@@ -182,7 +182,7 @@ package struct EffectWalker<D: EffectDriver> {
   /// retain the driver while the operation is suspended.
   private func prepareRun(
     priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<D.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<D.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>? {
     guard let driver else { return nil }
@@ -199,7 +199,7 @@ package struct EffectWalker<D: EffectDriver> {
     policy: EffectExecutionPolicy,
     priority: TaskPriority?,
     onAdmission: (@Sendable (EffectAdmission) -> D.Action)?,
-    operation: @escaping @Sendable (Send<D.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<D.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>? {
     guard let driver else { return nil }

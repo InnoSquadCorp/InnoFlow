@@ -287,7 +287,7 @@ package protocol EffectDriver<Action, Output>: AnyObject {
   @discardableResult
   func startRun(
     priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>
 
@@ -299,7 +299,7 @@ package protocol EffectDriver<Action, Output>: AnyObject {
     policy: EffectExecutionPolicy,
     priority: TaskPriority?,
     onAdmission: (@Sendable (EffectAdmission) -> Action)?,
-    operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>?
 

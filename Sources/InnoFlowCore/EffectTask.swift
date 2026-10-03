@@ -216,13 +216,13 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     case send(Action)
     case output(Output)
     case run(
-      priority: TaskPriority?, operation: @Sendable (Send<Action>, EffectContext) async -> Void)
+      priority: TaskPriority?, operation: @concurrent @Sendable (Send<Action>, EffectContext) async -> Void)
     case scheduledRun(
       id: AnyEffectID,
       policy: EffectExecutionPolicy,
       priority: TaskPriority?,
       onAdmission: (@Sendable (EffectAdmission) -> Action)?,
-      operation: @Sendable (Send<Action>, EffectContext) async -> Void
+      operation: @concurrent @Sendable (Send<Action>, EffectContext) async -> Void
     )
     case merge([ReducerEffect<Action, Output>])
     case concatenate([ReducerEffect<Action, Output>])
@@ -407,7 +407,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   /// Runs asynchronous work that can emit actions.
   public static func run(
     priority: TaskPriority? = nil,
-    _ operation: @escaping @Sendable (Send<Action>) async -> Void
+    _ operation: @escaping @concurrent @Sendable (Send<Action>) async -> Void
   ) -> Self {
     run(priority: priority) { send, _ in
       await operation(send)
@@ -417,7 +417,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   /// Runs asynchronous work that can emit actions and observe the store runtime context.
   public static func run(
     priority: TaskPriority? = nil,
-    _ operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void
+    _ operation: @escaping @concurrent @Sendable (Send<Action>, EffectContext) async -> Void
   ) -> Self {
     .init(operation: .run(priority: priority, operation: operation))
   }
@@ -432,7 +432,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     id: EffectID<ID>,
     policy: EffectExecutionPolicy,
     priority: TaskPriority? = nil,
-    _ operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void
+    _ operation: @escaping @concurrent @Sendable (Send<Action>, EffectContext) async -> Void
   ) -> Self {
     scheduledRun(
       id: AnyEffectID(id),
@@ -452,7 +452,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     policy: EffectExecutionPolicy,
     priority: TaskPriority? = nil,
     onAdmission: @escaping @Sendable (EffectAdmission) -> Action,
-    _ operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void
+    _ operation: @escaping @concurrent @Sendable (Send<Action>, EffectContext) async -> Void
   ) -> Self {
     scheduledRun(
       id: AnyEffectID(id),
@@ -468,7 +468,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     policy: EffectExecutionPolicy,
     priority: TaskPriority?,
     onAdmission: (@Sendable (EffectAdmission) -> Action)?,
-    operation: @escaping @Sendable (Send<Action>, EffectContext) async -> Void
+    operation: @escaping @concurrent @Sendable (Send<Action>, EffectContext) async -> Void
   ) -> Self {
     return .init(
       operation: .scheduledRun(
@@ -489,7 +489,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   /// `failure`, just like any other error; its type does not request cancellation.
   public static func perform<Success: Sendable>(
     priority: TaskPriority? = nil,
-    operation: @escaping @Sendable (EffectContext) async throws -> Success,
+    operation: @escaping @concurrent @Sendable (EffectContext) async throws -> Success,
     success: @escaping @Sendable (Success) -> Action,
     failure: @escaping @Sendable (any Error) -> Action
   ) -> Self {
@@ -509,7 +509,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   /// Convenience overload for operations that do not need ``EffectContext``.
   public static func perform<Success: Sendable>(
     priority: TaskPriority? = nil,
-    operation: @escaping @Sendable () async throws -> Success,
+    operation: @escaping @concurrent @Sendable () async throws -> Success,
     success: @escaping @Sendable (Success) -> Action,
     failure: @escaping @Sendable (any Error) -> Action
   ) -> Self {
@@ -531,7 +531,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   /// emits `StoreInstrumentation.didFailRun`; `TestStore` records an assertion failure.
   public static func run<S: AsyncSequence & Sendable>(
     priority: TaskPriority? = nil,
-    _ makeSequence: @escaping @Sendable (EffectContext) async throws -> S
+    _ makeSequence: @escaping @concurrent @Sendable (EffectContext) async throws -> S
   ) -> Self where S.Element == Action, S.AsyncIterator: Sendable {
     run(priority: priority) { send, context in
       do {
@@ -558,7 +558,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   /// `TestStore` records an assertion failure.
   public static func run<S: AsyncSequence & Sendable>(
     priority: TaskPriority? = nil,
-    sequence makeSequence: @escaping @Sendable (EffectContext) async throws -> S,
+    sequence makeSequence: @escaping @concurrent @Sendable (EffectContext) async throws -> S,
     transform: @escaping @Sendable (S.Element) -> Action?
   ) -> Self where S.AsyncIterator: Sendable {
     run(priority: priority) { send, context in

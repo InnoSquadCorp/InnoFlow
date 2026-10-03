@@ -975,6 +975,8 @@ run_authoring_policy_checks() {
     exit 1
   fi
 
+  "$SCRIPT_DIR/check-concurrency-safety.sh" "$ROOT_DIR/Sources"
+
   echo "[principle-gates] Checking macro maintainability split"
   local macro_entry="Sources/InnoFlowMacros/InnoFlowMacro.swift"
   if search_lines "@BindableField|diagnoseMissingBindableFieldSetters|BindableFieldDiagnostic" "$macro_entry"; then
@@ -1337,6 +1339,10 @@ run_release_build_checks() {
     --no-parallel \
     -Xswiftc -warnings-as-errors
 
+  echo "[principle-gates] Checking the independent effect execution consumer"
+  run_low_priority env INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" \
+    INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" "$SCRIPT_DIR/check-effect-execution-consumer.sh"
+
   run_release_configuration_checks
 }
 
@@ -1435,6 +1441,7 @@ run_sample_contract_checks() {
 
 run_gate_negative_controls() {
   "$SCRIPT_DIR/principle-gates-selftest.sh"
+  "$SCRIPT_DIR/check-concurrency-safety-selftest.sh"
 }
 
 run_principle_gates_impl() {
