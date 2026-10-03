@@ -3,7 +3,7 @@
 This independent Core-only package enables NonisolatedNonsendingByDefault.
 Its executable verifies main-queue separation for run, perform, and scheduled
 operations, a legacy-shaped Sendable operation function value, UInt serial
-capacity and exhaustive new admission cases.
+capacity, exhaustive new admission cases, and on-demand lane snapshot reads.
 
 Set INNOFLOW_CONSUMER_PACKAGE_PATH to select an alternate candidate package,
 including a documented platform-validation mirror. Negative variants selected

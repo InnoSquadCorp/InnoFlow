@@ -1,9 +1,12 @@
-import Foundation
 import Dispatch
+import Foundation
 import InnoFlowCore
 
 struct IsolationState: Sendable { var completed: [Int] = [] }
-enum IsolationAction: Sendable { case start, complete(Int) }
+enum IsolationAction: Sendable {
+  case start
+  case complete(Int)
+}
 func verifyGenericExecutor() { dispatchPrecondition(condition: .notOnQueue(.main)) }
 @main struct ConcurrentEffectConsumer {
   @MainActor static func main() async {
@@ -15,10 +18,11 @@ func verifyGenericExecutor() { dispatchPrecondition(condition: .notOnQueue(.main
             verifyGenericExecutor()
             await send(.complete(1))
           },
-          .perform(operation: {
-            verifyGenericExecutor()
-            return 2
-          }, success: { .complete($0) }, failure: { _ in .complete(-1) }),
+          .perform(
+            operation: {
+              verifyGenericExecutor()
+              return 2
+            }, success: { .complete($0) }, failure: { _ in .complete(-1) }),
           .run(id: EffectID("isolation"), policy: .serial(maxPending: UInt(1))) { send, _ in
             verifyGenericExecutor()
             await send(.complete(3))
@@ -30,14 +34,19 @@ func verifyGenericExecutor() { dispatchPrecondition(condition: .notOnQueue(.main
       }
     }
     let store = Store(reducer: reducer, initialState: .init())
+    precondition(store.runLaneSnapshots(limit: 0).isEmpty)
+    precondition(store.runLaneSnapshots(limit: -1).isEmpty)
     await store.send(.start).finish()
+    precondition(store.runLaneSnapshots().isEmpty)
     precondition(store.state.completed.sorted() == [1, 2, 3])
     print("run + perform + scheduled operation executed off the main dispatch queue")
   }
 }
 
 // A function-value spelling remains accepted under either module default.
-func acceptOperation(_ operation: @escaping @Sendable (Send<IsolationAction>, EffectContext) async -> Void)
+func acceptOperation(
+  _ operation: @escaping @Sendable (Send<IsolationAction>, EffectContext) async -> Void
+)
   -> EffectTask<IsolationAction>
 {
   .run(operation)
@@ -50,5 +59,12 @@ func admissionDescription(_ admission: EffectAdmission) -> String {
   case .rejected: "rejected"
   case .cancelledBeforeStart: "cancelled before start"
   case .superseded: "superseded"
+  }
+}
+
+@MainActor
+func weakLaneProvider<R: Reducer>(_ store: Store<R>) -> @MainActor () -> [EffectRunLaneSnapshot] {
+  { [weak store] in
+    store?.runLaneSnapshots(limit: 32) ?? []
   }
 }
