@@ -90,6 +90,7 @@ let package = Package(
         .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
         .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
         .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+        .product(name: "SwiftIfConfig", package: "swift-syntax"),
       ],
       swiftSettings: swift6PackageContract
     ),

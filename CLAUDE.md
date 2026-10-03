@@ -551,3 +551,7 @@ The runtime owns shared throttle completion even when callers discard every hand
 ### Optional child ownership
 
 Use opt-in `OptionalChildLifetime` / `.optionalChild(state:action:instanceID:child:)` to bind child effects to an explicit instance ID. Child reduction precedes the complete parent; all owner invalidations apply before effect execution. Instance IDs must change on reopening. Slots, nested owners and Stores isolate equal raw effect IDs. Parent/sibling work survives child closure, and noncooperative tasks remain physically active until return. Existing IfLet is unchanged. See docs/OPTIONAL_CHILD_LIFETIME.md.
+
+### Macro migration diagnostics
+
+Third-generic diagnostics offer source Fix-Its using the feature's actual Output or Never. Swift.Never is accepted as the same output-free type. Explicit-reduce repairs never silently discard typed output. Strict Phase totality evaluates active Phase and phaseMap conditional branches using the compiler build configuration; unavailable configuration is an explicit strict error, not fail-open coverage. Synthesized path helpers preserve availability but do not copy constructor-specific renamed metadata.

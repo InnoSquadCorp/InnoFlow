@@ -144,9 +144,7 @@ enum MacroError: Error, CustomStringConvertible {
   case notAStruct
   case missingState
   case missingAction
-  case missingBodyProperty
-  case explicitReduceUnsupported
-  case invalidBodySignature(details: [String])
+  case missingBodyProperty(outputName: String)
 
   var description: String {
     switch self {
@@ -156,21 +154,9 @@ enum MacroError: Error, CustomStringConvertible {
       return "@InnoFlow requires a nested 'State' type"
     case .missingAction:
       return "@InnoFlow requires a nested 'Action' type"
-    case .missingBodyProperty:
+    case .missingBodyProperty(let outputName):
       return
-        "@InnoFlow requires `var body: some Reducer<State, Action, Output>`; use `Never` when no output is emitted"
-    case .explicitReduceUnsupported:
-      return
-        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)"
-    case .invalidBodySignature(let details):
-      let joinedDetails = details.joined(separator: "; ")
-      return """
-        Invalid body signature for @InnoFlow.
-        Expected:
-        var body: some Reducer<State, Action, Output>
-        Detected issues: \(joinedDetails).
-        Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
-        """
+        "@InnoFlow requires `var body: some Reducer<State, Action, \(outputName)>`"
     }
   }
 }

@@ -37,7 +37,12 @@ extension InnoFlowMacro {
       } else if source.hasPrefix("!"), !source.hasPrefix("!=") {
         self = .not(Self(parsing: String(source.dropFirst())))
       } else {
-        self = .atom(source)
+        // These predicates have no whitespace-sensitive arguments. Compare
+        // their semantic spelling, while leaving custom conditions untouched.
+        let compact = source.filter { !$0.isWhitespace }
+        let predicatePrefixes = ["os(", "arch(", "targetEnvironment(", "swift(", "compiler("]
+        let atom = predicatePrefixes.contains(where: compact.hasPrefix) ? compact : source
+        self = .atom(atom == "os(OSX)" ? "os(macOS)" : atom)
       }
     }
 
@@ -699,7 +704,7 @@ extension InnoFlowMacro {
     for element in attributes {
       if let attribute = element.as(AttributeSyntax.self) {
         if outputAttributeName(attribute) == "available" {
-          sources.append(attribute.trimmedDescription)
+          sources.append(outputHelperAvailability(attribute).trimmedDescription)
         }
         continue
       }
@@ -723,6 +728,24 @@ extension InnoFlowMacro {
       }
     }
     return sources
+  }
+
+  /// A case-level rename targets an enum constructor, not a CasePath. Keep
+  /// deprecation/availability/message metadata, but do not teach the compiler
+  /// to replace a path use with a value or constructor of a different type.
+  private static func outputHelperAvailability(_ attribute: AttributeSyntax) -> AttributeSyntax {
+    guard case .availability(let arguments)? = attribute.arguments else { return attribute }
+    var retained = arguments.filter { argument in
+      guard case .availabilityLabeledArgument(let labeled) = argument.argument else { return true }
+      return logicalIdentifier(labeled.label) != "renamed"
+    }
+    guard retained.count != arguments.count else { return attribute }
+    if let last = retained.indices.last {
+      retained[last].trailingComma = nil
+    }
+    var copy = attribute
+    copy.arguments = .availability(retained)
+    return copy
   }
 
   private static func outputAttributeContexts(
@@ -966,7 +989,9 @@ extension InnoFlowMacro {
       return false
     }
     context.diagnose(
-      Diagnostic(node: Syntax(element.name), message: InnoFlowOutputPathsMessage.collision)
+      Diagnostic(
+        node: Syntax(element.name),
+        message: InnoFlowOutputPathsMessage.collision(memberName: memberName))
     )
     return true
   }
@@ -989,21 +1014,21 @@ extension InnoFlowMacro {
 }
 
 enum InnoFlowOutputPathsMessage: DiagnosticMessage {
-  case collision
+  case collision(memberName: String)
   case duplicateLabels(caseName: String)
   case unsupportedLocalBinding(caseName: String)
 
   var message: String {
     switch self {
-    case .collision:
+    case .collision(let memberName):
       return
-        "generated output path name collides with another generated output path or existing static member; declare an explicit static path or rename the case"
+        "generated output path `\(memberName)` collides with another generated output path or existing static member; declare an explicit static path or rename the case"
     case .duplicateLabels(let caseName):
       return
-        "case `\(caseName)` repeats a payload label; declare a manual `<caseName>CasePath` or add `@InnoFlowCasePathIgnored`"
+        "case `\(caseName)` repeats a payload label; declare a manual `\(InnoFlowMacro.generatedPathBaseName(from: caseName))CasePath` or add `@InnoFlowCasePathIgnored`"
     case .unsupportedLocalBinding(let caseName):
       return
-        "case `\(caseName)` uses separate external and local payload names; declare a manual `<caseName>CasePath` or add `@InnoFlowCasePathIgnored`"
+        "case `\(caseName)` uses separate external and local payload names; declare a manual `\(InnoFlowMacro.generatedPathBaseName(from: caseName))CasePath` or add `@InnoFlowCasePathIgnored`"
     }
   }
 

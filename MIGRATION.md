@@ -16,6 +16,10 @@ Existing IfLet keeps its behavior. To adopt state-owned cancellation, replace du
 
 `perform` now maps every thrown error, including a directly thrown `CancellationError`, to its failure action while the host remains active. Accepted task/dispatch/runtime cancellation remains silent. General `run` and AsyncSequence cancellation-error behavior is unchanged. Code that used a thrown CancellationError to abandon an active request should use explicit cancellation instead.
 
+### Compiler-assisted authoring migration
+
+Apply the macro Fix-It for a missing or incorrect third reducer generic; it selects Output only when the feature declares one and otherwise Never. Swift.Never is also accepted. Explicit-reduce repairs preserve existing Never effects with an explicit promoteOutput when moving to a typed-output body. Strict totality now checks active conditional Phase declarations and map references; missing compiler configuration produces a clear error instead of silently approving incomplete coverage. Constructor renamed availability does not rename the generated CasePath helper.
+
 ### Identifier corrections
 
 Keyword Phase cases no longer fail strict totality merely because declaration and reference use different optional backticks. Raw Action/Output names retain spaces and punctuation in generated CasePath names; reference those members with Swift backticks. Existing ordinary and leading-underscore path names are unchanged. Missing Phase cases and actual generated-member collisions still diagnose.

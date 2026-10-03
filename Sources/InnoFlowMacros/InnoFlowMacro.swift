@@ -127,7 +127,8 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
     }
 
     guard let bodyProperty = findBodyProperty(in: structDecl) else {
-      throw MacroError.missingBodyProperty
+      throw MacroError.missingBodyProperty(
+        outputName: hasNestedType(named: "Output", in: structDecl) ? "Output" : "Never")
     }
 
     let signatureIssues = bodySignatureIssues(
@@ -135,7 +136,14 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       hasOutput: hasNestedType(named: "Output", in: structDecl)
     )
     guard signatureIssues.isEmpty else {
-      throw MacroError.invalidBodySignature(details: signatureIssues)
+      diagnoseBodySignatureIssues(
+        signatureIssues,
+        in: bodyProperty,
+        hasOutput: hasNestedType(named: "Output", in: structDecl),
+        anchoredAt: node,
+        context: context
+      )
+      return []
     }
 
     emitMacroEntryDiagnostics(for: structDecl, context: context)

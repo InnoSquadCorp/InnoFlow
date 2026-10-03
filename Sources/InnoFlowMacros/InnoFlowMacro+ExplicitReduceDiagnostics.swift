@@ -21,7 +21,8 @@ extension InnoFlowMacro {
     let diagnostic = explicitReduceDiagnostic(
       anchoredAt: anchor,
       reduceFunction: reduceFunction,
-      hasBodyProperty: findBodyProperty(in: declaration) != nil
+      hasBodyProperty: findBodyProperty(in: declaration) != nil,
+      hasOutput: hasNestedType(named: "Output", in: declaration)
     )
     context.diagnose(diagnostic)
     return true
@@ -30,13 +31,18 @@ extension InnoFlowMacro {
   private static func explicitReduceDiagnostic(
     anchoredAt anchor: some SyntaxProtocol,
     reduceFunction: FunctionDeclSyntax,
-    hasBodyProperty: Bool
+    hasBodyProperty: Bool,
+    hasOutput: Bool
   ) -> Diagnostic {
-    let message = InnoFlowMacroMessage.explicitReduceUnsupported
+    let message = InnoFlowMacroMessage.explicitReduceUnsupported(
+      outputName: hasOutput ? "Output" : "Never")
 
     guard !hasBodyProperty,
       isCanonicalReduceFunction(reduceFunction),
-      let replacement = bodyReplacement(for: reduceFunction)?
+      let effectOutput = canonicalReduceOutput(
+        reduceFunction.signature.returnClause?.type, hasOutput: hasOutput),
+      let replacement = bodyReplacement(
+        for: reduceFunction, hasOutput: hasOutput, effectOutput: effectOutput)?
         .with(\.leadingTrivia, reduceFunction.leadingTrivia)
         .with(\.trailingTrivia, reduceFunction.trailingTrivia)
     else {
@@ -55,7 +61,7 @@ extension InnoFlowMacro {
   }
 
   private static func isCanonicalReduceFunction(_ function: FunctionDeclSyntax) -> Bool {
-    guard function.name.text == "reduce",
+    guard logicalIdentifier(function.name) == "reduce",
       function.signature.effectSpecifiers == nil,
       let body = function.body,
       !body.statements.isEmpty
@@ -66,8 +72,7 @@ extension InnoFlowMacro {
     let parameters = Array(function.signature.parameterClause.parameters)
     guard parameters.count == 2 else { return false }
     guard isCanonicalIntoParameter(parameters[0]),
-      isCanonicalActionParameter(parameters[1]),
-      isCanonicalEffectTaskReturn(function.signature.returnClause?.type)
+      isCanonicalActionParameter(parameters[1])
     else {
       return false
     }
@@ -76,8 +81,8 @@ extension InnoFlowMacro {
   }
 
   private static func isCanonicalIntoParameter(_ parameter: FunctionParameterSyntax) -> Bool {
-    guard parameter.firstName.text == "into",
-      parameter.secondName?.text == "state"
+    guard logicalIdentifier(parameter.firstName) == "into",
+      parameter.secondName.map(logicalIdentifier) == "state"
     else {
       return false
     }
@@ -86,35 +91,40 @@ extension InnoFlowMacro {
   }
 
   private static func isCanonicalActionParameter(_ parameter: FunctionParameterSyntax) -> Bool {
-    guard parameter.firstName.text == "action",
+    guard logicalIdentifier(parameter.firstName) == "action",
       parameter.secondName == nil,
       let identifier = parameter.type.as(IdentifierTypeSyntax.self)
     else {
       return false
     }
 
-    return identifier.name.text == "Action"
+    return logicalIdentifier(identifier.name) == "Action"
   }
 
-  private static func isCanonicalEffectTaskReturn(_ type: TypeSyntax?) -> Bool {
+  private static func canonicalReduceOutput(_ type: TypeSyntax?, hasOutput: Bool) -> String? {
     guard let identifier = type?.as(IdentifierTypeSyntax.self),
-      identifier.name.text == "EffectTask",
       let genericArguments = identifier.genericArgumentClause
-    else {
-      return false
-    }
-
+    else { return nil }
     let arguments = Array(genericArguments.arguments)
-    guard arguments.count == 1,
-      let actionType = arguments[0].argument.as(IdentifierTypeSyntax.self)
-    else {
-      return false
+    guard let first = arguments.first?.argument.as(IdentifierTypeSyntax.self),
+      logicalIdentifier(first.name) == "Action", first.genericArgumentClause == nil
+    else { return nil }
+    if logicalIdentifier(identifier.name) == "EffectTask", arguments.count == 1 {
+      return "Never"
     }
-
-    return actionType.name.text == "Action"
+    guard logicalIdentifier(identifier.name) == "ReducerEffect", arguments.count == 2,
+      let output = arguments[1].argument.as(IdentifierTypeSyntax.self),
+      output.genericArgumentClause == nil
+    else { return nil }
+    let name = logicalIdentifier(output.name)
+    return name == "Never" || (hasOutput && name == "Output") ? name : nil
   }
 
-  private static func bodyReplacement(for function: FunctionDeclSyntax) -> VariableDeclSyntax? {
+  private static func bodyReplacement(
+    for function: FunctionDeclSyntax,
+    hasOutput: Bool,
+    effectOutput: String
+  ) -> VariableDeclSyntax? {
     guard let body = function.body else { return nil }
     guard !containsMultilineStringLiteral(body.statements) else {
       return nil
@@ -127,12 +137,18 @@ extension InnoFlowMacro {
       body.statements,
       prefix: statementIndent
     )
+    let outputName = hasOutput ? "Output" : "Never"
+    // A legacy EffectTask explicitly cannot emit Output. Keep that closure's
+    // inferred type intact and lift it instead of rewriting its return values.
+    let promotesOutput = hasOutput && effectOutput == "Never"
+    let reducerName = promotesOutput ? "Reduce<State, Action, Never>" : "Reduce"
+    let promotion = promotesOutput ? "\n\(reducerIndent).promoteOutput(to: Output.self)" : ""
     return try? VariableDeclSyntax(
       """
-      var body: some Reducer<State, Action, Never> {
-      \(raw: reducerIndent)Reduce { state, action in
+      var body: some Reducer<State, Action, \(raw: outputName)> {
+      \(raw: reducerIndent)\(raw: reducerName) { state, action in
       \(raw: renderedStatements)
-      \(raw: reducerIndent)}
+      \(raw: reducerIndent)}\(raw: promotion)
       \(raw: declarationIndent)}
       """
     )
@@ -175,13 +191,13 @@ extension InnoFlowMacro {
 }
 
 enum InnoFlowMacroMessage: DiagnosticMessage {
-  case explicitReduceUnsupported
+  case explicitReduceUnsupported(outputName: String)
 
   var message: String {
     switch self {
-    case .explicitReduceUnsupported:
+    case .explicitReduceUnsupported(let outputName):
       return
-        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)"
+        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, \(outputName)>` instead"
     }
   }
 

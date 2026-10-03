@@ -401,7 +401,7 @@ extension InnoFlowMacro {
       context.diagnose(
         Diagnostic(
           node: Syntax(element.name),
-          message: InnoFlowActionPathsMessage.leadingUnderscoreCollision
+          message: InnoFlowActionPathsMessage.leadingUnderscoreCollision(memberName: memberName)
         )
       )
       return true
@@ -430,25 +430,25 @@ private struct SynthesizedActionPathMember {
 }
 
 enum InnoFlowActionPathsMessage: DiagnosticMessage {
-  case leadingUnderscoreCollision
+  case leadingUnderscoreCollision(memberName: String)
   case optionalPayloadNote(caseName: String)
   case labeledPayloadNote(caseName: String, label: String, actionPathBaseName: String)
   case multiPayloadNote(caseName: String, actionPathBaseName: String)
 
   var message: String {
     switch self {
-    case .leadingUnderscoreCollision:
+    case .leadingUnderscoreCollision(let memberName):
       return
-        "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case"
+        "generated action path `\(memberName)` collides with another generated action path or existing static member; declare an explicit static alias or rename the case"
     case .optionalPayloadNote(let caseName):
       return
         "case `\(caseName)` has an optional payload; CasePath is still synthesized but `.\(caseName)(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.\(caseName)(value)` + `.\(caseName)Cleared`) or declare a custom CasePath that flattens the inner optional"
     case .labeledPayloadNote(let caseName, let label, let actionPathBaseName):
       return
-        "case `\(caseName)` has a labeled payload (`\(label):`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, declare `static let \(actionPathBaseName)CasePath = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed"
+        "case `\(caseName)` has a labeled payload (`\(label):`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, declare `static let \(InnoFlowMacro.generatedIdentifierSource("\(actionPathBaseName)CasePath")) = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed"
     case .multiPayloadNote(let caseName, let actionPathBaseName):
       return
-        "case `\(caseName)` has multiple payload parameters; no CasePath is synthesized. Why: CasePath auto-synthesis only handles unlabeled single payloads and `id:action:` collection routes. Fix: collapse the payload into a single struct/tuple, declare `static let \(actionPathBaseName)CasePath = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed"
+        "case `\(caseName)` has multiple payload parameters; no CasePath is synthesized. Why: CasePath auto-synthesis only handles unlabeled single payloads and `id:action:` collection routes. Fix: collapse the payload into a single struct/tuple, declare `static let \(InnoFlowMacro.generatedIdentifierSource("\(actionPathBaseName)CasePath")) = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed"
     }
   }
 

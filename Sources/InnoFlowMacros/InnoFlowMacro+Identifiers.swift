@@ -20,6 +20,10 @@ extension InnoFlowMacro {
   /// Preserve the public naming rule: strip exactly one leading underscore.
   /// In particular, spaces and punctuation are not replaced or collapsed.
   static func generatedPathBaseName(from caseName: TokenSyntax) -> String {
+    generatedPathBaseName(from: logicalIdentifier(caseName))
+  }
+
+  static func generatedPathBaseName(from caseName: String) -> String {
     let name = logicalIdentifier(caseName)
     return name.hasPrefix("_") && name.count > 1 ? String(name.dropFirst()) : name
   }
