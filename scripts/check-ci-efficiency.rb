@@ -20,8 +20,9 @@ check(Array(ci_trigger.dig("pull_request", "types")).sort == %w[opened synchroni
 end
 check(ci_trigger.key?("workflow_dispatch") && ci_trigger.dig("merge_group", "types") == ["checks_requested"],
   "manual recovery and merge queues must produce full CI")
-check(ci.dig("concurrency", "cancel-in-progress") == true,
-  "CI must cancel superseded runs")
+metadata_only = "(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base)))"
+check(ci.dig("concurrency", "cancel-in-progress") == "${{ !#{metadata_only} }}",
+  "Code/validation events must cancel superseded runs; metadata must wait")
 check(ci.dig("concurrency", "group").to_s.include?("github.event.pull_request.number"),
   "CI concurrency must be scoped to a pull request or ref")
 
@@ -58,7 +59,6 @@ jobs.each do |name, job|
     "#{name}: steps cannot ignore failures")
 end
 
-metadata_only = "(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base)))"
 plan = jobs.fetch("ci-plan")
 check(plan["name"] == "CI Plan" && plan["if"] == "${{ !#{metadata_only} }}" && !plan.key?("needs"),
   "CI Plan must run independently for validation events")
@@ -127,18 +127,24 @@ check(asan_trigger.keys == ["workflow_dispatch"],
   "docs-required" => ["Build Documentation", %w[ci-plan documentation], "Require planned documentation result", "evaluate-documentation"],
 }.each do |id, (name, dependencies, step_name, command)|
   final_gate = jobs.fetch(id)
-  noop = id == "ci-required" ? "CI Metadata Only" : "Documentation Metadata Only"
-  check(final_gate["name"] == "${{ #{metadata_only} && '#{noop}' || '#{name}' }}" &&
-    final_gate["if"] == "${{ always() && !#{metadata_only} }}",
-    "#{name} must aggregate validation without replacing protected contexts on metadata events")
+  check(final_gate["name"] == name && final_gate["if"] == "${{ always() }}",
+    "#{name} must retain its protected name and always verify evidence")
   check(Array(final_gate["needs"]).sort == dependencies.sort,
     "#{name}: dependencies must match its complete result inventory")
   steps = final_gate.fetch("steps")
-  verifier = steps.last
-  check(verifier["name"] == step_name && !verifier.key?("if") &&
+  verifier = steps.find { |step| step["name"] == step_name }
+  check(verifier && verifier["if"] == "${{ !#{metadata_only} }}" &&
     verifier["run"] == "python3 -B scripts/ci-policy.py #{command}" &&
     verifier["env"] == ({"CI_PLAN" => '${{ needs.ci-plan.outputs.plan }}', "CI_NEEDS" => '${{ toJSON(needs) }}'}.merge(id == "ci-required" ? {"GH_TOKEN" => '${{ github.token }}', "CI_REUSE" => '${{ needs.ci-plan.outputs.reuse-proof }}'} : {})),
-    "#{name}: final unconditional verifier must consume the exact plan and dependency results")
+    "#{name}: validation verifier must consume the exact plan and dependency results")
+  metadata = steps.last
+  check(metadata["name"] == "Verify prior validation for metadata" &&
+    metadata["if"] == "${{ #{metadata_only} }}" &&
+    metadata["run"] == "python3 -B scripts/verify-ci-metadata.py --check '#{name}'" &&
+    metadata["env"] == {"GH_TOKEN" => '${{ github.token }}'},
+    "#{name}: metadata must revalidate the latest exact native CI evidence")
+  check(final_gate["permissions"] == {"contents" => "read", "actions" => "read", "checks" => "read", "pull-requests" => "read"},
+    "#{name}: metadata verification must remain read-only")
 end
 
 cd = load_yaml.call(File.join(workflow_dir, "cd.yml"))

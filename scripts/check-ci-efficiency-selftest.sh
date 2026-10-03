@@ -31,9 +31,9 @@ Dir.mktmpdir("innoflow-ci-efficiency") do |root|
   mutations = {
     "base edit is unobserved" => [".github/workflows/ci.yml", ->(doc) { (doc["on"] || doc[true])["pull_request"]["types"].delete("edited") }],
     "metadata starts planner" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["ci-plan"]["if"] = "always()" }],
-    "metadata replaces CI verdict" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["ci-required"]["name"] = "CI Required" }],
-    "metadata replaces docs verdict" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["docs-required"]["name"] = "Build Documentation" }],
-    "metadata executes docs aggregate" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["docs-required"]["if"] = "always()" }],
+    "metadata loses CI context" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["ci-required"]["name"] = "CI Metadata Only" }],
+    "metadata loses docs context" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["docs-required"]["name"] = "Documentation Metadata Only" }],
+    "metadata skips docs aggregate" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["docs-required"]["if"] = "success()" }],
     "policy omits workflow lint" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["policy"]["steps"].each { |step| step["run"] = step["run"].lines.reject { |line| line.strip == "python3 -B scripts/check-ci-workflows.py" }.join if step["run"] } }],
     "Ready transition reruns heavy CI" => [".github/workflows/ci.yml", ->(doc) { (doc["on"] || doc[true])["pull_request"]["types"] << "ready_for_review" }],
     "proof admission is conditional" => [".github/workflows/ci.yml", ->(doc) { doc["jobs"]["ci-plan"]["steps"].find { |step| step["id"] == "reuse" }["if"] = "false" }],
