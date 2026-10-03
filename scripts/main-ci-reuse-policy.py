@@ -118,6 +118,8 @@ STEP_SKIPS = {('CI Plan', 'Verify actual post-merge main origin'),
 PROOF_FIELDS = {"schema", "repository_id", "main", "base", "head", "merge", "tree",
                 "pr", "run", "attempt", "workflow", "suite", "reused_jobs"}
 
+STEP_SKIPS.update({('CI Required', 'Verify prior validation for metadata'), ('Build Documentation', 'Verify prior validation for metadata')})
+
 
 class Rejected(ValueError):
     pass

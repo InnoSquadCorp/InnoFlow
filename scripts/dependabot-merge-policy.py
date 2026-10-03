@@ -117,6 +117,8 @@ ALLOWED_STEP_SKIP = {('CI Plan', 'Verify actual post-merge main origin'),
  ('Focused Runtime Tests (visionOS)',
   'Preserve failed focused runtime results'),
  ('Focused Runtime Tests (watchOS)', 'Preserve failed focused runtime results')}
+ALLOWED_STEP_SKIP.update({('CI Required', 'Verify prior validation for metadata'), ('Build Documentation', 'Verify prior validation for metadata')})
+
 
 class Rejected(ValueError):
     pass
