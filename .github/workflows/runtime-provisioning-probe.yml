@@ -1,0 +1,68 @@
+name: Runtime Provisioning Probe
+# Diagnostic only: this workflow cannot produce a Release Preflight receipt.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: runtime-provisioning-probe-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  legacy-runtime:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        check: [runtime-ios-18.5, runtime-tvos-18.5, runtime-watchos-11.5, runtime-visionos-2.5]
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      CHECK_ID: ${{ matrix.check }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+        with:
+          ruby-version: '3.4.4'
+      - name: Probe exact legacy runtime and one focused inventory
+        run: |
+          set -euo pipefail
+          args=(--check-id "$CHECK_ID" --output "$RUNNER_TEMP/innoflow-provisioning-probe")
+          if [[ "$CHECK_ID" == runtime-ios-18.5 ]]; then args+=(--smoke); fi
+          ruby scripts/runtime-provisioning-probe.rb "${args[@]}"
+      - name: Preserve diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-probe-${{ github.sha }}-${{ matrix.check }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/innoflow-provisioning-probe/environment.json
+            ${{ runner.temp }}/innoflow-provisioning-probe/runtimes.json
+            ${{ runner.temp }}/innoflow-provisioning-probe/probe-success.json
+            ${{ runner.temp }}/innoflow-provisioning-probe/smoke.xcresult
+            ${{ runner.temp }}/innoflow-provisioning-probe-provisioning
+          if-no-files-found: warn
+          retention-days: 14
+  older-toolchain-catalog:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 10
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - name: Record installed Xcode Swift and runtimes
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/catalog"
+          { xcodebuild -version; xcrun swift --version; } 2>&1 | tee "$RUNNER_TEMP/catalog/toolchain.txt"
+          xcrun simctl list runtimes -j > "$RUNNER_TEMP/catalog/runtimes.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: runtime-probe-${{ github.sha }}-macos15-toolchain-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/catalog
+          if-no-files-found: warn
+          retention-days: 14
