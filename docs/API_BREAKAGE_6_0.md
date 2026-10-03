@@ -169,3 +169,7 @@ M1/M2 normalize logical identifiers separately from source escaping. Ordinary ge
 ### 2026-10-03 testing dispatch signature
 
 TestStore, ScopedTestStore and phase-send helpers return TestStoreDispatch; TestFlowTask aliases the same type. Statement calls remain compatible via discardable results. Assigning an unwrapped method value to async Void is intentionally source-breaking and is tested by an external Core+Testing consumer with a positive explicit adapter. This adds a consumer migration to the historical list above.
+
+### Optional child adoption
+
+OptionalChildLifetime and Reducer.optionalChild are additive, opt-in wrappers. Existing IfLet remains unchanged. Child instance identity is Hashable/Sendable; parent and child Output must match after explicit lifting. Public examples compile from Core-only generic and macro authoring consumers.

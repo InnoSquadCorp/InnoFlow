@@ -63,7 +63,8 @@ extension Store: EffectDriver {
     enqueue(
       action,
       animation: context?.animation,
-      flowTaskTracker: context?.flowTaskTracker
+      flowTaskTracker: context?.flowTaskTracker,
+      context: context
     )
   }
 
@@ -143,7 +144,7 @@ extension Store: EffectDriver {
       }
       await gate.wait()
       do {
-        if lifetime.isReleased {
+        if lifetime.isReleased || context?.shouldProceed == false {
           throw CancellationError()
         }
         guard
@@ -224,7 +225,8 @@ extension Store: EffectDriver {
             self.enqueue(
               action,
               animation: context?.animation,
-              flowTaskTracker: context?.flowTaskTracker
+              flowTaskTracker: context?.flowTaskTracker,
+              context: context
             )
           } else {
             self.recordDrop(action, reason: .cancellationBoundary, context: context)
@@ -233,7 +235,7 @@ extension Store: EffectDriver {
       }
 
       let checkCancellation: @Sendable () async throws -> Void = {
-        if lifetime.isReleased {
+        if lifetime.isReleased || context?.shouldProceed == false {
           throw CancellationError()
         }
         try await runtime.checkCancellation(

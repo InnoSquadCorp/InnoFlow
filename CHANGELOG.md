@@ -11,6 +11,8 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- OptionalChildLifetime and the parent optionalChild modifier bind optional-child effects to explicit instance identity, synchronously block stale actions/outputs, and isolate child scheduler/cancellation IDs without cancelling parent or sibling work.
+
 - TestStore sends return TestStoreDispatch (TestFlowTask alias), preserving descendant ownership and selective cancellation. Its finite finish verifies without consuming queues. Non-exhaustive output reception progresses intermediate actions, and exhaustive global finish reports actions and outputs together.
 
 - `Store.send(_:)` and `ScopedStore.send(_:)` now return a `FlowTask`. Its

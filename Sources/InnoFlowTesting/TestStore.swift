@@ -70,6 +70,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package var debounceTasksByID: [AnyEffectID: TrackedDebounceTask] = [:]
   package var throttleActivityTokenByID: [AnyEffectID: UUID] = [:]
   package var nextDebounceGenerationValue: UInt64 = 0
+  package let childLifetimeRegistry = ChildLifetimeRegistry()
   package let effectBoundaries = EffectCancellationBoundaries()
   package let throttleState = ThrottleStateMap<R.Action, R.Output>()
   package let runScheduler = EffectRunScheduler()
@@ -122,6 +123,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   // Tracked in docs/SWIFT_TOOLCHAIN_TRACKING.md.
   @_optimize(none)
   isolated deinit {
+    childLifetimeRegistry.removeAll()
     let diagnostic = makeTerminalVerificationDiagnostic()
     let failureReporter = assertionFailureReporter
     let warningReporter = skippedAssertionReporter

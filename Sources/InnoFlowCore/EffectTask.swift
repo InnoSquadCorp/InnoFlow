@@ -248,6 +248,12 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
       effect: ReducerEffect<Action, Output>,
       animation: EffectAnimation
     )
+    case optionalChild(
+      slot: ChildLifetimeSlot, before: AnyEffectID?, after: AnyEffectID?,
+      child: ReducerEffect<Action, Output>, parent: ReducerEffect<Action, Output>
+    )
+    case lifetimeScope(id: AnyEffectID, effect: ReducerEffect<Action, Output>)
+    case owned(owner: ChildLifetimeOwner, effect: ReducerEffect<Action, Output>)
     case lazyMap(LazyMappedEffect)
     /// Routes a drop event through the effect walker so reducers that do not
     /// own `Send` (e.g., `IfLet`/`IfCaseLet`) can still surface
@@ -256,6 +262,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   }
 
   package let operation: Operation
+  package let containsLifetimeMetadata: Bool
 
   /// Cancellation IDs precomputed at construction, or `nil` when the subtree
   /// contains a `.lazyMap` node — materializing those at construction would
@@ -265,6 +272,17 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
 
   package init(operation: Operation) {
     self.operation = operation
+    switch operation {
+    case .optionalChild, .lifetimeScope, .lazyMap:
+      self.containsLifetimeMetadata = true
+    case .merge(let effects), .concatenate(let effects):
+      self.containsLifetimeMetadata = effects.contains { $0.containsLifetimeMetadata }
+    case .cancellable(let effect, _, _), .debounce(let effect, _, _),
+      .throttle(let effect, _, _, _, _), .animation(let effect, _), .owned(_, let effect):
+      self.containsLifetimeMetadata = effect.containsLifetimeMetadata
+    default:
+      self.containsLifetimeMetadata = false
+    }
     self.cachedPotentialCancellationIDs = Self.eagerPotentialCancellationIDs(of: operation)
   }
 
@@ -308,7 +326,15 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
       guard let childIDs = effect.cachedPotentialCancellationIDs else { return nil }
       return childIDs.union([id])
 
-    case .animation(let effect, _):
+    case .optionalChild(_, _, _, let child, let parent):
+      guard let childIDs = child.cachedPotentialCancellationIDs,
+        let parentIDs = parent.cachedPotentialCancellationIDs else { return nil }
+      return childIDs.union(parentIDs)
+
+    case .owned(let owner, let effect):
+      return effect.cachedPotentialCancellationIDs.map { $0.union([owner.cancellationID]) }
+
+    case .lifetimeScope(_, let effect), .animation(let effect, _):
       return effect.cachedPotentialCancellationIDs
 
     case .lazyMap:
@@ -339,7 +365,13 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     case .throttle(let effect, let id, _, _, _):
       return effect.potentialCancellationIDs.union([id])
 
-    case .animation(let effect, _):
+    case .optionalChild(_, _, _, let child, let parent):
+      return child.potentialCancellationIDs.union(parent.potentialCancellationIDs)
+
+    case .owned(let owner, let effect):
+      return effect.potentialCancellationIDs.union([owner.cancellationID])
+
+    case .lifetimeScope(_, let effect), .animation(let effect, _):
       return effect.potentialCancellationIDs
 
     case .lazyMap(let lazyMapped):
@@ -692,7 +724,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     case .diagnosticDrop(let action, let reason):
       return .reportDrop(transform(action), reason: reason)
 
-    case .run, .scheduledRun, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation:
+    case .run, .scheduledRun, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation, .optionalChild, .lifetimeScope, .owned:
       // Flatten the 1-stage map fast path: rather than wrapping the source in
       // a `.lazyMap` (one closure allocation now + one indirect materialize
       // on each walk), rewrite the operation tree eagerly. The work is
@@ -760,6 +792,18 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
         leading: leading,
         trailing: trailing
       )
+
+    case .optionalChild(let slot, let before, let after, let child, let parent):
+      return .init(operation: .optionalChild(
+        slot: slot, before: before, after: after,
+        child: child.mapOutput(transform), parent: parent.mapOutput(transform)
+      ))
+
+    case .lifetimeScope(let id, let effect):
+      return .init(operation: .lifetimeScope(id: id, effect: effect.mapOutput(transform)))
+
+    case .owned(let owner, let effect):
+      return .init(operation: .owned(owner: owner, effect: effect.mapOutput(transform)))
 
     case .animation(let effect, let animation):
       return effect.mapOutput(transform).applyingAnimation(animation)
@@ -841,6 +885,18 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
         leading: leading,
         trailing: trailing
       )
+
+    case .optionalChild(let slot, let before, let after, let child, let parent):
+      return .init(operation: .optionalChild(
+        slot: slot, before: before, after: after,
+        child: child.eagerMap(transform), parent: parent.eagerMap(transform)
+      ))
+
+    case .lifetimeScope(let id, let effect):
+      return .init(operation: .lifetimeScope(id: id, effect: effect.eagerMap(transform)))
+
+    case .owned(let owner, let effect):
+      return .init(operation: .owned(owner: owner, effect: effect.eagerMap(transform)))
 
     case .animation(let effect, let animation):
       return effect.eagerMap(transform).applyingAnimation(animation)

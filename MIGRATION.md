@@ -4,6 +4,10 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ## 6.0.0
 
+### Optional-child lifetime adoption
+
+Existing IfLet keeps its behavior. To adopt state-owned cancellation, replace duplicate child composition with OptionalChildLifetime or the parent optionalChild modifier. Provide a fresh explicit instance ID on reopening; keeping the ID preserves the same lifetime. The wrapper already reduces the child before its complete parent. Lift typed outputs explicitly. Raw effect IDs inside a child are owner-local, so outside raw-ID cancellation no longer reaches opt-in child work. This is an additive opt-in API; see docs/OPTIONAL_CHILD_LIFETIME.md.
+
 ### Testing send return value and output progress
 
 `TestStore.send`, `ScopedTestStore.send`, and phase helper sends return `TestStoreDispatch`. `TestFlowTask` remains a typealias for the earlier draft name. Existing statement calls need no change. Explicit async Void method values and protocol adapters must wrap the call and discard its result. A dispatch handle's finish diagnoses only its own unverified work without consuming it; global store finish retains its whole-store role. In `.off`, receiveOutput now reduces intermediate actions and their follow-up effects while seeking the output under the original deadline. Exhaustive global finish reports both pending action and output counts together.

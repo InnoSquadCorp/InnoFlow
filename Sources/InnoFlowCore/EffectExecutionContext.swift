@@ -70,6 +70,7 @@ package struct EffectExecutionContext: Sendable {
   package let origin: EffectOrigin?
   package let flowTaskTracker: FlowTaskTracker?
   package let dispatchID: DispatchID?
+  private let lifetimeOwners: [ChildLifetimeOwner]
   private let runCancellationState: EffectRunCancellationState?
 
   package var cancellationID: AnyEffectID? {
@@ -87,7 +88,8 @@ package struct EffectExecutionContext: Sendable {
     origin: EffectOrigin?,
     flowTaskTracker: FlowTaskTracker? = nil,
     dispatchID: DispatchID? = nil,
-    runCancellationState: EffectRunCancellationState? = nil
+    runCancellationState: EffectRunCancellationState? = nil,
+    lifetimeOwners: [ChildLifetimeOwner] = []
   ) {
     if let cancellationIDs {
       self.cancellationIDs = cancellationIDs
@@ -105,6 +107,7 @@ package struct EffectExecutionContext: Sendable {
     self.flowTaskTracker = flowTaskTracker
     self.dispatchID = dispatchID ?? flowTaskTracker?.dispatchID
     self.runCancellationState = runCancellationState
+    self.lifetimeOwners = lifetimeOwners
   }
 
   package static func managedRoot(
@@ -164,7 +167,8 @@ package struct EffectExecutionContext: Sendable {
       origin: existing?.origin,
       flowTaskTracker: existing?.flowTaskTracker,
       dispatchID: existing?.dispatchID,
-      runCancellationState: existing?.runCancellationState
+      runCancellationState: existing?.runCancellationState,
+      lifetimeOwners: existing?.lifetimeOwners ?? []
     )
   }
 
@@ -182,7 +186,8 @@ package struct EffectExecutionContext: Sendable {
       origin: existing?.origin,
       flowTaskTracker: existing?.flowTaskTracker,
       dispatchID: existing?.dispatchID,
-      runCancellationState: existing?.runCancellationState
+      runCancellationState: existing?.runCancellationState,
+      lifetimeOwners: existing?.lifetimeOwners ?? []
     )
   }
 
@@ -200,11 +205,30 @@ package struct EffectExecutionContext: Sendable {
       origin: existing?.origin,
       flowTaskTracker: existing?.flowTaskTracker,
       dispatchID: existing?.dispatchID,
-      runCancellationState: state
+      runCancellationState: state,
+      lifetimeOwners: existing?.lifetimeOwners ?? []
+    )
+  }
+
+  package static func withOwner(_ owner: ChildLifetimeOwner, on existing: Self?) -> Self {
+    let owned = Self.withCancellation(owner.cancellationID, on: existing)
+    return .init(
+      cancellationIDs: owned.cancellationIDs,
+      cancellationScope: owned.cancellationScope,
+      cancellationTokens: owned.cancellationTokens,
+      interpreterLease: owned.interpreterLease,
+      animation: owned.animation,
+      sequence: owned.sequence,
+      origin: owned.origin,
+      flowTaskTracker: owned.flowTaskTracker,
+      dispatchID: owned.dispatchID,
+      runCancellationState: owned.runCancellationState,
+      lifetimeOwners: owned.lifetimeOwners + [owner]
     )
   }
 
   package var shouldProceed: Bool {
+    guard lifetimeOwners.allSatisfy({ !$0.isCancelled }) else { return false }
     // Immediate outputs carry dispatch ownership but no structural scope.
     // They must honor cancellation accepted during reducer/observer execution.
     guard flowTaskTracker?.isCancelled != true else { return false }
@@ -228,7 +252,8 @@ package struct EffectExecutionContext: Sendable {
       origin: origin,
       flowTaskTracker: flowTaskTracker,
       dispatchID: dispatchID,
-      runCancellationState: runCancellationState
+      runCancellationState: runCancellationState,
+      lifetimeOwners: lifetimeOwners
     )
   }
 

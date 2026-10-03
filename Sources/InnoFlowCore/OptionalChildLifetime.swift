@@ -1,0 +1,248 @@
+import Foundation
+import os
+
+/// Runs an optional child before its parent and binds the child's effects to
+/// the lifetime of its explicit instance identity.
+///
+/// Use a fresh instance ID when reopening a child, even if its business ID is
+/// unchanged. Keeping the ID denotes the same lifetime. This wrapper already
+/// reduces the child; do not also install `IfLet` for the same slot.
+public struct OptionalChildLifetime<Parent: Reducer, Child: Reducer, ID: Hashable & Sendable>:
+  Reducer where Parent.Output == Child.Output
+{
+  public typealias State = Parent.State
+  public typealias Action = Parent.Action
+  public typealias Output = Parent.Output
+
+  private let parent: Parent
+  private let child: Child
+  private let statePath: WritableKeyPath<State, Child.State?>
+  private let actionPath: CasePath<Action, Child.Action>
+  private let instanceID: @Sendable (Child.State) -> ID
+  private let slot: ChildLifetimeSlot
+
+  public init(
+    parent: Parent,
+    state: WritableKeyPath<State, Child.State?>,
+    action: CasePath<Action, Child.Action>,
+    instanceID: @escaping @Sendable (Child.State) -> ID,
+    child: Child,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column
+  ) {
+    self.parent = parent
+    self.child = child
+    self.statePath = state
+    self.actionPath = action
+    self.instanceID = instanceID
+    self.slot = ChildLifetimeSlot(state: state, file: fileID.description, line: line, column: column)
+  }
+
+  public func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
+    let before = state[keyPath: statePath].map { AnyEffectID(EffectID(instanceID($0))) }
+    var childEffect: ReducerEffect<Action, Output> = .none
+    if let childAction = actionPath.extract(action), var childState = state[keyPath: statePath] {
+      childEffect = child.reduce(into: &childState, action: childAction).map(actionPath.embed)
+      state[keyPath: statePath] = childState
+    }
+    let parentEffect = parent.reduce(into: &state, action: action)
+    let after = state[keyPath: statePath].map { AnyEffectID(EffectID(instanceID($0))) }
+    return .init(operation: .optionalChild(
+      slot: slot, before: before, after: after, child: childEffect, parent: parentEffect
+    ))
+  }
+}
+
+extension Reducer {
+  /// Adds opt-in optional-child lifetime management around this parent reducer.
+  ///
+  /// Child reduction runs first. Removal or replacement by either reducer
+  /// invalidates old child actions and outputs before any effects are delivered.
+  /// Cancellation IDs and scheduler lanes inside the child are owner-local;
+  /// cancelling a raw ID outside it does not cancel that child's work.
+  public func optionalChild<Child: Reducer, ID: Hashable & Sendable>(
+    state: WritableKeyPath<State, Child.State?>,
+    action: CasePath<Action, Child.Action>,
+    instanceID: @escaping @Sendable (Child.State) -> ID,
+    child: Child,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column
+  ) -> OptionalChildLifetime<Self, Child, ID> where Child.Output == Output {
+    OptionalChildLifetime(
+      parent: self, state: state, action: action, instanceID: instanceID, child: child,
+      fileID: fileID, line: line, column: column
+    )
+  }
+}
+
+/// Lock-backed structural identity: key paths never access state here.
+package final class ChildLifetimeKeyPath: Hashable, Sendable {
+  private let storage: OSAllocatedUnfairLock<AnyKeyPath>
+  package init(_ path: AnyKeyPath) { storage = .init(initialState: path) }
+  package static func == (lhs: ChildLifetimeKeyPath, rhs: ChildLifetimeKeyPath) -> Bool {
+    if lhs === rhs { return true }
+    let left = lhs.storage.withLock { $0 }
+    return rhs.storage.withLock { left == $0 }
+  }
+  package func hash(into hasher: inout Hasher) {
+    storage.withLock { hasher.combine($0) }
+  }
+}
+
+package struct ChildLifetimeSlot: Hashable, Sendable {
+  let state: ChildLifetimeKeyPath
+  let file: String
+  let line: UInt
+  let column: UInt
+
+  init(state: AnyKeyPath, file: String, line: UInt, column: UInt) {
+    self.state = ChildLifetimeKeyPath(state)
+    self.file = file
+    self.line = line
+    self.column = column
+  }
+}
+
+extension ReducerEffect {
+  @usableFromInline
+  func inLifetimeScope(state: AnyKeyPath) -> Self {
+    guard containsLifetimeMetadata else { return self }
+    return .init(operation: .lifetimeScope(
+      id: AnyEffectID(EffectID(ChildLifetimeKeyPath(state))), effect: self
+    ))
+  }
+}
+
+/// Captured by events, never reconstructed from the current child state.
+package final class ChildLifetimeOwner: Sendable {
+  package let generation = UUID()
+  private let cancelled = OSAllocatedUnfairLock(initialState: false)
+
+  package var cancellationID: AnyEffectID { AnyEffectID(EffectID(CancellationID(generation: generation))) }
+  package var isCancelled: Bool { cancelled.withLock { $0 } }
+  package func invalidate() { cancelled.withLock { $0 = true } }
+
+  package func namespace(_ id: AnyEffectID) -> AnyEffectID {
+    AnyEffectID(EffectID(NamespacedID(owner: generation, raw: id)))
+  }
+
+  private struct CancellationID: Hashable, Sendable { let generation: UUID }
+
+  private struct NamespacedID: Hashable, Sendable {
+    let owner: UUID
+    let raw: AnyEffectID
+  }
+}
+
+/// Contains only active slots. Retired tokens live solely in outstanding work.
+@MainActor
+package final class ChildLifetimeRegistry {
+  private struct Location: Hashable {
+    let path: [AnyEffectID]
+    let slot: ChildLifetimeSlot
+  }
+  private final class Node {
+    let identity: AnyEffectID
+    let owner = ChildLifetimeOwner()
+    var children: [Location: Node] = [:]
+    init(identity: AnyEffectID) { self.identity = identity }
+  }
+  private var roots: [Location: Node] = [:]
+
+  package init() {}
+
+  package var activeOwnerCount: Int {
+    func count(_ nodes: [Location: Node]) -> Int {
+      nodes.values.reduce(0) { $0 + 1 + count($1.children) }
+    }
+    return count(roots)
+  }
+
+  package func prepare<Action, Output>(
+    _ effect: ReducerEffect<Action, Output>,
+    invalidate: (AnyEffectID) -> Void
+  ) -> ReducerEffect<Action, Output> {
+    guard effect.containsLifetimeMetadata else { return effect }
+    return prepare(effect, parent: nil, path: [], invalidate: invalidate)
+  }
+
+  package func removeAll() {
+    for node in roots.values { close(node, invalidate: { _ in }) }
+    roots.removeAll()
+  }
+
+  private func close(_ node: Node, invalidate: (AnyEffectID) -> Void) {
+    node.owner.invalidate()
+    for child in node.children.values { close(child, invalidate: invalidate) }
+    node.children.removeAll()
+    invalidate(node.owner.cancellationID)
+  }
+
+  private func prepare<Action, Output>(
+    _ effect: ReducerEffect<Action, Output>,
+    parent: Node?,
+    path: [AnyEffectID],
+    invalidate: (AnyEffectID) -> Void
+  ) -> ReducerEffect<Action, Output> {
+    func recurse(_ effect: ReducerEffect<Action, Output>) -> ReducerEffect<Action, Output> {
+      prepare(effect, parent: parent, path: path, invalidate: invalidate)
+    }
+    func id(_ raw: AnyEffectID) -> AnyEffectID { parent?.owner.namespace(raw) ?? raw }
+    switch effect.operation {
+    case .lifetimeScope(let id, let nested):
+      return prepare(nested, parent: parent, path: path + [id], invalidate: invalidate)
+    case .optionalChild(let slot, let before, let after, let child, let parentEffect):
+      let location = Location(path: path, slot: slot)
+      var slots = parent?.children ?? roots
+      var previous = slots[location]
+      if previous?.identity != before {
+        if let previous { close(previous, invalidate: invalidate) }
+        previous = before.map(Node.init)
+      }
+      let childEffect: ReducerEffect<Action, Output>
+      if let previous, !child.isNone {
+        childEffect = .init(operation: .owned(
+          owner: previous.owner,
+          effect: prepare(child, parent: previous, path: [], invalidate: invalidate)
+        ))
+      } else {
+        childEffect = .none
+      }
+      if before != after {
+        if let previous { close(previous, invalidate: invalidate) }
+        slots[location] = after.map(Node.init)
+      } else {
+        slots[location] = previous
+      }
+      if let parent { parent.children = slots } else { roots = slots }
+      // Prepare every branch before executing any branch, including siblings.
+      return .merge(childEffect, recurse(parentEffect))
+    case .merge(let effects):
+      return .merge(effects.map(recurse))
+    case .concatenate(let effects):
+      return .concatenate(effects.map(recurse))
+    case .cancellable(let effect, let raw, let cancelInFlight):
+      return recurse(effect).cancellable(id(raw), cancelInFlight: cancelInFlight)
+    case .debounce(let effect, let raw, let interval):
+      return recurse(effect).debounce(id(raw), for: interval)
+    case .throttle(let effect, let raw, let interval, let leading, let trailing):
+      return recurse(effect).throttle(id(raw), for: interval, leading: leading, trailing: trailing)
+    case .scheduledRun(let raw, let policy, let priority, let onAdmission, let operation):
+      return .init(operation: .scheduledRun(
+        id: id(raw), policy: policy, priority: priority, onAdmission: onAdmission, operation: operation
+      ))
+    case .cancel(let raw):
+      return .cancel(id(raw))
+    case .animation(let effect, let animation):
+      return recurse(effect).applyingAnimation(animation)
+    case .lazyMap(let lazy):
+      return recurse(lazy.materialize())
+    case .owned:
+      return effect
+    case .none, .send, .output, .run, .diagnosticDrop:
+      return effect
+    }
+  }
+}

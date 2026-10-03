@@ -329,3 +329,7 @@ Phase declarations and references compare the same logical Swift identifier, reg
 ### TestStoreDispatch
 
 Root, scoped, and phase helper sends return one discardable TestStoreDispatch, also spelled TestFlowTask by the draft compatibility alias. Queued actions keep their dispatch activity until the receive reduction has registered follow-up work. Runtime completion is separate from unverified delivered outputs. Dispatch finish never consumes either queue, regardless of exhaustivity, and can be retried after explicit receive. Timeout/caller cancellation cancels only that dispatch and does not mark uncooperative physical work finished. Handles weakly reference their store. Non-exhaustive receiveOutput advances intermediate actions using a non-consuming shared queue revision, preserving per-queue FIFO and one total deadline.
+
+### Optional-child lifetime boundary
+
+OptionalChildLifetime is an opt-in composition wrapper around the complete parent reducer. It observes child instance identity before and after child-first/parent-second reduction, resolves all lifetime changes synchronously, and invalidates old owners before action/output admission. Stable business identity does not imply instance lifetime. Namespaced effect IDs and composition paths isolate siblings and nested scopes, including the same reusable reducer under different Scope locations. Parent/sibling work keeps its own lifetime. Owners are reclaimed after outstanding work releases them; no unbounded tombstone history is maintained. Existing IfLet semantics are unchanged.

@@ -547,3 +547,7 @@ The runtime owns shared throttle completion even when callers discard every hand
 ### Testing dispatch ownership
 
 `TestStore.send`, scoped sends, and phase sends return discardable `TestStoreDispatch` (`TestFlowTask` is its compatibility alias). Effect actions retain their originating context and a queue activity lease through reduction and descendant registration. Task `finish(timeout:)` is non-consuming and diagnoses only its own unverified actions/outputs in both exhaustivity modes. It never drains another dispatch. Global store finish remains the terminal/draining API. In `.off`, receiveOutput progresses necessary FIFO actions, checks output between actions, and shares one total deadline. Exhaustive global finish snapshots actions and outputs together before cleanup.
+
+### Optional child ownership
+
+Use opt-in `OptionalChildLifetime` / `.optionalChild(state:action:instanceID:child:)` to bind child effects to an explicit instance ID. Child reduction precedes the complete parent; all owner invalidations apply before effect execution. Instance IDs must change on reopening. Slots, nested owners and Stores isolate equal raw effect IDs. Parent/sibling work survives child closure, and noncooperative tasks remain physically active until return. Existing IfLet is unchanged. See docs/OPTIONAL_CHILD_LIFETIME.md.

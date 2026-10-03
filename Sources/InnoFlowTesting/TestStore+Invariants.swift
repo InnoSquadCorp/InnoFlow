@@ -34,7 +34,10 @@ extension TestStore {
     line: UInt
   ) -> ReducerEffect<R.Action, R.Output> {
     let previousState = state
-    let effect = reducer.reduce(into: &state, action: action)
+    let effect = childLifetimeRegistry.prepare(reducer.reduce(into: &state, action: action)) { id in
+      let sequence = markCancelled(id: id)
+      cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
+    }
     checkInvariants(
       previousState: previousState,
       action: action,

@@ -249,12 +249,14 @@ public final class Store<R: Reducer> {
   package func enqueue(
     _ action: R.Action,
     animation: EffectAnimation?,
-    flowTaskTracker: FlowTaskTracker? = nil
+    flowTaskTracker: FlowTaskTracker? = nil,
+    context: EffectExecutionContext? = nil
   ) {
     actionQueue.enqueue(
       action,
       animation: animation,
-      flowTaskTracker: flowTaskTracker
+      flowTaskTracker: flowTaskTracker,
+      context: context
     )
     drainActionQueueIfNeeded()
   }
@@ -287,7 +289,8 @@ public final class Store<R: Reducer> {
       // Cancellation can arrive after emission but before this FIFO entry is
       // reduced (including inside a synchronous observation/instrumentation
       // callback). Do not let a cancelled tree mutate state or start new work.
-      guard queuedAction.flowTaskTracker?.isCancelled != true else {
+      guard queuedAction.flowTaskTracker?.isCancelled != true,
+        queuedAction.context?.shouldProceed != false else {
         recordDrop(
           queuedAction.action,
           reason: .cancellationBoundary,
@@ -304,12 +307,16 @@ public final class Store<R: Reducer> {
       if let animation = queuedAction.animation {
         var animatedEffect: ReducerEffect<R.Action, R.Output> = .none
         animation.perform {
-          animatedEffect = reducer.reduce(into: &state, action: queuedAction.action)
+          animatedEffect = effectBridge.prepareLifetimes(
+            reducer.reduce(into: &state, action: queuedAction.action)
+          )
           observerRegistry.refresh(from: previousState, to: state)
         }
         effect = animatedEffect
       } else {
-        effect = reducer.reduce(into: &state, action: queuedAction.action)
+        effect = effectBridge.prepareLifetimes(
+          reducer.reduce(into: &state, action: queuedAction.action)
+        )
         observerRegistry.refresh(from: previousState, to: state)
       }
 

@@ -232,7 +232,7 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
     }
 
     let childEffect = reducer.reduce(into: &state[keyPath: self.state], action: childAction)
-    return childEffect.map(embedAction)
+    return childEffect.map(embedAction).inLifetimeScope(state: self.state)
   }
 }
 
@@ -310,7 +310,7 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
     state[keyPath: self.state] = childState
-    return childEffect.map(embedAction)
+    return childEffect.map(embedAction).inLifetimeScope(state: self.state)
   }
 
   /// Cold path for a child action arriving while child state is `nil`.

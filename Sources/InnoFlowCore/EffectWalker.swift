@@ -30,6 +30,13 @@ package struct EffectWalker<D: EffectDriver> {
     awaited: Bool = false
   ) async {
     switch effect.operation {
+    case .optionalChild, .lifetimeScope:
+      preconditionFailure("Child lifetime metadata must be prepared synchronously after reduction")
+
+    case .owned(let owner, let nested):
+      guard !owner.isCancelled else { return }
+      await walk(nested, context: .withOwner(owner, on: context), awaited: awaited)
+
     case .none:
       return
 

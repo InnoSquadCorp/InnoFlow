@@ -7,6 +7,7 @@ import Foundation
 package let storeActionQueueRetainedStorageBudget = 64 * 1024
 
 package struct StoreQueuedAction<Action> {
+  package let context: EffectExecutionContext?
   package let action: Action
   package let animation: EffectAnimation?
   package let flowTaskTracker: FlowTaskTracker?
@@ -40,10 +41,12 @@ package final class StoreActionQueue<Action> {
   package func enqueue(
     _ action: Action,
     animation: EffectAnimation?,
-    flowTaskTracker: FlowTaskTracker? = nil
+    flowTaskTracker: FlowTaskTracker? = nil,
+    context: EffectExecutionContext? = nil
   ) {
     buffered.append(
       .init(
+        context: context?.frozenForExecution(),
         action: action,
         animation: animation,
         flowTaskTracker: flowTaskTracker,
