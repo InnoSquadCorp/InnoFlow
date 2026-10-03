@@ -343,33 +343,67 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
   @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
   @usableFromInline let reducer: Child
   @usableFromInline let onMissing: OnMissingPolicy
+  @usableFromInline let lifetimeScopeID: AnyEffectID
 
   private init(
     state: CasePath<ParentState, Child.State>,
     extractAction: @escaping @Sendable (ParentAction) -> Child.Action?,
     embedAction: @escaping @Sendable (Child.Action) -> ParentAction,
     reducer: Child,
-    onMissing: OnMissingPolicy
+    onMissing: OnMissingPolicy,
+    lifetimeScopeID: AnyEffectID
   ) {
     self.state = state
     self.extractAction = extractAction
     self.embedAction = embedAction
     self.reducer = reducer
     self.onMissing = onMissing
+    self.lifetimeScopeID = lifetimeScopeID
   }
 
   public init(
     state: CasePath<ParentState, Child.State>,
     action: CasePath<ParentAction, Child.Action>,
     reducer: Child,
-    onMissing: OnMissingPolicy = .assertOnly
+    onMissing: OnMissingPolicy = .assertOnly,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column
   ) {
     self.init(
       state: state,
       extractAction: action.extract,
       embedAction: action.embed,
       reducer: reducer,
-      onMissing: onMissing
+      onMissing: onMissing,
+      lifetimeScopeID: ChildLifetimeCaseLocation(
+        state: state, fileID: fileID, line: line, column: column
+      ).effectID
+    )
+  }
+
+  /// Gives separate lifetime namespaces to case reducers created by the same
+  /// helper declaration. The ID must remain stable across body reconstruction.
+  public init<ID: Hashable & Sendable>(
+    state: CasePath<ParentState, Child.State>,
+    action: CasePath<ParentAction, Child.Action>,
+    reducer: Child,
+    onMissing: OnMissingPolicy = .assertOnly,
+    lifetimeID: EffectID<ID>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column
+  ) {
+    self.init(
+      state: state,
+      extractAction: action.extract,
+      embedAction: action.embed,
+      reducer: reducer,
+      onMissing: onMissing,
+      lifetimeScopeID: ChildLifetimeCaseLocation(
+        state: state, explicitID: AnyEffectID(lifetimeID),
+        fileID: fileID, line: line, column: column
+      ).effectID
     )
   }
 
@@ -386,7 +420,7 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
     state = self.state.embed(childState)
-    return childEffect.map(embedAction)
+    return childEffect.map(embedAction).inLifetimeScope(state: self.state, id: lifetimeScopeID)
   }
 
   /// Cold path for a child action arriving while parent state is in a
@@ -463,6 +497,8 @@ where
     let elementID = id
     return childEffect.map { followUpAction in
       actionPath.embed(elementID, followUpAction)
+    }.inLifetimeScope(state: self.state, elementID: elementID) { collection, id in
+      collection.first { $0.id == id }
     }
   }
 }
@@ -531,6 +567,8 @@ where
     let elementID = id
     return childEffect.map { followUpAction in
       actionPath.embed(elementID, followUpAction)
+    }.inLifetimeScope(state: self.state, elementID: elementID) { collection, id in
+      collection[id: id]
     }
   }
 }

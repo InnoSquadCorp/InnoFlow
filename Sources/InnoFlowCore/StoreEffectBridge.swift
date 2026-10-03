@@ -85,8 +85,12 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
   }
 
   /// Applies lifetime boundaries before any same-reduction output/effect can run.
-  package func prepareLifetimes(_ effect: ReducerEffect<Action, Output>) -> ReducerEffect<Action, Output> {
-    childLifetimeRegistry.prepare(effect) { id in
+  package func prepareLifetimes<State>(_ effect: ReducerEffect<Action, Output>, state: State)
+    -> ReducerEffect<
+      Action, Output
+    >
+  {
+    childLifetimeRegistry.prepare(effect, state: state) { id in
       let sequence = markCancelled(id: id)
       runScheduler.cancel(id: id, upTo: sequence)
       cancelCompositeTasks(id: id, upTo: sequence)

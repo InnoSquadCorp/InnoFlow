@@ -327,7 +327,7 @@ public final class Store<R: Reducer> {
         animation.perform {
           animatedEffect = withMutation(keyPath: stateKeyPath) {
             effectBridge.prepareLifetimes(
-              reducer.reduce(into: &storedState, action: queuedAction.action)
+              reducer.reduce(into: &storedState, action: queuedAction.action), state: storedState
             )
           }
           observerRegistry.refresh(from: previousState, to: storedState)
@@ -336,7 +336,7 @@ public final class Store<R: Reducer> {
       } else {
         effect = withMutation(keyPath: stateKeyPath) {
           effectBridge.prepareLifetimes(
-            reducer.reduce(into: &storedState, action: queuedAction.action)
+            reducer.reduce(into: &storedState, action: queuedAction.action), state: storedState
           )
         }
         observerRegistry.refresh(from: previousState, to: storedState)

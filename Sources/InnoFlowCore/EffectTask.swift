@@ -216,7 +216,8 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     case send(Action)
     case output(Output)
     case run(
-      priority: TaskPriority?, operation: @concurrent @Sendable (Send<Action>, EffectContext) async -> Void)
+      priority: TaskPriority?,
+      operation: @concurrent @Sendable (Send<Action>, EffectContext) async -> Void)
     case scheduledRun(
       id: AnyEffectID,
       policy: EffectExecutionPolicy,
@@ -252,7 +253,7 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
       slot: ChildLifetimeSlot, before: AnyEffectID?, after: AnyEffectID?,
       child: ReducerEffect<Action, Output>, parent: ReducerEffect<Action, Output>
     )
-    case lifetimeScope(id: AnyEffectID, effect: ReducerEffect<Action, Output>)
+    case lifetimeScope(id: ChildLifetimeProjection, effect: ReducerEffect<Action, Output>)
     case owned(owner: ChildLifetimeOwner, effect: ReducerEffect<Action, Output>)
     case lazyMap(LazyMappedEffect)
     /// Routes a drop event through the effect walker so reducers that do not
@@ -328,7 +329,8 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
 
     case .optionalChild(_, _, _, let child, let parent):
       guard let childIDs = child.cachedPotentialCancellationIDs,
-        let parentIDs = parent.cachedPotentialCancellationIDs else { return nil }
+        let parentIDs = parent.cachedPotentialCancellationIDs
+      else { return nil }
       return childIDs.union(parentIDs)
 
     case .owned(let owner, let effect):
@@ -724,7 +726,8 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     case .diagnosticDrop(let action, let reason):
       return .reportDrop(transform(action), reason: reason)
 
-    case .run, .scheduledRun, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation, .optionalChild, .lifetimeScope, .owned:
+    case .run, .scheduledRun, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation,
+      .optionalChild, .lifetimeScope, .owned:
       // Flatten the 1-stage map fast path: rather than wrapping the source in
       // a `.lazyMap` (one closure allocation now + one indirect materialize
       // on each walk), rewrite the operation tree eagerly. The work is
@@ -794,10 +797,11 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
       )
 
     case .optionalChild(let slot, let before, let after, let child, let parent):
-      return .init(operation: .optionalChild(
-        slot: slot, before: before, after: after,
-        child: child.mapOutput(transform), parent: parent.mapOutput(transform)
-      ))
+      return .init(
+        operation: .optionalChild(
+          slot: slot, before: before, after: after,
+          child: child.mapOutput(transform), parent: parent.mapOutput(transform)
+        ))
 
     case .lifetimeScope(let id, let effect):
       return .init(operation: .lifetimeScope(id: id, effect: effect.mapOutput(transform)))
@@ -887,10 +891,11 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
       )
 
     case .optionalChild(let slot, let before, let after, let child, let parent):
-      return .init(operation: .optionalChild(
-        slot: slot, before: before, after: after,
-        child: child.eagerMap(transform), parent: parent.eagerMap(transform)
-      ))
+      return .init(
+        operation: .optionalChild(
+          slot: slot, before: before, after: after,
+          child: child.eagerMap(transform), parent: parent.eagerMap(transform)
+        ))
 
     case .lifetimeScope(let id, let effect):
       return .init(operation: .lifetimeScope(id: id, effect: effect.eagerMap(transform)))

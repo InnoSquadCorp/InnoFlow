@@ -64,7 +64,7 @@ extension TestStore {
     for message in observation.violations {
       issueReporter(message, location)
     }
-    let effect = childLifetimeRegistry.prepare(reduced) { id in
+    let effect = childLifetimeRegistry.prepare(reduced, state: state) { id in
       let sequence = markCancelled(id: id)
       cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
     }
