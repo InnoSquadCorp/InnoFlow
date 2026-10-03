@@ -613,6 +613,23 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   }
 
   @MainActor
+  func testPhaseInspectorOpensAndDismisses() throws {
+    let app = launchApp(environment: ["INNOFLOW_SAMPLE_DEMO": "phase-driven-fsm"]) { app in
+      exists(app.switches["phase.fail-next-load"], describedAs: "phase demo")
+    }
+    tapButton(
+      "phase.inspector", in: app,
+      until: exists(
+        app.navigationBars["Flow Inspector"], describedAs: "payload-free Flow Inspector")
+    )
+    tapButton(
+      "phase.inspector.done", in: app,
+      until: exists(
+        app.switches["phase.fail-next-load"], describedAs: "phase demo after Inspector dismissal")
+    )
+  }
+
+  @MainActor
   func testPhaseDrivenFlowRecoversFromFailureAndLoadsTodos() throws {
     let app = launchApp(
       environment: ["INNOFLOW_SAMPLE_DEMO": "phase-driven-fsm"]

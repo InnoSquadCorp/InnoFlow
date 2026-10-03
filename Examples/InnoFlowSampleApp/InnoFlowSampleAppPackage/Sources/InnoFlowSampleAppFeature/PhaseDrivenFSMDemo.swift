@@ -1,5 +1,6 @@
 import Foundation
 import InnoFlow
+import InnoFlowInspector
 import InnoFlowSwiftUI
 import SwiftUI
 
@@ -179,7 +180,16 @@ struct PhaseDrivenTodoFeature {
 
 @MainActor
 struct PhaseDrivenFSMDemoView: View {
-  @State private var store = Store(reducer: PhaseDrivenTodoFeature())
+  private let diagnostics: StoreDiagnostics
+  @State private var store: Store<PhaseDrivenTodoFeature>
+  @State private var inspectorPresented = false
+
+  init() {
+    let diagnostics = StoreDiagnostics(capacity: 128)
+    self.diagnostics = diagnostics
+    self._store = State(
+      initialValue: Store(reducer: PhaseDrivenTodoFeature(), diagnostics: diagnostics))
+  }
 
   var body: some View {
     ScrollView {
@@ -236,6 +246,8 @@ struct PhaseDrivenFSMDemoView: View {
         .background(Color.primary.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
+        ViewOwnedTaskExample()
+
         LogSection(
           title: "Phase Map",
           entries: [
@@ -276,6 +288,29 @@ struct PhaseDrivenFSMDemoView: View {
       .padding()
     }
     .navigationTitle("Phase-Driven FSM")
+    #if DEBUG
+      .toolbar {
+        Button("Inspector") { inspectorPresented = true }
+        .accessibilityIdentifier("phase.inspector")
+      }
+      .sheet(isPresented: $inspectorPresented) {
+        NavigationStack {
+          FlowInspector(
+            diagnostics: diagnostics,
+            graph: FlowInspectorPhaseGraph(
+              graph: PhaseDrivenTodoFeature.phaseMap.derivedGraph,
+              currentPhase: store.phase,
+              label: { $0.rawValue }
+            ),
+            laneSnapshots: { [weak store] in store?.runLaneSnapshots(limit: 32) ?? [] }
+          )
+          .toolbar {
+            Button("Done") { inspectorPresented = false }.accessibilityIdentifier(
+              "phase.inspector.done")
+          }
+        }
+      }
+    #endif
   }
 }
 
