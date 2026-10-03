@@ -22,6 +22,7 @@ if [[ "${1:-}" == "-version" ]]; then
   exit 0
 fi
 printf '%s\n' "$@" >"$FOCUSED_RUNTIME_COMMAND_LOG"
+original_arguments=( "$@" )
 discovery_output=""
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == "-test-enumeration-output-path" ]]; then
@@ -39,6 +40,12 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 if [[ -n "$discovery_output" ]]; then
+  printf '%s\n' "${original_arguments[@]}" >"$FOCUSED_RUNTIME_DISCOVERY_LOG"
+  if [[ "$(printf '%s\n' "${original_arguments[@]}" | grep -c '^\-only-testing:' || true)" != 1 ]] ||
+      ! printf '%s\n' "${original_arguments[@]}" | grep -Fx -- '-only-testing:InnoFlowTests' >/dev/null; then
+    echo "Discovery attempted host-only InnoFlowMacrosTests.xctest without the runtime target restriction" >&2
+    exit 65
+  fi
   /usr/bin/python3 - "$discovery_output" <<'PY'
 import json
 import os
@@ -57,6 +64,8 @@ elif mode == "duplicate":
     identifiers[-1] = identifiers[0]
 elif mode == "zero":
     identifiers = []
+elif mode == "unreviewed-consistency":
+    identifiers.append("NewConsistencyTests/newContract()")
 with open(sys.argv[1], "w", encoding="utf-8") as stream:
     json.dump({"errors": [], "values": [{
         "disabledTests": [],
@@ -124,16 +133,42 @@ chmod +x "$TMP_ROOT/bin/xcrun"
 
 export PATH="$TMP_ROOT/bin:$PATH"
 export FOCUSED_RUNTIME_COMMAND_LOG="$TMP_ROOT/command.log"
+export FOCUSED_RUNTIME_DISCOVERY_LOG="$TMP_ROOT/discovery-command.log"
 export FOCUSED_RUNTIME_INVENTORY="$TMP_ROOT/package/docs/contracts/runtime-test-inventory.json"
 
 run_probe() {
-  rm -f "$FOCUSED_RUNTIME_COMMAND_LOG"
+  rm -f "$FOCUSED_RUNTIME_COMMAND_LOG" "$FOCUSED_RUNTIME_DISCOVERY_LOG"
   "$SCRIPT_DIR/run-focused-platform-runtime-tests.sh" \
     --destination "platform=iOS Simulator,id=FAKE-DEVICE-ID" \
     --package-root "$TMP_ROOT/package" || return $?
   [[ -s "$FOCUSED_RUNTIME_COMMAND_LOG" ]]
 }
 
+run_probe
+grep -Fx -- '-only-testing:InnoFlowTests' "$FOCUSED_RUNTIME_DISCOVERY_LOG" >/dev/null
+if grep -F -- '-only-testing:InnoFlowMacrosTests' "$FOCUSED_RUNTIME_DISCOVERY_LOG" >/dev/null; then
+  echo "Simulator discovery attempted host-only macro tests" >&2
+  exit 1
+fi
+# A regression that removes only the discovery restriction must fail before
+# runtime execution, just as the hosted 27.0 runtime diagnostic did.
+cp "$SCRIPT_DIR/run-focused-platform-runtime-tests.sh" "$TMP_ROOT/unrestricted-runtime.sh"
+sed '/^  -only-testing:InnoFlowTests$/d' "$TMP_ROOT/unrestricted-runtime.sh" >"$TMP_ROOT/unrestricted-runtime.tmp"
+mv "$TMP_ROOT/unrestricted-runtime.tmp" "$TMP_ROOT/unrestricted-runtime.sh"
+chmod +x "$TMP_ROOT/unrestricted-runtime.sh"
+status=0
+"$TMP_ROOT/unrestricted-runtime.sh" \
+  --destination "platform=iOS Simulator,id=FAKE-DEVICE-ID" \
+  --package-root "$TMP_ROOT/package" >"$TMP_ROOT/unrestricted.log" 2>&1 || status=$?
+[[ "$status" == 65 ]] || {
+  echo "Unrestricted runtime discovery did not fail closed: $status" >&2
+  exit 1
+}
+grep -F 'host-only InnoFlowMacrosTests.xctest' "$TMP_ROOT/unrestricted.log" >/dev/null
+if grep -Fx -- '-resultBundlePath' "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null; then
+  echo "Runtime execution proceeded after unrestricted discovery" >&2
+  exit 1
+fi
 run_probe
 if grep -Fx -- '-workspace' "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null; then
   echo "Unexpected workspace redirect for a plain Swift package" >&2
@@ -145,11 +180,11 @@ run_probe
 grep -Fx -- '-workspace' "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null
 grep -Fx -- "$TMP_ROOT/package/.swiftpm/xcode/package.xcworkspace" \
   "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null
-for suite in StoreScopeSelectionTests CollectionScopeCacheTests SingleScopeCacheTests; do
+for suite in $(/usr/bin/python3 -c 'import json, sys; print(" ".join(json.load(open(sys.argv[1]))["suites"]))' "$FOCUSED_RUNTIME_INVENTORY"); do
   grep -Fx -- "-only-testing:InnoFlowTests/$suite" "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null
 done
 
-for mode in partial missing renamed duplicate zero; do
+for mode in partial missing renamed duplicate zero unreviewed-consistency; do
   export FOCUSED_RUNTIME_FIXTURE_MODE="$mode"
   if run_probe >/dev/null 2>&1; then
     echo "Incomplete runtime fixture unexpectedly passed: $mode" >&2

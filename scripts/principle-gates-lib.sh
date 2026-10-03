@@ -1325,6 +1325,38 @@ run_release_configuration_checks() {
   rm -rf "$RELEASE_GATE_BUILD_PATH"
 }
 
+run_independent_consumer_checks() {
+  ensure_principle_gate_context
+
+  # Keep these external-package builds inside the existing full-principle
+  # release receipt. Their own runners enforce unit/CLI/semantic controls;
+  # nested Swift Testing summaries must not alter the root-suite receipt.
+  echo "[principle-gates] Checking the independent Level 1 consumer"
+  run_logged_gate_command "Level 1 consumer" run_low_priority env \
+    INNOFLOW_PACKAGE_PATH="$ROOT_DIR" SWIFT_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-level-one-consumer.sh"
+  echo "[principle-gates] Checking the independent test dispatch consumer"
+  run_logged_gate_command "Test dispatch consumer" run_low_priority env \
+    INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-test-dispatch-consumer.sh"
+  echo "[principle-gates] Checking the independent dispatch identity consumer"
+  run_logged_gate_command "Dispatch identity consumer" run_low_priority env \
+    INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-dispatch-identity-consumer.sh"
+  echo "[principle-gates] Checking the independent collection lifetime consumer"
+  run_logged_gate_command "Collection lifetime consumer" run_low_priority env \
+    INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-collection-lifetime-consumer.sh"
+  echo "[principle-gates] Checking the independent Apple SwiftUI consumer"
+  run_logged_gate_command "SwiftUI consumer" run_low_priority env \
+    INNOFLOW_PACKAGE_PATH="$ROOT_DIR" SWIFT_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-swiftui-consumer.sh"
+  echo "[principle-gates] Checking the independent AST migration consumer"
+  run_logged_gate_command "AST migration consumer" run_low_priority env \
+    INNOFLOW_MIGRATION_PACKAGE_PATH="$ROOT_DIR" \
+    "$ROOT_DIR/Tools/innoflow-migrate/scripts/check.sh"
+}
+
 run_release_build_checks() {
   ensure_principle_gate_context
 
@@ -1343,6 +1375,7 @@ run_release_build_checks() {
   run_low_priority env INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" \
     INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" "$SCRIPT_DIR/check-effect-execution-consumer.sh"
 
+  run_independent_consumer_checks
   run_release_configuration_checks
 }
 

@@ -3,6 +3,7 @@
 
 import json
 import hashlib
+import re
 import sys
 from collections import Counter
 
@@ -18,13 +19,35 @@ def collect_cases(node):
             yield from collect_cases(value)
 
 
-def validate(inventory, summary, tests):
+def validate_inventory(inventory):
+    if (not isinstance(inventory, dict) or type(inventory.get("schemaVersion")) is not int or
+            inventory["schemaVersion"] != 1):
+        return ["invalid-inventory"]
+    suites = inventory.get("suites")
+    expected = inventory.get("expectedTestIdentifiers")
+    if (not isinstance(suites, list) or not suites or
+            any(not isinstance(suite, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", suite)
+                for suite in suites)):
+        return ["invalid-inventory-suites"]
+    if (not isinstance(expected, list) or not expected or
+            any(not isinstance(item, str) or item.count("/") != 1 or not item.split("/", 1)[1]
+                for item in expected)):
+        return ["invalid-inventory-identifiers"]
     errors = []
-    expected = inventory["expectedTestIdentifiers"]
-    if inventory.get("schemaVersion") != 1 or not expected:
-        errors.append("invalid-inventory")
+    if suites != sorted(set(suites)):
+        errors.append("duplicate-or-unsorted-suites")
     if expected != sorted(set(expected)):
         errors.append("duplicate-or-unsorted-inventory")
+    if sorted({item.split("/", 1)[0] for item in expected}) != suites:
+        errors.append("inventory-suite-mismatch")
+    return errors
+
+
+def validate(inventory, summary, tests):
+    errors = validate_inventory(inventory)
+    if errors:
+        return errors, 0
+    expected = inventory["expectedTestIdentifiers"]
     cases = list(collect_cases(tests))
     actual = [case.get("nodeIdentifier") for case in cases]
     if any(not isinstance(item, str) for item in actual):
@@ -57,27 +80,47 @@ def validate(inventory, summary, tests):
 
 
 def validate_discovery(inventory, discovery):
-    errors = []
+    errors = validate_inventory(inventory)
+    if errors:
+        return errors, []
+    if not isinstance(discovery, dict):
+        return ["invalid-discovery"], []
     if discovery.get("errors") != []:
         errors.append("discovery-errors=" + repr(discovery.get("errors")))
     values = discovery.get("values")
-    if not isinstance(values, list) or len(values) != 1:
+    if not isinstance(values, list) or len(values) != 1 or not isinstance(values[0], dict):
         errors.append("unexpected-discovery-configurations")
         return errors, []
     value = values[0]
-    if value.get("disabledTests"):
-        errors.append("disabled-tests=" + repr(value["disabledTests"]))
+    disabled = value.get("disabledTests", [])
+    if not isinstance(disabled, list) or disabled:
+        errors.append("disabled-tests=" + repr(disabled))
+    enabled = value.get("enabledTests")
+    if not isinstance(enabled, list):
+        return errors + ["missing-enabled-tests"], []
     expected = inventory["expectedTestIdentifiers"]
     suites = set(inventory["suites"])
     discovered = []
-    for entry in value.get("enabledTests", []):
-        identifier = entry.get("identifier")
+    for entry in enabled:
+        identifier = entry.get("identifier") if isinstance(entry, dict) else None
         if not isinstance(identifier, str):
             errors.append("missing-discovered-identifier")
             continue
         parts = identifier.split("/", 2)
-        if len(parts) == 3 and parts[0] == "InnoFlowTests" and parts[1] in suites:
-            discovered.append(parts[1] + "/" + parts[2])
+        if len(parts) != 3 or not parts[1] or not parts[2]:
+            errors.append("malformed-discovered-identifier=" + identifier)
+            continue
+        if parts[0] != "InnoFlowTests":
+            errors.append("unexpected-discovery-target=" + parts[0])
+            continue
+        suite, test = parts[1:]
+        # The reviewed consistency contracts must never silently fall outside
+        # the focused run when another suite is introduced. Unrelated suites
+        # remain outside this intentionally focused inventory.
+        if suite.endswith("ConsistencyTests") and suite not in suites:
+            errors.append("unreviewed-consistency-suite=" + suite)
+        if suite in suites:
+            discovered.append(suite + "/" + test)
     if sorted(discovered) != expected:
         errors.append("discovery-missing=" + repr(sorted(set(expected) - set(discovered))))
         errors.append("discovery-unexpected=" + repr(sorted(set(discovered) - set(expected))))

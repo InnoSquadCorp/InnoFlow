@@ -191,6 +191,9 @@ jobs:
       - name: Verify gate negative controls
         run: '"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'
 
+      - name: Verify independent public API and AST migration consumers
+        run: '"$GITHUB_WORKSPACE/scripts/check-independent-consumers.sh"'
+
       - name: Run release configuration checks
         run: '"$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"'
 

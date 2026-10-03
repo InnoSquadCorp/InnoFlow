@@ -594,6 +594,9 @@ assert_success "$SCRIPT_DIR/run-release-preflight-selftest.sh"
 assert_success "$SCRIPT_DIR/report-public-api-inventory-selftest.rb"
 assert_success "$SCRIPT_DIR/inventory-doc-swift-blocks-selftest.rb"
 assert_success ruby "$SCRIPT_DIR/report-doc-fence-review-selftest.rb"
+assert_success "$SCRIPT_DIR/check-independent-consumers-selftest.sh"
+assert_success python3 -B -m unittest discover -s "$SCRIPT_DIR/tests" -p 'test_focused_runtime_result.py'
+assert_success python3 -B -m unittest discover -s "$SCRIPT_DIR/tests" -p 'test_timing_jsonl_migration.py'
 assert_success "$SCRIPT_DIR/check-migration-consumer-selftest.sh"
 assert_success ruby "$SCRIPT_DIR/release-evidence-artifact-selftest.rb"
 assert_success ruby "$SCRIPT_DIR/release-evidence-output-parser-selftest.rb"

@@ -9,6 +9,14 @@ trap 'rm -rf "$fixture_root"' EXIT
 mkdir -p "$fixture_root/docs/contracts" "$fixture_root/Tests/InnoFlowTests" "$fixture_root/scripts"
 cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
 cp "$root_dir/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/"
+cp "$root_dir/docs/contracts/swift-test-inventory.json" "$fixture_root/docs/contracts/"
+cp "$root_dir/docs/contracts/sample-test-inventory.json" "$fixture_root/docs/contracts/"
+sample_package="Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
+mkdir -p "$fixture_root/$sample_package/Tests"
+cp "$root_dir/$sample_package/Package.swift" "$fixture_root/$sample_package/"
+cp -R "$root_dir/$sample_package/Tests/InnoFlowSampleAppFeatureTests" "$fixture_root/$sample_package/Tests/"
+cp "$root_dir/Package.swift" "$fixture_root/"
+cp -R "$root_dir/Tests/InnoFlowTests" "$root_dir/Tests/InnoFlowMacrosTests" "$fixture_root/Tests/"
 cp "$root_dir/Tests/InnoFlowTests/CompileContractTests.swift" "$fixture_root/Tests/InnoFlowTests/"
 cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
 cp "$root_dir/scripts/run-release-preflight.sh" "$root_dir/scripts/run-release-preflight.rb" \
@@ -21,11 +29,33 @@ cp "$root_dir/scripts/report-doc-fence-review.rb" "$fixture_root/scripts/"
 ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
 
 # The identity/cancellation regressions must remain in every platform run.
-for suite in IdentifiedArrayTests ManualTestClockTests; do
+for suite in CollectionLifetimeConsistencyTests IdentifiedArrayTests ManualTestClockTests RuntimeConsistencyTests TestStoreDispatchConsistencyTests TestingLocationConsistencyTests PhaseExplorationConsistencyTests; do
   ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.lines.reject { |line| line.include?("-only-testing:InnoFlowTests/#{suite}") }.join)' \
     "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$suite"
   if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
     echo "Runtime suite omission passed: $suite" >&2
+    exit 1
+  fi
+  cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
+done
+
+# Discovery must exclude host-only macro tests without narrowing runtime suite discovery.
+for target in missing InnoFlowMacrosTests; do
+  ruby -e 'path, target = ARGV; source = File.read(path); replacement = target == "missing" ? "" : "  -only-testing:#{target}\n"; File.write(path, source.sub("  -only-testing:InnoFlowTests\n", replacement))' \
+    "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$target"
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Invalid runtime discovery target passed: $target" >&2
+    exit 1
+  fi
+  cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
+done
+
+# Extra or duplicate selections must not drift independently of the inventory.
+for selection in UnreviewedTests IdentifiedArrayTests; do
+  ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.sub("  test\n  -only-testing", "  test\n  -only-testing:InnoFlowTests/#{suite}\n  -only-testing"))' \
+    "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$selection"
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Unreviewed or duplicate runtime selection passed: $selection" >&2
     exit 1
   fi
   cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
@@ -41,6 +71,13 @@ expect_mutation_failure() {
   fi
 }
 
+for check_id in swift-6.3-toolchain swift-6.4-toolchain full-principle sample-swift-6.3; do
+  export COUNT_MUTATION_ID="$check_id"
+  expect_mutation_failure "unreviewed-count-$check_id" \
+    'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")==ENV.fetch("COUNT_MUTATION_ID") }; c["maximumTestCount"]+=1; File.write(p,JSON.generate(j)+"\n")'
+done
+unset COUNT_MUTATION_ID
+
 expect_mutation_failure stale-maximum \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="external-macro-consumer" }; c["maximumTestCount"]=1; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure missing-test \
@@ -51,6 +88,8 @@ expect_mutation_failure partial-filter \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="external-macro-consumer" }; c.fetch("commandContract").fetch("exclusiveOptionValues")["--filter"]="CompileContractTests/exportedMacroFeaturesWorkAcrossTargetBoundaries"; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure package-redirection \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="external-macro-consumer" }; c.fetch("commandContract").fetch("forbiddenArgumentPrefixes").delete("--package-path"); File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure full-principle-incorrect-run-count \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="full-principle" }; c["expectedTestRunCount"]=4; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure swift63-incorrect-run-count \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="swift-6.3-toolchain" }; c["expectedTestRunCount"]=2; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure swift64-incorrect-run-count \
@@ -75,6 +114,40 @@ expect_mutation_failure sample-sdk-bypass \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="sample-sdk-tvos" }; c.fetch("commandContract")["requiredArguments"].delete("--sample"); File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure unpinned-runtime-inventory \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="runtime-ios-18.5" }; c.delete("testIdentifierInventorySha256"); File.write(p,JSON.generate(j)+"\n")'
+
+cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
+printf '\n// stale source mutation\n' >>"$fixture_root/Tests/InnoFlowTests/CompileContractTests.swift"
+if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+  echo "Stale Swift test source inventory passed" >&2
+  exit 1
+fi
+cp "$root_dir/Tests/InnoFlowTests/CompileContractTests.swift" "$fixture_root/Tests/InnoFlowTests/"
+printf 'import Testing\n@Test func unreviewedAddition() {}\n' >"$fixture_root/Tests/InnoFlowTests/UnreviewedAddition.swift"
+if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+  echo "Unreviewed added Swift test source passed" >&2
+  exit 1
+fi
+rm "$fixture_root/Tests/InnoFlowTests/UnreviewedAddition.swift"
+ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
+
+# A freshly re-pinned partial focused list still cannot hide a source test.
+ruby -rjson -rdigest -e '
+  inventory_path, policy_path = ARGV
+  inventory = JSON.parse(File.read(inventory_path))
+  inventory.fetch("expectedTestIdentifiers").shift
+  File.write(inventory_path, JSON.generate(inventory) + "\n")
+  policy = JSON.parse(File.read(policy_path))
+  policy.fetch("checks").each do |check|
+    check["testIdentifierInventorySha256"] = Digest::SHA256.file(inventory_path).hexdigest if check.fetch("id").start_with?("runtime-")
+  end
+  File.write(policy_path, JSON.generate(policy) + "\n")
+' "$fixture_root/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/release-evidence-policy.json"
+if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+  echo "Re-pinned partial focused source inventory passed" >&2
+  exit 1
+fi
+cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
+cp "$root_dir/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/"
 
 command_repository="$fixture_root/command-repository"
 command_snapshot="$fixture_root/command-candidate.json"

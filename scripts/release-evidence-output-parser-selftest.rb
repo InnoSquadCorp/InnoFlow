@@ -123,6 +123,19 @@ assert_result(
   check: { "minimumTestCount" => 2, "maximumTestCount" => 2, "expectedTestRunCount" => 2 }
 )
 
+# Counts are exact source-declaration expectations. Passing additional leaves
+# or a parameterized case count must not silently widen the inventory.
+assert_result("exact declaration count", normal, accepted: true,
+  check: { "minimumTestCount" => 1, "maximumTestCount" => 1 })
+assert_result("passing extra bundle exceeds inventory", normal + second_bundle, accepted: false,
+  check: { "minimumTestCount" => 1, "maximumTestCount" => 1 })
+assert_result("missing bundle below inventory", normal, accepted: false,
+  check: { "minimumTestCount" => 2, "maximumTestCount" => 2 })
+assert_result("parameterized declarations counted once", parameterized, accepted: true,
+  check: { "minimumTestCount" => 2, "maximumTestCount" => 2 })
+assert_result("parameter cases do not inflate declaration count", parameterized, accepted: false,
+  check: { "minimumTestCount" => 3, "maximumTestCount" => 3 })
+
 duplicate_terminal = normal.sub(
   'Suite "FlowTask dispatch lifetime" passed after 0.051 seconds.',
   "Test \"normal completion\" passed after 0.001 seconds.\nSuite \"FlowTask dispatch lifetime\" passed after 0.051 seconds."

@@ -538,9 +538,10 @@ jobs:
         run: python3 -B scripts/ci-cache.py report --profile focused-runtime-tests --variant '${{ matrix.platform }}'
 
   principle-gates:
+    # Keep the existing check name; independent consumer compilation is an added step.
     name: Principle Gates (Static)
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 90
     needs: [ci-plan, lint, coverage]
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.principle-gates
 
@@ -564,6 +565,9 @@ jobs:
 
       - name: Verify gate negative controls
         run: '"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'
+
+      - name: Verify independent public API and AST migration consumers
+        run: '"$GITHUB_WORKSPACE/scripts/check-independent-consumers.sh"'
 
   sample-package-builds:
     name: Sample Package Build (${{ matrix.platform }})
@@ -876,6 +880,11 @@ jobs:
           set -euo pipefail
           swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors \
             --filter 'InnoFlowMacrosTests|CompileContractTests'
+
+      - name: Verify AST migration on the audited SwiftSyntax line
+        env:
+          INNOFLOW_MIGRATE_SWIFT_SYNTAX_VERSION: ${{ matrix.syntax }}
+        run: '"$GITHUB_WORKSPACE/Tools/innoflow-migrate/scripts/check.sh"'
 
       - name: Report cache observations
         if: always()

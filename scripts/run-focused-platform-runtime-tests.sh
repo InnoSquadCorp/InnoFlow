@@ -139,7 +139,12 @@ if (( ${#workspace_args[@]} > 0 )); then
   command+=( "${workspace_args[@]}" )
   discovery_command+=( "${workspace_args[@]}" )
 fi
+# Macro tests load host-only SwiftSyntax/plugin libraries. Discovery must use
+# the same runtime target as execution, while enumerating every runtime suite
+# so newly added consistency suites cannot silently escape inventory review.
+# Full macro coverage remains in both host toolchain gates and full-principle.
 discovery_command+=(
+  -only-testing:InnoFlowTests
   -scheme InnoFlow-Package
   -destination "$destination"
   CODE_SIGNING_ALLOWED=NO
@@ -153,15 +158,38 @@ command+=(
   CODE_SIGNING_REQUIRED=NO
   ONLY_ACTIVE_ARCH=YES
   test
-  -only-testing:InnoFlowTests/EffectRunSchedulerTests
-  -only-testing:InnoFlowTests/DispatchDiagnosticsTests
-  -only-testing:InnoFlowTests/FlowScopeTests
-  -only-testing:InnoFlowTests/OutputCasePathTests
-  -only-testing:InnoFlowTests/StoreScopeSelectionTests
+  -only-testing:InnoFlowTests/CollectionLifetimeConsistencyTests
   -only-testing:InnoFlowTests/CollectionScopeCacheTests
-  -only-testing:InnoFlowTests/SingleScopeCacheTests
+  -only-testing:InnoFlowTests/CompletionRelayConsistencyTests
+  -only-testing:InnoFlowTests/DiagnosticsRingConsistencyTests
+  -only-testing:InnoFlowTests/DispatchDiagnosticsTests
+  -only-testing:InnoFlowTests/DispatchIdentityConsistencyTests
+  -only-testing:InnoFlowTests/EffectIsolationConsistencyTests
+  -only-testing:InnoFlowTests/EffectRunSchedulerTests
+  -only-testing:InnoFlowTests/ExplorerFailureBoundaryConsistencyTests
+  -only-testing:InnoFlowTests/ExplorerFirstDiagnosticConsistencyTests
+  -only-testing:InnoFlowTests/ExplorerSafetyConsistencyTests
+  -only-testing:InnoFlowTests/FlowScopeTests
   -only-testing:InnoFlowTests/IdentifiedArrayTests
+  -only-testing:InnoFlowTests/InspectorGraphConsistencyTests
+  -only-testing:InnoFlowTests/MacroIdentifierConsistencyTests
+  -only-testing:InnoFlowTests/MacroMigrationConsistencyTests
   -only-testing:InnoFlowTests/ManualTestClockTests
+  -only-testing:InnoFlowTests/ObservationConsistencyTests
+  -only-testing:InnoFlowTests/OnChangeHostConsistencyTests
+  -only-testing:InnoFlowTests/OptionalChildLifetimeConsistencyTests
+  -only-testing:InnoFlowTests/OutputCasePathTests
+  -only-testing:InnoFlowTests/PerformanceSemanticsConsistencyTests
+  -only-testing:InnoFlowTests/PhaseExplorationConsistencyTests
+  -only-testing:InnoFlowTests/RunLaneSnapshotConsistencyTests
+  -only-testing:InnoFlowTests/RuntimeConsistencyTests
+  -only-testing:InnoFlowTests/SchedulerAdmissionConsistencyTests
+  -only-testing:InnoFlowTests/SingleScopeCacheTests
+  -only-testing:InnoFlowTests/StoreScopeSelectionTests
+  -only-testing:InnoFlowTests/TestEffectLedgerConsistencyTests
+  -only-testing:InnoFlowTests/TestStoreDispatchConsistencyTests
+  -only-testing:InnoFlowTests/TestingLocationConsistencyTests
+  -only-testing:InnoFlowTests/ViewDispatchLifetimeConsistencyTests
 )
 if [[ -n "$derived_data" ]]; then
   command+=( -derivedDataPath "$derived_data" )

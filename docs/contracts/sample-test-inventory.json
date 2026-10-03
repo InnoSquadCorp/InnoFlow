@@ -1,0 +1,448 @@
+{
+  "schemaVersion": 1,
+  "countSemantics": "One Swift Testing declaration per test, including parameterized tests once; XCTest is excluded from this parser count. Source expectation only, never an execution receipt.",
+  "hostTargets": [
+    "InnoFlowSampleAppFeatureTests"
+  ],
+  "sourceFiles": {
+    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.swift": "47d6956b51b38315d4ccbeb88b657486bf5487f3795e26ba4d17fb1ca023f4ca",
+    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/AdvancedTestingTests.swift": "aa833b10958eb419c5ad3dcaa47f36d007da1eebe43190f294eafdd7383453b1",
+    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift": "547d603170e95a5f7af89840a51627f75fab43f6d8ee0afa4b973971cbbba1f5",
+    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/OptionalChildLifetimeExampleTests.swift": "6bdbe060dca150229a2e7d6c5d0b5c664fa4b31656e24c0ce564e131ec318aac",
+    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/ViewOwnedTaskExampleTests.swift": "3739964dff06d02932cefc04d1486e17a1987ba1b3671a17ed5f5213857e446d"
+  },
+  "tests": [
+    {
+      "attribute": "@Test(\"Observe only the exercised todo phase transitions\")",
+      "conditionalContexts": [],
+      "displayName": "Observe only the exercised todo phase transitions",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/AdvancedTestingTests.swift",
+      "identifier": "AdvancedTestingTests/phaseCoverage()",
+      "line": 9,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Seeded state and clock choices reproduce a successful load\")",
+      "conditionalContexts": [],
+      "displayName": "Seeded state and clock choices reproduce a successful load",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/AdvancedTestingTests.swift",
+      "identifier": "AdvancedTestingTests/seededSearch()",
+      "line": 30,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Authentication flow credential retry returns to submitting\")",
+      "conditionalContexts": [],
+      "displayName": "Authentication flow credential retry returns to submitting",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/authenticationFlowFailureThenRetry()",
+      "line": 409,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Authentication flow MFA retry stays on the MFA path\")",
+      "conditionalContexts": [],
+      "displayName": "Authentication flow MFA retry stays on the MFA path",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/authenticationFlowMFAFailureThenRetry()",
+      "line": 453,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Authentication flow transitions through mfaRequired to authenticated\")",
+      "conditionalContexts": [],
+      "displayName": "Authentication flow transitions through mfaRequired to authenticated",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/authenticationFlowMFAPath()",
+      "line": 357,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Authentication flow reaches authenticated on successful credentials\")",
+      "conditionalContexts": [],
+      "displayName": "Authentication flow reaches authenticated on successful credentials",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/authenticationFlowSuccess()",
+      "line": 322,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Basics demo records queued follow-up increment\")",
+      "conditionalContexts": [],
+      "displayName": "Basics demo records queued follow-up increment",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/basicsQueuedFollowUp()",
+      "line": 10,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\n    \"Bidirectional websocket adapter mapper keeps auto-reconnect disabled peer closes disconnected\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket adapter mapper keeps auto-reconnect disabled peer closes disconnected",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperKeepsAutoReconnectDisabledPeerCloseDisconnected()",
+      "line": 1332,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket adapter mapper keeps exhausted retry budgets disconnected\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket adapter mapper keeps exhausted retry budgets disconnected",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperKeepsExhaustedRetryBudgetDisconnected()",
+      "line": 1321,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket adapter mapper surfaces reconnecting for retryable peer closes\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket adapter mapper surfaces reconnecting for retryable peer closes",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperMapsRetryablePeerClose()",
+      "line": 1288,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket adapter mapper surfaces reconnecting for retryable errors\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket adapter mapper surfaces reconnecting for retryable errors",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperMapsRetryableTransportError()",
+      "line": 1266,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket adapter mapper surfaces terminal failures while reconnecting\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket adapter mapper surfaces terminal failures while reconnecting",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperMapsTerminalFailureWhileReconnecting()",
+      "line": 1277,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket adapter mapper keeps terminal peer closes disconnected\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket adapter mapper keeps terminal peer closes disconnected",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperMapsTerminalPeerClose()",
+      "line": 1299,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket adapter mapper requires retry metadata for reconnecting\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket adapter mapper requires retry metadata for reconnecting",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperRequiresRetryMetadata()",
+      "line": 1310,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket reconnecting event keeps manual reconnect disabled\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket reconnecting event keeps manual reconnect disabled",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAutoRetrySurfacesReconnectingState()",
+      "line": 1222,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket bounds transcript rows and oversized payloads\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket bounds transcript rows and oversized payloads",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketBoundsTranscript()",
+      "line": 1014,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket demo connects, sends, and disconnects through the adapter\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket demo connects, sends, and disconnects through the adapter",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketConnectSendDisconnect()",
+      "line": 1041,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket failure resets connection state and surfaces reconnect\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket failure resets connection state and surfaces reconnect",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketFailureResetsConnectionState()",
+      "line": 1196,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket preserves the draft when send fails\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket preserves the draft when send fails",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketPreservesDraftOnSendFailure()",
+      "line": 1095,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket demo reconnects through the adapter boundary\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket demo reconnects through the adapter boundary",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketReconnects()",
+      "line": 1155,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Bidirectional websocket ignores send while disconnected\")",
+      "conditionalContexts": [],
+      "displayName": "Bidirectional websocket ignores send while disconnected",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketSendWhileDisconnectedIsNoOp()",
+      "line": 1126,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Form validation blocks submit until cross-field rules pass\")",
+      "conditionalContexts": [],
+      "displayName": "Form validation blocks submit until cross-field rules pass",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/formValidationBlocksInvalidSubmit()",
+      "line": 945,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Form validation submits cleanly and reset clears bindable fields\")",
+      "conditionalContexts": [],
+      "displayName": "Form validation submits cleanly and reset clears bindable fields",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/formValidationSubmitsAndResets()",
+      "line": 972,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"List-detail scoped favorite binding updates the parent and refreshed projection\")",
+      "conditionalContexts": [],
+      "displayName": "List-detail scoped favorite binding updates the parent and refreshed projection",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/listDetailFavoriteBinding()",
+      "line": 594,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"List-detail pagination loads first page and appends results\")",
+      "conditionalContexts": [],
+      "displayName": "List-detail pagination loads first page and appends results",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/listDetailPaginationFirstPage()",
+      "line": 508,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"List-detail pagination detects end of feed when service yields empty page\")",
+      "conditionalContexts": [],
+      "displayName": "List-detail pagination detects end of feed when service yields empty page",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/listDetailPaginationReachesEnd()",
+      "line": 538,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"List-detail pagination routes row actions through collection scope\")",
+      "conditionalContexts": [],
+      "displayName": "List-detail pagination routes row actions through collection scope",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/listDetailPaginationRowScope()",
+      "line": 566,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Offline-first save confirms optimistic update when repository succeeds\")",
+      "conditionalContexts": [],
+      "displayName": "Offline-first save confirms optimistic update when repository succeeds",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/offlineFirstSaveConfirmed()",
+      "line": 625,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Offline-first saveNow cancels pending debounce and avoids duplicate saves\")",
+      "conditionalContexts": [],
+      "displayName": "Offline-first saveNow cancels pending debounce and avoids duplicate saves",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/offlineFirstSaveNowCancelsPendingDebounce()",
+      "line": 718,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Offline-first save rolls back when repository fails\")",
+      "conditionalContexts": [],
+      "displayName": "Offline-first save rolls back when repository fails",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/offlineFirstSaveRolledBack()",
+      "line": 671,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Offline-first stale save failure keeps the latest local edit\")",
+      "conditionalContexts": [],
+      "displayName": "Offline-first stale save failure keeps the latest local edit",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/offlineFirstStaleSaveFailureKeepsLatestEdit()",
+      "line": 758,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Orchestration child actions with parent mutations are asserted through TestStore\")",
+      "conditionalContexts": [],
+      "displayName": "Orchestration child actions with parent mutations are asserted through TestStore",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/orchestrationParentMutationTesting()",
+      "line": 190,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Orchestration demo models parent-child refresh in order\")",
+      "conditionalContexts": [],
+      "displayName": "Orchestration demo models parent-child refresh in order",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/orchestrationRefreshOrder()",
+      "line": 27,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Orchestration demo long-running sync reaches completion\")",
+      "conditionalContexts": [],
+      "displayName": "Orchestration demo long-running sync reaches completion",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/orchestrationSyncPipeline()",
+      "line": 67,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Phase-driven sample fails and recovers to idle when dismissing the error\")",
+      "conditionalContexts": [],
+      "displayName": "Phase-driven sample fails and recovers to idle when dismissing the error",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/phaseDrivenFailureRecovery()",
+      "line": 133,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Phase-driven sample collection scope can target a single todo by id\")",
+      "conditionalContexts": [],
+      "displayName": "Phase-driven sample collection scope can target a single todo by id",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/phaseDrivenScopedTodoTesting()",
+      "line": 204,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Phase-driven sample follows the documented graph on success\")",
+      "conditionalContexts": [],
+      "displayName": "Phase-driven sample follows the documented graph on success",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/phaseDrivenSuccess()",
+      "line": 99,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Phase-driven sample routes todo child actions by id\")",
+      "conditionalContexts": [],
+      "displayName": "Phase-driven sample routes todo child actions by id",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/phaseDrivenTodoChildAction()",
+      "line": 165,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Realtime stream emits ticks when the clock advances\")",
+      "conditionalContexts": [],
+      "displayName": "Realtime stream emits ticks when the clock advances",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/realtimeStreamAdvancesClock()",
+      "line": 821,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Realtime stream retains only the displayed tick window and preserves totals\")",
+      "conditionalContexts": [],
+      "displayName": "Realtime stream retains only the displayed tick window and preserves totals",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/realtimeStreamBoundsRetainedTicks()",
+      "line": 926,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Realtime stream subscribe restarts the loop without duplicating tick emitters\")",
+      "conditionalContexts": [],
+      "displayName": "Realtime stream subscribe restarts the loop without duplicating tick emitters",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/realtimeStreamSubscribeRestartsLoop()",
+      "line": 877,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Realtime stream unsubscribe stops delivering ticks\")",
+      "conditionalContexts": [],
+      "displayName": "Realtime stream unsubscribe stops delivering ticks",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/realtimeStreamUnsubscribeStopsTicks()",
+      "line": 856,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Router composition ignores a buffered login output after logout\")",
+      "conditionalContexts": [],
+      "displayName": "Router composition ignores a buffered login output after logout",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/routerCompositionRejectsStaleAuthenticatedOutput()",
+      "line": 299,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Router composition consumes typed login output and replays pending detail\")",
+      "conditionalContexts": [],
+      "displayName": "Router composition consumes typed login output and replays pending detail",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/routerCompositionReplaysPendingRoute()",
+      "line": 280,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Router login emits a typed authenticated output after success\")",
+      "conditionalContexts": [],
+      "displayName": "Router login emits a typed authenticated output after success",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/routerLoginEmitsAuthenticatedOutput()",
+      "line": 257,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\"Router login cancels in-flight submit on logout\")",
+      "conditionalContexts": [],
+      "displayName": "Router login cancels in-flight submit on logout",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/routerLoginLogoutCancelsInFlightSubmit()",
+      "line": 232,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "optionalChildCloseAndReopenDropsOldOutput()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/OptionalChildLifetimeExampleTests.swift",
+      "identifier": "optionalChildCloseAndReopenDropsOldOutput()",
+      "line": 7,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "viewOwnedSampleCancellationPreservesIndependentRequest()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/ViewOwnedTaskExampleTests.swift",
+      "identifier": "viewOwnedSampleCancellationPreservesIndependentRequest()",
+      "line": 7,
+      "target": "InnoFlowSampleAppFeatureTests"
+    }
+  ]
+}

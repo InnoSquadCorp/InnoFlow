@@ -89,7 +89,9 @@ struct ExplorerSafetyConsistencyTests {
         factories += 1
         let store = TestStore(
           reducer: ExplorerUncooperative(gate: gate), initialState: .init(),
-          effectTimeout: .milliseconds(10))
+          // The receive barrier and cleanup share this budget. Ten milliseconds
+          // can cancel before physical work starts under parallel test load.
+          effectTimeout: .seconds(1))
         store.addInvariant("stop at started") { $0.step != 2 }
         return store
       },
@@ -99,6 +101,7 @@ struct ExplorerSafetyConsistencyTests {
       })
     let result = await explorer.run(maxSteps: 2)
     #expect(result.failure?.kind == .diagnostic)
+    #expect(result.failure?.message.contains("stop at started") == true)
     #expect(!result.cleanupCompleted && !result.replayValidated)
     #expect(factories == 1)
     await gate.release()

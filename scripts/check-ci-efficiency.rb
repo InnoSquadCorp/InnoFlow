@@ -104,6 +104,18 @@ check(principle_runs.any? { |run| run.include?("principle-gates.sh\" --static") 
   "CI principle gates must use the build-free static mode")
 check(principle_runs.include?('"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'),
   "CI must retain gate negative controls")
+check(principle_runs.include?('"$GITHUB_WORKSPACE/scripts/check-independent-consumers.sh"'),
+  "CI principle gates must execute the independent public API and AST migration consumers")
+check(jobs.fetch("principle-gates").fetch("steps").any? { |step|
+  step["run"] == '"$GITHUB_WORKSPACE/scripts/check-independent-consumers.sh"' &&
+    !step.key?("if") && !step.key?("continue-on-error")
+}, "CI independent consumers cannot be conditional or ignore failures")
+compatibility_steps = jobs.fetch("swift-syntax-compatibility").fetch("steps")
+check(compatibility_steps.any? { |step|
+  step["run"] == '"$GITHUB_WORKSPACE/Tools/innoflow-migrate/scripts/check.sh"' &&
+    step["env"] == {"INNOFLOW_MIGRATE_SWIFT_SYNTAX_VERSION" => '${{ matrix.syntax }}'} &&
+    !step.key?("if") && !step.key?("continue-on-error")
+}, "SwiftSyntax compatibility must exercise the AST migration consumer on its exact matrix line")
 check(jobs.fetch("release-tests").fetch("steps").any? { |step| step["run"] == '"$GITHUB_WORKSPACE/scripts/check-release-configuration.sh"' },
   "Release tests must execute the Release-only configuration gate")
 {
@@ -157,6 +169,14 @@ check(release_gate_runs.include?('"$GITHUB_WORKSPACE/scripts/check-release-confi
   "release workflow must retain Release configuration validation")
 check(release_gate_runs.include?('"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'),
   "release workflow must retain gate negative controls")
+
+check(release_gate_runs.include?('"$GITHUB_WORKSPACE/scripts/check-independent-consumers.sh"'),
+  "tag Release Gate must rerun the independent public API and AST migration consumers")
+
+check(cd.fetch("jobs").fetch("release-gate").fetch("steps").any? { |step|
+  step["run"] == '"$GITHUB_WORKSPACE/scripts/check-independent-consumers.sh"' &&
+    !step.key?("if") && !step.key?("continue-on-error")
+}, "tag independent consumers cannot be conditional or ignore failures")
 
 dependabot = load_yaml.call(File.join(root, ".github", "dependabot.yml"))
 updates = dependabot.fetch("updates")
