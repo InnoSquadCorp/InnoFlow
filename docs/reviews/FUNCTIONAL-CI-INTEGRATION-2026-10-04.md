@@ -59,6 +59,14 @@ Legacy runtime의 정확한 unavailable ID와 OS27의 실제 Passed 결과를
 실패해야 한다. 기존 diagnostic 2개, runtime 8개, full-principle 5 runs 및
 Release Preflight 32 checks는 유지한다.
 
+순수 fake executor selftest는 임시 PATH에서 정확한 version-only 도구와
+fixture 내부 `df -Pk` 응답만 사용한다. 다른 compile/build/disk 호출과
+version 실패를 거부하고 기존 low-disk 실패 대조를 유지한다. aggregate
+manifest는 헤더와 정확한 두 PASS check ID를 별도로 검사하고 누락·중복·추가
+행을 모두 거부하는 대조를 실행한다. 이 fixture의
+가상 도구·공간 응답은 native 실행 증거가 아니며 production의 실제 도구,
+10GB 공간 요구 또는 32 checks를 변경하지 않는다.
+
 ## 검증 구분
 
 로컬 통합은 Sources byte 동일성, 원본 trial 보존, 전체 diff, AST/source hash와

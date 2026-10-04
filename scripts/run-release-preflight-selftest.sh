@@ -70,6 +70,55 @@ for mode in execute resume; do
 done
 # Emulate Actions only inside this isolated fixture; never run real release checks locally.
 export GITHUB_ACTIONS=true
+# Toolchain identity is part of every receipt, even for the fake static gate.
+# Keep toolchain and disk reads inside the fixture too. No actual build or
+# runtime allocation occurs here; the low-space control below overrides df.
+# Unexpected compiler/build/disk commands must fail instead of reaching the host.
+mkdir -p "$fixture_root/toolchainbin"
+cat >"$fixture_root/toolchainbin/swift" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 1 && "$1" == "--version" ]] || { echo 'unexpected fixture swift command' >&2; exit 64; }
+[[ "${INNOFLOW_FIXTURE_TOOLCHAIN_FAIL:-}" != "swift" ]] || { echo 'intentional Swift identity failure' >&2; exit 65; }
+echo 'Swift version 6.4.0 (isolated preflight selftest)'
+SH
+cat >"$fixture_root/toolchainbin/xcodebuild" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 1 && "$1" == "-version" ]] || { echo 'unexpected fixture xcodebuild command' >&2; exit 64; }
+[[ "${INNOFLOW_FIXTURE_TOOLCHAIN_FAIL:-}" != "xcodebuild" ]] || { echo 'intentional Xcode identity failure' >&2; exit 65; }
+printf 'Xcode 27.0\nBuild version ISOLATED-SELFTEST\n'
+SH
+cat >"$fixture_root/toolchainbin/df" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 2 && "$1" == "-Pk" && -d "$2" && "$2" == "${INNOFLOW_PREFLIGHT_FIXTURE_ROOT:?}/"* ]] || {
+  echo 'unexpected fixture df command' >&2
+  exit 64
+}
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+printf 'fixture 52428800 1048576 51380224 2%% /\n'
+SH
+chmod +x "$fixture_root/toolchainbin/"*
+export INNOFLOW_PREFLIGHT_FIXTURE_ROOT="$fixture_root"
+export PATH="$fixture_root/toolchainbin:$PATH"
+for tool in swift xcodebuild; do
+  if "$tool" test >"$fixture_root/unexpected-$tool.log" 2>&1; then
+    echo "Unexpected toolchain command was accepted: $tool test" >&2
+    exit 1
+  fi
+  grep -q "unexpected fixture $tool command" "$fixture_root/unexpected-$tool.log"
+done
+if df -h "$fixture_root" >"$fixture_root/unexpected-df.log" 2>&1; then
+  echo 'Unexpected disk command was accepted' >&2
+  exit 1
+fi
+grep -q 'unexpected fixture df command' "$fixture_root/unexpected-df.log"
+if df -Pk / >"$fixture_root/outside-fixture-df.log" 2>&1; then
+  echo 'Disk read outside the fixture was accepted' >&2
+  exit 1
+fi
+grep -q 'unexpected fixture df command' "$fixture_root/outside-fixture-df.log"
 ruby -r ./scripts/release-runtime-catalog -e '
   {
     "ios" => ["iOS", "iOS Simulator", "18.5"],
@@ -88,6 +137,19 @@ ruby -r ./scripts/release-runtime-catalog -e '
 '
 scripts/run-release-preflight.sh plan --evidence-root "$evidence" --check-id static-innoflow-diff |
   grep -q 'git diff --check'
+for tool in swift xcodebuild; do
+  identity_evidence="$fixture_root/failed-identity-$tool"
+  if INNOFLOW_FIXTURE_TOOLCHAIN_FAIL="$tool" scripts/run-release-preflight.sh execute \
+    --evidence-root "$identity_evidence" --check-id static-innoflow-diff \
+    >"$fixture_root/failed-identity-$tool.log" 2>&1; then
+    echo "Failed toolchain identity was accepted: $tool" >&2
+    exit 1
+  fi
+  option='--version'
+  if [[ "$tool" == xcodebuild ]]; then option='-version'; fi
+  grep -q "$tool $option failed" "$fixture_root/failed-identity-$tool.log"
+  [[ ! -f "$identity_evidence/attempts.tsv" ]]
+done
 scripts/run-release-preflight.sh execute --evidence-root "$evidence" --check-id static-innoflow-diff |
   grep -q 'PASS static-innoflow-diff'
 scripts/run-release-preflight.sh report --evidence-root "$evidence" --check-id static-innoflow-diff |
@@ -189,6 +251,11 @@ scripts/run-release-preflight.sh report --evidence-root "$interrupt_evidence" --
 mkdir -p "$fixture_root/fakebin"
 cat >"$fixture_root/fakebin/df" <<'SH'
 #!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 2 && "$1" == "-Pk" && -d "$2" && "$2" == "${INNOFLOW_PREFLIGHT_FIXTURE_ROOT:?}/"* ]] || {
+  echo 'unexpected fixture df command' >&2
+  exit 64
+}
 printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
 printf 'fixture 100 99 1 99%% /\n'
 SH
@@ -244,6 +311,35 @@ git -C "$aggregate_repo" commit -qm aggregate-fixture
 "$aggregate_repo/scripts/run-release-preflight.sh" resume \
   --evidence-root "$fixture_root/aggregate-evidence" >"$fixture_root/aggregate.log"
 grep -q 'RELEASE_EVIDENCE_COMPLETE.*rows=2 expected=2' "$fixture_root/aggregate.log"
-[[ "$(wc -l <"$fixture_root/aggregate-evidence/manifest.tsv")" -eq 2 ]]
+verify_aggregate_manifest() {
+  ruby -e '
+    lines = File.readlines(ARGV.fetch(0), chomp: true)
+    abort "Wrong manifest header" unless lines.shift == "check_id\tstatus\tcandidate_hash\treceipt_path"
+    rows = lines.map { |line| line.split("\t", -1) }
+    abort "Expected exactly two complete PASS rows" unless rows.length == 2 &&
+      rows.all? { |row| row.length == 4 && row[1] == "PASS" } &&
+      rows.map(&:first).sort == %w[static-innoflow-diff static-principle]
+  ' "$1"
+}
+verify_aggregate_manifest "$fixture_root/aggregate-evidence/manifest.tsv"
+for mutation in missing duplicate extra; do
+  mutated_manifest="$fixture_root/aggregate-$mutation.tsv"
+  ruby -e '
+    source, destination, mutation = ARGV
+    lines = File.readlines(source)
+    case mutation
+    when "missing" then lines.delete_at(1)
+    when "duplicate" then lines[2] = lines[1]
+    when "extra" then lines << lines[1]
+    else abort "Unknown manifest mutation"
+    end
+    File.write(destination, lines.join)
+  ' "$fixture_root/aggregate-evidence/manifest.tsv" "$mutated_manifest" "$mutation"
+  if verify_aggregate_manifest "$mutated_manifest" >"$fixture_root/aggregate-$mutation.log" 2>&1; then
+    echo "Invalid aggregate manifest was accepted: $mutation" >&2
+    exit 1
+  fi
+  grep -q 'Expected exactly two complete PASS rows' "$fixture_root/aggregate-$mutation.log"
+done
 
-echo '[release-preflight-selftest] plan, execute, aggregate verification, verified report, reuse, fail/retry, runtime fallback/cleanup, lock, interrupt/retry, disk, tamper, candidate-change, dirty controls passed'
+echo '[release-preflight-selftest] isolated version-only toolchains and disk, identity failure, plan, execute, exact aggregate manifest and missing/duplicate/extra controls, verified report, reuse, fail/retry, runtime fallback/cleanup, lock, interrupt/retry, disk, tamper, candidate-change, dirty controls passed'
