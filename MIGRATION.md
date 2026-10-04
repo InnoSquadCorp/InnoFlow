@@ -4,13 +4,43 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ## 6.0.0
 
-### Testing source locations and lexical scopes
+### Stable baseline and prerelease scope
 
-New canonical assertion parameters are fileID, filePath, line and column, all defaulted at the caller. Explicit old file: calls remain accepted and map to column 1. Stored method values may need an adapter for the expanded signature. Direct FlowScope construction is now unavailable: move owned work into withFlowScope. Scenario.advance requires onceSleepersReach to make clock progression deterministic. TestStoreDispatch.effectLedger reports bounded typed lifecycle events separately from action/output assertions.
+The stable upgrade baseline is annotated tag `5.1.1` (tag object
+`7782c370bd6c769e1b9fc475146bd1aabce6b97f`, commit
+`00a73ed2d2cb94114b0be5c9fbd59c187a4b67c7`). The external migration gate checks
+that exact baseline; unreleased 6.0 drafts are not additional stable releases.
 
-### Scheduler capacity and terminal admission
+Typed outputs, dispatch handles, optional-child lifetime ownership, scheduled
+run admission, `FlowScope`, `TestStoreScenario`, `TestStoreExplorer`, and
+`DispatchID` are new in 6.0. Changes to their earlier draft spellings or behavior
+below affect prerelease adopters, not existing 5.1.1 uses of those APIs.
 
-serial(maxPending:) and queueFull(maxPending:) now carry UInt. Nonnegative literals continue to work; validate signed application input before converting it with UInt(exactly:), rather than trapping or clamping implicitly. invalidCapacity is removed. Exhaustive EffectAdmission switches must handle cancelledBeforeStart and superseded. A delayed older latest request no longer evicts a newer live request. Terminal admission observations never authorize action delivery after accepted cancellation.
+### Testing source locations
+
+New canonical assertion parameters are `fileID`, `filePath`, `line` and
+`column`, all defaulted at the caller. Existing stable `file:line:` assertion
+overloads remain accepted and map to column 1. Do not assume every stored
+method value breaks: a contextual signature can still select its compatibility
+overload. `send` additionally changes its return type, so a stored async
+Void-returning send still needs the explicit result-discarding adapter below.
+`TestStore.init` did not take source-location parameters in 5.1.1.
+
+### Prerelease lexical scopes and scheduler admission
+
+For earlier 6.0 drafts, direct `FlowScope` construction is now unavailable:
+move owned work into `withFlowScope`. Scenario `advance` requires
+`onceSleepersReach` to make clock progression deterministic.
+`TestStoreDispatch.effectLedger` reports bounded typed lifecycle events
+separately from action/output assertions.
+
+The new scheduler's `serial(maxPending:)` and `queueFull(maxPending:)` carry
+`UInt`. Nonnegative literals continue to work; validate signed input with
+`UInt(exactly:)` rather than trapping or clamping implicitly. The draft
+`invalidCapacity` case is removed. Exhaustive draft `EffectAdmission` switches
+must handle `cancelledBeforeStart` and `superseded`. A delayed older latest
+request no longer evicts a newer live request. Terminal admission observations
+never authorize action delivery after accepted cancellation.
 
 ### Sendable key paths in reducer composition and PhaseMap
 
@@ -47,9 +77,14 @@ IfCaseLet now captures defaulted fileID, line and column parameters so optional-
 
 `TestStore.send`, `ScopedTestStore.send`, and phase helper sends return `TestStoreDispatch`. `TestFlowTask` remains a typealias for the earlier draft name. Existing statement calls need no change. Explicit async Void method values and protocol adapters must wrap the call and discard its result. A dispatch handle's finish diagnoses only its own unverified work without consuming it; global store finish retains its whole-store role. In `.off`, receiveOutput now reduces intermediate actions and their follow-up effects while seeking the output under the original deadline. Exhaustive global finish reports both pending action and output counts together.
 
-### perform cancellation errors
+### Prerelease perform cancellation errors
 
-`perform` now maps every thrown error, including a directly thrown `CancellationError`, to its failure action while the host remains active. Accepted task/dispatch/runtime cancellation remains silent. General `run` and AsyncSequence cancellation-error behavior is unchanged. Code that used a thrown CancellationError to abandon an active request should use explicit cancellation instead.
+`perform` is new in 6.0. Compared with its earlier draft, it maps every thrown
+error, including a directly thrown `CancellationError`, to its failure action
+while the host remains active. Accepted task/dispatch/runtime cancellation
+remains silent. Stable `run` and AsyncSequence cancellation-error behavior is
+unchanged. Draft code that used a thrown `CancellationError` to abandon an
+active request should use explicit cancellation instead.
 
 ### Compiler-assisted authoring migration
 
@@ -261,13 +296,52 @@ manual time. These corrections do not require source-signature changes.
 
 ### Nested Output is an authoring declaration
 
-A nested type named Output opts the feature into the typed-output contract. A previously unrelated nested Output in a 5.x feature must be renamed or deliberately adopted; it is not silently ignored. The body diagnostic names the expected output type. EffectTask remains the Never-output typealias, so its generic extensions do not become arbitrary-output helpers. Live Store.outputs streams do not replay prior values; dispatch capture buffers from before its send is enqueued.
+A nested type named Output opts the feature into the typed-output contract. A previously unrelated nested Output in a 5.x feature must be renamed or deliberately adopted; it is not silently ignored. The body diagnostic names the expected output type. Live Store.outputs streams do not replay prior values; dispatch capture buffers from before its send is enqueued.
+
+### EffectTask extensions need an explicit output contract
+
+In 5.1.1, `EffectTask<Action>` is a nominal struct. In 6.0 it is the typealias
+`ReducerEffect<Action, Never>`. Ordinary explicitly specialized uses retain
+their output-free meaning, including helpers returning `EffectTask<Action>`.
+Extensions require a separate review on both supported Swift 6.3 and 6.4:
+
+```swift
+// Valid in 5.1.1, but the bare alias return needs generic arguments in 6.0.
+extension EffectTask {
+  static func helper() -> EffectTask { .none }
+}
+
+// Reviewed 6.0 replacement for a helper intended only for output-free effects.
+extension ReducerEffect where Output == Never {
+  static func helper() -> Self { .none }
+}
+```
+
+Changing only the return to `Self` makes the old extension compile, but Swift
+also exposes that helper on `ReducerEffect<Int, String>`: extending the alias
+does not automatically carry its `Never` restriction. An explicit
+`EffectTask<Action>` return still returns an output-free value even when the
+helper is called on that wider receiver. If the helper intentionally supports
+every Output, declare `extension ReducerEffect` and review its implementation
+and return type accordingly. Do not add `Output == Never` to an intentionally
+generic helper or replace a concrete output-free return with `Self` blindly.
+
+The syntax-only migration CLI reports recognized `EffectTask` extensions as
+manual-review blockers and leaves their bytes intact. It cannot decide that
+semantic intent. `scripts/check-migration-consumer.sh` compiles unchanged
+stable forms, current forms, the widened receiver, and the explicitly
+restricted replacement as independent clients. A blocker-free codemod report
+still requires compilation of the complete application.
 
 ### Dispatch correlation and timing JSONL
 
-DispatchID.rawValue is now a process-local monotonic UInt64 and init(rawValue:) is unavailable. Use your own domain or tracing identifier for persisted and cross-process correlation. JSON consumers must retain integer precision beyond JavaScript's safe-integer range; use a lossless UInt64-capable parser instead of converting to a floating-point number.
+`DispatchID` is new in 6.0. Compared with earlier drafts, its `rawValue` is a
+process-local monotonic `UInt64` and `init(rawValue:)` is unavailable. Use your
+own domain or tracing identifier for persisted and cross-process correlation.
+JSON consumers must retain integer precision beyond JavaScript's safe-integer
+range; use a lossless UInt64-capable parser instead of floating-point conversion.
 
-EffectTimingRecorder.Entry.dispatchID is UInt64? and new JSONL records declare schemaVersion 2. Older records without dispatch correlation still decode. UUID-string records fail with an explicit migration diagnostic rather than silently losing identity. The offline scripts/migrate-effect-timing-jsonl.py takes explicit input and a new output path; it preserves the original file and maps each archived UUID to a collision-free file-local integer while retaining legacyDispatchID in the raw converted JSON. These imported numbers are archival correlation only, not live DispatchID values. Keep both raw files; decoding and re-encoding Entry retains its public fields, not the converter's extra provenance field. Numeric IDs are not globally unique and separate process/file captures must not be concatenated as one correlation namespace.
+EffectTimingRecorder.Entry.dispatchID is UInt64? and new JSONL records declare schemaVersion 2. Stable 5.1.1 records without dispatch correlation still decode. UUID-string records from earlier 6.0 drafts fail with an explicit migration diagnostic rather than silently losing identity. The offline scripts/migrate-effect-timing-jsonl.py takes explicit input and a new output path; it preserves the original file and maps each archived UUID to a collision-free file-local integer while retaining legacyDispatchID in the raw converted JSON. These imported numbers are archival correlation only, not live DispatchID values. Keep both raw files; decoding and re-encoding Entry retains its public fields, not the converter's extra provenance field. Numeric IDs are not globally unique and separate process/file captures must not be concatenated as one correlation namespace.
 
 OnChange merges the base and change effects concurrently. Neither Store nor TestStore promises declaration-order emissions from those branches. If the application requires ordered work, express that order with concatenate; completing one branch earlier is not a host mismatch.
 

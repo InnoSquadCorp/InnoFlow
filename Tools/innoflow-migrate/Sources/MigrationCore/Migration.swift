@@ -63,6 +63,20 @@ private final class MigrationVisitor: SyntaxVisitor {
     blockers.append("\(location.line):\(location.column): \(message)")
   }
 
+  override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
+    // A generic typealias extension is not automatically restricted to the
+    // alias's Never output. Bare EffectTask return annotations also stop
+    // inheriting the nominal type's generic arguments. Neither changing them
+    // to Self nor preserving them proves the helper's intended output contract.
+    if (importsFlow || node.extendedType.is(MemberTypeSyntax.self)),
+      isNamedType(node.extendedType, name: "EffectTask", modules: ["InnoFlow", "InnoFlowCore"])
+        || namedClause(node.extendedType, name: "EffectTask") != nil {
+      block("EffectTask extension requires manual review: the alias does not constrain extensions to Never, and bare EffectTask return types need generic arguments. Use an explicit ReducerEffect extension with Output == Never for output-free helpers, or deliberately support generic Output; review helper return types too.", at: node)
+      return .skipChildren
+    }
+    return .visitChildren
+  }
+
   override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
     guard node.attributes.contains(where: { element in
       guard let attribute = element.as(AttributeSyntax.self) else { return false }

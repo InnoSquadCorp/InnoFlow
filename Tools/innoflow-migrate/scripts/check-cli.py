@@ -31,6 +31,19 @@ with tempfile.TemporaryDirectory(prefix="innoflow-cli-") as directory:
     unresolved.write_text("import InnoFlow\nlet scope = FlowScope()")
     run("--write", valid, unresolved, code=2)
     assert valid.read_text() == source and not list(root.glob("*.bak"))
+    extension = root / "EffectTaskExtension.swift"
+    for result_type in ("EffectTask", "Self", "EffectTask<Action>"):
+        extension_source = (
+            "import InnoFlowCore\r\n// 한글: preserve original bytes\r\n"
+            "extension EffectTask { static func helper() -> " + result_type + " { .none } }\r\n"
+        ).encode()
+        extension.write_bytes(extension_source)
+        for options in ((), ("--check",), ("--write",)):
+            blocked = run(*options, valid, extension, code=2)
+            assert "EffectTask extension requires manual review" in blocked.stderr
+            assert "0 blockers" not in blocked.stderr
+            assert extension.read_bytes() == extension_source and valid.read_text() == source
+            assert not list(root.glob("*.bak"))
     run("--write", valid)
     assert valid.read_text() == expected
     backup = pathlib.Path(str(valid) + ".innoflow-migrate.bak")

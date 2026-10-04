@@ -55,4 +55,7 @@ echo "[migration-consumer] baseline_tag=5.1.1 baseline_commit=$baseline_sha"
 run_consumer V5Consumer "$temporary/InnoFlow" "$temporary/v5.log"
 run_consumer V6Consumer "$root" "$temporary/v6.log"
 grep '^MIGRATION_V6 independent=3,4 named-reused=true scope-released=true output=42$' "$temporary/v6.log"
+python3 "$script_dir/check-migration-effect-extensions.py" \
+  --baseline-modules "$temporary/build-V5Consumer" --candidate-modules "$temporary/build-V6Consumer" \
+  --log-directory "$temporary/effect-extension-logs"
 echo "[migration-consumer] 5.1.1 and current external consumers passed"

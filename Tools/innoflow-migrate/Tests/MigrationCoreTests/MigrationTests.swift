@@ -12,6 +12,40 @@ private func migrate(_ source: String, expecting expected: String) {
   #expect(repeated.blockers.isEmpty)
 }
 
+@Test func effectTaskExtensionsRequireAnExplicitOutputDecision() {
+  for declaration in [
+    "extension EffectTask { static func helper() -> EffectTask { .none } }",
+    "extension EffectTask { static func helper() -> Self { .none } }",
+    "extension EffectTask { static func helper() -> EffectTask<Action> { .none } }",
+    "extension EffectTask where Action == Int { static var helper: Self { .none } }",
+    "extension InnoFlowCore.EffectTask { static func helper() -> Self { .none } }",
+    "extension InnoFlow.EffectTask<Int> { static var helper: Self { .none } }",
+    "extension `EffectTask` { static func helper() -> Self { .none } }",
+    "extension EffectTask { static func check() async { let store = TestStore(reducer: F()); store.assertNoMoreActions() } }",
+  ] {
+    let source = "import InnoFlow\r\nimport InnoFlowTesting\r\n// 한글: preserve extension bytes\r\n" + declaration
+    let result = InnoFlowMigration.migrate(source)
+    #expect(result.source == source)
+    #expect(result.changes.isEmpty)
+    #expect(result.blockers.count == 1)
+    #expect(result.blockers.first?.contains("EffectTask extension requires manual review") == true)
+    let repeated = InnoFlowMigration.migrate(result.source)
+    #expect(repeated.blockers == result.blockers)
+  }
+}
+
+@Test func effectTaskExtensionDetectionPreservesReviewedAndForeignContracts() {
+  for source in [
+    "import InnoFlowCore\nextension ReducerEffect where Output == Never { static func helper() -> Self { .none } }",
+    "import InnoFlowCore\nextension ReducerEffect { static func helper() -> Self { .none } }",
+    "import InnoFlow\nextension Other.EffectTask { static func helper() -> Self { .none } }",
+    "extension EffectTask { static func helper() -> Self { .none } }",
+    "import InnoFlowCore\nfunc helper<Action: Sendable>() -> EffectTask<Action> { .none }",
+  ] { migrate(source, expecting: source) }
+  let qualified = "extension InnoFlowCore.EffectTask { static func helper() -> Self { .none } }"
+  #expect(!InnoFlowMigration.migrate(qualified).blockers.isEmpty)
+}
+
 @Test func repairsBodyAndBuilderOutputWithoutTouchingTrivia() {
   let source = """
     import InnoFlow

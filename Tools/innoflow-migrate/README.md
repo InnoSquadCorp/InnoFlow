@@ -56,6 +56,12 @@ Review and compile the result with the candidate package.
   expressions are blockers: no `UInt(...)` trap, clamp or range policy is invented.
 - Direct FlowScope construction is reported for an explicit `withFlowScope`
   lifetime decision. Arbitrary statements and escaping storage are never wrapped.
+- Recognized `EffectTask` extensions require manual review, including bare,
+  `Self`, and explicit `EffectTask<Action>` helper returns. The stable 5.1.1
+  nominal struct became a `ReducerEffect<Action, Never>` alias: bare return
+  types stop compiling, while `Self` helpers can widen to real Output. Choose
+  an explicit `ReducerEffect where Output == Never` extension for output-free
+  helpers, or intentionally support generic Output. No extension is rewritten.
 - Existing TestStore `file:` calls keep the required-file compatibility overload.
   The tool does not invent a `fileID` from `filePath`; canonical calls already
   default to fileID/filePath/line/column. Alert title expressions are unchanged so
@@ -69,6 +75,11 @@ signatures need review. Nested helper bodies are not transformed. It does not
 resolve custom names that shadow framework names, infer import aliases, propagate
 async through call graphs, choose sleeper thresholds, or change application
 lifetimes. Review the report and compile against the exact candidate.
+The tool accepts both stable 5.1.1 migrations and recognized prerelease 6.0
+shapes; scheduler capacity and lexical FlowScope diagnostics concern draft APIs
+that were absent from 5.1.1. It does not establish their release history from
+syntax. The pinned stable/current compiler controls live in
+`scripts/check-migration-consumer.sh`, including EffectTask extension forms.
 
 Every edit is selected by SwiftSyntax nodes and UTF-8 source ranges, not regex
 replacement. Unmodified bytes retain trivia and ordering. Both the input and
