@@ -149,6 +149,14 @@ struct OrchestrationFeature {
         case ._syncAdmission(.queued):
           return .none
 
+        case ._syncAdmission(.cancelledBeforeStart):
+          state.syncLog.append("sync request cancelled before start")
+          return .none
+
+        case ._syncAdmission(.superseded):
+          state.syncLog.append("sync request superseded")
+          return .none
+
         case ._syncAdmission(.rejected(.busy)):
           state.syncLog.append("sync request ignored: already running")
           return .none

@@ -1,5 +1,9 @@
 # InnoFlow 6.0 implementation ledger
 
+This is the historical local-only implementation record from 2026-10-03.
+Publication was subsequently authorized for Ready PR #53; current verification
+boundaries are recorded in [IMPLEMENTATION_STATUS_6_0.md](IMPLEMENTATION_STATUS_6_0.md).
+
 ## Authorization and immutable input
 
 The owner requested both attached plans be assessed, implemented locally in the Linux VM, verified, and committed in dependency order on 2026-10-03. No remote push, PR, merge, tag, release, GitHub security-setting change, or user-desktop use is authorized by this work.

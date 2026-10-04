@@ -1250,5 +1250,25 @@
     ],
     "removed": [],
     "scope": "Two animated lifetime regression declarations, six parameterized cases. Source expectations only; Apple release execution remains pending."
+  },
+  "appleCISampleAdmissionRegression": {
+    "baseCommit": "b28c761c1798f18699da50a864db74b9843311d0",
+    "beforeCount": 48,
+    "afterCount": 49,
+    "added": [
+      {
+        "attribute": "@Test(\n    \"Terminal admission preserves an independently running sync\",\n    arguments: [EffectAdmission.cancelledBeforeStart, .superseded]\n  )",
+        "conditionalContexts": [],
+        "displayName": "Terminal admission preserves an independently running sync",
+        "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+        "identifier": "InnoFlowSampleAppFeatureTests/orchestrationTerminalAdmissionPreservesActiveSync(admission:)",
+        "line": 67,
+        "target": "InnoFlowSampleAppFeatureTests"
+      }
+    ],
+    "removed": [],
+    "sourceInventory": "docs/contracts/sample-test-inventory.json",
+    "sourceInventorySha256": "3254db04feeefd4f290d2ae379d15cfcca1659e86c2914a64e6c461446c2ee85",
+    "scope": "One declaration with cancelledBeforeStart/superseded parameter cases preserves another running sync. Exact source expectations; Apple execution is separate."
   }
 }

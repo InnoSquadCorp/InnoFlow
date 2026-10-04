@@ -64,6 +64,24 @@ struct InnoFlowSampleAppFeatureTests {
     await store.finish()
   }
 
+  @Test(
+    "Terminal admission preserves an independently running sync",
+    arguments: [EffectAdmission.cancelledBeforeStart, .superseded]
+  )
+  @MainActor
+  func orchestrationTerminalAdmissionPreservesActiveSync(admission: EffectAdmission) async {
+    var initial = OrchestrationFeature.State()
+    initial.isSyncing = true
+    initial.syncProgress = 55
+    initial.syncLog = ["existing sync"]
+    let store = TestStore(reducer: OrchestrationFeature(), initialState: initial)
+    let message =
+      admission == .cancelledBeforeStart
+      ? "sync request cancelled before start" : "sync request superseded"
+    await store.send(._syncAdmission(admission)) { $0.syncLog.append(message) }
+    await store.finish()
+  }
+
   @Test("Orchestration demo long-running sync reaches completion")
   @MainActor
   func orchestrationSyncPipeline() async {

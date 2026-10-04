@@ -7,7 +7,7 @@
   "sourceFiles": {
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.swift": "47d6956b51b38315d4ccbeb88b657486bf5487f3795e26ba4d17fb1ca023f4ca",
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/AdvancedTestingTests.swift": "aa833b10958eb419c5ad3dcaa47f36d007da1eebe43190f294eafdd7383453b1",
-    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift": "547d603170e95a5f7af89840a51627f75fab43f6d8ee0afa4b973971cbbba1f5",
+    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift": "47d464bcbefb915e1cc229c7134dc4549200b1f12bb568e1c9bf565195d9665c",
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/OptionalChildLifetimeExampleTests.swift": "6bdbe060dca150229a2e7d6c5d0b5c664fa4b31656e24c0ce564e131ec318aac",
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/ViewOwnedTaskExampleTests.swift": "3739964dff06d02932cefc04d1486e17a1987ba1b3671a17ed5f5213857e446d"
   },
@@ -36,7 +36,7 @@
       "displayName": "Authentication flow credential retry returns to submitting",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/authenticationFlowFailureThenRetry()",
-      "line": 409,
+      "line": 427,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -45,7 +45,7 @@
       "displayName": "Authentication flow MFA retry stays on the MFA path",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/authenticationFlowMFAFailureThenRetry()",
-      "line": 453,
+      "line": 471,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -54,7 +54,7 @@
       "displayName": "Authentication flow transitions through mfaRequired to authenticated",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/authenticationFlowMFAPath()",
-      "line": 357,
+      "line": 375,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -63,7 +63,7 @@
       "displayName": "Authentication flow reaches authenticated on successful credentials",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/authenticationFlowSuccess()",
-      "line": 322,
+      "line": 340,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -81,7 +81,7 @@
       "displayName": "Bidirectional websocket adapter mapper keeps auto-reconnect disabled peer closes disconnected",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperKeepsAutoReconnectDisabledPeerCloseDisconnected()",
-      "line": 1332,
+      "line": 1350,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -90,7 +90,7 @@
       "displayName": "Bidirectional websocket adapter mapper keeps exhausted retry budgets disconnected",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperKeepsExhaustedRetryBudgetDisconnected()",
-      "line": 1321,
+      "line": 1339,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -99,7 +99,7 @@
       "displayName": "Bidirectional websocket adapter mapper surfaces reconnecting for retryable peer closes",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperMapsRetryablePeerClose()",
-      "line": 1288,
+      "line": 1306,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -108,7 +108,7 @@
       "displayName": "Bidirectional websocket adapter mapper surfaces reconnecting for retryable errors",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperMapsRetryableTransportError()",
-      "line": 1266,
+      "line": 1284,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -117,7 +117,7 @@
       "displayName": "Bidirectional websocket adapter mapper surfaces terminal failures while reconnecting",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperMapsTerminalFailureWhileReconnecting()",
-      "line": 1277,
+      "line": 1295,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -126,7 +126,7 @@
       "displayName": "Bidirectional websocket adapter mapper keeps terminal peer closes disconnected",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperMapsTerminalPeerClose()",
-      "line": 1299,
+      "line": 1317,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -135,7 +135,7 @@
       "displayName": "Bidirectional websocket adapter mapper requires retry metadata for reconnecting",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAdapterMapperRequiresRetryMetadata()",
-      "line": 1310,
+      "line": 1328,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -144,7 +144,7 @@
       "displayName": "Bidirectional websocket reconnecting event keeps manual reconnect disabled",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketAutoRetrySurfacesReconnectingState()",
-      "line": 1222,
+      "line": 1240,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -153,7 +153,7 @@
       "displayName": "Bidirectional websocket bounds transcript rows and oversized payloads",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketBoundsTranscript()",
-      "line": 1014,
+      "line": 1032,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -162,7 +162,7 @@
       "displayName": "Bidirectional websocket demo connects, sends, and disconnects through the adapter",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketConnectSendDisconnect()",
-      "line": 1041,
+      "line": 1059,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -171,7 +171,7 @@
       "displayName": "Bidirectional websocket failure resets connection state and surfaces reconnect",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketFailureResetsConnectionState()",
-      "line": 1196,
+      "line": 1214,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -180,7 +180,7 @@
       "displayName": "Bidirectional websocket preserves the draft when send fails",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketPreservesDraftOnSendFailure()",
-      "line": 1095,
+      "line": 1113,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -189,7 +189,7 @@
       "displayName": "Bidirectional websocket demo reconnects through the adapter boundary",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketReconnects()",
-      "line": 1155,
+      "line": 1173,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -198,7 +198,7 @@
       "displayName": "Bidirectional websocket ignores send while disconnected",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/bidirectionalWebSocketSendWhileDisconnectedIsNoOp()",
-      "line": 1126,
+      "line": 1144,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -207,7 +207,7 @@
       "displayName": "Form validation blocks submit until cross-field rules pass",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/formValidationBlocksInvalidSubmit()",
-      "line": 945,
+      "line": 963,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -216,7 +216,7 @@
       "displayName": "Form validation submits cleanly and reset clears bindable fields",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/formValidationSubmitsAndResets()",
-      "line": 972,
+      "line": 990,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -225,7 +225,7 @@
       "displayName": "List-detail scoped favorite binding updates the parent and refreshed projection",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/listDetailFavoriteBinding()",
-      "line": 594,
+      "line": 612,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -234,7 +234,7 @@
       "displayName": "List-detail pagination loads first page and appends results",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/listDetailPaginationFirstPage()",
-      "line": 508,
+      "line": 526,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -243,7 +243,7 @@
       "displayName": "List-detail pagination detects end of feed when service yields empty page",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/listDetailPaginationReachesEnd()",
-      "line": 538,
+      "line": 556,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -252,7 +252,7 @@
       "displayName": "List-detail pagination routes row actions through collection scope",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/listDetailPaginationRowScope()",
-      "line": 566,
+      "line": 584,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -261,7 +261,7 @@
       "displayName": "Offline-first save confirms optimistic update when repository succeeds",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/offlineFirstSaveConfirmed()",
-      "line": 625,
+      "line": 643,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -270,7 +270,7 @@
       "displayName": "Offline-first saveNow cancels pending debounce and avoids duplicate saves",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/offlineFirstSaveNowCancelsPendingDebounce()",
-      "line": 718,
+      "line": 736,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -279,7 +279,7 @@
       "displayName": "Offline-first save rolls back when repository fails",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/offlineFirstSaveRolledBack()",
-      "line": 671,
+      "line": 689,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -288,7 +288,7 @@
       "displayName": "Offline-first stale save failure keeps the latest local edit",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/offlineFirstStaleSaveFailureKeepsLatestEdit()",
-      "line": 758,
+      "line": 776,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -297,7 +297,7 @@
       "displayName": "Orchestration child actions with parent mutations are asserted through TestStore",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/orchestrationParentMutationTesting()",
-      "line": 190,
+      "line": 208,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -315,6 +315,15 @@
       "displayName": "Orchestration demo long-running sync reaches completion",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/orchestrationSyncPipeline()",
+      "line": 85,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test(\n    \"Terminal admission preserves an independently running sync\",\n    arguments: [EffectAdmission.cancelledBeforeStart, .superseded]\n  )",
+      "conditionalContexts": [],
+      "displayName": "Terminal admission preserves an independently running sync",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+      "identifier": "InnoFlowSampleAppFeatureTests/orchestrationTerminalAdmissionPreservesActiveSync(admission:)",
       "line": 67,
       "target": "InnoFlowSampleAppFeatureTests"
     },
@@ -324,7 +333,7 @@
       "displayName": "Phase-driven sample fails and recovers to idle when dismissing the error",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/phaseDrivenFailureRecovery()",
-      "line": 133,
+      "line": 151,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -333,7 +342,7 @@
       "displayName": "Phase-driven sample collection scope can target a single todo by id",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/phaseDrivenScopedTodoTesting()",
-      "line": 204,
+      "line": 222,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -342,7 +351,7 @@
       "displayName": "Phase-driven sample follows the documented graph on success",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/phaseDrivenSuccess()",
-      "line": 99,
+      "line": 117,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -351,7 +360,7 @@
       "displayName": "Phase-driven sample routes todo child actions by id",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/phaseDrivenTodoChildAction()",
-      "line": 165,
+      "line": 183,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -360,7 +369,7 @@
       "displayName": "Realtime stream emits ticks when the clock advances",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/realtimeStreamAdvancesClock()",
-      "line": 821,
+      "line": 839,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -369,7 +378,7 @@
       "displayName": "Realtime stream retains only the displayed tick window and preserves totals",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/realtimeStreamBoundsRetainedTicks()",
-      "line": 926,
+      "line": 944,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -378,7 +387,7 @@
       "displayName": "Realtime stream subscribe restarts the loop without duplicating tick emitters",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/realtimeStreamSubscribeRestartsLoop()",
-      "line": 877,
+      "line": 895,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -387,7 +396,7 @@
       "displayName": "Realtime stream unsubscribe stops delivering ticks",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/realtimeStreamUnsubscribeStopsTicks()",
-      "line": 856,
+      "line": 874,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -396,7 +405,7 @@
       "displayName": "Router composition ignores a buffered login output after logout",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/routerCompositionRejectsStaleAuthenticatedOutput()",
-      "line": 299,
+      "line": 317,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -405,7 +414,7 @@
       "displayName": "Router composition consumes typed login output and replays pending detail",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/routerCompositionReplaysPendingRoute()",
-      "line": 280,
+      "line": 298,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -414,7 +423,7 @@
       "displayName": "Router login emits a typed authenticated output after success",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/routerLoginEmitsAuthenticatedOutput()",
-      "line": 257,
+      "line": 275,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
@@ -423,7 +432,7 @@
       "displayName": "Router login cancels in-flight submit on logout",
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/routerLoginLogoutCancelsInFlightSubmit()",
-      "line": 232,
+      "line": 250,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {

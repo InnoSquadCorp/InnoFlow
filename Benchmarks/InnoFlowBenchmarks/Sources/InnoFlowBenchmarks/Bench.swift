@@ -21,7 +21,7 @@ private struct Work: Reducer {
     case .chain(let remaining):
       state.count += 1
       return remaining > 0 ? .send(.chain(remaining - 1)) : .none
-    case .output(let value): state.count += 1; return .output(value)
+    case .output(let value): state.count += 1; return Self.output(value)
     case .row(let id): state.rows[id: id]?.value += 1; return .none
     case .binding(let value): state.bindingValue = value; return .none
     }

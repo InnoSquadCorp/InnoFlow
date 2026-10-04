@@ -1,4 +1,43 @@
-# InnoFlow 6.0 local candidate status
+# InnoFlow 6.0 candidate verification status
+
+## 2026-10-04 Ready PR checkpoint
+
+[Ready PR #53](https://github.com/InnoSquadCorp/InnoFlow/pull/53) is published.
+This checkpoint records actual evidence for `b28c761`, not a claim that a later
+commit or the release has passed every gate. The original implementation and
+VM boundaries below remain historical records from 2026-10-03.
+
+- Apple coverage execution passed 955 Swift Testing declarations in 91 suites
+  with two deliberately expected known issues, plus two XCTest source-location
+  checks. The coverage gate passed: total 86.83%, Core 90.81%, Testing 87.01%.
+  Inspector 6.14% and SwiftUI 52.73% are limited UI coverage, not a complete UI audit.
+- Lint, all 37 copyable documentation tests, DocC, the documentation aggregate,
+  public API/migration job, and watchOS/visionOS package builds passed at this SHA.
+  The 6.0 API tag comparison is staged until that baseline exists; the 5.1.1
+  migration consumer is a separate executed check.
+- Core/release/platform/sanitizer/UI checks still require their own exact-SHA
+  completion. Sample admission cases and an external benchmark API call were
+  repaired after this checkpoint. The new sample test adds one declaration with
+  two argument cases; its source inventory is 49, while root inventory stays 955.
+- Apple exposed non-Sendable lifetime/coverage metadata that the earlier Linux
+  lock adapter did not reject. Compiler-checked Sendable key paths and MainActor
+  projections now replace it; see MIGRATION.md for stored/erased path changes.
+  The stricter adapter reproduces the old error, and Swift 6.3/6.4 external
+  consumers cover accepted paths and 12 rejected unsafe/erased forms.
+- The later owner-free optimization was validated on Linux at `0c693e2` versus
+  `99a68db` with 5,808 fixed processes and independent verification: wall time
+  decreased 4.34% for general dispatch and 4.15% for chained actions. All
+  predeclared improvement/non-regression/A/A gates passed for that comparison.
+  Subsequent Apple source changes are not covered by that performance verdict.
+  Active-owner and Apple performance remain separate, unverified boundaries.
+- The benchmark's official toolchain was installed and its physical alias was
+  verified at `b28c761`, but the benchmark then failed its external package build.
+  No timing values from that run are performance evidence.
+- The full 32-check Release Preflight remains main-only and cannot be satisfied
+  by this PR's checks. No merge, tag, release or repository protection change
+  has been performed. STABLE_VERSION remains 5.1.1; 6.0.0 remains Unreleased.
+
+## Historical implementation and VM checkpoint
 
 Updated 2026-10-03. This is an implementation and verification ledger, not a
 release certificate. Both supplied plans are retained in docs/plans. The final
