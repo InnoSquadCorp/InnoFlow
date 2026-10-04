@@ -59,12 +59,63 @@ def is_swift_640_release(version):
                 and re.search(r"\(swift-6\.4(?:\.0)?-RELEASE(?:[ )])", version))
 
 
+def apple_runtime_environment(env, developer_dir, platform_path, sdk_path):
+    """Use only the selected Xcode's macOS test support, as SwiftPM does.
+
+    SwiftSDK.sdkPlatformPaths / TestingSupport.constructTestEnvironment derive
+    these paths from xcrun, not from a guessed toolchain or Xcode installation.
+    """
+    inherited = sorted(key for key, value in env.items() if key.startswith("DYLD_") and value)
+    if inherited:
+        raise RuntimeError("Uncontrolled loader environment: " + ", ".join(inherited))
+    paths = [Path(value) for value in (developer_dir, platform_path, sdk_path)]
+    if any(not path.is_absolute() or ":" in str(path) for path in paths):
+        raise RuntimeError("Selected developer/platform/SDK paths must be absolute single paths")
+    developer, platform_dir, sdk = [path.resolve(strict=True) for path in paths]
+    expected_platform = (developer / "Platforms/MacOSX.platform").resolve(strict=True)
+    if (platform_dir != expected_platform or developer not in platform_dir.parents
+            or platform_dir not in sdk.parents or not sdk.is_dir()):
+        raise RuntimeError("macOS SDK/platform does not belong to the selected Xcode")
+    frameworks = [platform_dir / "Developer/Library/Frameworks",
+                  platform_dir / "Developer/Library/PrivateFrameworks"]
+    libraries = platform_dir / "Developer/usr/lib"
+    for path in [*frameworks, libraries]:
+        if not path.is_dir() or platform_dir not in path.resolve(strict=True).parents:
+            raise RuntimeError(f"Selected macOS runtime search directory is missing or escapes its platform: {path}")
+    testing = frameworks[0] / "Testing.framework/Versions/A/Testing"
+    if not testing.is_file() or platform_dir not in testing.resolve(strict=True).parents:
+        raise RuntimeError(f"Selected macOS Testing.framework binary is missing or escapes its platform: {testing}")
+    testing = testing.resolve(strict=True)
+    overrides = {"DYLD_FRAMEWORK_PATH": os.pathsep.join(map(str, frameworks)),
+                 "DYLD_LIBRARY_PATH": str(libraries)}
+    evidence = {"developer_dir": str(developer), "platform_path": str(platform_dir),
+                "sdk_path": str(sdk), "environment": overrides,
+                "testing_framework": {"path": str(testing), "sha256": sha256(testing)}}
+    return {**env, **overrides}, evidence
+
+
+def validate_testing_load(stderr, runtime, required):
+    # Apple's Loader::logLoad emits "<UUID> path" through dyld[pid]'s logger.
+    images = re.findall(r"^dyld(?:\[\d+\])?: <[^>\r\n]+> (/[^\r\n]+)$", stderr, re.MULTILINE)
+    if not images:
+        raise RuntimeError("Missing dyld image-loading evidence in paired warmup")
+    loaded = sorted(set(path for path in images if "/Testing.framework/" in path))
+    expected = Path(runtime["testing_framework"]["path"])
+    if required and not loaded:
+        raise RuntimeError("Linked Testing.framework was not observed loading in paired warmup")
+    for path in loaded:
+        if Path(path).resolve(strict=True) != expected:
+            raise RuntimeError(f"Warmup loaded Testing.framework outside the selected macOS platform: {path}")
+    return {"required_by_linkage": required, "loaded_paths": loaded}
+
+
 def run_command(command, output, name, repo, env, timeout):
     """Save raw streams and a receipt even on timeout or launch failure."""
     log = output / "logs" / name
     log.parent.mkdir(parents=True, exist_ok=True)
     receipt = {"command": [str(x) for x in command], "cwd": str(repo),
-               "started_at": utc_now(), "timeout_seconds": timeout, "status": "running"}
+               "started_at": utc_now(), "timeout_seconds": timeout, "status": "running",
+               "loader_environment": {key: value for key, value in env.items() if key.startswith("DYLD_")}}
     write_json(log.with_suffix(".json"), receipt)
     stdout, stderr = b"", b""
     try:
@@ -269,8 +320,8 @@ def capture(repo, output):
     env = dict(os.environ, INNOFLOW_BENCHMARK_PACKAGE=str(repo))
     results, rows = None, []
 
-    def command(args, name, timeout=60):
-        return run_command(args, output, name, repo, env, timeout)
+    def command(args, name, timeout=60, command_env=None):
+        return run_command(args, output, name, repo, env if command_env is None else command_env, timeout)
 
     try:
         manifest["repo_sha"] = command(["git", "rev-parse", "HEAD"], "repo-sha")
@@ -315,6 +366,17 @@ def capture(repo, output):
                                    f"{actual_version[0]}.{actual_version[1]}. Apple compilation remains pending")
         if actual_version != (6, 4) or not is_swift_640_release(manifest["swift_version"]):
             raise RuntimeError("This matched cohort requires the official Swift 6.4.0-RELEASE toolchain; no substitution")
+        if (not manifest["swift_command_path"]
+                or Path(manifest["swift_command_path"]).resolve(strict=True)
+                != Path(manifest["xcrun_swift_path"]).resolve(strict=True)):
+            raise RuntimeError("Swift and xcrun selected different compilers; no toolchain substitution")
+        manifest["selected_developer_dir"] = command(["xcode-select", "-p"], "selected-developer-dir")
+        manifest["macos_sdk_platform_path"] = command(
+            ["xcrun", "--sdk", "macosx", "--show-sdk-platform-path"], "macos-sdk-platform-path")
+        runtime_env, manifest["runtime"] = apple_runtime_environment(
+            env, manifest["selected_developer_dir"], manifest["macos_sdk_platform_path"], manifest["macos_sdk_path"])
+        command(["xcrun", "otool", "-L", manifest["runtime"]["testing_framework"]["path"]],
+                "testing-framework-linkage")
         binaries = {}
         manifest["binaries"] = {}
         for side, (relative, product) in PACKAGES.items():
@@ -328,7 +390,10 @@ def capture(repo, output):
             if not executable.is_file() or not os.access(executable, os.X_OK):
                 raise RuntimeError(f"{side}: executable is missing or not executable")
             binaries[side] = executable
-            manifest["binaries"][side] = {"path": str(executable), "sha256": sha256(executable)}
+            linkage = command(["xcrun", "otool", "-L", str(executable)], f"{side}-linkage")
+            command(["xcrun", "otool", "-l", str(executable)], f"{side}-load-commands")
+            manifest["binaries"][side] = {"path": str(executable), "sha256": sha256(executable),
+                                          "links_testing_framework": "Testing.framework/" in linkage}
         manifest["resolutions_built"] = snapshot_resolutions(repo, output, "built")
         if not all(entry.get("valid") for entry in manifest["resolutions_built"].values()):
             raise RuntimeError("Both valid resolved manifests are required before measuring")
@@ -338,9 +403,18 @@ def capture(repo, output):
         write_json(output / "manifest.json", manifest)
         # Both release builds finish before any measured process starts. Never
         # launch simultaneous processes, builds, or background benchmark work.
+        manifest["runtime"]["warmup_loading"] = {}
         for scenario, phase, pair, side in schedule():
             name = f"{scenario}-{phase}-{pair + 1:02d}-{side}"
-            stdout = command([str(binaries[side]), scenario, str(COUNTS[scenario])], name, 180)
+            # Trace the first paired warmup only; the second warmup and every
+            # measured pair run without loader tracing. No extra invocations.
+            trace_loading = phase == "warmup" and pair == 0
+            process_env = {**runtime_env, "DYLD_PRINT_LIBRARIES": "1"} if trace_loading else runtime_env
+            stdout = command([str(binaries[side]), scenario, str(COUNTS[scenario])], name, 180, process_env)
+            if trace_loading:
+                manifest["runtime"]["warmup_loading"][name] = validate_testing_load(
+                    (output / f"logs/{name}.stderr").read_text(), manifest["runtime"],
+                    manifest["binaries"][side]["links_testing_framework"])
             row = {**parse_measurement(stdout, scenario), "phase": phase, "pair": pair, "side": side,
                    "ordinal": len(rows), "log": f"logs/{name}"}
             rows.append(row)
@@ -354,6 +428,9 @@ def capture(repo, output):
         for side, executable in binaries.items():
             if sha256(executable) != manifest["binaries"][side]["sha256"]:
                 raise RuntimeError(f"{side}: executable changed during capture")
+        testing = manifest["runtime"]["testing_framework"]
+        if sha256(Path(testing["path"])) != testing["sha256"]:
+            raise RuntimeError("Selected Testing.framework changed during capture")
         manifest["resolutions_after"] = snapshot_resolutions(repo, output, "after")
         if manifest["resolutions_after"] != {
             side: {**entry, "artifact": entry["artifact"].replace("/built/", "/after/")}
@@ -388,6 +465,156 @@ def self_test():
     from unittest.mock import patch
 
     class Controls(unittest.TestCase):
+        def runtime_fixture(self, root):
+            developer = root / "Xcode 26.6.app/Contents/Developer"
+            platform_dir = developer / "Platforms/MacOSX.platform"
+            sdk = platform_dir / "Developer/SDKs/MacOSX26.6.sdk"
+            for relative in ("Developer/Library/Frameworks", "Developer/Library/PrivateFrameworks",
+                             "Developer/usr/lib", "Developer/SDKs/MacOSX26.6.sdk"):
+                (platform_dir / relative).mkdir(parents=True)
+            binary = platform_dir / "Developer/Library/Frameworks/Testing.framework/Versions/A/Testing"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"fixture framework, not an Apple runtime")
+            return developer, platform_dir, sdk, binary
+
+        def test_runtime_paths_are_selected_verified_and_shared(self):
+            with tempfile.TemporaryDirectory() as temporary:
+                developer, platform_dir, sdk, binary = self.runtime_fixture(Path(temporary))
+                original = {"TOOLCHAINS": "fixture-official-release", "DEVELOPER_DIR": str(developer)}
+                runtime_env, evidence = apple_runtime_environment(original, str(developer), str(platform_dir), str(sdk))
+                self.assertEqual(original, {"TOOLCHAINS": "fixture-official-release", "DEVELOPER_DIR": str(developer)})
+                self.assertEqual(runtime_env["TOOLCHAINS"], original["TOOLCHAINS"])
+                self.assertEqual(runtime_env["DYLD_FRAMEWORK_PATH"],
+                                 str(platform_dir / "Developer/Library/Frameworks") + ":" +
+                                 str(platform_dir / "Developer/Library/PrivateFrameworks"))
+                self.assertEqual(runtime_env["DYLD_LIBRARY_PATH"], str(platform_dir / "Developer/usr/lib"))
+                self.assertEqual(evidence["testing_framework"], {"path": str(binary), "sha256": sha256(binary)})
+
+        def test_missing_or_foreign_runtime_and_ambient_loader_rejected(self):
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                developer, platform_dir, sdk, binary = self.runtime_fixture(root)
+                other_developer, other_platform, other_sdk, _ = self.runtime_fixture(root / "other")
+                for env, selected_developer, selected_platform, selected_sdk in (
+                    ({"DYLD_FRAMEWORK_PATH": "/unverified"}, developer, platform_dir, sdk),
+                    ({"DYLD_INSERT_LIBRARIES": "/unverified.dylib"}, developer, platform_dir, sdk),
+                    ({"DYLD_PRINT_LIBRARIES": "1"}, developer, platform_dir, sdk),
+                    ({}, other_developer, platform_dir, sdk),
+                    ({}, developer, other_platform, sdk),
+                    ({}, developer, platform_dir, other_sdk),
+                    ({}, Path("relative"), platform_dir, sdk),
+                ):
+                    with self.subTest(env=env, platform=selected_platform), self.assertRaises(RuntimeError):
+                        apple_runtime_environment(env, str(selected_developer), str(selected_platform), str(selected_sdk))
+                binary.unlink()
+                with self.assertRaisesRegex(RuntimeError, "Testing.framework binary is missing"):
+                    apple_runtime_environment({}, str(developer), str(platform_dir), str(sdk))
+                foreign = root / "foreign-Testing"
+                foreign.write_bytes(b"unverified")
+                binary.symlink_to(foreign)
+                with self.assertRaisesRegex(RuntimeError, "escapes its platform"):
+                    apple_runtime_environment({}, str(developer), str(platform_dir), str(sdk))
+
+        def test_warmup_requires_actual_selected_framework_loading(self):
+            with tempfile.TemporaryDirectory() as temporary:
+                developer, platform_dir, sdk, binary = self.runtime_fixture(Path(temporary))
+                _, runtime = apple_runtime_environment({}, str(developer), str(platform_dir), str(sdk))
+                trace = f"dyld[123]: <AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE> {binary}\n"
+                self.assertEqual(validate_testing_load(trace, runtime, True)["loaded_paths"], [str(binary)])
+                unrelated = "dyld[123]: <no uuid> /usr/lib/libSystem.B.dylib\n"
+                self.assertEqual(validate_testing_load(unrelated, runtime, False)["loaded_paths"], [])
+                for invalid in ("", str(binary), "Library not loaded: " + str(binary), unrelated):
+                    with self.subTest(invalid=invalid), self.assertRaises(RuntimeError):
+                        validate_testing_load(invalid, runtime, True)
+                foreign = Path(temporary) / "other/Testing.framework/Versions/A/Testing"
+                foreign.parent.mkdir(parents=True)
+                foreign.write_bytes(binary.read_bytes())
+                with self.assertRaisesRegex(RuntimeError, "outside the selected"):
+                    validate_testing_load(f"dyld[123]: <no uuid> {foreign}\n", runtime, True)
+
+        def test_capture_runtime_integration_preserves_cohort_and_failure_evidence(self):
+            for missing_framework, missing_trace in ((False, False), (True, False), (False, True)):
+                with self.subTest(missing_framework=missing_framework, missing_trace=missing_trace), \
+                        tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    repo, output = root / "repo", root / "evidence"
+                    repo.mkdir()
+                    (repo / "Package.swift").write_text("// swift-tools-version: 6.4\n")
+                    for side, (relative, product) in PACKAGES.items():
+                        package = repo / relative
+                        package.mkdir(parents=True)
+                        (package / "Package.swift").write_text("// swift-tools-version: 6.4\n")
+                        write_json(package / "Package.resolved", {"pins": [{
+                            "identity": "swift-composable-architecture" if side == "tca" else "swift-syntax",
+                            "state": {"version": "1.26.2", "revision": "a" * 40}}]})
+                        binary = root / "bin" / product
+                        binary.parent.mkdir(exist_ok=True)
+                        binary.write_bytes(b"fixture executable")
+                        binary.chmod(0o755)
+                    (repo / "Benchmarks/trend.py").write_text("# source fixture\n")
+                    developer, platform_dir, sdk, testing = self.runtime_fixture(root)
+                    swift = root / "swift"
+                    swift.write_bytes(b"fixture compiler")
+                    if missing_framework:
+                        testing.unlink()
+                    outputs = {"repo-sha": "a" * 40, "repo-description": "fixture", "source-status": "",
+                               "source-diff": "", "tracked-files": "\n".join(
+                                   str(Path(relative) / "Package.resolved") for relative, _ in PACKAGES.values()),
+                               "swift-version": "Apple Swift version 6.4 (swift-6.4-RELEASE)",
+                               "xcode-version": "Xcode 26.6\nBuild version fixture", "hardware": "fixture",
+                               "xcrun-swift-path": str(swift), "macos-sdk-path": str(sdk), "macos-sdk-version": "26.6",
+                               "selected-developer-dir": str(developer), "macos-sdk-platform-path": str(platform_dir)}
+                    invocations = []
+
+                    def fake_command(args, output, name, repo, env, timeout):
+                        invocations.append((name, list(args), dict(env)))
+                        if name in outputs:
+                            return outputs[name]
+                        if name.endswith(("-resolve", "-build", "-load-commands")):
+                            return ""
+                        if name.endswith("-bin-path"):
+                            return str(root / "bin")
+                        if name.endswith("-linkage"):
+                            return "@rpath/Testing.framework/Versions/A/Testing (compatibility version 1.0.0)"
+                        scenario = name.split("-")[0]
+                        self.assertIn(scenario, COUNTS)
+                        log = output / f"logs/{name}.stderr"
+                        log.parent.mkdir(parents=True, exist_ok=True)
+                        log.write_text(f"dyld[123]: <no uuid> {testing}\n" if not missing_trace else "")
+                        return json.dumps({"scenario": scenario, "iterations": COUNTS[scenario],
+                                           "checksum": expected_checksum(scenario), "ns": 100, "status": "measured"})
+
+                    with patch.dict(os.environ, {}, clear=True), \
+                            patch(__name__ + ".run_command", side_effect=fake_command), \
+                            patch("shutil.which", return_value=str(swift)), \
+                            patch("platform.system", return_value="Darwin"), \
+                            patch("platform.machine", return_value="arm64"), \
+                            patch("platform.platform", return_value="fixture-macOS"), \
+                            patch("platform.processor", return_value="fixture-processor"):
+                        self.assertEqual(capture(repo, output), 1 if missing_framework or missing_trace else 0)
+                    summary = json.loads((output / "summary.json").read_text())
+                    manifest = json.loads((output / "manifest.json").read_text())
+                    if missing_framework or missing_trace:
+                        self.assertEqual(summary["results"], {})
+                        self.assertEqual(manifest["validated_processes"], 0)
+                        self.assertTrue(manifest["errors"])
+                        if missing_framework:
+                            self.assertFalse(any(name.endswith("-build") for name, _, _ in invocations))
+                        continue
+                    samples = [(name, args, env) for name, args, env in invocations if name.startswith(tuple(COUNTS))]
+                    self.assertEqual(len(samples), 108)
+                    self.assertEqual(len(manifest["runtime"]["warmup_loading"]), 12)
+                    self.assertEqual(set(summary["results"]), set(COUNTS))
+                    for name, args, env in samples:
+                        self.assertEqual(args[1:], [name.split("-")[0], str(COUNTS[name.split("-")[0]])])
+                        self.assertEqual(env["DYLD_FRAMEWORK_PATH"], manifest["runtime"]["environment"]["DYLD_FRAMEWORK_PATH"])
+                        self.assertEqual(env["DYLD_LIBRARY_PATH"], manifest["runtime"]["environment"]["DYLD_LIBRARY_PATH"])
+                        self.assertEqual(env.get("DYLD_PRINT_LIBRARIES"), "1" if "-warmup-01-" in name else None)
+                    for name, args, env in invocations:
+                        if name.endswith("-build"):
+                            self.assertEqual(args[args.index("--configuration") + 1], "release")
+                            self.assertFalse(any(key.startswith("DYLD_") for key in env))
+
         def test_official_640_release_spellings_only(self):
             for version in ("Swift version 6.4 (swift-6.4-RELEASE)",
                             "Apple Swift version 6.4.0 (swift-6.4.0-RELEASE)"):
@@ -469,10 +696,12 @@ def self_test():
                     output = Path(temporary)
                     with patch("subprocess.run", side_effect=side_effect, return_value=return_value):
                         with self.assertRaises(RuntimeError):
-                            run_command(["unused"], output, "case", output, {}, 1)
+                            run_command(["unused"], output, "case", output, {"DYLD_FRAMEWORK_PATH": "/fixture"}, 1)
                     self.assertEqual((output / "logs/case.stdout").read_bytes(), b"partial")
                     self.assertEqual((output / "logs/case.stderr").read_bytes(), b"error")
-                    self.assertEqual(json.loads((output / "logs/case.json").read_text())["status"], status)
+                    receipt = json.loads((output / "logs/case.json").read_text())
+                    self.assertEqual(receipt["status"], status)
+                    self.assertEqual(receipt["loader_environment"], {"DYLD_FRAMEWORK_PATH": "/fixture"})
 
         def test_resolved_pins_and_malformed_original_are_preserved(self):
             with tempfile.TemporaryDirectory() as temporary:

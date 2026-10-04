@@ -47,6 +47,8 @@ Artifacts contain:
   sources with SHA-256 hashes, and executable hashes
 - Swift and Xcode versions, host/architecture details, runner image metadata,
   and the effective package tools-version requirements
+- selected macOS platform/runtime search paths, Testing.framework binary hash,
+  executable linkage/load commands, and paired warmup dyld loading traces
 - both packages' original `Package.resolved` files at available before/build/
   after/final stages, file hashes, and resolved dependency versions/revisions
 - raw stdout/stderr and command/exit/timeout receipts, including build failures
@@ -62,19 +64,26 @@ InnoFlow resolves one pin, SwiftSyntax 604.0.0, matching the root lock. The TCA
 package resolves 15 pins, including TCA 1.26.2, SwiftSyntax 604.0.0, and
 OpenCombine 0.14.0. No product was built to obtain these locks.
 
-These are **Linux-resolved candidate pins, not Apple-validated pins**. The
+These pins were initially **Linux-resolved candidates**. The
 upstream [combine-schedulers 1.2.2 manifest](https://github.com/pointfreeco/combine-schedulers/blob/114354e8c1667a2edc4993700fb9fa4f90157b56/Package.swift)
 enables the `OpenCombineSchedulers` default trait when Darwin cannot be
 imported, and its OpenCombineShim dependency is Linux/Android-specific.
 Other host/compiler-conditioned manifests may also affect resolution. The
-first Apple run must verify the committed graph and may produce different
+Apple capture must verify the committed graph and may produce different
 pins or lock metadata. Any existing lock change remains incomplete, with
 before/final files preserved for review; do not silently accept it or publish
 timings from that capture. Review and commit any required Apple lock refresh
 before rerunning. A Linux resolve or a committed lock is not Apple build proof.
 
-**Current boundary: authored, no Apple execution evidence.** The
-comparison package and TCA 1.26.2 require Swift tools 6.4, while
+**Current boundary: Apple builds succeeded; no complete timing cohort.** At
+`c874a85d3eba86020c178a55a091017727d3a436`, CI run `37183843435`
+(2026-10-04) built both Release executables and verified unchanged valid pins,
+then failed before the first validated warmup because dyld could not locate
+`@rpath/Testing.framework/Versions/A/Testing`. That capture is incomplete and
+contains no timing results. The runtime-path repair below still needs a fresh
+Apple CI capture; Python fixtures do not establish Apple runtime success.
+
+The comparison package and TCA 1.26.2 require Swift tools 6.4, while
 Xcode 26.6 bundles Swift 6.3. The workflow therefore installs the fixed official
 [Swift 6.4.0 macOS package](https://download.swift.org/swift-6.4.0-release/xcode/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-osx.pkg)
 in the hosted runner's user toolchain directory. It checks the package's
@@ -97,11 +106,31 @@ official Linux distribution) and `6.4.0 / swift-6.4.0-RELEASE` version
 spellings. It rejects later patches, development snapshots, and other builds;
 the macOS download URL remains pinned to 6.4.0.
 
-This installation recipe does not prove TCA's macros and SwiftUI compile with
-Swift 6.4.0 plus Xcode 26.6's SDK. Actual Apple compilation and Apple validation
-of the Linux-resolved transitive pins remain pending until an authorized CI execution. A missing or wrong
+That CI build evidence applies to its recorded SHA only. Each new capture must
+repeat Apple compilation and validation of the transitive pins. A missing or wrong
 toolchain remains incomplete; no newer-toolchain fallback or manifest rewrite
 is allowed. Do not lower either package's tools version.
+
+Directly launching these executables also needs the selected Xcode's testing
+runtime search paths. Following SwiftPM's
+[SDK platform path derivation](https://github.com/swiftlang/swift-package-manager/blob/main/Sources/PackageModel/SwiftSDKs/SwiftSDK.swift)
+and [test runtime environment setup](https://github.com/swiftlang/swift-package-manager/blob/main/Sources/Commands/Utilities/TestingSupport.swift),
+the runner uses `xcrun --sdk macosx --show-sdk-platform-path` and verifies that
+the platform and SDK belong to the selected Xcode. It checks the actual
+`Developer/Library/Frameworks/Testing.framework/Versions/A/Testing` binary,
+records its SHA-256 and linkage, and supplies the same platform framework,
+private-framework, and library directories to both benchmark processes through
+`DYLD_FRAMEWORK_PATH` and `DYLD_LIBRARY_PATH`. Existing nonempty `DYLD_*`
+settings are rejected instead of admitting unverified runtime overrides.
+
+The first paired warmup of each scenario enables `DYLD_PRINT_LIBRARIES` for
+both sides and verifies any loaded Testing.framework against that exact binary;
+linked Testing.framework requires a matching load. The second paired warmup and
+all measured processes omit loader tracing. The 108-process schedule, workload
+counts, Release build arguments, and product sources are unchanged. Missing
+frameworks, absent/mismatched loading evidence, or a changed framework hash
+leave the capture incomplete with no summary metrics. There is no alternate
+Xcode/toolchain/framework fallback.
 
 `publication_ready` only describes clean source and committed, unchanged pins
 after a complete capture. It grants no permission to publish and is not a
