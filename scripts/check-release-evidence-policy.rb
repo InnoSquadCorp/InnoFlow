@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "json"
+require_relative "swift-test-conditions"
 require "digest"
 require "open3"
 require "tmpdir"
@@ -132,24 +133,13 @@ begin
       full_sources.key?(test["file"]) &&
       test["file"].start_with?("Tests/#{test.fetch('target')}/") &&
       test["identifier"].is_a?(String) && !test["identifier"].empty?
-    # The reviewed host inventory currently has just this declaration-level
-    # condition. Unknown/platform-dependent declarations must not be counted
-    # without an explicit configuration review.
-    conditions = test.fetch("conditionalContexts")
-    abort "[release-evidence-policy] unreviewed conditional Swift test declaration" unless
-      conditions == [] ||
-      (test["identifier"] == "CompiledHarnessCacheTests/preservesProcessIsolation()" &&
-       conditions == ["#if os(macOS) || os(Linux)"])
   end
-  baseline_count = full_tests.count do |test|
-    test["target"] == "InnoFlowTests" && test["identifier"].start_with?("EffectTimingBaselineGate/")
-  end
-  abort "[release-evidence-policy] isolated timing baseline inventory changed" unless baseline_count == 1
+  counts = SwiftTestConditions.resolve("host-counts", inventory: full_inventory)
   full_inventory_sha = Digest::SHA256.file(full_inventory_path).hexdigest
   {
-    "swift-6.3-toolchain" => full_tests.length,
-    "swift-6.4-toolchain" => full_tests.length,
-    "full-principle" => full_tests.length * 2 + baseline_count,
+    "swift-6.3-toolchain" => counts.fetch("6.3"),
+    "swift-6.4-toolchain" => counts.fetch("6.4"),
+    "full-principle" => counts.fetch("full-principle"),
   }.each do |id, count|
     full_check = policy.fetch("checks").find { |entry| entry.fetch("id") == id }
     abort "[release-evidence-policy] #{id} count differs from exact source inventory" unless
@@ -212,6 +202,8 @@ begin
   inventory = JSON.parse(File.read(inventory_path))
   expected_suites = %w[
     CollectionLifetimeConsistencyTests
+    CollectionMultiScopeReconciliationTests
+    CollectionReconciliationBoundaryTests
     CollectionScopeCacheTests
     CompletionRelayConsistencyTests
     DiagnosticsRingConsistencyTests
@@ -235,10 +227,12 @@ begin
     OwnedSynchronousEffectConsistencyTests
     PerformanceSemanticsConsistencyTests
     PhaseExplorationConsistencyTests
+    ProjectionRegistrationBoundaryTests
     RunLaneSnapshotConsistencyTests
     RuntimeConsistencyTests
     SchedulerAdmissionConsistencyTests
     SingleScopeCacheTests
+    SnapshotBoundaryConsistencyTests
     StoreScopeSelectionTests
     TestEffectLedgerConsistencyTests
     TestStoreDispatchConsistencyTests
@@ -256,6 +250,20 @@ begin
   end.map { |test| test.fetch("identifier") }.sort
   abort "[release-evidence-policy] focused inventory differs from complete source declarations" unless
     identifiers == source_focused_identifiers
+  source_conditions = full_tests.select do |test|
+    test["target"] == "InnoFlowTests" && identifiers.include?(test["identifier"]) &&
+      test["conditionalContexts"] != []
+  end.to_h { |test| [test.fetch("identifier"), test.fetch("conditionalContexts")] }
+  abort "[release-evidence-policy] focused conditional inventory differs from source declarations" unless
+    inventory.fetch("conditionalContextsByIdentifier", {}) == source_conditions
+  source_capabilities = SwiftTestConditions.resolve("source-capabilities", inventory: full_inventory)
+  abort "[release-evidence-policy] focused capability inventory differs from source declarations" unless
+    inventory.fetch("requiredCapabilitiesByIdentifier", {}) == source_capabilities
+  %w[6.3 6.4].each do |version|
+    SwiftTestConditions.resolve("runtime-selection", inventory: inventory,
+                               compiler_output: "Swift version #{version}",
+                               runtime_identity: {"platform" => "iOS Simulator", "os" => "27.0", "deviceId" => "source-review"})
+  end
   # These tests assert that specific diagnostics are emitted. Only these
   # declarations may report Expected Failure; additions require review.
   diagnostic_identifiers = %w[
@@ -298,6 +306,6 @@ begin
   end
 
   puts "[release-evidence-policy] External macro inventory and command contract passed (#{names.length} tests)"
-rescue JSON::ParserError, KeyError, Errno::ENOENT, TypeError => error
+rescue JSON::ParserError, KeyError, Errno::ENOENT, TypeError, ArgumentError => error
   abort "[release-evidence-policy] Invalid policy: #{error.message}"
 end

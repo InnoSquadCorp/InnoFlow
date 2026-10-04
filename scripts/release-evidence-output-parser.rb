@@ -70,6 +70,7 @@ module ReleaseEvidenceOutputParser
         end
         current_run.fetch("testTerminals") << {
           "name" => name,
+          "suite" => identity&.first,
           "count" => 1,
           "caseCount" => case_count,
           "result" => match[3].downcase,
@@ -167,10 +168,20 @@ module ReleaseEvidenceOutputParser
       failures << "missingTest=#{test_name}" unless passed_test_names.include?(test_name)
     end
 
+    Array(check["requiredCapabilityTests"]).each do |required|
+      actual = all_test_terminals.count do |terminal|
+        terminal["suite"] == required.fetch("suite") && terminal["name"] == required.fetch("name") &&
+          terminal["result"] == "passed"
+      end
+      failures << "capabilityTest=#{required.fetch('name')} occurrences=#{actual}" unless actual == required.fetch("occurrences")
+    end
+
     {
       "failures" => failures.uniq,
       "result" => {
         "testCount" => test_count,
+        "executedTestCount" => passed_tests.length,
+        "unavailableTestCount" => all_test_terminals.count { |terminal| terminal["result"] == "skipped" },
         "suiteCount" => suite_count,
         "testRunCount" => passed_runs.length,
         "passedSuites" => passed_suite_names.sort,

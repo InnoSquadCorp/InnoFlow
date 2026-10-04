@@ -6,6 +6,11 @@ import hashlib
 import re
 import sys
 from collections import Counter
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from swift_test_conditions import (conditional_identifiers, runtime_selection, compiled_selection,
+                                   runtime_capabilities, runtime_identity, xcresult_runtime)
 
 
 def collect_cases(node):
@@ -45,17 +50,34 @@ def validate_inventory(inventory):
             any(not isinstance(item, str) or item not in expected for item in diagnostics) or
             diagnostics != sorted(set(diagnostics))):
         errors.append("invalid-expected-failure-inventory")
+    try:
+        conditional_identifiers(inventory)
+        runtime_capabilities(inventory)
+    except ValueError as error:
+        errors.append(str(error))
     return errors
 
 
-def validate(inventory, summary, tests):
+def validate(inventory, summary, tests, compiler_output=None, observed_runtime=None):
     errors = validate_inventory(inventory)
     if errors:
         return errors, 0
     if not isinstance(summary, dict) or not isinstance(tests, dict):
         return ["invalid-result-payload"], 0
-    expected = inventory["expectedTestIdentifiers"]
-    diagnostics = set(inventory.get("expectedFailureTestIdentifiers", []))
+    try:
+        compiled = compiled_selection(inventory, compiler_output)
+        relevant = set(compiled["expectedTestIdentifiers"]) & set(runtime_capabilities(inventory))
+        actual_runtime = xcresult_runtime(summary, tests) if relevant else None
+        if relevant and runtime_identity(observed_runtime) != actual_runtime:
+            raise ValueError("xcresult runtime differs from discovery runtime")
+        selected = runtime_selection(inventory, compiler_output, actual_runtime)
+    except ValueError as error:
+        return [str(error)], 0
+    expected = selected["expectedTestIdentifiers"]
+    diagnostics = set(selected["expectedFailureTestIdentifiers"])
+    unavailable = set(selected["expectedUnavailableTestIdentifiers"])
+    if diagnostics & unavailable:
+        return ["unavailable diagnostic inventory overlap"], 0
     cases = list(collect_cases(tests))
     actual = [case.get("nodeIdentifier") for case in cases]
     if any(not isinstance(item, str) for item in actual):
@@ -78,8 +100,8 @@ def validate(inventory, summary, tests):
     # Known diagnostic assertions are required outcomes, not an allowance for
     # arbitrary failures. Counters and exact per-declaration results must agree.
     for key, count in (("totalTestCount", len(cases)),
-                       ("passedTests", len(expected) - len(diagnostics)),
-                       ("failedTests", 0), ("skippedTests", 0),
+                       ("passedTests", len(expected) - len(diagnostics) - len(unavailable)),
+                       ("failedTests", 0), ("skippedTests", len(unavailable)),
                        ("expectedFailures", len(diagnostics))):
         if type(summary.get(key)) is not int or summary[key] != count:
             errors.append(key + "=" + str(summary.get(key)))
@@ -87,13 +109,14 @@ def validate(inventory, summary, tests):
         errors.append("runtime-warnings=" + repr(summary["runtimeWarnings"]))
     for case in cases:
         identifier = case.get("nodeIdentifier")
-        result = "Expected Failure" if isinstance(identifier, str) and identifier in diagnostics else "Passed"
+        result = ("Skipped" if isinstance(identifier, str) and identifier in unavailable else
+                  "Expected Failure" if isinstance(identifier, str) and identifier in diagnostics else "Passed")
         if case.get("result") != result:
             errors.append("unexpected-test-result=" + repr(identifier) + ":" + str(case.get("result")))
     return errors, len(cases)
 
 
-def validate_discovery(inventory, discovery):
+def validate_discovery(inventory, discovery, compiler_output=None, observed_runtime=None):
     errors = validate_inventory(inventory)
     if errors:
         return errors, []
@@ -107,15 +130,20 @@ def validate_discovery(inventory, discovery):
         return errors, []
     value = values[0]
     disabled = value.get("disabledTests", [])
-    if not isinstance(disabled, list) or disabled:
-        errors.append("disabled-tests=" + repr(disabled))
+    if not isinstance(disabled, list):
+        return errors + ["invalid-disabled-tests"], []
     enabled = value.get("enabledTests")
     if not isinstance(enabled, list):
         return errors + ["missing-enabled-tests"], []
-    expected = inventory["expectedTestIdentifiers"]
+    try:
+        selected = runtime_selection(inventory, compiler_output, observed_runtime)
+        expected = selected["expectedTestIdentifiers"]
+        unavailable = set(selected["expectedUnavailableTestIdentifiers"])
+    except ValueError as error:
+        return [str(error)], []
     suites = set(inventory["suites"])
     discovered = []
-    for entry in enabled:
+    for entry in enabled + disabled:
         identifier = entry.get("identifier") if isinstance(entry, dict) else None
         if not isinstance(identifier, str):
             errors.append("missing-discovered-identifier")
@@ -128,6 +156,8 @@ def validate_discovery(inventory, discovery):
             errors.append("unexpected-discovery-target=" + parts[0])
             continue
         suite, test = parts[1:]
+        if entry in disabled and suite + "/" + test not in unavailable:
+            errors.append("unexpected-disabled-test=" + identifier)
         # The reviewed consistency contracts must never silently fall outside
         # the focused run when another suite is introduced. Unrelated suites
         # remain outside this intentionally focused inventory.
@@ -144,12 +174,21 @@ def validate_discovery(inventory, discovery):
 
 
 def main():
+    compiler_output = None
+    observed_runtime = None
+    while len(sys.argv) >= 3 and sys.argv[1] in ("--compiler-version-file", "--runtime-identity-file"):
+        content = Path(sys.argv[2]).read_text(encoding="utf-8")
+        if sys.argv[1] == "--compiler-version-file":
+            compiler_output = content
+        else:
+            observed_runtime = json.loads(content)
+        del sys.argv[1:3]
     if len(sys.argv) == 4 and sys.argv[1] == "discover":
         with open(sys.argv[2], encoding="utf-8") as stream:
             inventory = json.load(stream)
         with open(sys.argv[3], encoding="utf-8") as stream:
             discovery = json.load(stream)
-        errors, discovered = validate_discovery(inventory, discovery)
+        errors, discovered = validate_discovery(inventory, discovery, compiler_output, observed_runtime)
         if errors:
             print("[focused-runtime] FAILED " + " ".join(errors), file=sys.stderr)
             raise SystemExit(1)
@@ -157,18 +196,20 @@ def main():
         print("[focused-runtime] DISCOVERY tests=" + str(len(discovered)) + " sha256=" + digest)
         return
     if len(sys.argv) != 4:
-        raise SystemExit("usage: validate-focused-runtime-result.py [discover] INVENTORY SUMMARY TESTS")
+        raise SystemExit("usage: validate-focused-runtime-result.py [--compiler-version-file FILE] [discover] INVENTORY SUMMARY [TESTS]")
     with open(sys.argv[1], encoding="utf-8") as stream:
         inventory = json.load(stream)
     with open(sys.argv[2], encoding="utf-8") as stream:
         summary = json.load(stream)
     with open(sys.argv[3], encoding="utf-8") as stream:
         tests = json.load(stream)
-    errors, count = validate(inventory, summary, tests)
+    errors, count = validate(inventory, summary, tests, compiler_output, observed_runtime)
     if errors:
         print("[focused-runtime] FAILED " + " ".join(errors), file=sys.stderr)
         raise SystemExit(1)
-    print("[focused-runtime] PASS tests=" + str(count))
+    print("[focused-runtime] PASS declarations=" + str(count) +
+          " executed=" + str(count - summary["skippedTests"]) +
+          " unavailable=" + str(summary["skippedTests"]))
 
 
 if __name__ == "__main__":

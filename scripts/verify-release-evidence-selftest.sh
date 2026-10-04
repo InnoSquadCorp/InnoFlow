@@ -227,6 +227,22 @@ write_manifest "$all_local"
 verify_local
 verify_one ui
 
+# A valid raw artifact cannot authenticate a forged execution/unavailability report.
+for check_id in ui swift; do
+  cp "$evidence/$check_id.receipt" "$fixture_root/$check_id.receipt.original"
+  for field in executedTestCount unavailableTestCount unavailableTestIdentifiers; do
+    ruby -rjson -e '
+      path, field = ARGV
+      receipt = JSON.parse(File.read(path))
+      receipt.fetch("result")[field] = field.end_with?("Identifiers") ? ["NeverRan/forged()"] : 999
+      File.write(path, JSON.generate(receipt) + "\n")
+    ' "$evidence/$check_id.receipt" "$field"
+    expect_failure "forged $check_id receipt $field" verify_one "$check_id"
+    cp "$fixture_root/$check_id.receipt.original" "$evidence/$check_id.receipt"
+  done
+  verify_one "$check_id"
+done
+
 # Required known diagnostics must keep exact identities and counters all the way
 # through record and re-verification of the unchanged raw artifact.
 for mode in good missing extra swapped failed skipped duplicate-issue wrong-passed-count warning \
@@ -435,4 +451,6 @@ for status in PASS FAIL BLOCKED INTERRUPTED; do
     "$evidence/attempts.tsv" || { echo "Attempt index is missing $status" >&2; exit 1; }
 done
 
+ruby "$script_dir/release-evidence-conditions-selftest.rb"
+ruby "$script_dir/release-evidence-availability-selftest.rb"
 echo "[verify-release-evidence-selftest] All checks passed"

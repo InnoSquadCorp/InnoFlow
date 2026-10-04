@@ -1,8 +1,10 @@
 {
   "schemaVersion": 1,
-  "provenance": "Reviewed source expectation: 322 Swift Testing declarations across 33 runtime suites. This includes the prior 308 identifiers plus 14 real Store/TestStore owned synchronous-contract regression declarations. The added cases passed in the strict Linux runtime mirror, with an independent focused replay; Apple execution remains required at the final source revision. Exact Apple discovery must target InnoFlowTests only. The two expectedFailureTestIdentifiers must each report Expected Failure, every other declaration Passed, with exactly 2 expected failures and 320 passed tests. This file is an expectation, not a passing test receipt.",
+  "provenance": "Reviewed source expectation only, never an execution receipt. Preserve all original 322 focused declarations and 25 additional semantic regressions; two mixed trial tests are explicitly extracted under new semantic identifiers. Product Sources are identical to e15dfac8e0c97edb4706ac35595f22fc2cff5c1d; S/I2/D2 remain unadopted in preserved trial 9008e338d9c2dca6c30e876b476c299000bf651b. Select compiler-conditional declarations from actual compiler evidence. The three Observation didSet declarations require actual OS27 capability; legacy Swift6.4 runtimes must report them unavailable rather than falsely Passed. Existing two intentional diagnostic identities remain exact. Apple native execution is required at the final source revision.",
   "suites": [
     "CollectionLifetimeConsistencyTests",
+    "CollectionMultiScopeReconciliationTests",
+    "CollectionReconciliationBoundaryTests",
     "CollectionScopeCacheTests",
     "CompletionRelayConsistencyTests",
     "DiagnosticsRingConsistencyTests",
@@ -26,10 +28,12 @@
     "OwnedSynchronousEffectConsistencyTests",
     "PerformanceSemanticsConsistencyTests",
     "PhaseExplorationConsistencyTests",
+    "ProjectionRegistrationBoundaryTests",
     "RunLaneSnapshotConsistencyTests",
     "RuntimeConsistencyTests",
     "SchedulerAdmissionConsistencyTests",
     "SingleScopeCacheTests",
+    "SnapshotBoundaryConsistencyTests",
     "StoreScopeSelectionTests",
     "TestEffectLedgerConsistencyTests",
     "TestStoreDispatchConsistencyTests",
@@ -52,6 +56,15 @@
     "CollectionLifetimeConsistencyTests/reorderingPreservesElementOwner(useTestStore:useIdentified:)",
     "CollectionLifetimeConsistencyTests/repeatedParentRemovalReleasesRegistrations(useTestStore:useIdentified:)",
     "CollectionLifetimeConsistencyTests/rowsOwnIndependentLifetimes(useTestStore:useIdentified:equalInstances:mutation:)",
+    "CollectionMultiScopeReconciliationTests/denseDirectScopesPreserveOwnerLifetimes(testing:groups:)",
+    "CollectionMultiScopeReconciliationTests/duplicateSlotsDoNotInflateCollectionDensity(testing:)",
+    "CollectionMultiScopeReconciliationTests/removingOneDenseScopeJoinsItsPhysicalWorkAndPreservesOthers(testing:)",
+    "CollectionMultiScopeReconciliationTests/singletonScopesNeedNoIndexAndPreserveReplacement(testing:groups:)",
+    "CollectionReconciliationBoundaryTests/denseDuplicatesUseFirstIdentityAndRecheckReplacement(testing:)",
+    "CollectionReconciliationBoundaryTests/denseOwnersPreserveLifetimeAcrossActions(testing:count:)",
+    "CollectionReconciliationBoundaryTests/denseSiblingCollectionsWithEqualIDsHaveDistinctIndexes(testing:)",
+    "CollectionReconciliationBoundaryTests/equalRelativeCollectionPathsUnderDistinctParentOwnersStaySeparate(testing:)",
+    "CollectionReconciliationBoundaryTests/sparseOwnersKeepDirectFirstLookup(testing:ids:)",
     "CollectionScopeCacheTests/alternatingActionPathsReplaceActiveFamily()",
     "CollectionScopeCacheTests/copiedActionPathReusesActiveFamily()",
     "CollectionScopeCacheTests/genericMacroCollectionPathReusesActiveFamily()",
@@ -66,9 +79,13 @@
     "CompletionRelayConsistencyTests/completedAndCancelledRegistration()",
     "CompletionRelayConsistencyTests/completionCancellationRace()",
     "CompletionRelayConsistencyTests/retainedUntilCompletion()",
+    "DiagnosticsRingConsistencyTests/activeLimitPreservesLexicalIdentifierOrderAndValues(count:)",
     "DiagnosticsRingConsistencyTests/concurrentRecordingKeepsBoundedOrderedSnapshots()",
+    "DiagnosticsRingConsistencyTests/emptyActiveSetAcceptsEveryLimit()",
+    "DiagnosticsRingConsistencyTests/retainedActiveSnapshotSurvivesTerminationAndLaterSubmissions()",
     "DiagnosticsRingConsistencyTests/retainedSnapshotDoesNotChangeWhenRingWrapsAgain()",
     "DiagnosticsRingConsistencyTests/ringPreservesChronologyAndExactDiscardCount(capacity:)",
+    "DiagnosticsRingConsistencyTests/singleActiveDispatchPreservesEveryValueAndLimit()",
     "DispatchDiagnosticsTests/activeSnapshotLimitIsApplied()",
     "DispatchDiagnosticsTests/boundedHistoryReportsDroppedRecords()",
     "DispatchDiagnosticsTests/cancellationAndTerminationAreDistinct()",
@@ -217,6 +234,9 @@
     "PhaseExplorationConsistencyTests/rejectedTransitions()",
     "PhaseExplorationConsistencyTests/seededReplayAndMinimization()",
     "PhaseExplorationConsistencyTests/sharedRecorder()",
+    "ProjectionRegistrationBoundaryTests/emptyDependencyPackCreatedDuringReductionKeepsItsAlwaysRefreshContract(changed:animated:)",
+    "ProjectionRegistrationBoundaryTests/lateDependencyNeedsThePreMutationValueEvenWhenFinalValuesMatch(initial:)",
+    "ProjectionRegistrationBoundaryTests/latePackageRegistrationPreservesOldAndNewSnapshots(kind:changed:)",
     "RunLaneSnapshotConsistencyTests/identicalIDsAcrossStoresHaveDifferentOpaqueLaneIDs()",
     "RunLaneSnapshotConsistencyTests/latestReplacementKeepsLiveLaneIdentityAndRetiredFinishCannotRemoveIt()",
     "RunLaneSnapshotConsistencyTests/snapshotContainsOnlyOpaqueIdentityAndAdmissionMetadata()",
@@ -245,6 +265,15 @@
     "SingleScopeCacheTests/reusesLiveScopeFromDefaultCallsite()",
     "SingleScopeCacheTests/selectedValueDoesNotPinWeaklyCachedScope()",
     "SingleScopeCacheTests/separatesEveryIdentityDimension()",
+    "SnapshotBoundaryConsistencyTests/didSetPrecedesProjectionRefresh(animated:observed:)",
+    "SnapshotBoundaryConsistencyTests/didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()",
+    "SnapshotBoundaryConsistencyTests/didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)",
+    "SnapshotBoundaryConsistencyTests/optionalNilIsARealSnapshotForDependencyComparison(animated:)",
+    "SnapshotBoundaryConsistencyTests/reentrantObservationQueuesAfterTheCurrentProjectionRefresh(animated:)",
+    "SnapshotBoundaryConsistencyTests/releasedAndLaterRegisteredSelectionsSeeCurrentValues(animated:)",
+    "SnapshotBoundaryConsistencyTests/retainedSelectedAndScopedValuesKeepTheirSnapshots(animated:)",
+    "SnapshotBoundaryConsistencyTests/rootObservationPrecedesMutationWithoutProjections(animated:)",
+    "SnapshotBoundaryConsistencyTests/willSetRegistrationPreservesChangedAndUnchangedDependencies(animated:changedDependency:)",
     "StoreScopeSelectionTests/animatedDispatchRefreshesProjectionsInsideAnimationBoundary()",
     "StoreScopeSelectionTests/bindingPositivePath()",
     "StoreScopeSelectionTests/collectionScopeCachingDoesNotRetainParentStore()",
@@ -363,5 +392,21 @@
     "ViewDispatchLifetimeConsistencyTests/disappearanceCancelsOnlyOwnedDispatch()",
     "ViewDispatchLifetimeConsistencyTests/preCancelledTaskDoesNotReduce()",
     "ViewDispatchLifetimeConsistencyTests/replacementRejectsOldResponses()"
-  ]
+  ],
+  "conditionalContextsByIdentifier": {
+    "SnapshotBoundaryConsistencyTests/didSetPrecedesProjectionRefresh(animated:observed:)": [
+      "#if compiler(>=6.4)"
+    ],
+    "SnapshotBoundaryConsistencyTests/didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()": [
+      "#if compiler(>=6.4)"
+    ],
+    "SnapshotBoundaryConsistencyTests/didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)": [
+      "#if compiler(>=6.4)"
+    ]
+  },
+  "requiredCapabilitiesByIdentifier": {
+    "SnapshotBoundaryConsistencyTests/didSetPrecedesProjectionRefresh(animated:observed:)": "observation-didset-os27",
+    "SnapshotBoundaryConsistencyTests/didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()": "observation-didset-os27",
+    "SnapshotBoundaryConsistencyTests/didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)": "observation-didset-os27"
+  }
 }

@@ -8,6 +8,7 @@ require "open3"
 require "pathname"
 require "time"
 require_relative "release-evidence-output-parser"
+require_relative "swift-test-conditions"
 
 STAGES = %w[local-preflight pre-publication post-publication].freeze
 
@@ -101,6 +102,7 @@ def resolved_policy(path)
     profiles.fetch(check.fetch("profile")).merge(check)
   end
   checks.each do |check|
+    check["sourceInventoryRoot"] = File.expand_path("../..", File.dirname(path))
     fail!("Expected failure identities must come from a pinned test inventory for #{check.fetch('id')}") if
       check.key?("expectedFailureTestIdentifiers")
     next unless check["testIdentifierInventory"]
@@ -129,6 +131,9 @@ def resolved_policy(path)
       check.fetch("allowsExpectedFailures", false) || check.fetch("allowsRuntimeWarnings", false)
     fail!("Test inventory digest mismatch for #{check.fetch("id")}") unless
       check["testIdentifierInventorySha256"] == sha256_file(inventory_path)
+    SwiftTestConditions.resolve("runtime-selection", inventory: inventory,
+                               compiler_output: "Swift version 6.3")
+    check["runtimeInventory"] = inventory
     check["expectedTestIdentifiers"] = identifiers
     check["expectedFailureTestIdentifiers"] = diagnostics
     check["minimumTestCount"] = identifiers.length
@@ -171,7 +176,7 @@ def resolved_policy(path)
     end
   end
   [raw, checks]
-rescue JSON::ParserError, KeyError => error
+rescue JSON::ParserError, KeyError, ArgumentError => error
   fail!("Invalid release evidence policy: #{error.message}")
 end
 
@@ -384,21 +389,93 @@ def collect_test_cases(node, result = [])
   result
 end
 
+# Bind conditional selection to the compiler captured by the actual runner,
+# and independently compare the receipt's selected toolchain identity. OS/runtime
+# labels cannot substitute for compiler identity (old runtimes run on Xcode 27).
+def compiler_check(check, toolchain, artifact_path)
+  runtime = check["runtimeInventory"]
+  source_path = check["swiftTestInventory"] if %w[swift-6.3-toolchain swift-6.4-toolchain full-principle].include?(check["id"])
+  return check unless source_path || (runtime && !runtime.fetch("conditionalContextsByIdentifier", {}).empty?)
+
+  output = File.read(artifact_path, encoding: "UTF-8")
+  captured = output.lines.grep(/\A\[swift-test-inventory\] compiler: /).join
+  actual = SwiftTestConditions.resolve("compiler-version", compiler_output: captured)
+  recorded = SwiftTestConditions.resolve("compiler-version", compiler_output: toolchain)
+  identities = captured.lines.map { |line| line.delete_prefix("[swift-test-inventory] compiler: ").strip }.uniq
+  fail!("Swift compiler identity differs from execution for #{check.fetch('id')}") unless
+    actual == recorded && identities.length == 1 && toolchain.include?(identities.first)
+  if source_path
+    expected = check.fetch("id") == "full-principle" ? "6.4" : check.dig("environment", "swift")
+    fail!("Unreviewed Swift compiler for #{check.fetch('id')}") unless actual == expected
+  end
+  if source_path
+    fail!("Invalid source inventory path") unless source_path.match?(/\A[a-zA-Z0-9_.\/-]+\z/) &&
+      !Pathname.new(source_path).absolute? && !source_path.split("/").include?("..")
+    inventory_path = File.join(check.fetch("sourceInventoryRoot"), source_path)
+    source_bytes = File.binread(inventory_path)
+    fail!("Source inventory pin mismatch") if File.symlink?(inventory_path) ||
+      check["swiftTestInventorySha256"] != Digest::SHA256.hexdigest(source_bytes)
+    inventory = JSON.parse(source_bytes)
+    counts = SwiftTestConditions.resolve("host-counts", inventory: inventory)
+    expected_count = counts.fetch(check["id"] == "full-principle" ? "full-principle" : actual)
+    fail!("Host declaration count differs from source inventory") unless
+      check["minimumTestCount"] == expected_count && check["maximumTestCount"] == expected_count
+    capabilities = SwiftTestConditions.resolve("source-capabilities", inventory: inventory)
+    if actual == "6.4" && !capabilities.empty?
+      host_lines = output.lines.grep(/\A\[swift-test-inventory\] host-runtime: /)
+      fail!("Missing or conflicting actual host runtime") unless host_lines.length == 1
+      host = JSON.parse(host_lines.first.delete_prefix("[swift-test-inventory] host-runtime: "))
+      host = SwiftTestConditions.resolve("runtime-identity", runtime_identity: host)
+      fail!("didSet host evidence requires actual macOS 27.0") unless host["platform"] == "macOS" && host["os"].start_with?("27.0")
+      occurrences = check["id"] == "full-principle" ? 2 : 1
+      check = check.merge("requiredCapabilityTests" => capabilities.keys.map do |identifier|
+        {"suite" => "State snapshot observable contracts", "name" => identifier.split("/", 2).last,
+         "occurrences" => occurrences}
+      end)
+    end
+  end
+  return check unless runtime
+
+  selected = SwiftTestConditions.resolve("compiled-selection", inventory: runtime, compiler_output: captured)
+  relevant = runtime.fetch("requiredCapabilitiesByIdentifier", {}).keys & selected.fetch("expectedTestIdentifiers")
+  unless relevant.empty?
+    runtime_lines = output.lines.grep(/\A\[swift-test-inventory\] runtime: /)
+    fail!("Missing or conflicting actual discovery runtime") unless runtime_lines.length == 1
+    observed_runtime = JSON.parse(runtime_lines.first.delete_prefix("[swift-test-inventory] runtime: "))
+    selected["observedRuntime"] = SwiftTestConditions.resolve("runtime-identity", runtime_identity: observed_runtime)
+  end
+  identifiers = selected.fetch("expectedTestIdentifiers")
+  check.merge(selected).merge("minimumTestCount" => identifiers.length, "maximumTestCount" => identifiers.length)
+rescue ArgumentError, JSON::ParserError, KeyError, Errno::ENOENT => error
+  fail!("Swift compiler inventory selection failed for #{check.fetch('id')}: #{error.message}")
+end
+
 def validate_xcresult!(check, raw_path, observed_environment)
   summary, tests = xcresult_data(raw_path)
+  unavailable = []
+  if check["runtimeInventory"] && !check["runtimeInventory"].fetch("requiredCapabilitiesByIdentifier", {}).empty?
+    relevant = check["runtimeInventory"].fetch("requiredCapabilitiesByIdentifier").keys & check.fetch("expectedTestIdentifiers")
+    actual_runtime = relevant.empty? ? nil : SwiftTestConditions.resolve("xcresult-runtime", summary: summary, tests: tests)
+    fail!("xcresult runtime differs from discovery runtime") unless relevant.empty? || actual_runtime == check["observedRuntime"]
+    selected = SwiftTestConditions.resolve("runtime-selection", inventory: check.fetch("runtimeInventory"),
+      compiler_output: "Swift version #{check.fetch('compilerVersion')}", runtime_identity: actual_runtime)
+    unavailable = selected.fetch("expectedUnavailableTestIdentifiers")
+    check = check.merge(selected)
+  end
   minimum = check.fetch("minimumTestCount", 1)
   maximum = check["maximumTestCount"]
   errors = []
   errors << "result=#{summary["result"]}" unless summary["result"] == "Passed"
   errors << "totalTestCount=#{summary["totalTestCount"]}" unless summary.fetch("totalTestCount", 0).to_i >= minimum
   errors << "totalTestCount=#{summary["totalTestCount"]}" if maximum && summary.fetch("totalTestCount", 0).to_i > maximum
-  %w[failedTests skippedTests].each { |key| errors << "#{key}=#{summary[key]}" unless summary.fetch(key, 0).to_i.zero? }
+  errors << "failedTests=#{summary['failedTests']}" unless summary.fetch("failedTests", 0).to_i.zero?
+  errors << "skippedTests=#{summary['skippedTests']}" unless summary.fetch("skippedTests", 0) == unavailable.length
   if check["testIdentifierInventory"]
     diagnostics = check.fetch("expectedFailureTestIdentifiers")
     expected_counts = {
       "totalTestCount" => check.fetch("expectedTestIdentifiers").length,
-      "passedTests" => check.fetch("expectedTestIdentifiers").length - diagnostics.length,
-      "failedTests" => 0, "skippedTests" => 0, "expectedFailures" => diagnostics.length,
+      "passedTests" => check.fetch("expectedTestIdentifiers").length - diagnostics.length - unavailable.length,
+      "failedTests" => 0, "skippedTests" => unavailable.length, "expectedFailures" => diagnostics.length,
     }
     expected_counts.each do |key, count|
       errors << "#{key}=#{summary[key].inspect}" unless summary[key].is_a?(Integer) && summary[key] == count
@@ -414,7 +491,13 @@ def validate_xcresult!(check, raw_path, observed_environment)
   errors << "discoveredTests=#{cases.length}" if maximum && cases.length > maximum
   diagnostics = check.fetch("expectedFailureTestIdentifiers", [])
   cases.each do |test|
-    expected_result = diagnostics.include?(test["nodeIdentifier"]) ? "Expected Failure" : "Passed"
+    expected_result = if unavailable.include?(test["nodeIdentifier"])
+      "Skipped"
+    elsif diagnostics.include?(test["nodeIdentifier"])
+      "Expected Failure"
+    else
+      "Passed"
+    end
     errors << "unexpectedTestResult=#{test['nodeIdentifier'].inspect}:#{test['result']}" unless
       test["result"] == expected_result
   end
@@ -463,9 +546,14 @@ def validate_xcresult!(check, raw_path, observed_environment)
   validate_environment!(check, observed_environment)
   {
     "summary" => summary.slice("result", "totalTestCount", "passedTests", "failedTests", "skippedTests", "expectedFailures"),
+    "executedTestCount" => cases.length - unavailable.length,
+    "unavailableTestCount" => unavailable.length,
+    "unavailableTestIdentifiers" => unavailable,
     "testIdentifiers" => cases.map { |test| test["nodeIdentifier"] || test["name"] }.compact.sort,
     "environment" => observed_environment,
   }
+rescue ArgumentError, KeyError => error
+  fail!("Invalid runtime availability evidence for #{check.fetch('id')}: #{error.message}")
 end
 
 def validate_build_xcresult!(check, raw_path, observed_environment)
@@ -686,6 +774,7 @@ when "record-automated"
   producer = options["producer-json"] && JSON.parse(options.fetch("producer-json"))
   validate_producer!(producer) if check["trustedProducerRequired"]
   artifact_entries = artifact_manifest(artifact)
+  check = compiler_check(check, required_option(options, "toolchain"), artifact)
   if check.fetch("artifactContent") == "non-empty"
     fail!("Evidence artifact is empty") if artifact_entries.sum { |entry| entry.fetch("size") }.zero?
   end
@@ -910,13 +999,18 @@ when "verify"
         else
           raw_path = resolve_inside(evidence_root, raw_record.fetch("path"))
           if check["resultFormat"] == "xcresult-summary"
-            validate_xcresult!(check, raw_path, receipt.dig("result", "environment") || {})
+            selected_check = compiler_check(check, receipt["toolchain"], resolve_inside(evidence_root, receipt.fetch("artifact").fetch("path")))
+            verified_result = validate_xcresult!(selected_check, raw_path, receipt.dig("result", "environment") || {})
+            errors << "Receipt result differs from raw evidence for #{identifier}" unless receipt["result"] == verified_result
           else
             validate_build_xcresult!(check, raw_path, receipt.dig("result", "environment") || {})
           end
         end
       elsif check["resultFormat"] == "swift-test-output"
-        validate_swift_test_output!(check, resolve_inside(evidence_root, receipt.fetch("artifact").fetch("path")), receipt.dig("result", "environment") || {})
+        artifact_path = resolve_inside(evidence_root, receipt.fetch("artifact").fetch("path"))
+        selected_check = compiler_check(check, receipt["toolchain"], artifact_path)
+        verified_result = validate_swift_test_output!(selected_check, artifact_path, receipt.dig("result", "environment") || {})
+        errors << "Receipt result differs from Swift output for #{identifier}" unless receipt["result"] == verified_result
       end
       [receipt["artifact"], receipt["rawArtifact"]].compact.each do |record|
         actual_path = resolve_inside(evidence_root, record.fetch("path"))

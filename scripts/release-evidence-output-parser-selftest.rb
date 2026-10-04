@@ -221,4 +221,13 @@ xctest_noise = <<~OUTPUT
 OUTPUT
 assert_result("XCTest noise around Swift Testing", xctest_noise + normal, accepted: true)
 
+capability_check = {"requiredCapabilityTests" => [{"suite" => "FlowTask dispatch lifetime", "name" => "normal completion", "occurrences" => 1}]}
+assert_result("capability must execute", normal, accepted: true, check: capability_check)
+assert_result("capability cannot skip", normal.sub("passed after 0.001", "skipped after 0.001"), accepted: false, check: capability_check)
+assert_result("capability cannot be substituted", normal.gsub("normal completion", "another completion"), accepted: false, check: capability_check)
+assert_result("capability cannot change suite", normal.gsub("FlowTask dispatch lifetime", "Other suite"), accepted: false, check: capability_check)
+assert_result("full principle requires both executions", normal, accepted: false,
+  check: {"requiredCapabilityTests" => [capability_check.fetch("requiredCapabilityTests").first.merge("occurrences" => 2)]})
+assert_result("full principle two executions", normal + normal, accepted: true,
+  check: {"requiredCapabilityTests" => [capability_check.fetch("requiredCapabilityTests").first.merge("occurrences" => 2)]})
 puts "[release-evidence-output-parser-selftest] All checks passed"

@@ -28,6 +28,94 @@ cp "$root_dir/scripts/report-doc-fence-review.rb" "$fixture_root/scripts/"
 
 ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
 
+# Compiler-specific declarations must survive both source and focused inventories.
+# Three newer-compiler declarations plus two common controls exercise exact counts.
+python3 - "$fixture_root" <<'PY_CONDITIONAL'
+import hashlib
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+full_path = root / "docs/contracts/swift-test-inventory.json"
+runtime_path = root / "docs/contracts/runtime-test-inventory.json"
+policy_path = root / "docs/contracts/release-evidence-policy.json"
+full = json.loads(full_path.read_text())
+runtime = json.loads(runtime_path.read_text())
+policy = json.loads(policy_path.read_text())
+relative = "Tests/InnoFlowTests/IdentifiedArrayTests.swift"
+source = root / relative
+with source.open("a") as stream:
+    stream.write("\nextension IdentifiedArrayTests {\n")
+    for index in range(5):
+        condition = ["#if compiler(>=6.4)"] if index < 3 else []
+        name = "compilerInventoryFixture" + str(index)
+        if condition:
+            stream.write("#if compiler(>=6.4)\n")
+        stream.write("@Test func " + name + "() {}\n")
+        if condition:
+            stream.write("#endif\n")
+        identifier = "IdentifiedArrayTests/" + name + "()"
+        full["tests"].append({"target": "InnoFlowTests", "file": relative, "line": 1,
+            "identifier": identifier, "displayName": name + "()", "attribute": "@Test",
+            "conditionalContexts": condition})
+        runtime["expectedTestIdentifiers"].append(identifier)
+        if condition:
+            runtime.setdefault("conditionalContextsByIdentifier", {})[identifier] = condition
+    stream.write("}\n")
+full["sourceFiles"][relative] = hashlib.sha256(source.read_bytes()).hexdigest()
+full["tests"].sort(key=lambda test: (test["target"], test["identifier"]))
+runtime["expectedTestIdentifiers"].sort()
+full_path.write_text(json.dumps(full) + "\n")
+runtime_path.write_text(json.dumps(runtime) + "\n")
+for check in policy["checks"]:
+    if check["id"] in ("swift-6.3-toolchain", "swift-6.4-toolchain", "full-principle"):
+        increment = {"swift-6.3-toolchain": 2, "swift-6.4-toolchain": 5, "full-principle": 10}[check["id"]]
+        for field in ("minimumTestCount", "maximumTestCount"):
+            check[field] += increment
+        check["swiftTestInventorySha256"] = hashlib.sha256(full_path.read_bytes()).hexdigest()
+    if check["id"].startswith("runtime-"):
+        check["testIdentifierInventorySha256"] = hashlib.sha256(runtime_path.read_bytes()).hexdigest()
+policy_path.write_text(json.dumps(policy) + "\n")
+PY_CONDITIONAL
+ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
+cp "$fixture_root/docs/contracts/release-evidence-policy.json" "$fixture_root/conditional-policy.json"
+cp "$fixture_root/docs/contracts/runtime-test-inventory.json" "$fixture_root/conditional-runtime.json"
+for mode in old-compiler-overcount new-compiler-undercount full-principle-undercount missing-condition wrong-condition; do
+  python3 - "$fixture_root" "$mode" <<'PY_MUTATION'
+import hashlib
+import json
+from pathlib import Path
+import sys
+root, mode = Path(sys.argv[1]), sys.argv[2]
+policy = json.loads((root / "conditional-policy.json").read_text())
+runtime = json.loads((root / "conditional-runtime.json").read_text())
+if mode.endswith("count"):
+    check_id = {"old-compiler-overcount": "swift-6.3-toolchain", "new-compiler-undercount": "swift-6.4-toolchain", "full-principle-undercount": "full-principle"}[mode]
+    check = next(check for check in policy["checks"] if check["id"] == check_id)
+    for field in ("minimumTestCount", "maximumTestCount"):
+        check[field] += 3 if mode.startswith("old") else -3
+else:
+    conditions = runtime["conditionalContextsByIdentifier"]
+    key = next(iter(conditions))
+    if mode == "missing-condition":
+        del conditions[key]
+    else:
+        conditions[key] = ["#if compiler(>=6.3)"]
+path = root / "docs/contracts/runtime-test-inventory.json"
+path.write_text(json.dumps(runtime) + "\n")
+for check in policy["checks"]:
+    if check["id"].startswith("runtime-"):
+        check["testIdentifierInventorySha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+(root / "docs/contracts/release-evidence-policy.json").write_text(json.dumps(policy) + "\n")
+PY_MUTATION
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Conditional declaration mutation passed: $mode" >&2
+    exit 1
+  fi
+done
+cp "$root_dir/docs/contracts/"{release-evidence-policy,runtime-test-inventory,swift-test-inventory}.json "$fixture_root/docs/contracts/"
+cp "$root_dir/Tests/InnoFlowTests/IdentifiedArrayTests.swift" "$fixture_root/Tests/InnoFlowTests/"
+
 # The identity/cancellation regressions must remain in every platform run.
 for suite in CollectionLifetimeConsistencyTests IdentifiedArrayTests ManualTestClockTests RuntimeConsistencyTests TestStoreDispatchConsistencyTests TestingLocationConsistencyTests PhaseExplorationConsistencyTests OwnedSynchronousEffectConsistencyTests; do
   ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.lines.reject { |line| line.include?("-only-testing:InnoFlowTests/#{suite}") }.join)' \

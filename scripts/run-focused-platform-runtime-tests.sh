@@ -159,6 +159,8 @@ command+=(
   ONLY_ACTIVE_ARCH=YES
   test
   -only-testing:InnoFlowTests/CollectionLifetimeConsistencyTests
+  -only-testing:InnoFlowTests/CollectionMultiScopeReconciliationTests
+  -only-testing:InnoFlowTests/CollectionReconciliationBoundaryTests
   -only-testing:InnoFlowTests/CollectionScopeCacheTests
   -only-testing:InnoFlowTests/CompletionRelayConsistencyTests
   -only-testing:InnoFlowTests/DiagnosticsRingConsistencyTests
@@ -182,10 +184,12 @@ command+=(
   -only-testing:InnoFlowTests/OwnedSynchronousEffectConsistencyTests
   -only-testing:InnoFlowTests/PerformanceSemanticsConsistencyTests
   -only-testing:InnoFlowTests/PhaseExplorationConsistencyTests
+  -only-testing:InnoFlowTests/ProjectionRegistrationBoundaryTests
   -only-testing:InnoFlowTests/RunLaneSnapshotConsistencyTests
   -only-testing:InnoFlowTests/RuntimeConsistencyTests
   -only-testing:InnoFlowTests/SchedulerAdmissionConsistencyTests
   -only-testing:InnoFlowTests/SingleScopeCacheTests
+  -only-testing:InnoFlowTests/SnapshotBoundaryConsistencyTests
   -only-testing:InnoFlowTests/StoreScopeSelectionTests
   -only-testing:InnoFlowTests/TestEffectLedgerConsistencyTests
   -only-testing:InnoFlowTests/TestStoreDispatchConsistencyTests
@@ -209,11 +213,21 @@ command+=( -resultBundlePath "$result_bundle" )
 echo "[focused-runtime] package=$package_root"
 echo "[focused-runtime] destination=$destination"
 xcodebuild -version
-xcrun swift --version
+compiler_version_file="$validation_root/swift-version.txt"
+xcrun swift --version >"$compiler_version_file"
+cat "$compiler_version_file"
+printf '[swift-test-inventory] compiler: %s\n' "$(head -n 1 "$compiler_version_file")"
+
+runtime_identity_file="$validation_root/runtime-identity.json"
+/usr/bin/python3 "$script_dir/swift_test_conditions.py" capture-runtime \
+  "$inventory_file" "$compiler_version_file" "$destination" "$runtime_identity_file"
+printf '[swift-test-inventory] runtime: %s\n' "$(cat "$runtime_identity_file")"
 
 cd "$package_root"
 "${discovery_command[@]}"
 /usr/bin/python3 "$script_dir/validate-focused-runtime-result.py" \
+  --compiler-version-file "$compiler_version_file" \
+  --runtime-identity-file "$runtime_identity_file" \
   discover "$inventory_file" "$discovery_file"
 test_status=0
 "${command[@]}" || test_status=$?
@@ -238,4 +252,6 @@ xcrun xcresulttool get test-results summary --path "$result_bundle" --compact >"
 xcrun xcresulttool get test-results tests --path "$result_bundle" --compact >"$tests_file"
 cat "$summary_file"
 /usr/bin/python3 "$script_dir/validate-focused-runtime-result.py" \
+  --compiler-version-file "$compiler_version_file" \
+  --runtime-identity-file "$runtime_identity_file" \
   "$inventory_file" "$summary_file" "$tests_file"

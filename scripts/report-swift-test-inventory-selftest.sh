@@ -17,6 +17,14 @@ let template = """
   #if os(macOS) || os(Linux)
     @Test func hostConditional() {}
   #endif
+  #if compiler(>=6.4)
+    @available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)
+    @Test(arguments: [false, true]) func compilerConditional(value: Bool) {}
+  #elseif compiler(>=6.3)
+    @Test func olderBranch() {}
+  #else
+    @Test func fallbackBranch() {}
+  #endif
 }
 class XCTestFixture {
   func testXCTestDoesNotInflateSwiftTestingCount() {}
@@ -36,9 +44,17 @@ import sys
 inventory = json.load(open(sys.argv[1]))
 keys = [(test["target"], test["identifier"]) for test in inventory["tests"]]
 assert keys == [("InnoFlowMacrosTests", "MacroTests/macro()"),
+                ("InnoFlowTests", "RuntimeTests/compilerConditional(value:)"),
+                ("InnoFlowTests", "RuntimeTests/fallbackBranch()"),
                 ("InnoFlowTests", "RuntimeTests/hostConditional()"),
+                ("InnoFlowTests", "RuntimeTests/olderBranch()"),
                 ("InnoFlowTests", "RuntimeTests/parameterized(value:)")], keys
-assert inventory["tests"][1]["conditionalContexts"] == ["#if os(macOS) || os(Linux)"]
+contexts = {test["identifier"]: test["conditionalContexts"] for test in inventory["tests"]}
+assert contexts["RuntimeTests/hostConditional()"] == ["#if os(macOS) || os(Linux)"]
+assert contexts["RuntimeTests/compilerConditional(value:)"] == ["#if compiler(>=6.4)"]
+assert next(test for test in inventory["tests"] if test["identifier"] == "RuntimeTests/compilerConditional(value:)")["availabilityAttributes"] == ["@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"]
+assert contexts["RuntimeTests/olderBranch()"] == ["#elseif compiler(>=6.3)"]
+assert contexts["RuntimeTests/fallbackBranch()"] == ["#else "]
 assert len(inventory["sourceFiles"]) == 3
 assert not any("Fixtures/" in path for path in inventory["sourceFiles"])
 PY

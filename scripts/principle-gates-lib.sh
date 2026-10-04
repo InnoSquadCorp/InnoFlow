@@ -1529,6 +1529,12 @@ run_principle_gates_impl() {
     return 0
   fi
 
+  local compiler_identity
+  compiler_identity="$(swift --version)"
+  printf '[swift-test-inventory] compiler: %s\n' "${compiler_identity%%$'\n'*}"
+  if [[ "$(uname -s)" == Darwin ]]; then
+    printf '[swift-test-inventory] host-runtime: {"platform":"macOS","os":"%s"}\n' "$(sw_vers -productVersion)"
+  fi
   echo "[principle-gates] Checking gate negative controls"
   run_gate_negative_controls
   run_release_build_checks

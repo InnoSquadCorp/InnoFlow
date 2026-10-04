@@ -45,20 +45,26 @@ final class Inventory: SyntaxVisitor {
       displayName = value.segments.compactMap { $0.as(StringSegmentSyntax.self)?.content.text }
         .joined()
     }
-    items.append([
+    var item: [String: Any] = [
       "target": target, "file": file,
       "line": converter.location(for: node.positionAfterSkippingLeadingTrivia).line,
       "identifier": (scopes.reversed() + [signature]).joined(separator: "/"),
       "displayName": displayName,
       "conditionalContexts": Array(conditions.reversed()),
       "attribute": test.trimmedDescription,
-    ])
+    ]
+    let availability = node.attributes.compactMap { $0.as(AttributeSyntax.self) }.filter {
+      $0.attributeName.trimmedDescription == "available"
+    }.map { $0.trimmedDescription }
+    if !availability.isEmpty { item["availabilityAttributes"] = availability }
+    items.append(item)
     return .skipChildren
   }
 }
 let root = CommandLine.arguments[1]
 var all: [[String: Any]] = []
-let targets = CommandLine.arguments.count > 2
+let targets =
+  CommandLine.arguments.count > 2
   ? Array(CommandLine.arguments.dropFirst(2)) : ["InnoFlowTests", "InnoFlowMacrosTests"]
 for target in targets {
   let path = root + "/Tests/" + target

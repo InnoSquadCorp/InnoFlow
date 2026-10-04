@@ -15,4 +15,8 @@ version_output="$("$1" --version)"
 version="$(printf '%s\n' "$version_output" | awk 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "version") { print $(i + 1); exit } }')"
 case "$version" in "$expected"|"$expected".*) ;; *) echo "Swift toolchain mismatch: expected $expected.x, found ${version:-unknown}" >&2; exit 1 ;; esac
 printf '%s\n' "$version_output"
+printf '[swift-test-inventory] compiler: %s\n' "${version_output%%$'\n'*}"
+if [[ "$(uname -s)" == Darwin ]]; then
+  printf '[swift-test-inventory] host-runtime: {"platform":"macOS","os":"%s"}\n' "$(sw_vers -productVersion)"
+fi
 exec "$@"

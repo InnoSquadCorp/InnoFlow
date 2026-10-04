@@ -89,6 +89,7 @@ Dir.mktmpdir("innoflow-hosted-selftest-") do |fixture|
   FileUtils.mkdir_p(File.join(repo, "scripts"))
   FileUtils.mkdir_p(File.join(repo, "docs/contracts"))
   %w[release-candidate-snapshot.rb release-evidence-tool.rb release-evidence-output-parser.rb
+    swift-test-conditions.rb swift_test_conditions.py
     record-release-evidence.sh verify-release-evidence.sh].each do |name|
     FileUtils.cp(File.join(source, "scripts", name), File.join(repo, "scripts", name))
   end

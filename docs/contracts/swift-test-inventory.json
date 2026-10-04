@@ -20,11 +20,13 @@
     "Tests/InnoFlowTests/ActionPathIdentityTests.swift": "887ee90df239b5fc1b1684640cfbe0da8ee815a6661c01fe53408a3b3f949811",
     "Tests/InnoFlowTests/CapturedProcessTests.swift": "c4bc77435ccec6cbc4269779fcea735d4f186ab0abe541f7d234b69475e44c7a",
     "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift": "3e6c9d6bd60f028300cd7f960aa65f5b098e680e88e6986ec496b700e1578527",
+    "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift": "11994df06d3dba24d2d887dc10002a583c5ae4df1e26a3076982c2fbf1e70dea",
+    "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift": "07826e201476e89303cd5096b7ee25bd3888cf75ce95ea5de88a3a06c5153832",
     "Tests/InnoFlowTests/CollectionScopeCacheTests.swift": "fa9077319b417a82956e4b1b13582dc6f2c2bccbe292ec31a34c6b8192f76fb4",
     "Tests/InnoFlowTests/CompileContractTests.swift": "562d2e82a65d5ed5dbd8034d2c6fe40e07dcd377be0a4c75420fd2aae656645a",
     "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift": "eec1e9f1a6d763f94042fe55b8ecb94fd8d69a228ad67c44c1cd46a55c2df393",
     "Tests/InnoFlowTests/CompletionRelayConsistencyTests.swift": "8a5dcbff94e2ec9b86aed848fdb344f16a31dd54bc38afb32eba5fa872658d2d",
-    "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift": "a40cc603a356e99d69c2c118b153117036a4f270d578a886e9ff559beddb0203",
+    "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift": "de9670df54d9b44a04738f25e3374c4b4df1ee6ab9f385929a1604c6db029e41",
     "Tests/InnoFlowTests/DispatchDiagnosticsTests.swift": "dd5551d5727b44747695e5fb959990cea3418ae3428da32b36adbab4d0419b43",
     "Tests/InnoFlowTests/DispatchIdentityConsistencyTests.swift": "cd72d897b2487a66921a1eac6459f7b335818c40ab875f55a09a537048eb95be",
     "Tests/InnoFlowTests/EffectCancellationScopeTests.swift": "063773f942b8e6cbd240fd7b457aa9d082bbc07d4fed3f888e70a9b26cfe401a",
@@ -63,6 +65,7 @@
     "Tests/InnoFlowTests/PhaseTransitionGraphTests.swift": "aef6f5017017eda6aa0abc9f1835684895ce92b111b2a04e539f3dc1d5ff41b3",
     "Tests/InnoFlowTests/PhaseValidationReducerDiagnosticsTests.swift": "c4d4faf604b39d4b4a45e9c197ac7653c8c69ef230e61eb44a20286f75f1c632",
     "Tests/InnoFlowTests/ProjectionObserverRegistryPerfTests.swift": "5e9bb7aa5fa4e3e75aa737968f7227e019c220657f393851c933ba5a01e653c2",
+    "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift": "77ef215977a46533c6196a4be1e4b316b3ff6eb441acdee3ed55839dfa59edbe",
     "Tests/InnoFlowTests/ReducerCompositionPerfComparisonScriptTests.swift": "ce556cfe2cb0131e31a1890b4bd7f396b52b1ebd0a194f08a08b14c1c64a670a",
     "Tests/InnoFlowTests/ReducerCompositionPerfTests.swift": "6035860def54e96ba39e0caa5bd4265fa36f6e199cd50c0a03f037faf7b9f7ba",
     "Tests/InnoFlowTests/ReducerCompositionTests.swift": "ea048d8fce194c3fa1717e1f9724dff5d57ac26f4720f8b2c78783c4aafd4ee0",
@@ -72,6 +75,7 @@
     "Tests/InnoFlowTests/RuntimeConsistencyTests.swift": "0284121a4d4082e90beb9ff3024fe9fefd985cd043ce7a4a31e136b0eed45f15",
     "Tests/InnoFlowTests/SchedulerAdmissionConsistencyTests.swift": "edd836e02c275ccb7868890b94200d9efe3d1f88e46c52aa4de4c73ed55f9126",
     "Tests/InnoFlowTests/SingleScopeCacheTests.swift": "f3e561515b9bfac6d68257841d85a2a2fc75dbcd904c17924265dd361d7f4b4a",
+    "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift": "96f1391d7af6445afae14bf076b4ebcbb51b41d7afcad67fa93f0b436cad5bcb",
     "Tests/InnoFlowTests/StoreActionQueueTests.swift": "d3da7dd5c8ba412bb4fe71575de8f2b49cc4652c8cf4d874ddb729bb925b4d16",
     "Tests/InnoFlowTests/StoreEffectBridgeIsolationTests.swift": "fc998c68c090697e42447b5d16e91ded813b03e2efb7334e9a89d20ef87d3e55",
     "Tests/InnoFlowTests/StoreEffectRuntimeTests.swift": "ef3ec23ef1729afd21b443e51900a4a990e700c8b93c8960f6631d50c606e3df",
@@ -1091,6 +1095,87 @@
       "target": "InnoFlowTests"
     },
     {
+      "attribute": "@Test(arguments: [false, true], [1, 8, 32, 128])",
+      "conditionalContexts": [],
+      "displayName": "denseDirectScopesPreserveOwnerLifetimes(testing:groups:)",
+      "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+      "identifier": "CollectionMultiScopeReconciliationTests/denseDirectScopesPreserveOwnerLifetimes(testing:groups:)",
+      "line": 201,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "duplicateSlotsDoNotInflateCollectionDensity(testing:)",
+      "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+      "identifier": "CollectionMultiScopeReconciliationTests/duplicateSlotsDoNotInflateCollectionDensity(testing:)",
+      "line": 234,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "removingOneDenseScopeJoinsItsPhysicalWorkAndPreservesOthers(testing:)",
+      "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+      "identifier": "CollectionMultiScopeReconciliationTests/removingOneDenseScopeJoinsItsPhysicalWorkAndPreservesOthers(testing:)",
+      "line": 249,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true], [1, 8, 32, 128])",
+      "conditionalContexts": [],
+      "displayName": "singletonScopesNeedNoIndexAndPreserveReplacement(testing:groups:)",
+      "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+      "identifier": "CollectionMultiScopeReconciliationTests/singletonScopesNeedNoIndexAndPreserveReplacement(testing:groups:)",
+      "line": 219,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "denseDuplicatesUseFirstIdentityAndRecheckReplacement(testing:)",
+      "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+      "identifier": "CollectionReconciliationBoundaryTests/denseDuplicatesUseFirstIdentityAndRecheckReplacement(testing:)",
+      "line": 138,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true], [1, 32, 128, 512, 1_000])",
+      "conditionalContexts": [],
+      "displayName": "denseOwnersPreserveLifetimeAcrossActions(testing:count:)",
+      "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+      "identifier": "CollectionReconciliationBoundaryTests/denseOwnersPreserveLifetimeAcrossActions(testing:count:)",
+      "line": 97,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "denseSiblingCollectionsWithEqualIDsHaveDistinctIndexes(testing:)",
+      "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+      "identifier": "CollectionReconciliationBoundaryTests/denseSiblingCollectionsWithEqualIDsHaveDistinctIndexes(testing:)",
+      "line": 173,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "equalRelativeCollectionPathsUnderDistinctParentOwnersStaySeparate(testing:)",
+      "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+      "identifier": "CollectionReconciliationBoundaryTests/equalRelativeCollectionPathsUnderDistinctParentOwnersStaySeparate(testing:)",
+      "line": 232,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(\n    arguments: [false, true], [[Int](), [0], [500], [999], [0, 142, 285, 428, 571, 714, 857, 999]])",
+      "conditionalContexts": [],
+      "displayName": "sparseOwnersKeepDirectFirstLookup(testing:ids:)",
+      "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+      "identifier": "CollectionReconciliationBoundaryTests/sparseOwnersKeepDirectFirstLookup(testing:ids:)",
+      "line": 119,
+      "target": "InnoFlowTests"
+    },
+    {
       "attribute": "@Test(\"Alternating collection action paths replace only the active row family\")",
       "conditionalContexts": [],
       "displayName": "Alternating collection action paths replace only the active row family",
@@ -1588,12 +1673,39 @@
       "target": "InnoFlowTests"
     },
     {
+      "attribute": "@Test(arguments: [0, 1, 24])",
+      "conditionalContexts": [],
+      "displayName": "activeLimitPreservesLexicalIdentifierOrderAndValues(count:)",
+      "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+      "identifier": "DiagnosticsRingConsistencyTests/activeLimitPreservesLexicalIdentifierOrderAndValues(count:)",
+      "line": 23,
+      "target": "InnoFlowTests"
+    },
+    {
       "attribute": "@Test",
       "conditionalContexts": [],
       "displayName": "concurrentRecordingKeepsBoundedOrderedSnapshots()",
       "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
       "identifier": "DiagnosticsRingConsistencyTests/concurrentRecordingKeepsBoundedOrderedSnapshots()",
-      "line": 41,
+      "line": 158,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "emptyActiveSetAcceptsEveryLimit()",
+      "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+      "identifier": "DiagnosticsRingConsistencyTests/emptyActiveSetAcceptsEveryLimit()",
+      "line": 130,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "retainedActiveSnapshotSurvivesTerminationAndLaterSubmissions()",
+      "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+      "identifier": "DiagnosticsRingConsistencyTests/retainedActiveSnapshotSurvivesTerminationAndLaterSubmissions()",
+      "line": 103,
       "target": "InnoFlowTests"
     },
     {
@@ -1602,7 +1714,7 @@
       "displayName": "retainedSnapshotDoesNotChangeWhenRingWrapsAgain()",
       "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
       "identifier": "DiagnosticsRingConsistencyTests/retainedSnapshotDoesNotChangeWhenRingWrapsAgain()",
-      "line": 23,
+      "line": 140,
       "target": "InnoFlowTests"
     },
     {
@@ -1612,6 +1724,15 @@
       "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
       "identifier": "DiagnosticsRingConsistencyTests/ringPreservesChronologyAndExactDiscardCount(capacity:)",
       "line": 7,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "singleActiveDispatchPreservesEveryValueAndLimit()",
+      "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+      "identifier": "DiagnosticsRingConsistencyTests/singleActiveDispatchPreservesEveryValueAndLimit()",
+      "line": 70,
       "target": "InnoFlowTests"
     },
     {
@@ -4063,6 +4184,33 @@
       "target": "InnoFlowTests"
     },
     {
+      "attribute": "@Test(arguments: [false, true], [false, true])",
+      "conditionalContexts": [],
+      "displayName": "emptyDependencyPackCreatedDuringReductionKeepsItsAlwaysRefreshContract(changed:animated:)",
+      "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+      "identifier": "ProjectionRegistrationBoundaryTests/emptyDependencyPackCreatedDuringReductionKeepsItsAlwaysRefreshContract(changed:animated:)",
+      "line": 93,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [0, 1])",
+      "conditionalContexts": [],
+      "displayName": "lateDependencyNeedsThePreMutationValueEvenWhenFinalValuesMatch(initial:)",
+      "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+      "identifier": "ProjectionRegistrationBoundaryTests/lateDependencyNeedsThePreMutationValueEvenWhenFinalValuesMatch(initial:)",
+      "line": 123,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: RegistrationBoundaryKind.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "latePackageRegistrationPreservesOldAndNewSnapshots(kind:changed:)",
+      "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+      "identifier": "ProjectionRegistrationBoundaryTests/latePackageRegistrationPreservesOldAndNewSnapshots(kind:changed:)",
+      "line": 42,
+      "target": "InnoFlowTests"
+    },
+    {
       "attribute": "@Test(\"Reducer perf comparison fails when per-iteration metric is malformed\")",
       "conditionalContexts": [],
       "displayName": "Reducer perf comparison fails when per-iteration metric is malformed",
@@ -4681,6 +4829,102 @@
       "file": "Tests/InnoFlowTests/SingleScopeCacheTests.swift",
       "identifier": "SingleScopeCacheTests/separatesEveryIdentityDimension()",
       "line": 64,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true], [false, true])",
+      "availabilityAttributes": [
+        "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+      ],
+      "conditionalContexts": [
+        "#if compiler(>=6.4)"
+      ],
+      "displayName": "didSetPrecedesProjectionRefresh(animated:observed:)",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/didSetPrecedesProjectionRefresh(animated:observed:)",
+      "line": 248,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "availabilityAttributes": [
+        "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+      ],
+      "conditionalContexts": [
+        "#if compiler(>=6.4)"
+      ],
+      "displayName": "didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()",
+      "line": 280,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true], [false, true])",
+      "availabilityAttributes": [
+        "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+      ],
+      "conditionalContexts": [
+        "#if compiler(>=6.4)"
+      ],
+      "displayName": "didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)",
+      "line": 304,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "optionalNilIsARealSnapshotForDependencyComparison(animated:)",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/optionalNilIsARealSnapshotForDependencyComparison(animated:)",
+      "line": 220,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "reentrantObservationQueuesAfterTheCurrentProjectionRefresh(animated:)",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/reentrantObservationQueuesAfterTheCurrentProjectionRefresh(animated:)",
+      "line": 167,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "releasedAndLaterRegisteredSelectionsSeeCurrentValues(animated:)",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/releasedAndLaterRegisteredSelectionsSeeCurrentValues(animated:)",
+      "line": 203,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "retainedSelectedAndScopedValuesKeepTheirSnapshots(animated:)",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/retainedSelectedAndScopedValuesKeepTheirSnapshots(animated:)",
+      "line": 98,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "rootObservationPrecedesMutationWithoutProjections(animated:)",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/rootObservationPrecedesMutationWithoutProjections(animated:)",
+      "line": 73,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true], [false, true])",
+      "conditionalContexts": [],
+      "displayName": "willSetRegistrationPreservesChangedAndUnchangedDependencies(animated:changedDependency:)",
+      "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+      "identifier": "SnapshotBoundaryConsistencyTests/willSetRegistrationPreservesChangedAndUnchangedDependencies(animated:changedDependency:)",
+      "line": 129,
       "target": "InnoFlowTests"
     },
     {

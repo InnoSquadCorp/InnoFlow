@@ -36,6 +36,36 @@ class FocusedRuntimeTests(unittest.TestCase):
             for item in self.inventory["expectedTestIdentifiers"]
         ]}
 
+    def test_compiler_conditional_selection_keeps_exact_discovery_and_results(self):
+        conditional = self.inventory["expectedTestIdentifiers"][0]
+        self.inventory["conditionalContextsByIdentifier"] = {conditional: ["#if compiler(>=6.4)"]}
+        for version in ("6.3", "6.4"):
+            with self.subTest(version=version):
+                discovery = copy.deepcopy(self.discovery)
+                tests = copy.deepcopy(self.tests)
+                summary = copy.deepcopy(self.summary)
+                if version == "6.3":
+                    discovery["values"][0]["enabledTests"].pop(0)
+                    tests["tests"].pop(0)
+                    summary.update(totalTestCount=1, passedTests=1)
+                output = "Apple Swift version " + version + ".0 (swiftlang-fixture)"
+                self.assertEqual(RUNTIME.validate_discovery(self.inventory, discovery, output)[0], [])
+                self.assertEqual(RUNTIME.validate(self.inventory, summary, tests, output)[0], [])
+                wrong = "Swift version " + ("6.4" if version == "6.3" else "6.3")
+                self.assertTrue(RUNTIME.validate_discovery(self.inventory, discovery, wrong)[0])
+                self.assertTrue(RUNTIME.validate(self.inventory, summary, tests, wrong)[0])
+
+    def test_conditional_inventory_rejects_unknown_conditions_and_missing_compiler(self):
+        conditional = self.inventory["expectedTestIdentifiers"][0]
+        for contexts in (["#if compiler(>=6.4)"], ["#if canImport(FutureKit)"],
+                         ["#elseif compiler(>=6.4)"], ["#else "], [], None, "#if compiler(>=6.4)"):
+            with self.subTest(contexts=contexts):
+                self.inventory["conditionalContextsByIdentifier"] = {conditional: contexts}
+                self.assertTrue(RUNTIME.validate_discovery(self.inventory, self.discovery)[0])
+                self.assertTrue(RUNTIME.validate(self.inventory, self.summary, self.tests)[0])
+        self.inventory["conditionalContextsByIdentifier"] = {"OtherTests/phantom()": ["#if compiler(>=6.4)"]}
+        self.assertTrue(RUNTIME.validate_inventory(self.inventory))
+
     def test_complete_discovery_and_results_pass(self):
         self.assertEqual(RUNTIME.validate_discovery(self.inventory, self.discovery)[0], [])
         self.assertEqual(RUNTIME.validate(self.inventory, self.summary, self.tests), ([], 2))

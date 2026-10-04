@@ -312,6 +312,39 @@ one previously nonexistent result bundle through `-resultBundlePath` (or the
 accessibility runner's `--result-bundle-path`) matching `--raw-artifact`; an old
 xcresult cannot be attached to a new successful command.
 
+Source test inventories retain every declaration and its AST `conditionalContexts`,
+including compiler-inactive declarations; parameterized tests count once. Regenerate
+`swift-test-inventory.json` with `scripts/report-swift-test-inventory.sh` after the
+final test sources change. The focused inventory preserves the reviewed union plus
+`conditionalContextsByIdentifier`, copied exactly from those source declarations.
+Its discovery and result validators select the exact active set using the captured
+Swift compiler version. Receipt recording and verification also compare the full
+compiler identity in the execution log with the receipt toolchain. Swift 6.3 and
+6.4 host counts are distinct when declarations require `compiler(>=6.4)`;
+`full-principle` uses `2 * Swift-6.4-declarations + 1` with its unchanged five runs.
+Unknown conditions or compiler identities fail closed. Runtime OS versions cannot
+substitute for compiler identity, and regenerated inventories are never execution
+receipts or permission to change focused suites, diagnostic outcomes or run counts.
+
+The three compiler-6.4 Observation didSet declarations also require OS 27 APIs.
+They carry function-level `@available` attributes, preserved in the AST inventory,
+and the exact `observation-didset-os27` capability is pinned by test identifier.
+Focused runs resolve their actual simulator device/runtime before discovery and
+compare it with the raw xcresult device identity. The reviewed legacy runtimes
+must report those three declarations as `Skipped`; OS 27 must report each as
+`Passed`. Missing IDs, empty legacy passes, modern skips, other skips and unknown
+runtime identities fail closed. Receipts report executed and unavailable counts
+separately while retaining the complete compiled declaration count and the two
+existing diagnostic outcomes. Native discovery/result schemas remain subject to
+fresh Apple CI validation; synthetic fixtures are only tooling tests.
+
+The Swift 6.4 host and full-principle receipts require captured actual macOS 27.0
+identity from `sw_vers`, regardless of runner label. They retain the ordinary
+Swift-output skip prohibition and require each didSet declaration to complete
+once (host) or twice (full-principle). A future host without that runtime blocks
+these required checks. An aggregate Swift Testing "tests passed" line is never
+proof that an unavailable test body ran.
+
 The producer does not manufacture preflight evidence. Required command results
 and raw artifacts must come from the successful exact-SHA main CI run. The
 producer adds only the exact-tag baseline and explicit dispatch approval. The

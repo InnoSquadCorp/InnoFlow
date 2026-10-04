@@ -15,7 +15,7 @@ repo="$fixture_root/repo"
 evidence="$fixture_root/evidence"
 mkdir -p "$repo/scripts" "$repo/docs/contracts"
 for script in run-release-preflight.sh run-release-preflight.rb release-runtime-catalog.rb release-candidate-snapshot.rb \
-  release-evidence-tool.rb release-evidence-output-parser.rb record-release-evidence.sh \
+  release-evidence-tool.rb release-evidence-output-parser.rb swift-test-conditions.rb swift_test_conditions.py record-release-evidence.sh \
   verify-release-evidence.sh; do
   cp "$script_dir/$script" "$repo/scripts/$script"
 done
