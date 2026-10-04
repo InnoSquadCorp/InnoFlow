@@ -6,6 +6,16 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 PACKAGE="${INNOFLOW_CONSUMER_PACKAGE_PATH:-$ROOT}"
 JOBS="${INNOFLOW_CONSUMER_JOBS:-1}"
+# Swift's Apple build driver may color diagnostics even in redirected output.
+# Preserve the raw log and normalize only terminal escapes before exact matching.
+plain_diagnostics() {
+  python3 - "$1" <<'PY'
+import re
+import sys
+from pathlib import Path
+print(re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', Path(sys.argv[1]).read_text()), end='')
+PY
+}
 INNOFLOW_CONSUMER_PACKAGE_PATH="$PACKAGE" INNOFLOW_COLLECTION_CONSUMER_NEGATIVE=0 \
   swift run --package-path "$FIXTURE" --scratch-path "$TMP/build" --jobs "$JOBS" \
   -Xswiftc -warnings-as-errors Consumer >"$TMP/positive.log" 2>&1 \
@@ -17,8 +27,9 @@ if INNOFLOW_CONSUMER_PACKAGE_PATH="$PACKAGE" INNOFLOW_COLLECTION_CONSUMER_NEGATI
   echo "error: previous IfCaseLet initializer function unexpectedly compiled" >&2
   exit 1
 fi
-if ! grep -Eq "PreviousInitializer.swift:.*error: cannot convert value of type" "$TMP/negative.log" \
-  || ! grep -q "StaticString" "$TMP/negative.log"; then
+plain_diagnostics "$TMP/negative.log" >"$TMP/negative.plain.log"
+if ! grep -Eq "PreviousInitializer.swift:.*error: cannot convert value of type" "$TMP/negative.plain.log" \
+  || ! grep -q "StaticString" "$TMP/negative.plain.log"; then
   cat "$TMP/negative.log" >&2
   echo "error: initializer consumer failed for an unrelated reason" >&2
   exit 1
@@ -33,8 +44,9 @@ for boundary in scope iflet foreach identified optional phase; do
       echo "error: $boundary accepted a $kind non-Sendable key path" >&2
       exit 1
     fi
+    plain_diagnostics "$TMP/$boundary-$kind.log" >"$TMP/$boundary-$kind.plain.log"
     if ! grep -Eq "NonSendableKeyPath.swift:.*error:.*does not conform to the 'Sendable' protocol" \
-      "$TMP/$boundary-$kind.log"; then
+      "$TMP/$boundary-$kind.plain.log"; then
       cat "$TMP/$boundary-$kind.log" >&2
       echo "error: $boundary $kind consumer failed for an unrelated reason" >&2
       exit 1
