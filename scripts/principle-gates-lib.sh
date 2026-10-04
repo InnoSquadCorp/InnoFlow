@@ -1348,6 +1348,10 @@ run_independent_consumer_checks() {
   run_logged_gate_command "Dispatch identity consumer" run_low_priority env \
     INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
     "$SCRIPT_DIR/check-dispatch-identity-consumer.sh"
+  echo "[principle-gates] Checking the independent effect execution consumer"
+  run_logged_gate_command "Effect execution consumer" run_low_priority env \
+    INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-effect-execution-consumer.sh"
   echo "[principle-gates] Checking the independent collection lifetime consumer"
   run_logged_gate_command "Collection lifetime consumer" run_low_priority env \
     INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
@@ -1375,10 +1379,6 @@ run_release_build_checks() {
     --jobs "$SWIFTPM_JOBS" \
     --no-parallel \
     -Xswiftc -warnings-as-errors
-
-  echo "[principle-gates] Checking the independent effect execution consumer"
-  run_low_priority env INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" \
-    INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" "$SCRIPT_DIR/check-effect-execution-consumer.sh"
 
   run_independent_consumer_checks
   run_release_configuration_checks

@@ -3,6 +3,13 @@
 2026-10-03. 이 문서는 검증 도구 수정과 소스 기대 목록을 기록한다.
 수정 후보의 Apple 실행 결과 또는 릴리스 승인서는 아니다.
 
+> 아래 수치와 실행 상태는 `99a68db` 당시의 역사적 기록이다. 이후 `1545318`에서
+> animated lifetime 회귀 선언 2개(총 6개 parameter case)를 추가하여 `0c693e2`의
+> 소스 기대값은 host 955, full-principle 1,911, focused 308로 갱신했다.
+> 이는 Apple 실행 결과가 아니며, 최신 정책과 inventory 파일이 현재 기대값의 기준이다.
+> 이 문서 이후 Ready PR 게시와 Apple CI 검증이 시작되었으므로 마지막 절의 미게시 상태도
+> 작성 당시를 나타낸다.
+
 ## 기존 main 실행: 21 PASS / 11 FAIL
 
 대상은 [Release Preflight 37120540957](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37120540957),

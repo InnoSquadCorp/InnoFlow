@@ -14,7 +14,7 @@ echo level-one >>"$ROOT_DIR/order"
 echo level-one-output
 [[ "${CONSUMER_FAILURE:-}" != level-one ]]
 STUB
-for entry in test-dispatch dispatch-identity collection-lifetime; do
+for entry in test-dispatch dispatch-identity effect-execution collection-lifetime; do
   cat >"$root/scripts/check-$entry-consumer.sh" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -45,10 +45,10 @@ STUB
 chmod +x "$root/scripts/check-level-one-consumer.sh" "$root/scripts/check-swiftui-consumer.sh" "$root/Tools/innoflow-migrate/scripts/check.sh"
 export ROOT_DIR="$root" PRINCIPLE_GATES_NICE=0 PRINCIPLE_GATES_SWIFTPM_JOBS=1
 "$root/scripts/check-independent-consumers.sh" >"$root/pass.log" 2>&1
-[[ "$(cat "$root/order")" == $'level-one\ntest-dispatch\ndispatch-identity\ncollection-lifetime\nswiftui\ncodemod' ]]
+[[ "$(cat "$root/order")" == $'level-one\ntest-dispatch\ndispatch-identity\neffect-execution\ncollection-lifetime\nswiftui\ncodemod' ]]
 # The successful nested Swift Testing log must stay outside root-suite counts.
-! grep -E 'level-one-output|test-dispatch-output|dispatch-identity-output|collection-lifetime-output|swiftui-output|codemod-output' "$root/pass.log" >/dev/null
-for failure in level-one test-dispatch dispatch-identity collection-lifetime swiftui codemod; do
+! grep -E 'level-one-output|test-dispatch-output|dispatch-identity-output|effect-execution-output|collection-lifetime-output|swiftui-output|codemod-output' "$root/pass.log" >/dev/null
+for failure in level-one test-dispatch dispatch-identity effect-execution collection-lifetime swiftui codemod; do
   : >"$root/order"
   if CONSUMER_FAILURE="$failure" "$root/scripts/check-independent-consumers.sh" >"$root/fail.log" 2>&1; then
     echo "[independent-consumers-selftest] Masked $failure failure" >&2
