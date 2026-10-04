@@ -55,6 +55,7 @@
     "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift": "bd775af281557749d380acaa10b6dacedee5428f7850501d2c9520001ee943e9",
     "Tests/InnoFlowTests/OutputCasePathTests.swift": "6d79858842554f72e1fb731b5d8d7a37ce0fe6caf370d57049c0f041cddbbd3d",
     "Tests/InnoFlowTests/OutputPromotionTests.swift": "b064880b01077fd5cdf58531a68f799c21999f7c7329056a365bdfbb0334d0d6",
+    "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift": "3860488a93f5059a7b4304a907abbd278e5208aeef034114b230f28a4abb8d4b",
     "Tests/InnoFlowTests/PerformanceSemanticsConsistencyTests.swift": "4535b90a7f8b18f2da24e2d287a60e3a7e9c47b0d59aee0484e28a33047ef3e5",
     "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift": "9979586a0f1be97bc2c63ad7c3d3735787baa28e40f9a335dcb26343fd01cf9d",
     "Tests/InnoFlowTests/PhaseMapDiagnosticsAdaptersTests.swift": "f0a7ffb10c41d0b5ecf3c4af5b49956d863c4a1834f42cd1fb4830df8b489ee1",
@@ -3438,6 +3439,132 @@
       "file": "Tests/InnoFlowTests/OutputPromotionTests.swift",
       "identifier": "OutputPromotionTests/promotesChildAndEffect()",
       "line": 8,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "childFollowupRunKeepsOwnerAndJoinsPhysicalCancellation(useTestStore:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/childFollowupRunKeepsOwnerAndJoinsPhysicalCancellation(useTestStore:)",
+      "line": 477,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "directOutputIsCapturedAndObservedBeforeReturn(managed:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/directOutputIsCapturedAndObservedBeforeReturn(managed:)",
+      "line": 154,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "directSendDrainsBeforeReturnAndBeforeIndependentActions(managed:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/directSendDrainsBeforeReturnAndBeforeIndependentActions(managed:)",
+      "line": 140,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "discardedHandlesStillDrainSynchronously()",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/discardedHandlesStillDrainSynchronously()",
+      "line": 175,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "explicitCompositeKeepsAsynchronousScheduling(parallel:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/explicitCompositeKeepsAsynchronousScheduling(parallel:)",
+      "line": 239,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "nestedOwnersAndEqualIdentitySiblingsKeepSynchronousFollowups(useTestStore:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/nestedOwnersAndEqualIdentitySiblingsKeepSynchronousFollowups(useTestStore:)",
+      "line": 374,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "observationCancellationPreservesImmediateEmissionThenQueueDrop(managed:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/observationCancellationPreservesImmediateEmissionThenQueueDrop(managed:)",
+      "line": 448,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "parentFollowupsKeepIndependentLifetimeAfterChildClose(useTestStore:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/parentFollowupsKeepIndependentLifetimeAfterChildClose(useTestStore:)",
+      "line": 284,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: SynchronousOwnerChange.allCases)",
+      "conditionalContexts": [],
+      "displayName": "reentrantCloseOrReplacementDropsQueuedOldOwner(change:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/reentrantCloseOrReplacementDropsQueuedOldOwner(change:)",
+      "line": 210,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "sameReductionCloseObservesSuppressedSendAndOutput()",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/sameReductionCloseObservesSuppressedSendAndOutput()",
+      "line": 186,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testStoreAutomaticDrainPreservesParentIndependence()",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreAutomaticDrainPreservesParentIndependence()",
+      "line": 325,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testStoreDirectOutputAndSameReductionSuppression()",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreDirectOutputAndSameReductionSuppression()",
+      "line": 269,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "testStoreDirectSendRetainsDispatchUntilReceive(managed:)",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreDirectSendRetainsDispatchUntilReceive(managed:)",
+      "line": 249,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testStoreScopedReceivePreservesParentIndependence()",
+      "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+      "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreScopedReceivePreservesParentIndependence()",
+      "line": 416,
       "target": "InnoFlowTests"
     },
     {

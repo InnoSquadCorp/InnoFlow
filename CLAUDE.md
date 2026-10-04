@@ -87,6 +87,9 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
 7. InnoFlow owns business/domain transitions only.
 8. `Store.send(_:)` returns a `FlowTask`; action-tree waiting and cancellation
    must remain scoped to the originating dispatch.
+   Optional-child ownership metadata must preserve bare send/output synchronous
+   scheduling. A queued child action retains its owner through admission, while
+   parent effects returned after admission remain independently owned.
    Recheck dispatch cancellation before reducing queued actions and delivering
    immediate outputs; already-applied state changes are not rolled back.
 9. Reducer `Output` is typed and ephemeral. Persisted or renderable data stays

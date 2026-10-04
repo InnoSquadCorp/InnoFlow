@@ -530,6 +530,8 @@ run_authoring_surface_checks() {
   search_lines "public typealias TestFlowTask = TestStoreDispatch" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null
 
   search_lines "public struct OptionalChildLifetime" Sources/InnoFlowCore/OptionalChildLifetime.swift >/dev/null
+  search_lines "func directSendDrainsBeforeReturnAndBeforeIndependentActions" Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null
+  search_lines "func parentFollowupsKeepIndependentLifetimeAfterChildClose" Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null
   search_lines "func reusedReducerInDifferentScopesHasIndependentLifetimes" Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift >/dev/null
 
   python3 scripts/check-testing-contracts.py

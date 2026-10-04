@@ -265,6 +265,14 @@ guarantees two things before returning:
    an unstructured `Task`, but the body of that task has not necessarily started
    yet.
 
+Lifetime ownership metadata does not introduce a scheduling boundary. A bare
+child `.send` or output stays synchronous through `optionalChild`; emitted
+actions retain the captured owner until queue admission. Reentrant removal or
+replacement can reject that queued action with the normal drop observation.
+Once an action is admitted, the new reducer composition determines ownership:
+parent effects outside the child wrapper remain independent. Explicit merge,
+concatenate and run operations keep their asynchronous scheduling semantics.
+
 `FlowTask.finish()` then waits until every effect and follow-up action descended
 from that dispatch becomes idle. `FlowTask.cancel()` requests cancellation only
 for that tree; it does not cancel work started by another send. Cancellation

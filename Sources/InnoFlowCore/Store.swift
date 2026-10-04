@@ -201,31 +201,42 @@ public final class Store<R: Reducer> {
     sequence: UInt64,
     flowTaskTracker: FlowTaskTracker?
   ) {
+    let context: EffectExecutionContext
     switch effect.operation {
     case .none:
       return
-
-    case .send(let action):
-      recordEmission(
-        action,
-        context: .unmanaged(sequence: sequence, flowTaskTracker: flowTaskTracker)
-      )
-      enqueue(action, animation: nil, flowTaskTracker: flowTaskTracker)
-
-    case .output(let output):
-      deliverOutput(
-        output,
-        context: .unmanaged(sequence: sequence, flowTaskTracker: flowTaskTracker)
-      )
-
+    case .send, .output:
+      context = .unmanaged(sequence: sequence, flowTaskTracker: flowTaskTracker)
     default:
       // The scope and interpreter lease are registered synchronously before
       // the root Task can race with store-level cancellation.
-      let context = effectBridge.makeEffectContext(
+      context = effectBridge.makeEffectContext(
         sequence: sequence,
         potentialCancellationIDs: effect.potentialCancellationIDs,
         flowTaskTracker: flowTaskTracker
       )
+    }
+    executeEffect(effect, context: context)
+  }
+
+  private func executeEffect(
+    _ effect: ReducerEffect<R.Action, R.Output>,
+    context: EffectExecutionContext
+  ) {
+    switch effect.operation {
+    case .none:
+      return
+    case .owned(let owner, let nested):
+      // Ownership is metadata, not a scheduling boundary. Keep the immediate
+      // emission and queue cancellation checks of the wrapped effect.
+      executeEffect(nested, context: .withOwner(owner, on: context))
+    case .send(let action):
+      recordEmission(action, context: context)
+      enqueue(action, animation: nil, flowTaskTracker: context.flowTaskTracker, context: context)
+    case .output(let output):
+      deliverOutput(output, context: context)
+    default:
+      let flowTaskTracker = context.flowTaskTracker
       let activity = flowTaskTracker?.beginActivity()
       let predecessor = rootEffectInterpreterTail
       let task = Task { @MainActor [weak self, weak flowTaskTracker] in

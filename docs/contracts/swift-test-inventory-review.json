@@ -1270,5 +1270,139 @@
     "sourceInventory": "docs/contracts/sample-test-inventory.json",
     "sourceInventorySha256": "3254db04feeefd4f290d2ae379d15cfcca1659e86c2914a64e6c461446c2ee85",
     "scope": "One declaration with cancelledBeforeStart/superseded parameter cases preserves another running sync. Exact source expectations; Apple execution is separate."
+  },
+  "ownedSynchronousRegression": {
+    "baseCount": 955,
+    "finalCount": 969,
+    "fullPrincipleCount": 1939,
+    "added": [
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "childFollowupRunKeepsOwnerAndJoinsPhysicalCancellation(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/childFollowupRunKeepsOwnerAndJoinsPhysicalCancellation(useTestStore:)",
+        "line": 477,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "directOutputIsCapturedAndObservedBeforeReturn(managed:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/directOutputIsCapturedAndObservedBeforeReturn(managed:)",
+        "line": 154,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "directSendDrainsBeforeReturnAndBeforeIndependentActions(managed:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/directSendDrainsBeforeReturnAndBeforeIndependentActions(managed:)",
+        "line": 140,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "discardedHandlesStillDrainSynchronously()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/discardedHandlesStillDrainSynchronously()",
+        "line": 175,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "explicitCompositeKeepsAsynchronousScheduling(parallel:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/explicitCompositeKeepsAsynchronousScheduling(parallel:)",
+        "line": 239,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "nestedOwnersAndEqualIdentitySiblingsKeepSynchronousFollowups(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/nestedOwnersAndEqualIdentitySiblingsKeepSynchronousFollowups(useTestStore:)",
+        "line": 374,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "observationCancellationPreservesImmediateEmissionThenQueueDrop(managed:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/observationCancellationPreservesImmediateEmissionThenQueueDrop(managed:)",
+        "line": 448,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "parentFollowupsKeepIndependentLifetimeAfterChildClose(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/parentFollowupsKeepIndependentLifetimeAfterChildClose(useTestStore:)",
+        "line": 284,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: SynchronousOwnerChange.allCases)",
+        "conditionalContexts": [],
+        "displayName": "reentrantCloseOrReplacementDropsQueuedOldOwner(change:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/reentrantCloseOrReplacementDropsQueuedOldOwner(change:)",
+        "line": 210,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "sameReductionCloseObservesSuppressedSendAndOutput()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/sameReductionCloseObservesSuppressedSendAndOutput()",
+        "line": 186,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "testStoreAutomaticDrainPreservesParentIndependence()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreAutomaticDrainPreservesParentIndependence()",
+        "line": 325,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "testStoreDirectOutputAndSameReductionSuppression()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreDirectOutputAndSameReductionSuppression()",
+        "line": 269,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "testStoreDirectSendRetainsDispatchUntilReceive(managed:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreDirectSendRetainsDispatchUntilReceive(managed:)",
+        "line": 249,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "testStoreScopedReceivePreservesParentIndependence()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreScopedReceivePreservesParentIndependence()",
+        "line": 416,
+        "target": "InnoFlowTests"
+      }
+    ],
+    "evidence": "Source recovered byte-exact after environment transition. Fresh strict Linux run37 tests/4suites, before-control3 declarations fails14 assertions. Earlier219/20 and independent32/4 historical results retain summaries only; final Apple execution required."
   }
 }
