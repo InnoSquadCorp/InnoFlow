@@ -64,9 +64,14 @@ extension TestStore {
     for message in observation.violations {
       issueReporter(message, location)
     }
-    let effect = childLifetimeRegistry.prepare(reduced, state: state) { id in
-      let sequence = markCancelled(id: id)
-      cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
+    let effect: ReducerEffect<R.Action, R.Output>
+    if childLifetimeRegistry.requiresPreparation(for: reduced) {
+      effect = childLifetimeRegistry.prepare(reduced, state: state) { id in
+        let sequence = markCancelled(id: id)
+        cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
+      }
+    } else {
+      effect = reduced
     }
     checkInvariants(
       previousState: previousState,

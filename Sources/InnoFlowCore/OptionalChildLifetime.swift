@@ -283,12 +283,20 @@ package final class ChildLifetimeRegistry {
     return count(roots)
   }
 
+  /// Check before materializing State at the call site. Existing owners still
+  /// need final-state reconciliation even when this effect carries no metadata.
+  package func requiresPreparation<Action, Output>(
+    for effect: ReducerEffect<Action, Output>
+  ) -> Bool {
+    effect.containsLifetimeMetadata || !roots.isEmpty
+  }
+
   package func prepare<Action, Output, State>(
     _ effect: ReducerEffect<Action, Output>,
     state: State,
     invalidate: (AnyEffectID) -> Void
   ) -> ReducerEffect<Action, Output> {
-    guard effect.containsLifetimeMetadata || !roots.isEmpty else { return effect }
+    guard requiresPreparation(for: effect) else { return effect }
     let prepared =
       effect.containsLifetimeMetadata
       ? prepare(effect, parent: nil, path: [], invalidate: invalidate) : effect

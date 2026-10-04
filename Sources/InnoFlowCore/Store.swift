@@ -326,18 +326,22 @@ public final class Store<R: Reducer> {
         var animatedEffect: ReducerEffect<R.Action, R.Output> = .none
         animation.perform {
           animatedEffect = withMutation(keyPath: stateKeyPath) {
-            effectBridge.prepareLifetimes(
-              reducer.reduce(into: &storedState, action: queuedAction.action), state: storedState
-            )
+            let reduced = reducer.reduce(into: &storedState, action: queuedAction.action)
+            guard effectBridge.childLifetimeRegistry.requiresPreparation(for: reduced) else {
+              return reduced
+            }
+            return effectBridge.prepareLifetimes(reduced, state: storedState)
           }
           observerRegistry.refresh(from: previousState, to: storedState)
         }
         effect = animatedEffect
       } else {
         effect = withMutation(keyPath: stateKeyPath) {
-          effectBridge.prepareLifetimes(
-            reducer.reduce(into: &storedState, action: queuedAction.action), state: storedState
-          )
+          let reduced = reducer.reduce(into: &storedState, action: queuedAction.action)
+          guard effectBridge.childLifetimeRegistry.requiresPreparation(for: reduced) else {
+            return reduced
+          }
+          return effectBridge.prepareLifetimes(reduced, state: storedState)
         }
         observerRegistry.refresh(from: previousState, to: storedState)
       }
