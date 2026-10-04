@@ -9,6 +9,8 @@ on:
       - 'Package.swift'
       - 'Package.resolved'
       - '.github/workflows/benchmark-trend.yml'
+      - 'scripts/select-swift-release-toolchain.py'
+      - 'scripts/tests/test_swift_release_toolchain.py'
 
 permissions:
   contents: read
@@ -42,7 +44,9 @@ jobs:
           persist-credentials: false
 
       - name: Check cohort integrity controls
-        run: python3 -B Benchmarks/trend.py --self-test
+        run: |
+          python3 -B Benchmarks/trend.py --self-test
+          python3 -B -m unittest discover -s scripts/tests -p test_swift_release_toolchain.py
 
       - name: Verify and select official Swift 6.4.0 toolchain
         # Xcode 26.6 supplies the SDK; TCA 1.26.2 requires Swift tools 6.4.
@@ -97,40 +101,11 @@ jobs:
           installer -target CurrentUserHomeDirectory -pkg "$pkg" \
             2>&1 | tee "$TOOLCHAIN_EVIDENCE/installer.txt"
           TOOLCHAIN_STAGE=selection
-          python3 -B - <<'PY'
-          import json, os, plistlib, re, shutil, subprocess
-          from pathlib import Path
-          evidence = Path(os.environ["TOOLCHAIN_EVIDENCE"])
-          matches, inventory = [], []
-          root = Path.home() / "Library/Developer/Toolchains"
-          for info in sorted(root.glob("*.xctoolchain/Info.plist")):
-              swift = info.parent / "usr/bin/swift"
-              if not swift.is_file():
-                  continue
-              result = subprocess.run([str(swift), "--version"], capture_output=True, text=True, timeout=30)
-              entry = {"path": str(info.parent), "stdout": result.stdout, "stderr": result.stderr,
-                       "returncode": result.returncode}
-              inventory.append(entry)
-              if (result.returncode == 0
-                  and re.search(r"\bSwift version 6\.4(?:\.0)?(?:\s|\()", result.stdout)
-                  and re.search(r"\(swift-6\.4(?:\.0)?-RELEASE(?:[ )])", result.stdout)):
-                  matches.append((info, entry))
-          (evidence / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
-          if len(matches) != 1:
-              raise SystemExit("Expected exactly one installed official Swift 6.4.0 release toolchain")
-          info, entry = matches[0]
-          identifier = plistlib.loads(info.read_bytes())["CFBundleIdentifier"]
-          if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", identifier):
-              raise SystemExit("Invalid installed toolchain identifier")
-          shutil.copyfile(info, evidence / "selected-Info.plist")
-          (evidence / "selected.json").write_text(json.dumps({**entry, "identifier": identifier}, indent=2) + "\n")
-          (evidence / "identifier.txt").write_text(identifier + "\n")
-          (evidence / "bin-path.txt").write_text(str(info.parent / "usr/bin") + "\n")
-          with Path(os.environ["GITHUB_ENV"]).open("a") as stream:
-              stream.write("TOOLCHAINS=" + identifier + "\n")
-          with Path(os.environ["GITHUB_PATH"]).open("a") as stream:
-              stream.write(str(info.parent / "usr/bin") + "\n")
-          PY
+          # The installer may expose swift-latest as an alias of the same bundle.
+          # Resolve aliases; distinct physical matching installations still fail.
+          python3 -B scripts/select-swift-release-toolchain.py \
+            --root "$HOME/Library/Developer/Toolchains" \
+            --evidence "$TOOLCHAIN_EVIDENCE"
           export TOOLCHAINS="$(cat "$TOOLCHAIN_EVIDENCE/identifier.txt")"
           export PATH="$(cat "$TOOLCHAIN_EVIDENCE/bin-path.txt"):$PATH"
           swift --version 2>&1 | tee "$TOOLCHAIN_EVIDENCE/selected-swift-version.txt"

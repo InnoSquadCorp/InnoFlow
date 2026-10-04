@@ -39,9 +39,9 @@ outputs without reordering either queue or affecting siblings. Receive those
 values, then call it again. Timeout or caller cancellation cancels only the
 selected dispatch; a cancellation-resistant operation remains unfinished until
 it physically returns. A handle and a pending task verification do not retain
-the store. ``FlowScope`` can explicitly track a testing handle using the same
-Core dispatch ownership; scope closure joins runtime cancellation and does not
-replace test assertions.
+the store. `InnoFlowCore.FlowScope` can explicitly track a testing handle using
+the same Core dispatch ownership; scope closure joins runtime cancellation and
+does not replace test assertions.
 
 Use the global `await store.finish()` for terminal verification. Exhaustive
 verification reports actions and outputs from one snapshot with exact counts

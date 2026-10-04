@@ -6,9 +6,11 @@ module ReleaseEvidenceOutputParser
   RUN_START = /#{EVENT_PREFIX}Test run started\.(?:\s|$)/i
   RUN_SUMMARY = /#{EVENT_PREFIX}Test run with ([0-9]+) tests?(?: in ([0-9]+) suites?)? (passed|failed)(?: after|\.|$)/i
   TEST_QUOTED_START = /#{EVENT_PREFIX}Test "(.*)"(?: with ([0-9]+) test cases?)? started\.(?:\s|$)/i
-  TEST_UNQUOTED_START = /#{EVENT_PREFIX}Test (?!(?:run|Suite|Case|"))(.*?)(?: with ([0-9]+) test cases?)? started\.(?:\s|$)/i
+  # Exclude reserved event words, not Swift identifiers that begin with them
+  # (for example runLaneSnapshotProvider() or CaseExtraction()).
+  TEST_UNQUOTED_START = /#{EVENT_PREFIX}Test (?!(?:run|Suite|Case)(?:\s|$)|")(.*?)(?: with ([0-9]+) test cases?)? started\.(?:\s|$)/i
   TEST_QUOTED_TERMINAL = /#{EVENT_PREFIX}Test "(.*)"(?: with ([0-9]+) test cases?)? (passed|failed|skipped|cancelled)(?: after| because|:|\.|$)/i
-  TEST_UNQUOTED_TERMINAL = /#{EVENT_PREFIX}Test (?!(?:run|Suite|Case|"))(.*?)(?: with ([0-9]+) test cases?)? (passed|failed|skipped|cancelled)(?: after| because|:|\.|$)/i
+  TEST_UNQUOTED_TERMINAL = /#{EVENT_PREFIX}Test (?!(?:run|Suite|Case)(?:\s|$)|")(.*?)(?: with ([0-9]+) test cases?)? (passed|failed|skipped|cancelled)(?: after| because|:|\.|$)/i
   TEST_CASE_START = /#{EVENT_PREFIX}Test case .* to "(.*)" started\.(?:\s|$)/i
   SUITE_QUOTED_START = /#{EVENT_PREFIX}Suite "(.*)" started\.(?:\s|$)/i
   SUITE_UNQUOTED_START = /#{EVENT_PREFIX}Suite (?!(?:"))(.*?) started\.(?:\s|$)/i

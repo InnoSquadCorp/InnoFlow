@@ -47,7 +47,7 @@
     "Tests/InnoFlowTests/ForEachIdentifiedReducerTests.swift": "ae96fb6d02c5eb6389fd3b54c68cb5f4a2a9997aabba3f45a86b588cb3a970fb",
     "Tests/InnoFlowTests/IdentifiedArrayTests.swift": "4b8c8b97a06290f211f29645866c2cccca59b8354d1dfff6fb9e0fac93f1fdcf",
     "Tests/InnoFlowTests/InspectorGraphConsistencyTests.swift": "7b64f07907601cf29f7108c49658011398a4c4945c5f62fe4e035059508dd6b7",
-    "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift": "48b8938d5473050ff2e612b230ee9899a57aca25355ba2fa7221f03bd0dea82b",
+    "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift": "c92ac940b1a6c729e20ad1761a283662afcb5b01a78f85f62ccdc25766986406",
     "Tests/InnoFlowTests/MacroMigrationConsistencyTests.swift": "4c7648b467eed963fa76d2f8675959d5418c66f89ce1ed4339589264f276de56",
     "Tests/InnoFlowTests/ManualTestClockTests.swift": "f516ddc41e32f3eda675c7ff5f183f8666a1160b832c1ef9a4bffcc6980d449b",
     "Tests/InnoFlowTests/ObservationConsistencyTests.swift": "bd11afddf7805c308e1e01e92e1963dccf0ccb5556105ccd48319a1aa5af022e",
@@ -94,8 +94,8 @@
     "Tests/InnoFlowTests/TestStoreOutputMatchingTests.swift": "f0740b7fe9744cc8c760589810869b1da52b4faa9f622df43efc98ff77bf29e0",
     "Tests/InnoFlowTests/TestStoreReceiveTests.swift": "80151f4c56f8ed900337e3e5592d829184604bfc288b55d77cf59b9711671857",
     "Tests/InnoFlowTests/TestStoreTerminalVerificationTests.swift": "8e6ef2e10209205ed6d9cb5852cc4137177bb055bc048b43d079850529f38ac2",
-    "Tests/InnoFlowTests/TestSupport.swift": "c7799ae8aa6028699873a38bddeb72982df5e61d17deb578c382dedcd1faff20",
-    "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift": "52cb8ba7fb68f7113b109c3ed003162fe276712aa8177b34f03bb1f7b0594a3d",
+    "Tests/InnoFlowTests/TestSupport.swift": "0bfa3ce7f28bbef531bbdf45e4fb15f5ce92c1b7a6272d80fcb3db02d06ecf4e",
+    "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift": "327c043ac89288a2495a5d364f075604e5323932521946e2887b14057210b5b4",
     "Tests/InnoFlowTests/ViewDispatchLifetimeConsistencyTests.swift": "aa2a17f14a44cc00663465c7c7cc9723cac4b591d6612bf3249d09f6e4188dcb"
   },
   "tests": [

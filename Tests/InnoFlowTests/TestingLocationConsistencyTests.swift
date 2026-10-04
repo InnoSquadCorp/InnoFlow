@@ -268,15 +268,12 @@ private struct LocationConsistencyFeature: Reducer {
         }
       }
     #else
-      override func recordFailure(
-        withDescription description: String, inFile filePath: String?, atLine lineNumber: UInt,
-        expected: Bool
-      ) {
+      override func record(_ issue: XCTIssue) {
         if capturingExpectedFailure {
-          captured.append((filePath, lineNumber))
+          let location = issue.sourceCodeContext.location
+          captured.append((location?.fileURL.path, UInt(location?.lineNumber ?? 0)))
         } else {
-          super.recordFailure(
-            withDescription: description, inFile: filePath, atLine: lineNumber, expected: expected)
+          super.record(issue)
         }
       }
 

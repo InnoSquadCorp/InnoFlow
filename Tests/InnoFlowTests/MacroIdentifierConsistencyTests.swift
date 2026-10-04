@@ -75,7 +75,7 @@ struct MacroIdentifierConsistencyTests {
       #expect(Output.`platform valueCasePath`.embed("portable") == .`platform value`("portable"))
     #endif
     if #available(macOS 26.0, iOS 26.0, tvOS 26.0, watchOS 26.0, visionOS 26.0, *) {
-      #expect(Output.`available valueCasePath`.embed(8) == .`available value`(8))
+      #expect(Output.`available valueCasePath`.embed(()) == .`available value`)
     }
   }
 
@@ -141,8 +141,11 @@ private struct IdentifierPathFeature {
     #else
       case `platform value`(String)
     #endif
+    // Swift permits potentially unavailable payload-free cases. Associated-value
+    // availability uses a separate expansion fixture because that source shape
+    // is rejected by the Apple compiler before macro-generated helpers are used.
     @available(macOS 26.0, iOS 26.0, tvOS 26.0, watchOS 26.0, visionOS 26.0, *)
-    case `available value`(Int)
+    case `available value`
     @available(*, unavailable)
     case `unavailable value`(Int)
   }

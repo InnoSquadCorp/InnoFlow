@@ -26,8 +26,10 @@ func casePathExtractionFailureMessage<Root>(
 ///   - root: The enum value to inspect.
 ///   - path: The case path expected to match.
 ///   - caseName: Optional case label used to make failures easier to read.
-///   - fileID: The source file reported when extraction fails.
+///   - fileID: The source file identifier reported when extraction fails.
+///   - filePath: The source file path reported when extraction fails.
 ///   - line: The source line reported when extraction fails.
+///   - column: The source column reported when extraction fails.
 /// - Returns: The extracted value when the case path matches, otherwise `nil`
 ///   after recording a test failure.
 @discardableResult

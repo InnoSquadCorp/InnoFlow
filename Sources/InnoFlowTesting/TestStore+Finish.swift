@@ -174,8 +174,10 @@ extension TestStore {
   /// - Parameters:
   ///   - timeout: The total wall-clock deadline. Pass `nil` to use the timeout
   ///     configured when this `TestStore` was initialized.
-  ///   - file: The source file reported when terminal verification fails.
+  ///   - fileID: The source file identifier reported when terminal verification fails.
+  ///   - filePath: The source file path reported when terminal verification fails.
   ///   - line: The source line reported when terminal verification fails.
+  ///   - column: The source column reported when terminal verification fails.
   public func finish(
     timeout: Duration? = nil,
     fileID: StaticString = #fileID,
