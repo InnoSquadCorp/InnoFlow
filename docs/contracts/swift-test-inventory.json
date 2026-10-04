@@ -19,7 +19,7 @@
     "Tests/InnoFlowMacrosTests/StrictPhaseTotalityMacroTests.swift": "77f5eab3a74e55f0e8a0c8bda67e80e84af44f6214b09a22099954c54b58cb53",
     "Tests/InnoFlowTests/ActionPathIdentityTests.swift": "887ee90df239b5fc1b1684640cfbe0da8ee815a6661c01fe53408a3b3f949811",
     "Tests/InnoFlowTests/CapturedProcessTests.swift": "c4bc77435ccec6cbc4269779fcea735d4f186ab0abe541f7d234b69475e44c7a",
-    "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift": "a092ed6f3c75c2ff6ce1ad86e3b095b56176db6dddfe5cb3a538fe6c7ac2ed79",
+    "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift": "ed0478efbfa4a5e054cfd1f7b9682ca04707beb453de7bbcdea2a39a4ad6c3ac",
     "Tests/InnoFlowTests/CollectionScopeCacheTests.swift": "fa9077319b417a82956e4b1b13582dc6f2c2bccbe292ec31a34c6b8192f76fb4",
     "Tests/InnoFlowTests/CompileContractTests.swift": "562d2e82a65d5ed5dbd8034d2c6fe40e07dcd377be0a4c75420fd2aae656645a",
     "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift": "eec1e9f1a6d763f94042fe55b8ecb94fd8d69a228ad67c44c1cd46a55c2df393",
@@ -993,10 +993,19 @@
     {
       "attribute": "@Test(arguments: [false, true], [false, true])",
       "conditionalContexts": [],
+      "displayName": "animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:)",
+      "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+      "identifier": "CollectionLifetimeConsistencyTests/animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:)",
+      "line": 300,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true], [false, true])",
+      "conditionalContexts": [],
       "displayName": "collectionInsideIfLetReconcilesOptionalParent(useTestStore:useIdentified:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/collectionInsideIfLetReconcilesOptionalParent(useTestStore:useIdentified:)",
-      "line": 484,
+      "line": 594,
       "target": "InnoFlowTests"
     },
     {
@@ -1005,7 +1014,7 @@
       "displayName": "collectionInsideScopeAndCaseClosesAtFinalParentState(useTestStore:useIdentified:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/collectionInsideScopeAndCaseClosesAtFinalParentState(useTestStore:useIdentified:)",
-      "line": 412,
+      "line": 522,
       "target": "InnoFlowTests"
     },
     {
@@ -1014,7 +1023,7 @@
       "displayName": "equalRawSchedulerIDsHaveSeparateRowLanes(useTestStore:useIdentified:equalInstances:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/equalRawSchedulerIDsHaveSeparateRowLanes(useTestStore:useIdentified:equalInstances:)",
-      "line": 312,
+      "line": 422,
       "target": "InnoFlowTests"
     },
     {
@@ -1023,7 +1032,16 @@
       "displayName": "explicitHelperIdentitiesIsolateOverlappingCasePaths(useTestStore:useIdentified:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/explicitHelperIdentitiesIsolateOverlappingCasePaths(useTestStore:useIdentified:)",
-      "line": 585,
+      "line": 695,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "firstAnimatedChildOutputUsesFinalComposedState(useIdentified:)",
+      "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+      "identifier": "CollectionLifetimeConsistencyTests/firstAnimatedChildOutputUsesFinalComposedState(useIdentified:)",
+      "line": 266,
       "target": "InnoFlowTests"
     },
     {
@@ -1032,7 +1050,7 @@
       "displayName": "parentRemovalSuppressesSameReductionChildOutput(useTestStore:useIdentified:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/parentRemovalSuppressesSameReductionChildOutput(useTestStore:useIdentified:)",
-      "line": 340,
+      "line": 450,
       "target": "InnoFlowTests"
     },
     {
@@ -1041,7 +1059,7 @@
       "displayName": "reconstructedCasePathKeepsOneStructuralOwner(useTestStore:useIdentified:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/reconstructedCasePathKeepsOneStructuralOwner(useTestStore:useIdentified:)",
-      "line": 530,
+      "line": 640,
       "target": "InnoFlowTests"
     },
     {
@@ -1050,7 +1068,7 @@
       "displayName": "reorderingPreservesElementOwner(useTestStore:useIdentified:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/reorderingPreservesElementOwner(useTestStore:useIdentified:)",
-      "line": 446,
+      "line": 556,
       "target": "InnoFlowTests"
     },
     {
@@ -1059,7 +1077,7 @@
       "displayName": "repeatedParentRemovalReleasesRegistrations(useTestStore:useIdentified:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/repeatedParentRemovalReleasesRegistrations(useTestStore:useIdentified:)",
-      "line": 462,
+      "line": 572,
       "target": "InnoFlowTests"
     },
     {
@@ -1068,7 +1086,7 @@
       "displayName": "rowsOwnIndependentLifetimes(useTestStore:useIdentified:equalInstances:mutation:)",
       "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
       "identifier": "CollectionLifetimeConsistencyTests/rowsOwnIndependentLifetimes(useTestStore:useIdentified:equalInstances:mutation:)",
-      "line": 254,
+      "line": 364,
       "target": "InnoFlowTests"
     },
     {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "provenance": "Reviewed 6.0 candidate source and SwiftPM Linux-mirror compiled discovery (311 Swift Testing runtime declarations, 1 XCTest location fixture, and 9 macro declarations in the isolated collection-validation mirror). This focused expectation contains 306 Swift Testing identifiers across 32 runtime suites. CollectionScopeCacheTests, IdentifiedArrayTests, OutputCasePathTests, SingleScopeCacheTests, and StoreScopeSelectionTests are outside that mirror and retain identifiers from the reviewed baseline with unchanged source. Every Apple platform must still match this exact inventory through InnoFlowTests-only xcodebuild discovery before execution. This file is an expectation, not a passing test receipt.",
+  "provenance": "Reviewed 6.0 candidate source and SwiftPM Linux-mirror compiled discovery (313 Swift Testing runtime declarations, 1 XCTest location fixture, and 9 macro declarations in the isolated collection-validation mirror). This focused expectation contains 308 Swift Testing identifiers across 32 runtime suites. CollectionScopeCacheTests, IdentifiedArrayTests, OutputCasePathTests, SingleScopeCacheTests, and StoreScopeSelectionTests are outside that mirror and retain identifiers from the reviewed baseline with unchanged source. Every Apple platform must still match this exact inventory through InnoFlowTests-only xcodebuild discovery before execution. This file is an expectation, not a passing test receipt.",
   "suites": [
     "CollectionLifetimeConsistencyTests",
     "CollectionScopeCacheTests",
@@ -36,10 +36,12 @@
     "ViewDispatchLifetimeConsistencyTests"
   ],
   "expectedTestIdentifiers": [
+    "CollectionLifetimeConsistencyTests/animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:)",
     "CollectionLifetimeConsistencyTests/collectionInsideIfLetReconcilesOptionalParent(useTestStore:useIdentified:)",
     "CollectionLifetimeConsistencyTests/collectionInsideScopeAndCaseClosesAtFinalParentState(useTestStore:useIdentified:)",
     "CollectionLifetimeConsistencyTests/equalRawSchedulerIDsHaveSeparateRowLanes(useTestStore:useIdentified:equalInstances:)",
     "CollectionLifetimeConsistencyTests/explicitHelperIdentitiesIsolateOverlappingCasePaths(useTestStore:useIdentified:)",
+    "CollectionLifetimeConsistencyTests/firstAnimatedChildOutputUsesFinalComposedState(useIdentified:)",
     "CollectionLifetimeConsistencyTests/parentRemovalSuppressesSameReductionChildOutput(useTestStore:useIdentified:)",
     "CollectionLifetimeConsistencyTests/reconstructedCasePathKeepsOneStructuralOwner(useTestStore:useIdentified:)",
     "CollectionLifetimeConsistencyTests/reorderingPreservesElementOwner(useTestStore:useIdentified:)",

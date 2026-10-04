@@ -106,6 +106,18 @@ private enum CollectionLifetimeAction: Equatable, Sendable {
   case rootDone, reorder
 }
 
+private enum CollectionLifetimeAnimatedAction: Equatable, Sendable {
+  case collection(CollectionLifetimeAction)
+  case animate(CollectionLifetimeAction)
+}
+
+@MainActor
+private final class CollectionLifetimeAnimationProbe {
+  var performances = 0
+  var ownerCounts: [Int] = []
+  var instances: [Int?] = []
+}
+
 private let collectionLifetimeActionPath = CollectionActionPath<
   CollectionLifetimeAction, Int, CollectionLifetimeRowAction
 >(
@@ -251,6 +263,104 @@ enum CollectionLifetimeMutation: CaseIterable, Sendable {
 @Suite("Collection optional child lifetime consistency")
 @MainActor
 struct CollectionLifetimeConsistencyTests {
+  @Test(arguments: [false, true])
+  func firstAnimatedChildOutputUsesFinalComposedState(useIdentified: Bool) async {
+    let probe = CollectionLifetimeAnimationProbe()
+    let animation = EffectAnimation(description: "first-child-removal") { updates in
+      probe.performances += 1
+      updates()
+    }
+    let collection = collectionLifetimeReducer(useIdentified: useIdentified, gates: [])
+    let reducer = Reduce<CollectionLifetimeState, CollectionLifetimeAnimatedAction, String> {
+      state, action in
+      switch action {
+      case .collection(let action):
+        return collection.reduce(into: &state, action: action).map { .collection($0) }
+      case .animate(let action):
+        return .send(.collection(action)).applyingAnimation(animation)
+      }
+    }
+    let store = Store(reducer: reducer, initialState: .init(equalInstances: true))
+    #expect(store.effectBridge.childLifetimeRegistry.activeOwnerCount == 0)
+
+    // This animated queue entry introduces the first lifetime metadata. Its
+    // child's output must be invalidated by the complete parent's removal.
+    let dispatch = store.send(
+      .animate(.row(0, .child(.emit))), capturingOutputs: .unbounded)
+    await dispatch.finish()
+    var outputs: [String] = []
+    for await output in dispatch.outputs { outputs.append(output) }
+
+    #expect(probe.performances == 1)
+    #expect(outputs == ["parent-remove"])
+    #expect(store.state.row(0, useIdentified: useIdentified) == nil)
+    #expect(store.effectBridge.childLifetimeRegistry.activeOwnerCount == 0)
+  }
+
+  @Test(arguments: [false, true], [false, true])
+  func animatedParentMutationReconcilesExistingOwnersWithoutMetadata(
+    useIdentified: Bool, removeAndReenter: Bool
+  ) async throws {
+    let gates = (0..<6).map { _ in CollectionLifetimeGate() }
+    let store = Store(
+      reducer: collectionLifetimeReducer(useIdentified: useIdentified, gates: gates),
+      initialState: .init(equalInstances: true))
+    let instance = store.select { $0.row(0, useIdentified: useIdentified)?.child?.instance }
+
+    // Keep one dispatch limited to the old child so its physical completion
+    // cannot be prolonged by surviving parent work.
+    let oldChild = store.send(.row(0, .child(.start(4))))
+    try #require(store.effectBridge.childLifetimeRegistry.activeOwnerCount == 1)
+    await gates[4].waitUntilEntered()
+    let withParents = store.send(.row(0, .child(.start(0))))
+    await gates[0].waitUntilEntered()
+    await gates[2].waitUntilEntered()
+    await gates[3].waitUntilEntered()
+    let sibling = store.send(.row(1, .child(.start(1))))
+    await gates[1].waitUntilEntered()
+    #expect(store.effectBridge.childLifetimeRegistry.activeOwnerCount == 2)
+
+    let probe = CollectionLifetimeAnimationProbe()
+    let animation = EffectAnimation(description: "existing-child-removal") { updates in
+      probe.performances += 1
+      probe.ownerCounts.append(store.effectBridge.childLifetimeRegistry.activeOwnerCount)
+      probe.instances.append(instance.requireAlive())
+      updates()
+      probe.ownerCounts.append(store.effectBridge.childLifetimeRegistry.activeOwnerCount)
+      probe.instances.append(instance.requireAlive())
+    }
+    // Both actions bypass the row reducer. Their effects contain no lifetime
+    // metadata, but the previously registered owners still need reconciliation.
+    store.enqueue(removeAndReenter ? .remove : .replace(30), animation: animation)
+
+    #expect(probe.performances == 1)
+    #expect(probe.ownerCounts == [2, 1])
+    #expect(probe.instances == [10, removeAndReenter ? nil : 30])
+    #expect(!oldChild.isFinished)
+    if removeAndReenter { await store.send(.insert(30)).finish() }
+    let replacement = store.send(.row(0, .child(.start(5))))
+    await gates[5].waitUntilEntered()
+
+    for index in [0, 1, 2, 3, 5] { await gates[index].open() }
+    await withParents.finish()
+    await sibling.finish()
+    await replacement.finish()
+    #expect(store.state.row(1, useIdentified: useIdentified)?.child?.received == [1])
+    #expect(store.state.parentReceived.sorted() == [2, 3])
+    #expect(store.state.row(0, useIdentified: useIdentified)?.child?.received == [5])
+    #expect(!oldChild.isFinished)
+
+    // The cancelled operation ignores cancellation until its gate opens. Its
+    // late action must not reach the replacement, and finish must join it.
+    await gates[4].open()
+    await oldChild.finish()
+    #expect(oldChild.isFinished)
+    #expect(store.state.row(0, useIdentified: useIdentified)?.child?.received == [5])
+    await store.send(.row(0, .close)).finish()
+    await store.send(.row(1, .close)).finish()
+    #expect(store.effectBridge.childLifetimeRegistry.activeOwnerCount == 0)
+  }
+
   @Test(
     arguments: [false, true].flatMap { host in
       [false, true].flatMap { identified in

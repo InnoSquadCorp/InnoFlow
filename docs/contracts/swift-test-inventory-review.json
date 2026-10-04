@@ -1223,5 +1223,32 @@
     "removed": [],
     "sourceInventory": "docs/contracts/sample-test-inventory.json",
     "sourceInventorySha256": "2d5dc6f1531feca1e613e5609953b3af47616bde5399f6aa4a1f7197cbf2fbea"
+  },
+  "stateCopyGuardRegression": {
+    "baseCommit": "99a68dbfa07d1143be20eb1b41eca1c52023bbc3",
+    "beforeCount": 953,
+    "afterCount": 955,
+    "added": [
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "conditionalContexts": [],
+        "displayName": "animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "identifier": "CollectionLifetimeConsistencyTests/animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:)",
+        "line": 300,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "firstAnimatedChildOutputUsesFinalComposedState(useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "identifier": "CollectionLifetimeConsistencyTests/firstAnimatedChildOutputUsesFinalComposedState(useIdentified:)",
+        "line": 266,
+        "target": "InnoFlowTests"
+      }
+    ],
+    "removed": [],
+    "scope": "Two animated lifetime regression declarations, six parameterized cases. Source expectations only; Apple release execution remains pending."
   }
 }
