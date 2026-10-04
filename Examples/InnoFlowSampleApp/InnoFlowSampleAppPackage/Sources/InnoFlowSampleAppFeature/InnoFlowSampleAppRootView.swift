@@ -16,7 +16,9 @@ public struct InnoFlowSampleAppRootView: View {
   public var body: some View {
     Group {
       if let launchDemo {
-        sampleDemoView(for: launchDemo)
+        NavigationStack {
+          sampleDemoView(for: launchDemo)
+        }
       } else {
         sampleHubView
       }

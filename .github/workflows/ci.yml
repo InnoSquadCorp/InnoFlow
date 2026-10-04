@@ -795,9 +795,19 @@ jobs:
             -disableAutomaticPackageResolution \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.udid }}" \
             -only-testing:InnoFlowSampleAppUITests \
+            -resultBundlePath "$RUNNER_TEMP/sample-ui-results.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test
+
+      - name: Preserve canonical sample UI results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sample-ui-results-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sample-ui-results.xcresult
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Report cache observations
         if: always()

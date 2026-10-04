@@ -138,13 +138,18 @@ final class InnoFlowSampleAppUITests: XCTestCase {
       return true
     }
 
-    for _ in 0..<maxSwipes {
-      app.swipeUp()
-      if waitForCondition(
-        hittable(element, describedAs: "element \(element)"),
-        timeout: UIWait.scrollSettle
-      ) {
-        return true
+    // The hub groups rows by learning level, while catalog iteration and a
+    // returning navigation path can ask for an earlier row. Search both
+    // directions instead of repeatedly scrolling away from the target.
+    for swipeUp in [true, false] {
+      for _ in 0..<maxSwipes {
+        if swipeUp { app.swipeUp() } else { app.swipeDown() }
+        if waitForCondition(
+          hittable(element, describedAs: "element \(element)"),
+          timeout: UIWait.scrollSettle
+        ) {
+          return true
+        }
       }
     }
 

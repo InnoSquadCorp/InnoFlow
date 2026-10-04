@@ -680,6 +680,10 @@
         "conclusion": "success"
       },
       {
+        "name": "Preserve canonical sample UI results",
+        "conclusion": "success"
+      },
+      {
         "name": "Report cache observations",
         "conclusion": "success"
       }
