@@ -33,9 +33,22 @@ class ToolchainSelectionTests(unittest.TestCase):
         physical = self.bundle("swift-6.4.0-RELEASE")
         (self.root / "swift-latest.xctoolchain").symlink_to(physical.name, target_is_directory=True)
         result = module.select(self.root, self.evidence, self.run_version())
-        self.assertEqual(result["path"], str(physical))
+        self.assertEqual(result["path"], str(physical.resolve()))
         self.assertEqual(len(result["aliases"]), 2)
-        self.assertEqual((self.evidence / "bin-path.txt").read_text(), str(physical / "usr/bin") + "\n")
+        self.assertEqual((self.evidence / "bin-path.txt").read_text(), str(physical.resolve() / "usr/bin") + "\n")
+
+    def test_symlink_backed_root_preserves_aliases_and_canonical_selection(self):
+        physical = self.bundle("swift-6.4.0-RELEASE")
+        (self.root / "swift-latest.xctoolchain").symlink_to(physical.name, target_is_directory=True)
+        # Model macOS temporary roots reached through /var -> /private/var.
+        aliased_root = Path(self.temp.name) / "toolchains-alias"
+        aliased_root.symlink_to(self.root, target_is_directory=True)
+        result = module.select(aliased_root, self.evidence, self.run_version())
+        self.assertEqual(result["path"], str(physical.resolve()))
+        self.assertEqual(result["resolved_path"], str(physical.resolve()))
+        self.assertEqual(result["aliases"], [str(aliased_root / physical.name),
+                                            str(aliased_root / "swift-latest.xctoolchain")])
+        self.assertEqual((self.evidence / "bin-path.txt").read_text(), str(physical.resolve() / "usr/bin") + "\n")
 
     def test_two_distinct_release_installations_are_rejected(self):
         self.bundle("one")
