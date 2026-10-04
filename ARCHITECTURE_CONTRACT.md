@@ -336,7 +336,7 @@ Phase declarations and references compare the same logical Swift identifier, reg
 
 ### TestStoreDispatch
 
-Root, scoped, and phase helper sends return one discardable TestStoreDispatch, also spelled TestFlowTask by the draft compatibility alias. Queued actions keep their dispatch activity until the receive reduction has registered follow-up work. Runtime completion is separate from unverified delivered outputs. Dispatch finish never consumes either queue, regardless of exhaustivity, and can be retried after explicit receive. Timeout/caller cancellation cancels only that dispatch and does not mark uncooperative physical work finished. Handles weakly reference their store. Non-exhaustive receiveOutput advances intermediate actions using a non-consuming shared queue revision, preserving per-queue FIFO and one total deadline.
+Root, scoped, and phase helper sends return one discardable TestStoreDispatch. Queued actions keep their dispatch activity until the receive reduction has registered follow-up work. Runtime completion is separate from unverified delivered outputs. Dispatch finish never consumes either queue, regardless of exhaustivity, and can be retried after explicit receive. Timeout/caller cancellation cancels only that dispatch and does not mark uncooperative physical work finished. Handles weakly reference their store. Non-exhaustive receiveOutput advances intermediate actions using a non-consuming shared queue revision, preserving per-queue FIFO and one total deadline.
 
 ### Optional-child lifetime boundary
 

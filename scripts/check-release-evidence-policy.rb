@@ -232,6 +232,7 @@ begin
     OnChangeHostConsistencyTests
     OptionalChildLifetimeConsistencyTests
     OutputCasePathTests
+    OwnedSynchronousEffectConsistencyTests
     PerformanceSemanticsConsistencyTests
     PhaseExplorationConsistencyTests
     RunLaneSnapshotConsistencyTests

@@ -421,7 +421,7 @@ struct TestStoreDispatchConsistencyTests {
     let store = TestStore(reducer: DispatchConsistencyFeature())
     let scoped = store.scope(
       state: \.events, action: DispatchConsistencyFeature.Action.identityPath)
-    let task: TestFlowTask = await scoped.send(.start(6))
+    let task: TestStoreDispatch = await scoped.send(.start(6))
     await scoped.receive(.step(6, 1)) { $0 = [61] }
     #expect(!task.isFinished)
     await scoped.receive(.step(6, 2)) { $0 = [61, 62] }

@@ -102,9 +102,11 @@ private func lifetimeReducer(
     }
     return .none
   }
-  .optionalChild(state: \.left, action: lifetimeLeftPath, instanceID: { $0.instance }, child: child)
   .optionalChild(
-    state: \.right, action: lifetimeRightPath, instanceID: { $0.instance }, child: child)
+    state: \.left, action: lifetimeLeftPath, instanceID: { $0.instance }, reducer: child
+  )
+  .optionalChild(
+    state: \.right, action: lifetimeRightPath, instanceID: { $0.instance }, reducer: child)
 }
 
 @Suite("Optional child lifetime consistency")
@@ -301,13 +303,13 @@ private func nestedLifetimeReducer(gates: [LifetimeGate])
     return .none
   }
   .optionalChild(
-    state: \.child, action: lifetimeNestedPath, instanceID: { $0.instance }, child: child)
+    state: \.child, action: lifetimeNestedPath, instanceID: { $0.instance }, reducer: child)
   return Reduce<LifetimeOuterState, LifetimeOuterAction, Never> { state, action in
     if case .closeMiddle = action { state.middle = nil }
     return .none
   }
   .optionalChild(
-    state: \.middle, action: lifetimeMiddlePath, instanceID: { $0.instance }, child: middle)
+    state: \.middle, action: lifetimeMiddlePath, instanceID: { $0.instance }, reducer: middle)
 }
 
 extension OptionalChildLifetimeConsistencyTests {

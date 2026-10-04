@@ -27,13 +27,13 @@ where Parent.Output == Child.Output {
     state: any WritableKeyPath<State, Child.State?> & Sendable,
     action: CasePath<Action, Child.Action>,
     instanceID: @escaping @Sendable (Child.State) -> ID,
-    child: Child,
+    reducer: Child,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column
   ) {
     self.parent = parent
-    self.child = child
+    self.child = reducer
     self.statePath = state
     self.actionPath = action
     self.instanceID = instanceID
@@ -68,13 +68,13 @@ extension Reducer {
     state: any WritableKeyPath<State, Child.State?> & Sendable,
     action: CasePath<Action, Child.Action>,
     instanceID: @escaping @Sendable (Child.State) -> ID,
-    child: Child,
+    reducer: Child,
     fileID: StaticString = #fileID,
     line: UInt = #line,
     column: UInt = #column
   ) -> OptionalChildLifetime<Self, Child, ID> where Child.Output == Output {
     OptionalChildLifetime(
-      parent: self, state: state, action: action, instanceID: instanceID, child: child,
+      parent: self, state: state, action: action, instanceID: instanceID, reducer: reducer,
       fileID: fileID, line: line, column: column
     )
   }

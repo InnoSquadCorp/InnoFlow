@@ -117,7 +117,7 @@ private struct SynchronousFeature: Reducer {
     if managed {
       return parent.optionalChild(
         state: \.child, action: synchronousChildPath, instanceID: { $0.id },
-        child: child
+        reducer: child
       ).reduce(into: &state, action: action)
     }
     return CombineReducers {
@@ -361,13 +361,13 @@ private func synchronousPairReducer()
       state: \.left,
       action: CasePath(
         embed: { .left($0) }, extract: { if case .left(let a) = $0 { a } else { nil } }),
-      instanceID: { _ in 1 }, child: SynchronousFeature(managed: true)
+      instanceID: { _ in 1 }, reducer: SynchronousFeature(managed: true)
     )
     .optionalChild(
       state: \.right,
       action: CasePath(
         embed: { .right($0) }, extract: { if case .right(let a) = $0 { a } else { nil } }),
-      instanceID: { _ in 1 }, child: SynchronousFeature(managed: true))
+      instanceID: { _ in 1 }, reducer: SynchronousFeature(managed: true))
 }
 
 extension OwnedSynchronousEffectConsistencyTests {

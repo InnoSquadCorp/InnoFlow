@@ -36,9 +36,9 @@ struct TestingLocationConsistencyTests {
       guard let error = issue.error,
         String(describing: error) == expectedMessage,
         issue.sourceLocation
-        == SourceLocation(
-          fileID: "LocationTests/Explicit.swift", filePath: "/fixtures/Explicit.swift", line: 91,
-          column: 8)
+          == SourceLocation(
+            fileID: "LocationTests/Explicit.swift", filePath: "/fixtures/Explicit.swift", line: 91,
+            column: 8)
       else { return false }
       return matchedIssues.withLock { count in
         count += 1

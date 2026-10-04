@@ -62,17 +62,6 @@ public struct TestStoreDispatch: Sendable {
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
   }
 
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  @MainActor
-  public func finish(
-    timeout: Duration? = nil,
-    file: StaticString,
-    line: UInt = #line
-  ) async {
-    await finish(
-      timeout: timeout, location: .init(fileID: file, filePath: file, line: line, column: 1))
-  }
-
   @MainActor
   package func finish(
     timeout: Duration? = nil,
@@ -197,7 +186,3 @@ extension FlowScope {
     return task
   }
 }
-
-/// Compatibility spelling for ``TestStoreDispatch``. Both names refer to the
-/// same dispatch handle and have identical ownership and assertion behavior.
-public typealias TestFlowTask = TestStoreDispatch

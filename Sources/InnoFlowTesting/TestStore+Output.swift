@@ -24,18 +24,6 @@ extension TestStore {
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
   }
 
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  public func receiveOutput(
-    _ expectedOutput: R.Output,
-    timeout: Duration? = nil,
-    file: StaticString,
-    line: UInt = #line
-  ) async where R.Output: Equatable {
-    await receiveOutput(
-      expectedOutput, timeout: timeout,
-      location: .init(fileID: file, filePath: file, line: line, column: 1))
-  }
-
   package func receiveOutput(
     _ expectedOutput: R.Output,
     timeout: Duration? = nil,
@@ -68,20 +56,6 @@ extension TestStore {
     await receiveOutput(
       where: predicate, description: description, timeout: timeout,
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
-  }
-
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  @discardableResult
-  public func receiveOutput(
-    where predicate: (R.Output) -> Bool,
-    description: String? = nil,
-    timeout: Duration? = nil,
-    file: StaticString,
-    line: UInt = #line
-  ) async -> R.Output? {
-    await receiveOutput(
-      where: predicate, description: description, timeout: timeout,
-      location: .init(fileID: file, filePath: file, line: line, column: 1))
   }
 
   @discardableResult
@@ -117,20 +91,6 @@ extension TestStore {
     await receiveOutput(
       path, caseName: caseName, timeout: timeout,
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
-  }
-
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  @discardableResult
-  public func receiveOutput<Value>(
-    _ path: CasePath<R.Output, Value>,
-    caseName: String? = nil,
-    timeout: Duration? = nil,
-    file: StaticString,
-    line: UInt = #line
-  ) async -> Value? {
-    await receiveOutput(
-      path, caseName: caseName, timeout: timeout,
-      location: .init(fileID: file, filePath: file, line: line, column: 1))
   }
 
   @discardableResult

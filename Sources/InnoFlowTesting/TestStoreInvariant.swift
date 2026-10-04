@@ -23,18 +23,6 @@ public struct TestStoreInvariant<State: Equatable>: Sendable {
       predicate: predicate)
   }
 
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  public init(
-    _ name: String,
-    file: StaticString,
-    line: UInt = #line,
-    predicate: @escaping @MainActor @Sendable (State) -> Bool
-  ) {
-    self.init(
-      name, location: .init(fileID: file, filePath: file, line: line, column: 1),
-      predicate: predicate)
-  }
-
   package init(
     _ name: String,
     location: TestStoreSourceLocation,

@@ -22,12 +22,12 @@ private func exerciseKeyPaths(
   ).reduce(into: &state, action: .row(1, 4))
   precondition(state.identified[id: 1]?.count == 4)
   _ = keyPathParentReducer().optionalChild(
-    state: optional, action: keyPathAction, instanceID: { $0.id }, child: keyPathChildReducer()
+    state: optional, action: keyPathAction, instanceID: { $0.id }, reducer: keyPathChildReducer()
   ).reduce(into: &state, action: .child(5))
   precondition(state.optional?.count == 7)
   _ = OptionalChildLifetime(
     parent: keyPathParentReducer(), state: optional, action: keyPathAction,
-    instanceID: { $0.id }, child: keyPathChildReducer()
+    instanceID: { $0.id }, reducer: keyPathChildReducer()
   ).reduce(into: &state, action: .child(1))
   precondition(state.optional?.count == 8)
   let map = PhaseMap<KeyPathState, KeyPathAction, Int>(phase) {

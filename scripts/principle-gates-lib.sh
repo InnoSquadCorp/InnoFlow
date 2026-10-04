@@ -527,7 +527,10 @@ run_authoring_surface_checks() {
   search_lines "func trailingCompletion" Tests/InnoFlowTests/RuntimeConsistencyTests.swift >/dev/null
 
   search_lines "public struct TestStoreDispatch" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null
-  search_lines "public typealias TestFlowTask = TestStoreDispatch" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null
+  if search_lines "public typealias TestFlowTask" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null; then
+    echo "[principle-gates] Failed: unpublished testing dispatch alias must not ship"
+    exit 1
+  fi
 
   search_lines "public struct OptionalChildLifetime" Sources/InnoFlowCore/OptionalChildLifetime.swift >/dev/null
   search_lines "func directSendDrainsBeforeReturnAndBeforeIndependentActions" Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null

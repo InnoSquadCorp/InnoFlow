@@ -29,7 +29,7 @@ cp "$root_dir/scripts/report-doc-fence-review.rb" "$fixture_root/scripts/"
 ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
 
 # The identity/cancellation regressions must remain in every platform run.
-for suite in CollectionLifetimeConsistencyTests IdentifiedArrayTests ManualTestClockTests RuntimeConsistencyTests TestStoreDispatchConsistencyTests TestingLocationConsistencyTests PhaseExplorationConsistencyTests; do
+for suite in CollectionLifetimeConsistencyTests IdentifiedArrayTests ManualTestClockTests RuntimeConsistencyTests TestStoreDispatchConsistencyTests TestingLocationConsistencyTests PhaseExplorationConsistencyTests OwnedSynchronousEffectConsistencyTests; do
   ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.lines.reject { |line| line.include?("-only-testing:InnoFlowTests/#{suite}") }.join)' \
     "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$suite"
   if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then

@@ -27,7 +27,7 @@ Exhaustive mode still requires explicit action assertions.
 An optional payload received through a path preserves `.some(nil)` separately
 from a failed or cancelled receive. Caller cancellation never reports a timeout.
 
-`send` returns a discardable ``TestStoreDispatch`` (`TestFlowTask` is an alias) for its root dispatch and every
+`send` returns a discardable ``TestStoreDispatch`` for its root dispatch and every
 descendant action and effect, including through scoped and phase helpers. Its
 `cancel()` affects only that dispatch. `isFinished` describes runtime completion:
 a queued action prevents completion, while a delivered but unverified output
@@ -109,7 +109,6 @@ Read <doc:AdvancedTesting> for phase coverage and reproducible seeded exploratio
 
 - ``TestStore``
 - ``TestStoreDispatch``
-- ``TestFlowTask``
 - ``ScopedTestStore``
 - ``Exhaustivity``
 - ``TestStoreInvariant``

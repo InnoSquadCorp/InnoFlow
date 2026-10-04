@@ -51,7 +51,7 @@ struct OptionalChildLifetimeExample {
     }.optionalChild(
       state: \.child, action: Action.childCasePath,
       instanceID: { $0.instanceID },
-      child: LifetimeExampleChild().mapOutput { output in
+      reducer: LifetimeExampleChild().mapOutput { output in
         switch output {
         case .loaded(let id): .loaded(id)
         }

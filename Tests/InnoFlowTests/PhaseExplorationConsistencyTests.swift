@@ -38,9 +38,10 @@ struct PhaseExplorationConsistencyTests {
     } matching: { issue in
       guard let error = issue.error,
         String(describing: error) == expectedMessage,
-        issue.sourceLocation == SourceLocation(
-          fileID: "CoverageTests/Explicit.swift", filePath: "/fixtures/PhaseCoverage.swift",
-          line: 73, column: 9)
+        issue.sourceLocation
+          == SourceLocation(
+            fileID: "CoverageTests/Explicit.swift", filePath: "/fixtures/PhaseCoverage.swift",
+            line: 73, column: 9)
       else { return false }
       return matchedIssues.withLock { count in
         count += 1

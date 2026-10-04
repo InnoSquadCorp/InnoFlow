@@ -19,7 +19,7 @@
     "Tests/InnoFlowMacrosTests/StrictPhaseTotalityMacroTests.swift": "77f5eab3a74e55f0e8a0c8bda67e80e84af44f6214b09a22099954c54b58cb53",
     "Tests/InnoFlowTests/ActionPathIdentityTests.swift": "887ee90df239b5fc1b1684640cfbe0da8ee815a6661c01fe53408a3b3f949811",
     "Tests/InnoFlowTests/CapturedProcessTests.swift": "c4bc77435ccec6cbc4269779fcea735d4f186ab0abe541f7d234b69475e44c7a",
-    "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift": "ed0478efbfa4a5e054cfd1f7b9682ca04707beb453de7bbcdea2a39a4ad6c3ac",
+    "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift": "3e6c9d6bd60f028300cd7f960aa65f5b098e680e88e6986ec496b700e1578527",
     "Tests/InnoFlowTests/CollectionScopeCacheTests.swift": "fa9077319b417a82956e4b1b13582dc6f2c2bccbe292ec31a34c6b8192f76fb4",
     "Tests/InnoFlowTests/CompileContractTests.swift": "562d2e82a65d5ed5dbd8034d2c6fe40e07dcd377be0a4c75420fd2aae656645a",
     "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift": "eec1e9f1a6d763f94042fe55b8ecb94fd8d69a228ad67c44c1cd46a55c2df393",
@@ -52,12 +52,12 @@
     "Tests/InnoFlowTests/ManualTestClockTests.swift": "f516ddc41e32f3eda675c7ff5f183f8666a1160b832c1ef9a4bffcc6980d449b",
     "Tests/InnoFlowTests/ObservationConsistencyTests.swift": "bd11afddf7805c308e1e01e92e1963dccf0ccb5556105ccd48319a1aa5af022e",
     "Tests/InnoFlowTests/OnChangeHostConsistencyTests.swift": "f4f909e575dc74fba32f004bc931043c251e394058995cd2b70f660e2dd8a4f5",
-    "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift": "bd775af281557749d380acaa10b6dacedee5428f7850501d2c9520001ee943e9",
+    "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift": "425e86de2e49d368907c2b76aa10221a46d4913900673e03da6a27c144ec4eef",
     "Tests/InnoFlowTests/OutputCasePathTests.swift": "6d79858842554f72e1fb731b5d8d7a37ce0fe6caf370d57049c0f041cddbbd3d",
     "Tests/InnoFlowTests/OutputPromotionTests.swift": "b064880b01077fd5cdf58531a68f799c21999f7c7329056a365bdfbb0334d0d6",
-    "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift": "3860488a93f5059a7b4304a907abbd278e5208aeef034114b230f28a4abb8d4b",
+    "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift": "44a27b67521e7881c924e73d86d959ce929ffe72f40a9f130e2a95b1c688a9a0",
     "Tests/InnoFlowTests/PerformanceSemanticsConsistencyTests.swift": "4535b90a7f8b18f2da24e2d287a60e3a7e9c47b0d59aee0484e28a33047ef3e5",
-    "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift": "9979586a0f1be97bc2c63ad7c3d3735787baa28e40f9a335dcb26343fd01cf9d",
+    "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift": "75f4c08cd4a21248b7ceaeb9c74d250181c34b08d9855524476f223555e13e03",
     "Tests/InnoFlowTests/PhaseMapDiagnosticsAdaptersTests.swift": "f0a7ffb10c41d0b5ecf3c4af5b49956d863c4a1834f42cd1fb4830df8b489ee1",
     "Tests/InnoFlowTests/PhaseMapPerfTests.swift": "c0c3a43a477c400c1c534062341d92ed7ff0c50cf140d192522bb9102452b3e4",
     "Tests/InnoFlowTests/PhaseTransitionGraphTests.swift": "aef6f5017017eda6aa0abc9f1835684895ce92b111b2a04e539f3dc1d5ff41b3",
@@ -87,7 +87,7 @@
     "Tests/InnoFlowTests/TestEffectLedgerConsistencyTests.swift": "a251bd41275ed8d0cdf4568fca5e79aec83b074282dcff34a0e28a3de82bbe2d",
     "Tests/InnoFlowTests/TestFixtures.swift": "39db8bade1914dc26510b46811b443089c56023a71610ab229d04b35adc84e65",
     "Tests/InnoFlowTests/TestStoreCoreTests.swift": "c285aa617c578ccc63b22dee7cb9ecc08f5c3daca4c8c602b4d35065a3f60540",
-    "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift": "c154b0dd9ec24e8c5a71e8dab06ab9c4f43a15b0d0f448db44aa053b204d29b6",
+    "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift": "83befd375232d7401874f06fdaf5a1b39bd8c62803fe290214aff6d79a8665df",
     "Tests/InnoFlowTests/TestStoreEffectAlgebraTests.swift": "d68e2df57bd2f18ef3d5628c6d86eaa997c64c1e3ce0e12ea083450ce1e8f3a6",
     "Tests/InnoFlowTests/TestStoreExhaustivityTests.swift": "d1b1e1e17a652e9a99a6c9fd31f09d5f1bcdc9f932e588343ee3d399dc5eec4e",
     "Tests/InnoFlowTests/TestStoreFinishTests.swift": "6994cf3ff37130b373efdca0d3bf8fb2265ebf58f18e23f4303a64fe889eb14e",
@@ -96,7 +96,7 @@
     "Tests/InnoFlowTests/TestStoreReceiveTests.swift": "80151f4c56f8ed900337e3e5592d829184604bfc288b55d77cf59b9711671857",
     "Tests/InnoFlowTests/TestStoreTerminalVerificationTests.swift": "8e6ef2e10209205ed6d9cb5852cc4137177bb055bc048b43d079850529f38ac2",
     "Tests/InnoFlowTests/TestSupport.swift": "0bfa3ce7f28bbef531bbdf45e4fb15f5ce92c1b7a6272d80fcb3db02d06ecf4e",
-    "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift": "f249afdb6724a3cd2aeedeaa70dd83a120c400335896f77ce32079243458504d",
+    "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift": "b11519e3ee6c2f608df54d9df427d12c9a18169236e3b65bd7ea6a326130e50d",
     "Tests/InnoFlowTests/ViewDispatchLifetimeConsistencyTests.swift": "aa2a17f14a44cc00663465c7c7cc9723cac4b591d6612bf3249d09f6e4188dcb"
   },
   "tests": [
@@ -2565,7 +2565,7 @@
       "displayName": "a correct reducer control runs the budget without a false failure",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "ExplorerFailureBoundaryConsistencyTests/correctControl()",
-      "line": 314,
+      "line": 315,
       "target": "InnoFlowTests"
     },
     {
@@ -2574,7 +2574,7 @@
       "displayName": "effect runtime errors are preserved with their origin",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "ExplorerFailureBoundaryConsistencyTests/effectError()",
-      "line": 288,
+      "line": 289,
       "target": "InnoFlowTests"
     },
     {
@@ -2583,7 +2583,7 @@
       "displayName": "generator exceptions are diagnostics, never advertised as reducer reproductions",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "ExplorerFailureBoundaryConsistencyTests/generatorError()",
-      "line": 301,
+      "line": 302,
       "target": "InnoFlowTests"
     },
     {
@@ -3258,7 +3258,7 @@
       "displayName": "closeKeepsSameDispatchParentAndSiblingAliveAndJoinsPhysicalChild()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/closeKeepsSameDispatchParentAndSiblingAliveAndJoinsPhysicalChild()",
-      "line": 132,
+      "line": 134,
       "target": "InnoFlowTests"
     },
     {
@@ -3267,7 +3267,7 @@
       "displayName": "legacyIfLetKeepsItsExistingLifetimeBehavior()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/legacyIfLetKeepsItsExistingLifetimeBehavior()",
-      "line": 389,
+      "line": 391,
       "target": "InnoFlowTests"
     },
     {
@@ -3276,7 +3276,7 @@
       "displayName": "nestedOwnerSameRawLaneAndInnerClosePreserveOuter(useTestStore:)",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/nestedOwnerSameRawLaneAndInnerClosePreserveOuter(useTestStore:)",
-      "line": 314,
+      "line": 316,
       "target": "InnoFlowTests"
     },
     {
@@ -3285,7 +3285,7 @@
       "displayName": "outerCloseInvalidatesAllNestedWork(useTestStore:)",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/outerCloseInvalidatesAllNestedWork(useTestStore:)",
-      "line": 355,
+      "line": 357,
       "target": "InnoFlowTests"
     },
     {
@@ -3294,7 +3294,7 @@
       "displayName": "rawCancellationOutsideChildDoesNotCancelItsNamespacedWork()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/rawCancellationOutsideChildDoesNotCancelItsNamespacedWork()",
-      "line": 227,
+      "line": 229,
       "target": "InnoFlowTests"
     },
     {
@@ -3303,7 +3303,7 @@
       "displayName": "repeatedCloseReopenReleasesActiveRegistrations()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/repeatedCloseReopenReleasesActiveRegistrations()",
-      "line": 238,
+      "line": 240,
       "target": "InnoFlowTests"
     },
     {
@@ -3312,7 +3312,7 @@
       "displayName": "replaceAndReopenSameBusinessIDDropsOldInstanceEvents()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/replaceAndReopenSameBusinessIDDropsOldInstanceEvents()",
-      "line": 177,
+      "line": 179,
       "target": "InnoFlowTests"
     },
     {
@@ -3321,7 +3321,7 @@
       "displayName": "retainingInstanceIDKeepsLifetimeDespitePayloadReplacement()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/retainingInstanceIDKeepsLifetimeDespitePayloadReplacement()",
-      "line": 194,
+      "line": 196,
       "target": "InnoFlowTests"
     },
     {
@@ -3330,7 +3330,7 @@
       "displayName": "reusedReducerInDifferentScopesHasIndependentLifetimes(useTestStore:)",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/reusedReducerInDifferentScopesHasIndependentLifetimes(useTestStore:)",
-      "line": 454,
+      "line": 456,
       "target": "InnoFlowTests"
     },
     {
@@ -3339,7 +3339,7 @@
       "displayName": "sameRawSchedulerIDIsIsolatedBySiblingAndStore()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/sameRawSchedulerIDIsIsolatedBySiblingAndStore()",
-      "line": 205,
+      "line": 207,
       "target": "InnoFlowTests"
     },
     {
@@ -3348,7 +3348,7 @@
       "displayName": "sameReductionChildOutputIsSuppressedButParentOutputSurvives()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/sameReductionChildOutputIsSuppressedButParentOutputSurvives()",
-      "line": 113,
+      "line": 115,
       "target": "InnoFlowTests"
     },
     {
@@ -3357,7 +3357,7 @@
       "displayName": "testStoreClosePreservesSiblingAndDropsLateAction()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/testStoreClosePreservesSiblingAndDropsLateAction()",
-      "line": 158,
+      "line": 160,
       "target": "InnoFlowTests"
     },
     {
@@ -3366,7 +3366,7 @@
       "displayName": "testStoreSameReductionChildOutputIsSuppressed()",
       "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
       "identifier": "OptionalChildLifetimeConsistencyTests/testStoreSameReductionChildOutputIsSuppressed()",
-      "line": 124,
+      "line": 126,
       "target": "InnoFlowTests"
     },
     {
@@ -3672,7 +3672,7 @@
       "displayName": "canceling exploration while waiting for clock registration completes without a false failure",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/cancellation()",
-      "line": 193,
+      "line": 194,
       "target": "InnoFlowTests"
     },
     {
@@ -3681,7 +3681,7 @@
       "displayName": "manual time and explicit receive replay on fresh clocks",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/clockProgression()",
-      "line": 162,
+      "line": 163,
       "target": "InnoFlowTests"
     },
     {
@@ -3690,7 +3690,7 @@
       "displayName": "illegal PhaseMap mutation becomes a TestStore diagnostic without trapping",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/phaseViolationsAreSearchable()",
-      "line": 75,
+      "line": 76,
       "target": "InnoFlowTests"
     },
     {
@@ -3699,7 +3699,7 @@
       "displayName": "SplitMix64 uses fixed reference vectors",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/randomVectors()",
-      "line": 113,
+      "line": 114,
       "target": "InnoFlowTests"
     },
     {
@@ -3708,7 +3708,7 @@
       "displayName": "undeclared targets and forbidden self transitions report without inventing coverage",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/rejectedTransitions()",
-      "line": 88,
+      "line": 89,
       "target": "InnoFlowTests"
     },
     {
@@ -3717,7 +3717,7 @@
       "displayName": "same seed discovers invariant bug within budget and minimizes with valid prerequisites",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/seededReplayAndMinimization()",
-      "line": 121,
+      "line": 122,
       "target": "InnoFlowTests"
     },
     {
@@ -3726,7 +3726,7 @@
       "displayName": "parallel stores aggregate exact counts while independent map sites do not mix",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/sharedRecorder()",
-      "line": 54,
+      "line": 55,
       "target": "InnoFlowTests"
     },
     {

@@ -175,7 +175,7 @@ private func collectionLifetimeReducer(
     action: CasePath(
       embed: { .child($0) },
       extract: { if case .child(let action) = $0 { action } else { nil } }),
-    instanceID: { $0.instance }, child: child)
+    instanceID: { $0.instance }, reducer: child)
   let array = ForEachReducer(
     state: \CollectionLifetimeState.rows, action: collectionLifetimeActionPath, reducer: row)
   let identified = ForEachIdentifiedReducer(

@@ -51,19 +51,6 @@ public struct TestStoreScenarioStep<R: Reducer>: Sendable where R.State: Equatab
       assert: assert)
   }
 
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  public static func send(
-    _ action: R.Action,
-    label: String? = nil,
-    file: StaticString,
-    line: UInt = #line,
-    assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
-  ) -> Self {
-    send(
-      action, label: label, location: .init(fileID: file, filePath: file, line: line, column: 1),
-      assert: assert)
-  }
-
   package static func send(
     _ action: R.Action,
     label: String? = nil,
@@ -109,18 +96,6 @@ public struct TestStoreScenarioStep<R: Reducer>: Sendable where R.State: Equatab
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
   }
 
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  public static func finish(
-    timeout: Duration? = nil,
-    label: String = "finish",
-    file: StaticString,
-    line: UInt = #line
-  ) -> Self {
-    finish(
-      timeout: timeout, label: label,
-      location: .init(fileID: file, filePath: file, line: line, column: 1))
-  }
-
   package static func finish(
     timeout: Duration? = nil,
     label: String = "finish",
@@ -147,20 +122,6 @@ extension TestStoreScenarioStep where R.Action: Equatable {
       action, timeout: timeout, label: label,
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column),
       assert: assert)
-  }
-
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  public static func receive(
-    _ action: R.Action,
-    timeout: Duration? = nil,
-    label: String? = nil,
-    file: StaticString,
-    line: UInt = #line,
-    assert: (@MainActor @Sendable (inout R.State) -> Void)? = nil
-  ) -> Self {
-    receive(
-      action, timeout: timeout, label: label,
-      location: .init(fileID: file, filePath: file, line: line, column: 1), assert: assert)
   }
 
   package static func receive(
@@ -193,19 +154,6 @@ extension TestStoreScenarioStep where R.Output: Equatable {
     receiveOutput(
       output, timeout: timeout, label: label,
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
-  }
-
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  public static func receiveOutput(
-    _ output: R.Output,
-    timeout: Duration? = nil,
-    label: String? = nil,
-    file: StaticString,
-    line: UInt = #line
-  ) -> Self {
-    receiveOutput(
-      output, timeout: timeout, label: label,
-      location: .init(fileID: file, filePath: file, line: line, column: 1))
   }
 
   package static func receiveOutput(

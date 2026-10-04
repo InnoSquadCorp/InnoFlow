@@ -42,7 +42,7 @@ validation workflows that previously required application-level adapters.
 
 ### Additional 6.0 candidate work
 
-Testing sends now return `TestStoreDispatch` (`TestFlowTask` is an alias), with
+Testing sends now return `TestStoreDispatch`, with
 non-consuming dispatch verification and bounded typed effect ledgers. Optional
 children can opt into instance-scoped lifetimes that suppress stale responses
 without cancelling siblings or parent work. Test tooling adds four-coordinate

@@ -318,18 +318,6 @@ where Root.State: Equatable {
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
   }
 
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  public func receiveOutput(
-    _ expectedOutput: Root.Output,
-    timeout: Duration? = nil,
-    file: StaticString,
-    line: UInt = #line
-  ) async where Root.Output: Equatable {
-    await parent.receiveOutput(
-      expectedOutput, timeout: timeout,
-      location: .init(fileID: file, filePath: file, line: line, column: 1))
-  }
-
   /// Receives a root output matching a predicate under the root exhaustivity
   /// policy and one total timeout. Cancellation does not report a timeout.
   @discardableResult
@@ -345,20 +333,6 @@ where Root.State: Equatable {
     await parent.receiveOutput(
       where: predicate, description: description, timeout: timeout,
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
-  }
-
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  @discardableResult
-  public func receiveOutput(
-    where predicate: (Root.Output) -> Bool,
-    description: String? = nil,
-    timeout: Duration? = nil,
-    file: StaticString,
-    line: UInt = #line
-  ) async -> Root.Output? {
-    await parent.receiveOutput(
-      where: predicate, description: description, timeout: timeout,
-      location: .init(fileID: file, filePath: file, line: line, column: 1))
   }
 
   /// Receives a root reducer output while asserting through this scoped test
@@ -381,20 +355,6 @@ where Root.State: Equatable {
     await receiveOutput(
       path, caseName: caseName, timeout: timeout,
       location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
-  }
-
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  @discardableResult
-  public func receiveOutput<Value>(
-    _ path: CasePath<Root.Output, Value>,
-    caseName: String? = nil,
-    timeout: Duration? = nil,
-    file: StaticString,
-    line: UInt = #line
-  ) async -> Value? {
-    await receiveOutput(
-      path, caseName: caseName, timeout: timeout,
-      location: .init(fileID: file, filePath: file, line: line, column: 1))
   }
 
   @discardableResult

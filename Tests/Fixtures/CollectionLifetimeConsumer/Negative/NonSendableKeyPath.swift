@@ -42,7 +42,7 @@ import InnoFlowCore
         let path = \KeyPathState.[index].optional
       #endif
       _ = keyPathParentReducer().optionalChild(
-        state: path, action: keyPathAction, instanceID: { $0.id }, child: keyPathChildReducer())
+        state: path, action: keyPathAction, instanceID: { $0.id }, reducer: keyPathChildReducer())
     #elseif NEGATIVE_PHASE
       #if NEGATIVE_ERASED
         let path: PlainStatePath<Int> = \.phase

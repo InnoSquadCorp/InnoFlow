@@ -67,6 +67,9 @@ module DocExampleContexts
       ["README.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
       ["README.md", "c59889e5cb5259e9155cc6cc5df873955cf168ff82760be5c270fb1f521caee6"],
     ],
+    "MigrationEffectExtension" => [
+      ["MIGRATION.md", "2ffd3599e7f986d157ca1cb7f09aa6463d5ab4c2ea062bd31c1d5a7fef060558"],
+    ],
     "MigrationOutputs" => [
       ["MIGRATION.md", "8d1023b2a02459493babce279da1fad46387155b977a8d5c6b234dc8f713a4eb"],
       ["MIGRATION.md", "834b8028a79193f8f71c228acb59a2ecfbb00d211b5ee03b07814ab15d96a79b"],
@@ -149,6 +152,7 @@ module DocExampleContexts
     "ReadmeOutputs" => %w[readmeOutputBroadcast() readmeOutputCapture()],
     "ReadmeLifetimes" => %w[readmeDispatchLifetime() migrationDispatchLifetime() migrationMethodValue() readmeFlowScope()],
     "ReadmeTesting" => %w[readmeReceiveMatchers() readmeCollectionScope() readmeSelections()],
+    "MigrationEffectExtension" => %w[migrationEffectExtension()],
     "MigrationOutputs" => %w[migrationOutputBroadcast() migrationOutputCapture()],
     "DocCPhaseContracts" => %w[docCGraphContract() docCTotalityContract()],
     "DocCTiming" => %w[docCTimingCapture()],
@@ -384,6 +388,8 @@ module DocExampleContexts
       # the exact preview expression through a ViewBuilder function instead.
       feature_source + view + preview.sub('#Preview("Counter") {',
         "@MainActor @ViewBuilder func readmePreview() -> some View {")
+    when "MigrationEffectExtension"
+      blocks.fetch(0) + function("migrationEffectExtension", "let _: EffectTask<Int> = .helper()")
     when "MigrationOutputs"
       no_output, output = blocks.fetch(0).split("\n// Typed app-boundary output\n", 2)
       abort "[doc-copyable] Missing migration variant boundary" unless output

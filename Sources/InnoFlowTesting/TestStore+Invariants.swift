@@ -29,18 +29,6 @@ extension TestStore {
       predicate: predicate)
   }
 
-  /// Compatibility overload for an explicitly supplied legacy source file.
-  public func addInvariant(
-    _ name: String,
-    file: StaticString,
-    line: UInt = #line,
-    predicate: @escaping @MainActor @Sendable (R.State) -> Bool
-  ) {
-    addInvariant(
-      name, location: .init(fileID: file, filePath: file, line: line, column: 1),
-      predicate: predicate)
-  }
-
   package func addInvariant(
     _ name: String,
     location: TestStoreSourceLocation,

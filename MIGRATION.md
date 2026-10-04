@@ -26,6 +26,19 @@ overload. `send` additionally changes its return type, so a stored async
 Void-returning send still needs the explicit result-discarding adapter below.
 `TestStore.init` did not take source-location parameters in 5.1.1.
 
+### Final names for prerelease adopters
+
+`TestStoreDispatch` is the sole testing handle name. Replace the unreleased
+`TestFlowTask` alias. OptionalChildLifetime and optionalChild now use `reducer:`
+in place of their draft-only `child:` label, matching the other composition APIs.
+New receiveOutput, invariant, scenario and dispatch-finish APIs accept only the
+complete `fileID:filePath:line:column:` coordinates. Their draft-only `file:`
+overloads are removed; published 5.1.1 assertion overloads remain.
+
+Framework public enum case changes after 6.0.0 require a major release. Package
+consumers may switch exhaustively; omitting `@frozen` does not waive SwiftPM
+source compatibility. See [the API freeze decisions](docs/PUBLIC_API_FREEZE_6_0.md).
+
 ### Prerelease lexical scopes and scheduler admission
 
 For earlier 6.0 drafts, direct `FlowScope` construction is now unavailable:
@@ -75,7 +88,7 @@ IfCaseLet now captures defaulted fileID, line and column parameters so optional-
 
 ### Testing send return value and output progress
 
-`TestStore.send`, `ScopedTestStore.send`, and phase helper sends return `TestStoreDispatch`. `TestFlowTask` remains a typealias for the earlier draft name. Existing statement calls need no change. Explicit async Void method values and protocol adapters must wrap the call and discard its result. A dispatch handle's finish diagnoses only its own unverified work without consuming it; global store finish retains its whole-store role. In `.off`, receiveOutput now reduces intermediate actions and their follow-up effects while seeking the output under the original deadline. Exhaustive global finish reports both pending action and output counts together.
+`TestStore.send`, `ScopedTestStore.send`, and phase helper sends return `TestStoreDispatch`. The unreleased `TestFlowTask` alias is removed; use the single canonical name `TestStoreDispatch`. Existing statement calls need no change. Explicit async Void method values and protocol adapters must wrap the call and discard its result. A dispatch handle's finish diagnoses only its own unverified work without consuming it; global store finish retains its whole-store role. In `.off`, receiveOutput now reduces intermediate actions and their follow-up effects while seeking the output under the original deadline. Exhaustive global finish reports both pending action and output counts together.
 
 ### Prerelease perform cancellation errors
 
@@ -305,13 +318,10 @@ In 5.1.1, `EffectTask<Action>` is a nominal struct. In 6.0 it is the typealias
 their output-free meaning, including helpers returning `EffectTask<Action>`.
 Extensions require a separate review on both supported Swift 6.3 and 6.4:
 
-```swift
-// Valid in 5.1.1, but the bare alias return needs generic arguments in 6.0.
-extension EffectTask {
-  static func helper() -> EffectTask { .none }
-}
+The 5.1.1 spelling `extension EffectTask { static func helper() -> EffectTask { .none } }`
+needs an explicit review. For an output-free helper, the 6.0 replacement is:
 
-// Reviewed 6.0 replacement for a helper intended only for output-free effects.
+```swift
 extension ReducerEffect where Output == Never {
   static func helper() -> Self { .none }
 }

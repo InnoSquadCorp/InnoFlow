@@ -179,6 +179,7 @@ command+=(
   -only-testing:InnoFlowTests/OnChangeHostConsistencyTests
   -only-testing:InnoFlowTests/OptionalChildLifetimeConsistencyTests
   -only-testing:InnoFlowTests/OutputCasePathTests
+  -only-testing:InnoFlowTests/OwnedSynchronousEffectConsistencyTests
   -only-testing:InnoFlowTests/PerformanceSemanticsConsistencyTests
   -only-testing:InnoFlowTests/PhaseExplorationConsistencyTests
   -only-testing:InnoFlowTests/RunLaneSnapshotConsistencyTests

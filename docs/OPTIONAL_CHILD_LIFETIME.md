@@ -1,6 +1,6 @@
 # Optional child lifetime
 
-Use `parent.optionalChild(state:action:instanceID:child:)` or `OptionalChildLifetime(parent:state:action:instanceID:child:)` to opt into state-owned effects. The wrapper reduces a matching child first and then the complete parent. Do not also install IfLet for that child slot. Existing IfLet behavior is unchanged.
+Use `parent.optionalChild(state:action:instanceID:reducer:)` or `OptionalChildLifetime(parent:state:action:instanceID:reducer:)` to opt into state-owned effects. The wrapper reduces a matching child first and then the complete parent. Do not also install IfLet for that child slot. Existing IfLet behavior is unchanged.
 
 Supply a Hashable and Sendable child instance identity. Its projection must be pure and stable: the host may evaluate it again against the final composed state, without rerunning reducers or phase matchers. A business record ID is not a lifetime ID: create a fresh instance ID when closing/reopening the same record. Replacing payload while keeping the instance ID preserves the lifetime. A close/reopen hidden within one reducer call using the same ID cannot be inferred.
 
