@@ -12,6 +12,29 @@ New canonical assertion parameters are fileID, filePath, line and column, all de
 
 serial(maxPending:) and queueFull(maxPending:) now carry UInt. Nonnegative literals continue to work; validate signed application input before converting it with UInt(exactly:), rather than trapping or clamping implicitly. invalidCapacity is removed. Exhaustive EffectAdmission switches must handle cancelledBeforeStart and superseded. A delayed older latest request no longer evicts a newer live request. Terminal admission observations never authorize action delivery after accepted cancellation.
 
+### Sendable key paths in reducer composition and PhaseMap
+
+`Scope`, `IfLet`, `ForEachReducer`, `ForEachIdentifiedReducer`,
+`OptionalChildLifetime` / `optionalChild`, and `PhaseMap` now require a
+Sendable state key path. This is an intentional 6.0 source change: lifetime
+metadata and phase coverage can outlive the reducer call, so captured subscript
+indices must satisfy the compiler's Sendable checks.
+
+Direct stored-property literals such as `state: \.child` still compile. Preserve
+the marker on a hoisted value or helper return type, for example
+`let path: any WritableKeyPath<Parent.State, Child.State> & Sendable = \.child`.
+The optional-child form uses `Child.State?` and collection forms use their exact
+collection value type. A plain `WritableKeyPath<...>` annotation erases this
+proof and must be changed at its declaration; do not cast it back or wrap it in
+unchecked storage. Subscript indices should be immutable Sendable values.
+A non-Sendable reference index is rejected even when the root State is Sendable.
+
+The supported Swift 6.3 and 6.4 compilers verify this contract. Independent
+consumer fixtures cover literals, explicitly typed values, Sendable indices,
+and rejection of erased or non-Sendable captured paths. Existing IfLet runtime
+behavior stays the same; its key-path input type is strengthened. IfCaseLet's
+CasePath inputs and Store selection key-path APIs are unaffected.
+
 ### Optional-child lifetime adoption
 
 Existing IfLet keeps its behavior. To adopt state-owned cancellation, replace duplicate child composition with OptionalChildLifetime or the parent optionalChild modifier. Provide a fresh explicit instance ID on reopening; keeping the ID preserves the same lifetime. The wrapper already reduces the child before its complete parent. Lift typed outputs explicitly. Raw effect IDs inside a child are owner-local, so outside raw-ID cancellation no longer reaches opt-in child work. This is an additive opt-in API; see docs/OPTIONAL_CHILD_LIFETIME.md.

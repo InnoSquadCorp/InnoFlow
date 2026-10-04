@@ -84,7 +84,7 @@ public struct PhaseMapDiagnostics<Action: Sendable, Phase: Hashable & Sendable>:
 
 public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Sendable> {
   package let observationID: String
-  package let phaseKeyPath: WritableKeyPath<State, Phase>
+  package let phaseKeyPath: any WritableKeyPath<State, Phase> & Sendable
   package let rules: [PhaseRule<State, Action, Phase>]
   package let rulesBySourcePhase: [Phase: [PhaseRule<State, Action, Phase>]]
   package let diagnostics: PhaseMapDiagnostics<Action, Phase>
@@ -99,7 +99,7 @@ public struct PhaseMap<State: Sendable, Action: Sendable, Phase: Hashable & Send
   private let cachedDerivedGraph: PhaseTransitionGraph<Phase>
 
   public init(
-    _ phaseKeyPath: WritableKeyPath<State, Phase>,
+    _ phaseKeyPath: any WritableKeyPath<State, Phase> & Sendable,
     diagnostics: PhaseMapDiagnostics<Action, Phase> = .disabled,
     fileID: StaticString = #fileID,
     line: UInt = #line,

@@ -67,17 +67,18 @@ public enum PhaseCoverageMinimum: Sendable, Equatable {
 public final class PhaseCoverageRecorder<
   State: Sendable, Action: Sendable, Phase: Hashable & Sendable
 >: Sendable {
-  private struct Storage {
-    let keyPath: WritableKeyPath<State, Phase>
+  private struct Storage: Sendable {
     var counts: [PhaseCoverageTransition<Phase>: Int] = [:]
   }
   private let identity: String
+  private let keyPath: any WritableKeyPath<State, Phase> & Sendable
   private let expected: Set<PhaseCoverageTransition<Phase>>
   private let storage: OSAllocatedUnfairLock<Storage>
 
   public init(_ map: PhaseMap<State, Action, Phase>) {
     identity = map.observationID
-    storage = .init(initialState: Storage(keyPath: map.phaseKeyPath))
+    keyPath = map.phaseKeyPath
+    storage = .init(initialState: Storage())
     expected = Set(
       map.rules.flatMap { rule in
         rule.transitions.flatMap { transition in
@@ -134,13 +135,12 @@ extension PhaseCoverageRecorder: PhaseMapRuntimeObserver {
     map: PhaseMap<S, A, P>, declarationIndex: Int, from: P, to: P
   ) {
     guard identity == map.observationID, A.self == Action.self,
-      let keyPath = map.phaseKeyPath as? WritableKeyPath<State, Phase>,
+      S.self == State.self, P.self == Phase.self,
       let source = from as? Phase, let target = to as? Phase
     else { return }
     let edge = PhaseCoverageTransition(from: source, to: target, triggerID: declarationIndex)
-    guard expected.contains(edge) else { return }
+    guard expected.contains(edge), keyPath == map.phaseKeyPath else { return }
     storage.withLock { value in
-      guard value.keyPath == keyPath else { return }
       value.counts[edge, default: 0] += 1
     }
   }

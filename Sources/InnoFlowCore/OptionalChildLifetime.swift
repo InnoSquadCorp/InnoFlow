@@ -17,14 +17,14 @@ where Parent.Output == Child.Output {
 
   private let parent: Parent
   private let child: Child
-  private let statePath: WritableKeyPath<State, Child.State?>
+  private let statePath: any WritableKeyPath<State, Child.State?> & Sendable
   private let actionPath: CasePath<Action, Child.Action>
   private let instanceID: @Sendable (Child.State) -> ID
   private let slot: ChildLifetimeSlot
 
   public init(
     parent: Parent,
-    state: WritableKeyPath<State, Child.State?>,
+    state: any WritableKeyPath<State, Child.State?> & Sendable,
     action: CasePath<Action, Child.Action>,
     instanceID: @escaping @Sendable (Child.State) -> ID,
     child: Child,
@@ -65,7 +65,7 @@ extension Reducer {
   /// Cancellation IDs and scheduler lanes inside the child are owner-local;
   /// cancelling a raw ID outside it does not cancel that child's work.
   public func optionalChild<Child: Reducer, ID: Hashable & Sendable>(
-    state: WritableKeyPath<State, Child.State?>,
+    state: any WritableKeyPath<State, Child.State?> & Sendable,
     action: CasePath<Action, Child.Action>,
     instanceID: @escaping @Sendable (Child.State) -> ID,
     child: Child,
@@ -80,33 +80,30 @@ extension Reducer {
   }
 }
 
-/// Lock-backed structural identity: key paths never access state here.
+/// Structural identity whose captured key-path indices are compiler-checked Sendable.
 package final class ChildLifetimeKeyPath: Hashable, Sendable {
-  private let storage: OSAllocatedUnfairLock<AnyKeyPath>
-  package init(_ path: AnyKeyPath) { storage = .init(initialState: path) }
+  private let path: any AnyKeyPath & Sendable
+  package init(_ path: any AnyKeyPath & Sendable) { self.path = path }
   package static func == (lhs: ChildLifetimeKeyPath, rhs: ChildLifetimeKeyPath) -> Bool {
-    if lhs === rhs { return true }
-    let left = lhs.storage.withLock { $0 }
-    return rhs.storage.withLock { left == $0 }
+    lhs.path == rhs.path
   }
-  package func hash(into hasher: inout Hasher) {
-    storage.withLock { hasher.combine($0) }
-  }
+  package func hash(into hasher: inout Hasher) { hasher.combine(path) }
 }
 
-/// A structural path step also retains the state projection needed at the final
-/// composed-reduction boundary. The lock protects non-Sendable key paths; these
-/// projections only read snapshots and never access a Store.
+/// An immutable, Sendable projection invoked only during MainActor reconciliation.
+/// Erased snapshots stay in the caller's isolation domain; no closure or state is
+/// transferred by a read, and user projections never run inside a lock.
 package final class ChildLifetimeProjection: Hashable, Sendable {
   private let id: AnyEffectID
-  private let read: OSAllocatedUnfairLock<(Any) -> Any?>
+  private let read: @MainActor @Sendable (Any) -> Any?
 
-  init(id: AnyEffectID, read: @escaping (Any) -> Any?) {
+  init(id: AnyEffectID, read: @escaping @MainActor @Sendable (Any) -> Any?) {
     self.id = id
-    self.read = .init(initialState: read)
+    self.read = read
   }
 
-  func value(in state: Any) -> Any? { read.withLock { $0(state) } }
+  @MainActor
+  func value(in state: Any) -> Any? { read(state) }
 
   package static func == (lhs: ChildLifetimeProjection, rhs: ChildLifetimeProjection) -> Bool {
     lhs.id == rhs.id
@@ -149,10 +146,10 @@ package struct ChildLifetimeSlot: Hashable, Sendable {
   let file: String
   let line: UInt
   let column: UInt
-  private let read: OSAllocatedUnfairLock<(Any) -> (identity: AnyEffectID, state: Any)?>
+  private let read: @MainActor @Sendable (Any) -> (identity: AnyEffectID, state: Any)?
 
   init<Root, ChildState, ID: Hashable & Sendable>(
-    state: WritableKeyPath<Root, ChildState?>,
+    state: any WritableKeyPath<Root, ChildState?> & Sendable,
     instanceID: @escaping @Sendable (ChildState) -> ID,
     file: String, line: UInt, column: UInt
   ) {
@@ -160,14 +157,15 @@ package struct ChildLifetimeSlot: Hashable, Sendable {
     self.file = file
     self.line = line
     self.column = column
-    self.read = .init(initialState: { root in
+    self.read = { root in
       guard let root = root as? Root, let child = root[keyPath: state] else { return nil }
       return (AnyEffectID(EffectID(instanceID(child))), child)
-    })
+    }
   }
 
+  @MainActor
   func snapshot(in state: Any) -> (identity: AnyEffectID, state: Any)? {
-    read.withLock { $0(state) }
+    read(state)
   }
 
   package static func == (lhs: Self, rhs: Self) -> Bool {
@@ -185,7 +183,7 @@ package struct ChildLifetimeSlot: Hashable, Sendable {
 
 extension ReducerEffect {
   @usableFromInline
-  func inLifetimeScope<Root, Value>(state: KeyPath<Root, Value>) -> Self {
+  func inLifetimeScope<Root, Value>(state: any KeyPath<Root, Value> & Sendable) -> Self {
     guard containsLifetimeMetadata else { return self }
     return .init(
       operation: .lifetimeScope(
@@ -196,7 +194,7 @@ extension ReducerEffect {
   }
 
   @usableFromInline
-  func inLifetimeScope<Root, Value>(state: KeyPath<Root, Value?>) -> Self {
+  func inLifetimeScope<Root, Value>(state: any KeyPath<Root, Value?> & Sendable) -> Self {
     guard containsLifetimeMetadata else { return self }
     return .init(
       operation: .lifetimeScope(
@@ -221,8 +219,8 @@ extension ReducerEffect {
 
   @usableFromInline
   func inLifetimeScope<Root, Collection, ID: Hashable & Sendable, Element>(
-    state: KeyPath<Root, Collection>, elementID: ID,
-    element: @escaping (Collection, ID) -> Element?
+    state: any KeyPath<Root, Collection> & Sendable, elementID: ID,
+    element: @escaping @MainActor @Sendable (Collection, ID) -> Element?
   ) -> Self {
     guard containsLifetimeMetadata else { return self }
     let location = ChildLifetimeCollectionLocation(

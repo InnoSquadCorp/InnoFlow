@@ -29,6 +29,7 @@ func makeAdapter() -> (
 
 @main struct Consumer {
   @MainActor static func main() async {
+    verifySendableCompositionKeyPaths()
     let state = CasePath<Selection, Int>(
       embed: { .active($0) },
       extract: { if case .active(let value) = $0 { value } else { nil } })

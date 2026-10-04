@@ -8,7 +8,7 @@ if [[ ! -d "$SOURCE_ROOT" ]]; then
   exit 2
 fi
 set +e
-matches="$(grep -REn --include='*.swift' '(@unchecked[[:space:]]+Sendable|nonisolated[[:space:]]*\([[:space:]]*unsafe|assumeIsolated|@preconcurrency)' "$SOURCE_ROOT" 2>&1)"
+matches="$(grep -REn --include='*.swift' '(@unchecked[[:space:]]+Sendable|nonisolated[[:space:]]*\([[:space:]]*unsafe|assumeIsolated|@preconcurrency|uncheckedState[[:space:]]*:|withLock(IfAvailable)?Unchecked)' "$SOURCE_ROOT" 2>&1)"
 status=$?
 set -e
 case "$status" in

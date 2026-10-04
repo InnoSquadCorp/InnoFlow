@@ -172,7 +172,7 @@ TestStore, ScopedTestStore and phase-send helpers return TestStoreDispatch; Test
 
 ### Optional child adoption
 
-OptionalChildLifetime and Reducer.optionalChild are additive, opt-in wrappers. Existing IfLet remains unchanged. Child instance identity is Hashable/Sendable; parent and child Output must match after explicit lifting. Public examples compile from Core-only generic and macro authoring consumers.
+OptionalChildLifetime and Reducer.optionalChild are additive, opt-in wrappers. Existing IfLet retains its runtime behavior; its key-path input now requires Sendable as classified below. Child instance identity is Hashable/Sendable; parent and child Output must match after explicit lifting. Public examples compile from Core-only generic and macro authoring consumers.
 
 ### Scheduler 6.0 signature changes
 
@@ -195,3 +195,22 @@ PhaseMap initialization also adds defaulted source coordinates to identify cover
 ### IfCaseLet lifetime declaration coordinates
 
 IfCaseLet.init(state:action:reducer:onMissing:) gains defaulted fileID, line and column parameters. Constructor call syntax remains source-compatible, but the old exact four-argument initializer function type no longer matches; use an explicit closure adapter. The overload with lifetimeID: EffectID<ID> is additive and distinguishes overlapping case reducers built at the same helper declaration. Existing CasePath identity and public collection ID constraints do not change. Tests/Fixtures/CollectionLifetimeConsumer provides a positive consumer and an exact old-signature negative compile control.
+
+### 2026-10-04 Sendable composition and phase paths
+
+State key-path parameters of Scope, IfLet, ForEachReducer,
+ForEachIdentifiedReducer, OptionalChildLifetime / Reducer.optionalChild and
+PhaseMap are now `any WritableKeyPath<...> & Sendable`. This changes public
+signatures and previously erased stored key-path values must preserve the marker
+at their declaration. Direct literals and Sendable subscript indices remain
+valid. Non-Sendable captured indices are rejected by the compiler. IfCaseLet
+CasePath inputs and Store selection APIs are unchanged.
+
+This closes an Apple OSAllocatedUnfairLock compile failure and removes the
+attempt to carry non-Sendable lifetime/coverage projections through lock-backed
+Sendable metadata. Projections are immutable MainActor Sendable closures;
+coverage storage is compiler-checked Sendable. No unchecked lock escape is used.
+The historical digester/symbol counts above do not include this change and must
+not be reported as the final candidate's API inventory. The external
+CollectionLifetimeConsumer now checks each affected composition/phase boundary
+and its source migration on supported toolchains.

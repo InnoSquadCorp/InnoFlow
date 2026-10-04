@@ -880,6 +880,8 @@ jobs:
           set -euo pipefail
           swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors \
             --filter 'InnoFlowMacrosTests|CompileContractTests'
+          # Compile the Sendable key-path migration against both audited compilers.
+          "$GITHUB_WORKSPACE/scripts/check-collection-lifetime-consumer.sh"
 
       - name: Verify AST migration on the audited SwiftSyntax line
         env:

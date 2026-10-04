@@ -193,13 +193,13 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   public typealias Action = ParentAction
   public typealias Output = Child.Output
 
-  @usableFromInline let state: WritableKeyPath<ParentState, Child.State>
+  @usableFromInline let state: any WritableKeyPath<ParentState, Child.State> & Sendable
   @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
   @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
   @usableFromInline let reducer: Child
 
   private init(
-    state: WritableKeyPath<ParentState, Child.State>,
+    state: any WritableKeyPath<ParentState, Child.State> & Sendable,
     extractAction: @escaping @Sendable (ParentAction) -> Child.Action?,
     embedAction: @escaping @Sendable (Child.Action) -> ParentAction,
     reducer: Child
@@ -211,7 +211,7 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   }
 
   public init(
-    state: WritableKeyPath<ParentState, Child.State>,
+    state: any WritableKeyPath<ParentState, Child.State> & Sendable,
     action: CasePath<ParentAction, Child.Action>,
     reducer: Child
   ) {
@@ -262,14 +262,14 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   public typealias Action = ParentAction
   public typealias Output = Child.Output
 
-  @usableFromInline let state: WritableKeyPath<ParentState, Child.State?>
+  @usableFromInline let state: any WritableKeyPath<ParentState, Child.State?> & Sendable
   @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
   @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
   @usableFromInline let reducer: Child
   @usableFromInline let onMissing: OnMissingPolicy
 
   private init(
-    state: WritableKeyPath<ParentState, Child.State?>,
+    state: any WritableKeyPath<ParentState, Child.State?> & Sendable,
     extractAction: @escaping @Sendable (ParentAction) -> Child.Action?,
     embedAction: @escaping @Sendable (Child.Action) -> ParentAction,
     reducer: Child,
@@ -283,7 +283,7 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   }
 
   public init(
-    state: WritableKeyPath<ParentState, Child.State?>,
+    state: any WritableKeyPath<ParentState, Child.State?> & Sendable,
     action: CasePath<ParentAction, Child.Action>,
     reducer: Child,
     onMissing: OnMissingPolicy = .assertOnly
@@ -462,13 +462,13 @@ where
   public typealias Action = ParentAction
   public typealias Output = Child.Output
 
-  @usableFromInline let state: WritableKeyPath<ParentState, CollectionState>
+  @usableFromInline let state: any WritableKeyPath<ParentState, CollectionState> & Sendable
   @usableFromInline let action:
     CollectionActionPath<ParentAction, CollectionState.Element.ID, Child.Action>
   @usableFromInline let reducer: Child
 
   public init(
-    state: WritableKeyPath<ParentState, CollectionState>,
+    state: any WritableKeyPath<ParentState, CollectionState> & Sendable,
     action: CollectionActionPath<ParentAction, CollectionState.Element.ID, Child.Action>,
     reducer: Child
   ) {
@@ -530,7 +530,8 @@ where
   public typealias Action = ParentAction
   public typealias Output = Child.Output
 
-  @usableFromInline let state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>
+  @usableFromInline let state:
+    any WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>> & Sendable
   @usableFromInline let action: CollectionActionPath<ParentAction, ElementID, Child.Action>
   @usableFromInline let reducer: Child
 
@@ -540,7 +541,7 @@ where
   /// `reduce(into:action:)`; this reducer writes the copied child state back
   /// through the same `IdentifiedArray[id:]` address used for lookup.
   public init(
-    state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>,
+    state: any WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>> & Sendable,
     action: CollectionActionPath<ParentAction, ElementID, Child.Action>,
     reducer: Child
   ) {

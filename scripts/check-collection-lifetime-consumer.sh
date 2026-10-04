@@ -24,3 +24,21 @@ if ! grep -Eq "PreviousInitializer.swift:.*error: cannot convert value of type" 
   exit 1
 fi
 echo "Expected old IfCaseLet initializer function rejection verified"
+for boundary in scope iflet foreach identified optional phase; do
+  for kind in erased capture; do
+    if INNOFLOW_CONSUMER_PACKAGE_PATH="$PACKAGE" \
+      INNOFLOW_COLLECTION_CONSUMER_NEGATIVE="$boundary-$kind" \
+      swift build --package-path "$FIXTURE" --scratch-path "$TMP/build" --jobs "$JOBS" \
+      -Xswiftc -warnings-as-errors >"$TMP/$boundary-$kind.log" 2>&1; then
+      echo "error: $boundary accepted a $kind non-Sendable key path" >&2
+      exit 1
+    fi
+    if ! grep -Eq "NonSendableKeyPath.swift:.*error:.*does not conform to the 'Sendable' protocol" \
+      "$TMP/$boundary-$kind.log"; then
+      cat "$TMP/$boundary-$kind.log" >&2
+      echo "error: $boundary $kind consumer failed for an unrelated reason" >&2
+      exit 1
+    fi
+    echo "Expected $boundary $kind key-path rejection verified"
+  done
+done
