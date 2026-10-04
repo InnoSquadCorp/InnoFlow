@@ -114,6 +114,12 @@ expect_mutation_failure sample-sdk-bypass \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="sample-sdk-tvos" }; c.fetch("commandContract")["requiredArguments"].delete("--sample"); File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure unpinned-runtime-inventory \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="runtime-ios-18.5" }; c.delete("testIdentifierInventorySha256"); File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure broad-expected-failures \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("profiles").fetch("tests")["allowsExpectedFailures"]=true; File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure broad-runtime-warnings \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("checks").find { |x| x.fetch("id")=="runtime-ios-18.5" }["allowsRuntimeWarnings"]=true; File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure inline-diagnostic-override \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("checks").find { |x| x.fetch("id")=="runtime-ios-18.5" }["expectedFailureTestIdentifiers"]=[]; File.write(p,JSON.generate(j)+"\n")'
 
 cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
 printf '\n// stale source mutation\n' >>"$fixture_root/Tests/InnoFlowTests/CompileContractTests.swift"
@@ -148,6 +154,35 @@ if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/nul
 fi
 cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
 cp "$root_dir/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/"
+
+# Re-pinning a malformed or expanded diagnostic list cannot authorize it.
+for mode in missing extra substituted duplicate unsorted absent; do
+  ruby -rjson -rdigest -e '
+    inventory_path, policy_path, mode = ARGV
+    inventory = JSON.parse(File.read(inventory_path))
+    diagnostics = inventory.fetch("expectedFailureTestIdentifiers")
+    case mode
+    when "missing" then diagnostics.pop
+    when "extra" then diagnostics << inventory.fetch("expectedTestIdentifiers").first; diagnostics.sort!
+    when "substituted" then diagnostics[0] = inventory.fetch("expectedTestIdentifiers").first; diagnostics.sort!
+    when "duplicate" then diagnostics << diagnostics.last
+    when "unsorted" then diagnostics.reverse!
+    when "absent" then inventory.delete("expectedFailureTestIdentifiers")
+    end
+    File.write(inventory_path, JSON.generate(inventory) + "\n")
+    policy = JSON.parse(File.read(policy_path))
+    policy.fetch("checks").each do |check|
+      check["testIdentifierInventorySha256"] = Digest::SHA256.file(inventory_path).hexdigest if check.fetch("id").start_with?("runtime-")
+    end
+    File.write(policy_path, JSON.generate(policy) + "\n")
+  ' "$fixture_root/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/release-evidence-policy.json" "$mode"
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Re-pinned unreviewed diagnostic inventory passed: $mode" >&2
+    exit 1
+  fi
+  cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
+  cp "$root_dir/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/"
+done
 
 command_repository="$fixture_root/command-repository"
 command_snapshot="$fixture_root/command-candidate.json"

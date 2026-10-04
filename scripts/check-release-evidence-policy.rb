@@ -255,12 +255,27 @@ begin
   end.map { |test| test.fetch("identifier") }.sort
   abort "[release-evidence-policy] focused inventory differs from complete source declarations" unless
     identifiers == source_focused_identifiers
+  # These tests assert that specific diagnostics are emitted. Only these
+  # declarations may report Expected Failure; additions require review.
+  diagnostic_identifiers = %w[
+    PhaseExplorationConsistencyTests/actualTransitionCoverage()
+    TestingLocationConsistencyTests/swiftTestingUsesCallSite()
+  ]
+  abort "[release-evidence-policy] runtime diagnostic inventory changed" unless
+    inventory["expectedFailureTestIdentifiers"] == diagnostic_identifiers &&
+    (diagnostic_identifiers - identifiers).empty?
+  abort "[release-evidence-policy] runtime failures and warnings must not be broadly allowed" unless
+    policy.dig("profiles", "tests", "allowsExpectedFailures") == false &&
+    policy.dig("profiles", "tests", "allowsRuntimeWarnings") == false
   inventory_sha = Digest::SHA256.file(inventory_path).hexdigest
   runtime_checks.each do |runtime_check|
     abort "[release-evidence-policy] #{runtime_check.fetch("id")} has no pinned runtime inventory" unless
       runtime_check["testIdentifierInventory"] == inventory_relative &&
       runtime_check["testIdentifierInventorySha256"] == inventory_sha &&
-      !runtime_check.key?("expectedTestIdentifiers")
+      !runtime_check.key?("expectedTestIdentifiers") &&
+      !runtime_check.key?("expectedFailureTestIdentifiers") &&
+      !runtime_check.fetch("allowsExpectedFailures", false) &&
+      !runtime_check.fetch("allowsRuntimeWarnings", false)
   end
   runner = File.read(File.join(root, "scripts/run-focused-platform-runtime-tests.sh"))
   discovery_target_selections = runner.scan(/^\s+-only-testing:([A-Za-z_][A-Za-z0-9_]*)$/).flatten

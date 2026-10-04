@@ -56,7 +56,7 @@
     "Tests/InnoFlowTests/OutputCasePathTests.swift": "6d79858842554f72e1fb731b5d8d7a37ce0fe6caf370d57049c0f041cddbbd3d",
     "Tests/InnoFlowTests/OutputPromotionTests.swift": "b064880b01077fd5cdf58531a68f799c21999f7c7329056a365bdfbb0334d0d6",
     "Tests/InnoFlowTests/PerformanceSemanticsConsistencyTests.swift": "4535b90a7f8b18f2da24e2d287a60e3a7e9c47b0d59aee0484e28a33047ef3e5",
-    "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift": "65117edf9b1a0b3a4d89f8bde3b4274732280c1b2ebe46dd5311156f3e6da8ee",
+    "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift": "9979586a0f1be97bc2c63ad7c3d3735787baa28e40f9a335dcb26343fd01cf9d",
     "Tests/InnoFlowTests/PhaseMapDiagnosticsAdaptersTests.swift": "f0a7ffb10c41d0b5ecf3c4af5b49956d863c4a1834f42cd1fb4830df8b489ee1",
     "Tests/InnoFlowTests/PhaseMapPerfTests.swift": "c0c3a43a477c400c1c534062341d92ed7ff0c50cf140d192522bb9102452b3e4",
     "Tests/InnoFlowTests/PhaseTransitionGraphTests.swift": "aef6f5017017eda6aa0abc9f1835684895ce92b111b2a04e539f3dc1d5ff41b3",
@@ -95,7 +95,7 @@
     "Tests/InnoFlowTests/TestStoreReceiveTests.swift": "80151f4c56f8ed900337e3e5592d829184604bfc288b55d77cf59b9711671857",
     "Tests/InnoFlowTests/TestStoreTerminalVerificationTests.swift": "8e6ef2e10209205ed6d9cb5852cc4137177bb055bc048b43d079850529f38ac2",
     "Tests/InnoFlowTests/TestSupport.swift": "0bfa3ce7f28bbef531bbdf45e4fb15f5ce92c1b7a6272d80fcb3db02d06ecf4e",
-    "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift": "327c043ac89288a2495a5d364f075604e5323932521946e2887b14057210b5b4",
+    "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift": "f249afdb6724a3cd2aeedeaa70dd83a120c400335896f77ce32079243458504d",
     "Tests/InnoFlowTests/ViewDispatchLifetimeConsistencyTests.swift": "aa2a17f14a44cc00663465c7c7cc9723cac4b591d6612bf3249d09f6e4188dcb"
   },
   "tests": [
@@ -2564,7 +2564,7 @@
       "displayName": "a correct reducer control runs the budget without a false failure",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "ExplorerFailureBoundaryConsistencyTests/correctControl()",
-      "line": 298,
+      "line": 314,
       "target": "InnoFlowTests"
     },
     {
@@ -2573,7 +2573,7 @@
       "displayName": "effect runtime errors are preserved with their origin",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "ExplorerFailureBoundaryConsistencyTests/effectError()",
-      "line": 272,
+      "line": 288,
       "target": "InnoFlowTests"
     },
     {
@@ -2582,7 +2582,7 @@
       "displayName": "generator exceptions are diagnostics, never advertised as reducer reproductions",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "ExplorerFailureBoundaryConsistencyTests/generatorError()",
-      "line": 285,
+      "line": 301,
       "target": "InnoFlowTests"
     },
     {
@@ -3545,7 +3545,7 @@
       "displayName": "canceling exploration while waiting for clock registration completes without a false failure",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/cancellation()",
-      "line": 177,
+      "line": 193,
       "target": "InnoFlowTests"
     },
     {
@@ -3554,7 +3554,7 @@
       "displayName": "manual time and explicit receive replay on fresh clocks",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/clockProgression()",
-      "line": 146,
+      "line": 162,
       "target": "InnoFlowTests"
     },
     {
@@ -3563,7 +3563,7 @@
       "displayName": "illegal PhaseMap mutation becomes a TestStore diagnostic without trapping",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/phaseViolationsAreSearchable()",
-      "line": 59,
+      "line": 75,
       "target": "InnoFlowTests"
     },
     {
@@ -3572,7 +3572,7 @@
       "displayName": "SplitMix64 uses fixed reference vectors",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/randomVectors()",
-      "line": 97,
+      "line": 113,
       "target": "InnoFlowTests"
     },
     {
@@ -3581,7 +3581,7 @@
       "displayName": "undeclared targets and forbidden self transitions report without inventing coverage",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/rejectedTransitions()",
-      "line": 72,
+      "line": 88,
       "target": "InnoFlowTests"
     },
     {
@@ -3590,7 +3590,7 @@
       "displayName": "same seed discovers invariant bug within budget and minimizes with valid prerequisites",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/seededReplayAndMinimization()",
-      "line": 105,
+      "line": 121,
       "target": "InnoFlowTests"
     },
     {
@@ -3599,7 +3599,7 @@
       "displayName": "parallel stores aggregate exact counts while independent map sites do not mix",
       "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
       "identifier": "PhaseExplorationConsistencyTests/sharedRecorder()",
-      "line": 38,
+      "line": 54,
       "target": "InnoFlowTests"
     },
     {
@@ -8567,7 +8567,7 @@
       "displayName": "asynchronous run failures retain the originating public call site",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/asynchronousFailureLocation()",
-      "line": 129,
+      "line": 151,
       "target": "InnoFlowTests"
     },
     {
@@ -8576,7 +8576,7 @@
       "displayName": "default source arguments are captured at the caller",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/defaultsUseCaller()",
-      "line": 30,
+      "line": 52,
       "target": "InnoFlowTests"
     },
     {
@@ -8585,7 +8585,7 @@
       "displayName": "different enum cases with equal payloads still produce a structural diff",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/enumCaseDiff()",
-      "line": 207,
+      "line": 229,
       "target": "InnoFlowTests"
     },
     {
@@ -8594,7 +8594,7 @@
       "displayName": "explicit legacy file overload remains supported with a defined column",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/legacyFileOverload()",
-      "line": 45,
+      "line": 67,
       "target": "InnoFlowTests"
     },
     {
@@ -8603,7 +8603,7 @@
       "displayName": "scenario decoration and invariant diagnostics keep their configured origins",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/scenarioAndInvariantLocations()",
-      "line": 103,
+      "line": 125,
       "target": "InnoFlowTests"
     },
     {
@@ -8612,7 +8612,7 @@
       "displayName": "scoped and phase helpers forward every source coordinate",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/scopedAndPhaseLocations()",
-      "line": 59,
+      "line": 81,
       "target": "InnoFlowTests"
     },
     {
@@ -8621,7 +8621,7 @@
       "displayName": "scoped predicate output cancellation does not turn into a timeout",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/scopedOutputCancellation()",
-      "line": 174,
+      "line": 196,
       "target": "InnoFlowTests"
     },
     {
@@ -8630,7 +8630,7 @@
       "displayName": "scoped exact and predicate outputs use the shared root queue",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/scopedOutputOverloads(exhaustive:)",
-      "line": 145,
+      "line": 167,
       "target": "InnoFlowTests"
     },
     {
@@ -8639,7 +8639,7 @@
       "displayName": "scoped predicate output honors non-exhaustive action progress and total timeout",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/scopedOutputProgressAndTimeout()",
-      "line": 157,
+      "line": 179,
       "target": "InnoFlowTests"
     },
     {
@@ -8648,7 +8648,7 @@
       "displayName": "structural diff penetrates hidden descriptions and retains nested collection paths",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/structuralDiffSnapshots()",
-      "line": 193,
+      "line": 215,
       "target": "InnoFlowTests"
     },
     {
@@ -8657,7 +8657,7 @@
       "displayName": "Swift Testing records the exact supplied four-coordinate source location",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/swiftTestingUsesCallSite()",
-      "line": 14,
+      "line": 15,
       "target": "InnoFlowTests"
     },
     {
@@ -8666,7 +8666,7 @@
       "displayName": "dispatch/global finish and deinit preserve complete source locations",
       "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
       "identifier": "TestingLocationConsistencyTests/terminalLocations()",
-      "line": 82,
+      "line": 104,
       "target": "InnoFlowTests"
     },
     {

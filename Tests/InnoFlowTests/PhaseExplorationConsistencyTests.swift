@@ -29,9 +29,25 @@ struct PhaseExplorationConsistencyTests {
     #expect(report.uncovered.map(\.triggerID).sorted() == [1, 4, 5])
     #expect(report.mermaid().contains("trigger 4 uncovered"))
     #expect(report.mermaid() == report.mermaid())
+    let matchedIssues = OSAllocatedUnfairLock(initialState: 0)
+    let expectedMessage = "Phase coverage was 3/6; required 1.0.\n\(report.mermaid())"
     withKnownIssue("Only three of six declared edges were exercised") {
-      recorder.assertPhaseCoverage(minimum: .all)
+      recorder.assertPhaseCoverage(
+        minimum: .all, fileID: "CoverageTests/Explicit.swift",
+        filePath: "/fixtures/PhaseCoverage.swift", line: 73, column: 9)
+    } matching: { issue in
+      guard let error = issue.error,
+        String(describing: error) == expectedMessage,
+        issue.sourceLocation == SourceLocation(
+          fileID: "CoverageTests/Explicit.swift", filePath: "/fixtures/PhaseCoverage.swift",
+          line: 73, column: 9)
+      else { return false }
+      return matchedIssues.withLock { count in
+        count += 1
+        return count == 1
+      }
     }
+    #expect(matchedIssues.withLock { $0 } == 1)
     await store.finish()
   }
 

@@ -1,6 +1,7 @@
 import Foundation
 import InnoFlowCore
 import Testing
+import os
 
 @testable import InnoFlowTesting
 
@@ -14,16 +15,37 @@ struct TestingLocationConsistencyTests {
   @Test("Swift Testing records the exact supplied four-coordinate source location")
   func swiftTestingUsesCallSite() async {
     let store = TestStore(reducer: LocationConsistencyFeature())
+    let matchedIssues = OSAllocatedUnfairLock(initialState: 0)
+    let expectedMessage = """
+      State mismatch after action.
+
+      Diff:
+      count: expected 0, actual 1
+
+      Expected:
+      State(count: 0, phase: 0)
+
+      Actual:
+      State(count: 1, phase: 0)
+      """
     await withKnownIssue("Intentional state mismatch verifies the real reporter") {
       await store.send(
         .increment, fileID: "LocationTests/Explicit.swift", filePath: "/fixtures/Explicit.swift",
         line: 91, column: 8)
     } matching: { issue in
-      issue.sourceLocation
+      guard let error = issue.error,
+        String(describing: error) == expectedMessage,
+        issue.sourceLocation
         == SourceLocation(
           fileID: "LocationTests/Explicit.swift", filePath: "/fixtures/Explicit.swift", line: 91,
           column: 8)
+      else { return false }
+      return matchedIssues.withLock { count in
+        count += 1
+        return count == 1
+      }
     }
+    #expect(matchedIssues.withLock { $0 } == 1)
     await store.finish()
   }
 

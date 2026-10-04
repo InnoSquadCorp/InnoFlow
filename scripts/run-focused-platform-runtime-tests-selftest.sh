@@ -52,7 +52,8 @@ import os
 import sys
 
 with open(os.environ["FOCUSED_RUNTIME_INVENTORY"], encoding="utf-8") as stream:
-    identifiers = json.load(stream)["expectedTestIdentifiers"]
+    inventory = json.load(stream)
+    identifiers = inventory["expectedTestIdentifiers"]
 mode = os.environ.get("FOCUSED_RUNTIME_FIXTURE_MODE", "complete")
 if mode == "partial":
     identifiers = identifiers[:4]
@@ -94,7 +95,8 @@ import os
 import sys
 
 with open(os.environ["FOCUSED_RUNTIME_INVENTORY"], encoding="utf-8") as stream:
-    identifiers = json.load(stream)["expectedTestIdentifiers"]
+    inventory = json.load(stream)
+    identifiers = inventory["expectedTestIdentifiers"]
 mode = os.environ.get("FOCUSED_RUNTIME_FIXTURE_MODE", "complete")
 if mode == "partial":
     identifiers = identifiers[:4]
@@ -106,19 +108,42 @@ elif mode == "duplicate":
     identifiers[-1] = identifiers[0]
 elif mode == "zero":
     identifiers = []
+diagnostics = inventory.get("expectedFailureTestIdentifiers", [])
+results = {identifier: "Expected Failure" if identifier in diagnostics else "Passed"
+           for identifier in identifiers}
+if mode == "diagnostic-missing":
+    results[diagnostics[0]] = "Passed"
+elif mode == "diagnostic-extra":
+    results[next(item for item in identifiers if item not in diagnostics)] = "Expected Failure"
+elif mode == "diagnostic-swapped":
+    results[diagnostics[0]] = "Passed"
+    results[next(item for item in identifiers if item not in diagnostics)] = "Expected Failure"
+elif mode == "diagnostic-failed":
+    results[diagnostics[0]] = "Failed"
+elif mode == "diagnostic-skipped":
+    results[diagnostics[0]] = "Skipped"
 if sys.argv[1] == "summary":
     if mode == "xcode-failure":
         print(json.dumps({"result": "Failed", "failedTests": 1,
                           "testFailures": [{"failureText": "fixture assertion details"}]}))
         raise SystemExit(0)
-    print(json.dumps({
-        "result": "Passed", "failedTests": 0, "skippedTests": 0,
-        "expectedFailures": 0, "runtimeWarnings": [],
+    summary = {
+        "result": "Passed", "failedTests": list(results.values()).count("Failed"),
+        "skippedTests": list(results.values()).count("Skipped"),
+        "passedTests": list(results.values()).count("Passed"),
+        "expectedFailures": list(results.values()).count("Expected Failure"), "runtimeWarnings": [],
         "totalTestCount": len(identifiers),
-    }))
+    }
+    if mode == "diagnostic-duplicate-issue":
+        summary["expectedFailures"] += 1
+    elif mode == "diagnostic-wrong-passed-count":
+        summary["passedTests"] = len(identifiers)
+    elif mode == "diagnostic-warning":
+        summary["runtimeWarnings"] = ["unexpected warning"]
+    print(json.dumps(summary))
 elif sys.argv[1] == "tests":
     print(json.dumps({"tests": [
-        {"nodeType": "Test Case", "nodeIdentifier": identifier, "result": "Passed"}
+        {"nodeType": "Test Case", "nodeIdentifier": identifier, "result": results[identifier]}
         for identifier in identifiers
     ]}))
 else:
@@ -184,7 +209,9 @@ for suite in $(/usr/bin/python3 -c 'import json, sys; print(" ".join(json.load(o
   grep -Fx -- "-only-testing:InnoFlowTests/$suite" "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null
 done
 
-for mode in partial missing renamed duplicate zero unreviewed-consistency; do
+for mode in partial missing renamed duplicate zero unreviewed-consistency \
+    diagnostic-missing diagnostic-extra diagnostic-swapped diagnostic-failed diagnostic-skipped \
+    diagnostic-duplicate-issue diagnostic-wrong-passed-count diagnostic-warning; do
   export FOCUSED_RUNTIME_FIXTURE_MODE="$mode"
   if run_probe >/dev/null 2>&1; then
     echo "Incomplete runtime fixture unexpectedly passed: $mode" >&2

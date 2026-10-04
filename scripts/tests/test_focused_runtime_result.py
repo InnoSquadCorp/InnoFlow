@@ -28,7 +28,7 @@ class FocusedRuntimeTests(unittest.TestCase):
                 for item in self.inventory["expectedTestIdentifiers"]
             ]
         }]}
-        self.summary = {"result": "Passed", "totalTestCount": 2,
+        self.summary = {"result": "Passed", "totalTestCount": 2, "passedTests": 2,
                         "failedTests": 0, "skippedTests": 0, "expectedFailures": 0,
                         "runtimeWarnings": []}
         self.tests = {"tests": [
@@ -135,6 +135,77 @@ class FocusedRuntimeTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertTrue(RUNTIME.validate(
                     self.inventory, {**self.summary, field: value}, self.tests)[0])
+
+    def diagnostic_fixture(self):
+        inventory = copy.deepcopy(self.inventory)
+        inventory["expectedFailureTestIdentifiers"] = [inventory["expectedTestIdentifiers"][0]]
+        summary = {**self.summary, "passedTests": 1, "expectedFailures": 1}
+        tests = copy.deepcopy(self.tests)
+        tests["tests"][0]["result"] = "Expected Failure"
+        return inventory, summary, tests
+
+    def test_reviewed_diagnostic_is_required_with_exact_passed_count(self):
+        self.assertEqual(RUNTIME.validate(*self.diagnostic_fixture()), ([], 2))
+
+    def test_malformed_or_unreviewed_diagnostic_inventory_fails(self):
+        for diagnostics in (None, True, "OtherTests/control()", [None],
+                            ["OtherTests/unknown()"], ["OtherTests/control()"] * 2,
+                            list(reversed(self.inventory["expectedTestIdentifiers"]))):
+            with self.subTest(diagnostics=diagnostics):
+                inventory = {**self.inventory, "expectedFailureTestIdentifiers": diagnostics}
+                self.assertTrue(RUNTIME.validate(inventory, self.summary, self.tests)[0])
+
+    def test_missing_extra_swapped_or_failed_diagnostic_is_rejected(self):
+        for mode in ("missing", "extra", "swapped", "failed", "skipped", "renamed",
+                     "duplicate", "absent", "no-longer-fails", "ordinary-failure"):
+            with self.subTest(mode=mode):
+                inventory, summary, tests = self.diagnostic_fixture()
+                cases = tests["tests"]
+                if mode == "missing":
+                    cases[0]["result"] = "Passed"
+                elif mode == "extra":
+                    cases[1]["result"] = "Expected Failure"
+                elif mode == "swapped":
+                    cases[0]["result"], cases[1]["result"] = "Passed", "Expected Failure"
+                elif mode == "renamed":
+                    cases[0]["nodeIdentifier"] = "FixtureConsistencyTests/other()"
+                elif mode == "duplicate":
+                    cases.append(cases[0])
+                elif mode == "absent":
+                    cases.pop(0)
+                elif mode == "no-longer-fails":
+                    cases[0]["result"] = "Passed"
+                    summary.update(passedTests=2, expectedFailures=0)
+                elif mode == "ordinary-failure":
+                    cases[1]["result"] = "Failed"
+                    summary.update(passedTests=0, failedTests=1)
+                else:
+                    cases[0]["result"] = mode.title()
+                self.assertTrue(RUNTIME.validate(inventory, summary, tests)[0])
+
+    def test_diagnostic_summary_counters_are_required_exact_integers(self):
+        for key in ("totalTestCount", "passedTests", "failedTests", "skippedTests", "expectedFailures"):
+            for value in (None, False, True, "0", "1", 0.0, 1.0, -1, 99):
+                with self.subTest(key=key, value=value):
+                    inventory, summary, tests = self.diagnostic_fixture()
+                    summary[key] = value
+                    self.assertTrue(RUNTIME.validate(inventory, summary, tests)[0])
+            inventory, summary, tests = self.diagnostic_fixture()
+            del summary[key]
+            self.assertTrue(RUNTIME.validate(inventory, summary, tests)[0])
+
+    def test_diagnostic_warnings_and_failed_summary_still_fail(self):
+        for field, value in (("runtimeWarnings", ["warning"]), ("runtimeWarnings", {}),
+                             ("runtimeWarnings", None), ("result", "Failed"),
+                             ("passedTests", 2), ("expectedFailures", 2)):
+            with self.subTest(field=field, value=value):
+                inventory, summary, tests = self.diagnostic_fixture()
+                summary[field] = value
+                self.assertTrue(RUNTIME.validate(inventory, summary, tests)[0])
+
+    def test_malformed_result_payload_is_rejected(self):
+        for summary, tests in ((None, self.tests), (self.summary, [])):
+            self.assertTrue(RUNTIME.validate(self.inventory, summary, tests)[0])
 
 
 if __name__ == "__main__":

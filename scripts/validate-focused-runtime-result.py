@@ -40,6 +40,11 @@ def validate_inventory(inventory):
         errors.append("duplicate-or-unsorted-inventory")
     if sorted({item.split("/", 1)[0] for item in expected}) != suites:
         errors.append("inventory-suite-mismatch")
+    diagnostics = inventory.get("expectedFailureTestIdentifiers", [])
+    if (not isinstance(diagnostics, list) or
+            any(not isinstance(item, str) or item not in expected for item in diagnostics) or
+            diagnostics != sorted(set(diagnostics))):
+        errors.append("invalid-expected-failure-inventory")
     return errors
 
 
@@ -47,7 +52,10 @@ def validate(inventory, summary, tests):
     errors = validate_inventory(inventory)
     if errors:
         return errors, 0
+    if not isinstance(summary, dict) or not isinstance(tests, dict):
+        return ["invalid-result-payload"], 0
     expected = inventory["expectedTestIdentifiers"]
+    diagnostics = set(inventory.get("expectedFailureTestIdentifiers", []))
     cases = list(collect_cases(tests))
     actual = [case.get("nodeIdentifier") for case in cases]
     if any(not isinstance(item, str) for item in actual):
@@ -65,17 +73,23 @@ def validate(inventory, summary, tests):
             errors.append("duplicate-test-identifier")
     if summary.get("result") != "Passed":
         errors.append("result=" + str(summary.get("result")))
-    if summary.get("totalTestCount") != len(cases):
-        errors.append("summary-test-count-mismatch")
     if len(cases) != len(expected):
         errors.append("inventory-test-count-mismatch")
-    for key in ("failedTests", "skippedTests", "expectedFailures"):
-        if summary.get(key, 0) != 0:
+    # Known diagnostic assertions are required outcomes, not an allowance for
+    # arbitrary failures. Counters and exact per-declaration results must agree.
+    for key, count in (("totalTestCount", len(cases)),
+                       ("passedTests", len(expected) - len(diagnostics)),
+                       ("failedTests", 0), ("skippedTests", 0),
+                       ("expectedFailures", len(diagnostics))):
+        if type(summary.get(key)) is not int or summary[key] != count:
             errors.append(key + "=" + str(summary.get(key)))
-    if summary.get("runtimeWarnings"):
-        errors.append("runtime-warnings=" + str(len(summary["runtimeWarnings"])))
-    if any(case.get("result") != "Passed" for case in cases):
-        errors.append("non-passed-test-case")
+    if summary.get("runtimeWarnings", []) != []:
+        errors.append("runtime-warnings=" + repr(summary["runtimeWarnings"]))
+    for case in cases:
+        identifier = case.get("nodeIdentifier")
+        result = "Expected Failure" if isinstance(identifier, str) and identifier in diagnostics else "Passed"
+        if case.get("result") != result:
+            errors.append("unexpected-test-result=" + repr(identifier) + ":" + str(case.get("result")))
     return errors, len(cases)
 
 

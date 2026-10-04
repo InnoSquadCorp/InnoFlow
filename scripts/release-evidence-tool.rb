@@ -101,6 +101,8 @@ def resolved_policy(path)
     profiles.fetch(check.fetch("profile")).merge(check)
   end
   checks.each do |check|
+    fail!("Expected failure identities must come from a pinned test inventory for #{check.fetch('id')}") if
+      check.key?("expectedFailureTestIdentifiers")
     next unless check["testIdentifierInventory"]
 
     relative = check.fetch("testIdentifierInventory")
@@ -113,16 +115,22 @@ def resolved_policy(path)
     inventory = JSON.parse(File.read(inventory_path))
     identifiers = inventory.fetch("expectedTestIdentifiers")
     suites = inventory.fetch("suites")
+    diagnostics = inventory.fetch("expectedFailureTestIdentifiers", [])
     fail!("Invalid test inventory for #{check.fetch("id")}") unless
       inventory["schemaVersion"] == 1 &&
       identifiers.is_a?(Array) && !identifiers.empty? &&
       identifiers.all? { |item| item.is_a?(String) && item.match?(/\A[A-Za-z][A-Za-z0-9_]*\/[A-Za-z][^\/]*\z/) } &&
       identifiers == identifiers.uniq.sort &&
       suites.is_a?(Array) && suites == suites.uniq.sort &&
-      suites == identifiers.map { |item| item.split("/", 2).first }.uniq.sort
+      suites == identifiers.map { |item| item.split("/", 2).first }.uniq.sort &&
+      diagnostics.is_a?(Array) && diagnostics.all? { |item| identifiers.include?(item) } &&
+      diagnostics == diagnostics.uniq.sort
+    fail!("Pinned runtime inventories must not broadly allow failures or warnings") if
+      check.fetch("allowsExpectedFailures", false) || check.fetch("allowsRuntimeWarnings", false)
     fail!("Test inventory digest mismatch for #{check.fetch("id")}") unless
       check["testIdentifierInventorySha256"] == sha256_file(inventory_path)
     check["expectedTestIdentifiers"] = identifiers
+    check["expectedFailureTestIdentifiers"] = diagnostics
     check["minimumTestCount"] = identifiers.length
     check["maximumTestCount"] = identifiers.length
   end
@@ -134,6 +142,8 @@ def resolved_policy(path)
       identifier = matrix.fetch("idTemplate").dup
       values.each { |key, value| identifier = identifier.gsub("{#{key}}", value) }
       check = profiles.fetch(check.fetch("profile")).merge(check).merge("id" => identifier)
+      fail!("Matrix expected failure identities must come from a pinned test inventory") if
+        check.key?("expectedFailureTestIdentifiers")
       check["environment"] = check.fetch("environment", {}).merge(values)
       if matrix["testIdentifierMap"]
         identity_key = matrix.fetch("testIdentifierAxes").map { |axis| values.fetch(axis) }.join("-")
@@ -383,16 +393,31 @@ def validate_xcresult!(check, raw_path, observed_environment)
   errors << "totalTestCount=#{summary["totalTestCount"]}" unless summary.fetch("totalTestCount", 0).to_i >= minimum
   errors << "totalTestCount=#{summary["totalTestCount"]}" if maximum && summary.fetch("totalTestCount", 0).to_i > maximum
   %w[failedTests skippedTests].each { |key| errors << "#{key}=#{summary[key]}" unless summary.fetch(key, 0).to_i.zero? }
-  unless check.fetch("allowsExpectedFailures", false)
+  if check["testIdentifierInventory"]
+    diagnostics = check.fetch("expectedFailureTestIdentifiers")
+    expected_counts = {
+      "totalTestCount" => check.fetch("expectedTestIdentifiers").length,
+      "passedTests" => check.fetch("expectedTestIdentifiers").length - diagnostics.length,
+      "failedTests" => 0, "skippedTests" => 0, "expectedFailures" => diagnostics.length,
+    }
+    expected_counts.each do |key, count|
+      errors << "#{key}=#{summary[key].inspect}" unless summary[key].is_a?(Integer) && summary[key] == count
+    end
+  elsif !check.fetch("allowsExpectedFailures", false)
     errors << "expectedFailures=#{summary["expectedFailures"]}" unless summary.fetch("expectedFailures", 0).to_i.zero?
   end
   unless check.fetch("allowsRuntimeWarnings", false)
-    errors << "runtimeWarnings=#{summary.fetch("runtimeWarnings", []).length}" unless summary.fetch("runtimeWarnings", []).empty?
+    errors << "runtimeWarnings=#{summary['runtimeWarnings'].inspect}" unless summary.fetch("runtimeWarnings", []) == []
   end
   cases = collect_test_cases(tests)
   errors << "discoveredTests=#{cases.length}" if cases.length < minimum
   errors << "discoveredTests=#{cases.length}" if maximum && cases.length > maximum
-  errors << "nonPassedTestCase" unless cases.all? { |test| test["result"] == "Passed" }
+  diagnostics = check.fetch("expectedFailureTestIdentifiers", [])
+  cases.each do |test|
+    expected_result = diagnostics.include?(test["nodeIdentifier"]) ? "Expected Failure" : "Passed"
+    errors << "unexpectedTestResult=#{test['nodeIdentifier'].inspect}:#{test['result']}" unless
+      test["result"] == expected_result
+  end
   if check["testIdentifierInventory"]
     actual_identifiers = cases.map { |test| test["nodeIdentifier"] }
     expected_identifiers = check.fetch("expectedTestIdentifiers")
