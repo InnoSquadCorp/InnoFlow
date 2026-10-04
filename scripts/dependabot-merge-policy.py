@@ -79,8 +79,10 @@ CORE = {'CI Plan': ['Plan exact changed paths'],
                           'Build package scheme for tvOS'],
  'Canonical Sample Build': ['Show Xcode version', 'Build canonical sample'],
  'Principle Gates (Static)': ['Show Xcode version',
+                              'Select supported Ruby',
                               'Run static principle gates',
-                              'Verify gate negative controls'],
+                              'Verify gate negative controls',
+                              'Verify independent public API and AST migration consumers'],
  'Sample Package Build (tvOS)': ['Show Xcode version',
                                  'Build sample package for tvOS'],
  'Sample Package Build (visionOS)': ['Show Xcode version',
@@ -100,7 +102,8 @@ CORE = {'CI Plan': ['Plan exact changed paths'],
                                                     'Resolve and verify '
                                                     'audited SwiftSyntax',
                                                     'Test macro and external '
-                                                    'compile contracts'],
+                                                    'compile contracts',
+                                                    'Verify AST migration on the audited SwiftSyntax line'],
  'SwiftSyntax Compatibility (Swift 6.4, 604.0.0)': ['Checkout exact '
                                                     'compatibility candidate',
                                                     'Verify pinned '
@@ -108,7 +111,8 @@ CORE = {'CI Plan': ['Plan exact changed paths'],
                                                     'Resolve and verify '
                                                     'audited SwiftSyntax',
                                                     'Test macro and external '
-                                                    'compile contracts']}
+                                                    'compile contracts',
+                                                    'Verify AST migration on the audited SwiftSyntax line']}
 FULL_SKIPPED = set()
 ALLOWED_STEP_SKIP = {('CI Plan', 'Verify actual post-merge main origin'),
  ('Documentation / Build Documentation', 'Upload Documentation Artifact'),

@@ -87,6 +87,33 @@ class PublicOperationsTests(unittest.TestCase):
     def test_current_contract(self):
         p.validate(self.root)
 
+    def test_macro_opt_out_gate_rejects_removed_logical_identity_or_dispatch(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'InnoFlow'
+            shutil.copytree(ROOT, root, ignore=shutil.ignore_patterns('.git', '.build*', '__pycache__'))
+            path = root / 'Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift'
+            original = path.read_text()
+            command = ['bash', str(root / 'scripts/check-macro-operations.sh')]
+            result = subprocess.run(command, cwd=root, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            mutations = [
+                ('logicalIdentifier(identifier.name)', 'identifier.name.text'),
+                ('logicalIdentifier(member.name)', 'member.name.text'),
+                ('let isExplicitlyIgnored = hasCasePathIgnoredAttribute(enumCaseDecl)',
+                 'let isExplicitlyIgnored = false'),
+                ('isExplicitlyIgnored: isExplicitlyIgnored,', 'isExplicitlyIgnored: false,'),
+                ('if isExplicitlyIgnored {', 'if false {'),
+            ]
+            for before, after in mutations:
+                with self.subTest(before=before):
+                    self.assertIn(before, original)
+                    path.write_text(original.replace(before, after))
+                    result = subprocess.run(command, cwd=root, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn('action-path synthesis must honor the per-case opt-out marker',
+                                  result.stdout + result.stderr)
+                    path.write_text(original)
+
     def test_every_swift_syntax_lock_and_generator_requires_coherence(self):
         for f in p.LOCKS:
             doc = json.loads((self.root / f).read_text())

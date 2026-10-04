@@ -77,8 +77,10 @@ CORE = {'CI Plan': {'Plan exact changed paths'},
                           'Show Xcode version'},
  'Canonical Sample Build': {'Show Xcode version', 'Build canonical sample'},
  'Principle Gates (Static)': {'Run static principle gates',
+                              'Select supported Ruby',
                               'Show Xcode version',
-                              'Verify gate negative controls'},
+                              'Verify gate negative controls',
+                              'Verify independent public API and AST migration consumers'},
  'Sample Package Build (tvOS)': {'Build sample package for tvOS',
                                  'Show Xcode version'},
  'Sample Package Build (visionOS)': {'Build sample package for visionOS',
@@ -97,6 +99,7 @@ CORE = {'CI Plan': {'Plan exact changed paths'},
                                                     'audited SwiftSyntax',
                                                     'Test macro and external '
                                                     'compile contracts',
+                                                    'Verify AST migration on the audited SwiftSyntax line',
                                                     'Verify pinned '
                                                     'compatibility toolchain'},
  'SwiftSyntax Compatibility (Swift 6.4, 604.0.0)': {'Checkout exact '
@@ -105,6 +108,7 @@ CORE = {'CI Plan': {'Plan exact changed paths'},
                                                     'audited SwiftSyntax',
                                                     'Test macro and external '
                                                     'compile contracts',
+                                                    'Verify AST migration on the audited SwiftSyntax line',
                                                     'Verify pinned '
                                                     'compatibility toolchain'}}
 SKIPPED = set()

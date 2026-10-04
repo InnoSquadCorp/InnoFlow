@@ -1114,7 +1114,12 @@ run_macro_operations_checks() {
     echo "[principle-gates] Failed: the action-path opt-out macro must remain registered"
     exit 1
   fi
-  if ! grep -F 'identifier.name.text == "InnoFlowCasePathIgnored"' Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift >/dev/null; then
+  local action_path_source="Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift"
+  if ! grep -F 'logicalIdentifier(identifier.name) == "InnoFlowCasePathIgnored"' "$action_path_source" >/dev/null \
+      || ! grep -F 'logicalIdentifier(member.name) == "InnoFlowCasePathIgnored"' "$action_path_source" >/dev/null \
+      || ! grep -F 'let isExplicitlyIgnored = hasCasePathIgnoredAttribute(enumCaseDecl)' "$action_path_source" >/dev/null \
+      || ! grep -F 'isExplicitlyIgnored: isExplicitlyIgnored,' "$action_path_source" >/dev/null \
+      || ! search_multiline 'if isExplicitlyIgnored[[:space:]]*\{[[:space:]]*return nil' "$action_path_source" >/dev/null; then
     echo "[principle-gates] Failed: action-path synthesis must honor the per-case opt-out marker"
     exit 1
   fi
