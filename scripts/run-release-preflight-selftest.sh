@@ -3,6 +3,9 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 fixture_root="$(mktemp -d)"
+# macOS TMPDIR can pass through /var -> /private/var. Match the runner's
+# realpath evidence roots without relaxing the fixture-only df boundary.
+fixture_root="$(cd "$fixture_root" && pwd -P)"
 cleanup() {
   if [[ "${INNOFLOW_KEEP_PREFLIGHT_FIXTURE:-0}" == "1" ]]; then
     echo "[release-preflight-selftest] fixture=$fixture_root" >&2
