@@ -39,6 +39,74 @@ parameterized = <<~OUTPUT
 OUTPUT
 assert_result("parameterized", parameterized, accepted: true)
 
+# Test/case lines copied from Release Preflight run 37314847278, attempt 1,
+# swift-6.3-toolchain output (2026-10-05). Only the enclosing run/suite summary
+# is reduced to these two declarations. This fixture is not release evidence.
+# https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37314847278
+unquoted_parameterized = <<~OUTPUT
+  ◇ Test run started.
+  ◇ Suite "Collection optional child lifetime consistency" started.
+  ◇ Test firstAnimatedChildOutputUsesFinalComposedState(useIdentified:) started.
+  ◇ Test case passing 1 argument useIdentified → false to firstAnimatedChildOutputUsesFinalComposedState(useIdentified:) started.
+  ◇ Test case passing 1 argument useIdentified → true to firstAnimatedChildOutputUsesFinalComposedState(useIdentified:) started.
+  ✔ Test firstAnimatedChildOutputUsesFinalComposedState(useIdentified:) with 2 test cases passed after 0.010 seconds.
+  ◇ Test animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:) started.
+  ◇ Test case passing 2 arguments useIdentified → false, removeAndReenter → false to animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:) started.
+  ◇ Test case passing 2 arguments useIdentified → false, removeAndReenter → true to animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:) started.
+  ◇ Test case passing 2 arguments useIdentified → true, removeAndReenter → false to animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:) started.
+  ◇ Test case passing 2 arguments useIdentified → true, removeAndReenter → true to animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:) started.
+  ✔ Test animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:) with 4 test cases passed after 0.018 seconds.
+  ✔ Suite "Collection optional child lifetime consistency" passed after 0.028 seconds.
+  ✔ Test run with 2 tests in 1 suite passed after 0.028 seconds.
+OUTPUT
+unquoted_parameterized_check = {
+  "minimumTestCount" => 2,
+  "maximumTestCount" => 2,
+  "expectedTestRunCount" => 1,
+  "expectedResultSuites" => ["Collection optional child lifetime consistency"],
+  "expectedTestNames" => [
+    "firstAnimatedChildOutputUsesFinalComposedState(useIdentified:)",
+    "animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:)",
+  ],
+}
+assert_result("Swift 6.3 unquoted parameterized real-log excerpt", unquoted_parameterized,
+  accepted: true, check: unquoted_parameterized_check)
+unquoted_case = unquoted_parameterized.lines.find { |line| line.include?("Test case passing 1 argument") }
+{
+  "unknown owner" => unquoted_case.sub("to firstAnimated", "to unknownFirstAnimated"),
+  "missing owner" => unquoted_case.sub(/to .* started/, "to started"),
+  "unterminated quoted owner" => unquoted_case.sub("to firstAnimated", 'to "firstAnimated'),
+  "unmatched closing quote" => unquoted_case.sub(" started.", '" started.'),
+  "unknown case start syntax" => unquoted_case.sub("started.", "started eventually"),
+  "missing argument description" => unquoted_case.sub("passing 1 argument useIdentified → false", "passing"),
+  "unknown case terminal" => unquoted_case.sub("started.", "passed after 0.001 seconds."),
+}.each do |name, malformed_case|
+  assert_result("unquoted parameterized #{name}", unquoted_parameterized.sub(unquoted_case, malformed_case),
+    accepted: false, check: unquoted_parameterized_check)
+end
+assert_result("unquoted case count mismatch",
+  unquoted_parameterized.sub("with 2 test cases", "with 3 test cases"),
+  accepted: false, check: unquoted_parameterized_check)
+assert_result("unquoted duplicate case start",
+  unquoted_parameterized.sub(unquoted_case, unquoted_case + unquoted_case),
+  accepted: false, check: unquoted_parameterized_check)
+%w[started passed].each do |event|
+  missing_event = unquoted_parameterized.lines.reject do |line|
+    line.match?(/Test firstAnimated.* #{event}/)
+  end.join
+  assert_result("unquoted parameterized missing test #{event}", missing_event,
+    accepted: false, check: unquoted_parameterized_check)
+end
+%w[failed skipped cancelled].each do |result|
+  assert_result("unquoted parameterized #{result}",
+    unquoted_parameterized.sub("with 2 test cases passed", "with 2 test cases #{result}"),
+    accepted: false, check: unquoted_parameterized_check)
+end
+assert_result("unquoted cases do not inflate declarations", unquoted_parameterized,
+  accepted: false, check: unquoted_parameterized_check.merge("minimumTestCount" => 6, "maximumTestCount" => 6))
+assert_result("unquoted parameterized required identity is exact", unquoted_parameterized,
+  accepted: false, check: unquoted_parameterized_check.merge("expectedTestNames" => ["unknown(useIdentified:)"]))
+
 quoted_name = <<~OUTPUT
   Test run started.
   Suite "Quoted displays" started.

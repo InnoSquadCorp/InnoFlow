@@ -11,7 +11,10 @@ module ReleaseEvidenceOutputParser
   TEST_UNQUOTED_START = /#{EVENT_PREFIX}Test (?!(?:run|Suite|Case)(?:\s|$)|")(.*?)(?: with ([0-9]+) test cases?)? started\.(?:\s|$)/i
   TEST_QUOTED_TERMINAL = /#{EVENT_PREFIX}Test "(.*)"(?: with ([0-9]+) test cases?)? (passed|failed|skipped|cancelled)(?: after| because|:|\.|$)/i
   TEST_UNQUOTED_TERMINAL = /#{EVENT_PREFIX}Test (?!(?:run|Suite|Case)(?:\s|$)|")(.*?)(?: with ([0-9]+) test cases?)? (passed|failed|skipped|cancelled)(?: after| because|:|\.|$)/i
-  TEST_CASE_START = /#{EVENT_PREFIX}Test case .* to "(.*)" started\.(?:\s|$)/i
+  TEST_CASE_QUOTED_START = /#{EVENT_PREFIX}Test case .* to "(.*)" started\.(?:\s|$)/i
+  # Swift Testing prints an identifier instead of a quoted display name when
+  # the parameterized declaration does not provide a custom @Test name.
+  TEST_CASE_UNQUOTED_START = /#{EVENT_PREFIX}Test case passing [1-9][0-9]* arguments? .+ to ([^"\r\n]+?) started\.(?:\s|$)/i
   SUITE_QUOTED_START = /#{EVENT_PREFIX}Suite "(.*)" started\.(?:\s|$)/i
   SUITE_UNQUOTED_START = /#{EVENT_PREFIX}Suite (?!(?:"))(.*?) started\.(?:\s|$)/i
   SUITE_QUOTED_TERMINAL = /#{EVENT_PREFIX}Suite "(.*)" (passed|failed|skipped|cancelled)(?: after| because|:|\.|$)/i
@@ -46,7 +49,7 @@ module ReleaseEvidenceOutputParser
         next
       end
 
-      if (match = line.match(TEST_CASE_START))
+      if (match = line.match(TEST_CASE_QUOTED_START) || line.match(TEST_CASE_UNQUOTED_START))
         current_run = require_run(current_run, failures, "test case start", line_number)
         name = match[1].strip
         failures << "test case without active test run=#{runs.length + 1} test=#{name.inspect} line=#{line_number}" unless current_run.fetch("activeTests").key?(name)
