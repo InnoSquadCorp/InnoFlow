@@ -21,7 +21,7 @@ cat >"$scratch/legacy.jsonl" <<'JSONL'
 {"phase":"runFinished","sequence":1,"timestampNanos":30,"dispatchID":"00000000-0000-0000-0000-000000000001"}
 JSONL
 python3 "$root/scripts/migrate-effect-timing-jsonl.py" --input "$scratch/legacy.jsonl" --output "$scratch/migrated.jsonl"
-swift run "${args[@]}" Consumer "$scratch/migrated.jsonl" >"$scratch/positive.log" 2>&1 || { cat "$scratch/positive.log" >&2; exit 1; }
+python3 "$root/scripts/run-swift-testing-consumer.py" "${args[@]}" Consumer "$scratch/migrated.jsonl" >"$scratch/positive.log" 2>&1 || { cat "$scratch/positive.log" >&2; exit 1; }
 cat "$scratch/positive.log"
 grep -Fx 'Dispatch identity consumer passed' "$scratch/positive.log" >/dev/null
 for control in RawValue UUIDRecord; do

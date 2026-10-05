@@ -4,7 +4,7 @@ root="$(cd "$(dirname "$0")/.." && pwd -P)"
 package="${INNOFLOW_PACKAGE_PATH:-$root}"
 temporary="$(mktemp -d)"
 trap 'rm -rf "$temporary"' EXIT
-INNOFLOW_PACKAGE_PATH="$package" swift run \
+INNOFLOW_PACKAGE_PATH="$package" python3 "$root/scripts/run-swift-testing-consumer.py" \
   --package-path "$root/Tests/Fixtures/LevelOneConsumer" \
   --scratch-path "$temporary/build" --jobs "${SWIFT_JOBS:-1}" \
   -Xswiftc -warnings-as-errors LevelOneConsumer >"$temporary/consumer.log" 2>&1 || {

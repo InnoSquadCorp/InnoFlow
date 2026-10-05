@@ -7,7 +7,7 @@ trap 'rm -rf "$scratch"' EXIT
 export INNOFLOW_CONSUMER_PACKAGE_PATH="$package"
 args=(--package-path "$root/Tests/Fixtures/TestFlowTaskConsumer" --scratch-path "$scratch/build" --jobs "${INNOFLOW_CONSUMER_JOBS:-1}" -Xswiftc -warnings-as-errors)
 INNOFLOW_TESTFLOWTASK_NEGATIVE=0 INNOFLOW_FLOWSCOPE_NEGATIVE=0 \
-  swift run "${args[@]}" Consumer >"$scratch/positive.log" 2>&1 || {
+  python3 "$root/scripts/run-swift-testing-consumer.py" "${args[@]}" Consumer >"$scratch/positive.log" 2>&1 || {
   cat "$scratch/positive.log" >&2
   exit 1
 }
