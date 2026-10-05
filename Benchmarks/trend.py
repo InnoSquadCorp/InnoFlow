@@ -484,6 +484,10 @@ def self_test():
                 runtime_env, evidence = apple_runtime_environment(original, str(developer), str(platform_dir), str(sdk))
                 self.assertEqual(original, {"TOOLCHAINS": "fixture-official-release", "DEVELOPER_DIR": str(developer)})
                 self.assertEqual(runtime_env["TOOLCHAINS"], original["TOOLCHAINS"])
+                # Loader paths are canonical, including when macOS TMPDIR is
+                # reached through /var -> /private/var. Keep aliased inputs above.
+                platform_dir = platform_dir.resolve()
+                binary = binary.resolve()
                 self.assertEqual(runtime_env["DYLD_FRAMEWORK_PATH"],
                                  str(platform_dir / "Developer/Library/Frameworks") + ":" +
                                  str(platform_dir / "Developer/Library/PrivateFrameworks"))
