@@ -303,7 +303,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "generated output path name collides with another generated output path or existing static member; declare an explicit static path or rename the case",
+              "generated output path `valueCasePath` collides with another generated output path or existing static member; declare an explicit static path or rename the case",
             line: 4,
             column: 10
           )
@@ -526,9 +526,8 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action, Output>
+              var body: some Reducer<State, Action, Never>
               Detected issues: first generic parameter must be `State` (or `Self.State`), found `Other.State`; second generic parameter must be `Action` (or `Self.Action`), found `Other.Action`.
-              Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
             line: 1,
             column: 1
@@ -1911,7 +1910,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
+              "generated action path `childCasePath` collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
             line: 7,
             column: 14
           )
@@ -1970,7 +1969,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
+              "generated action path `childCasePath` collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
             line: 7,
             column: 14
           )
@@ -2002,7 +2001,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "@InnoFlow requires `var body: some Reducer<State, Action, Output>`; use `Never` when no output is emitted",
+              "@InnoFlow requires `var body: some Reducer<State, Action, Never>`",
             line: 1,
             column: 1
           )
@@ -2052,7 +2051,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)",
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Never>` instead",
             line: 1,
             column: 1,
             fixIts: [
@@ -2130,7 +2129,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)",
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Never>` instead",
             line: 1,
             column: 1
           )
@@ -2168,9 +2167,8 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action, Output>
-              Detected issues: `body` type `Int` must be an opaque `some Reducer<State, Action, Output>` type.
-              Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
+              var body: some Reducer<State, Action, Never>
+              Detected issues: `body` type `Int` must be an opaque `some Reducer<State, Action, Never>` type.
               """,
             line: 1,
             column: 1
@@ -2213,9 +2211,8 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action, Output>
+              var body: some Reducer<State, Action, Never>
               Detected issues: `body` must use `some` (not `any`).
-              Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
             line: 1,
             column: 1
@@ -2258,9 +2255,8 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action, Output>
+              var body: some Reducer<State, Action, Never>
               Detected issues: `body` type must constrain to `Reducer`, found `ReducerLike`.
-              Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
             line: 1,
             column: 1
@@ -2303,9 +2299,8 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action, Output>
+              var body: some Reducer<State, Action, Never>
               Detected issues: first generic parameter must be `State` (or `Self.State`), found `Int`; second generic parameter must be `Action` (or `Self.Action`), found `String`.
-              Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
             line: 1,
             column: 1
@@ -2348,9 +2343,8 @@ struct InnoFlowMacrosTests {
             message: """
               Invalid body signature for @InnoFlow.
               Expected:
-              var body: some Reducer<State, Action, Output>
+              var body: some Reducer<State, Action, Never>
               Detected issues: first generic parameter must be `State` (or `Self.State`), found `State<Int>`; second generic parameter must be `Action` (or `Self.Action`), found `Action<String>`.
-              Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
               """,
             line: 1,
             column: 1
@@ -2413,7 +2407,7 @@ struct InnoFlowMacrosTests {
         diagnostics: [
           DiagnosticSpec(
             message:
-              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)",
+              "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Never>` instead",
             line: 1,
             column: 1
           )

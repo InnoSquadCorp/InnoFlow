@@ -12,7 +12,7 @@ extension TestStore {
     policy: EffectExecutionPolicy,
     priority: TaskPriority?,
     onAdmission: (@Sendable (EffectAdmission) -> R.Action)?,
-    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>? {
     let context = context?.frozenForExecution()
@@ -27,13 +27,30 @@ extension TestStore {
         guard let action = onAdmission?(.started) else { return }
         self?.deliverAction(action, context: context)
       },
-      onPendingExit: { _ in }
+      onPendingExit: { _ in },
+      context: context,
+      onAdmissionLifecycle: { [weak self] _, admission in
+        guard let self else { return }
+        switch admission {
+        case .rejected(let reason): self.recordEffectEvent(.rejected(reason), context: context)
+        case .superseded: self.recordEffectEvent(.superseded, context: context)
+        default: self.recordEffectEvent(.admitted(admission), context: context)
+        }
+      },
+      onCancellationEvent: { [weak self] cause in
+        self?.recordEffectEvent(
+          .cancelled(cause == .superseded ? .superseded : .effect), context: context)
+      }
     )
 
     guard case .accepted(let ticket) = plan else {
-      if case .rejected(let reason) = plan,
-        let action = onAdmission?(.rejected(reason))
-      {
+      let admission: EffectAdmission
+      switch plan {
+      case .rejected(let reason): admission = .rejected(reason)
+      case .terminal(let terminal): admission = terminal
+      case .accepted: preconditionFailure("Accepted request must have a ticket")
+      }
+      if !Task.isCancelled, let action = onAdmission?(admission) {
         deliverAction(action, context: context)
       }
       return nil
@@ -53,8 +70,10 @@ extension TestStore {
     beginFinishActivity(.scheduled, token: token, context: context)
     let endpoint = makeRunEndpoint()
     let scheduler = runScheduler
+    let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
     let task = Task { @MainActor [weak self] in
       defer {
+        dispatchActivity?.finish()
         endpoint.finishTrackedTask(token: token)
       }
       let shouldStart = await withTaskCancellationHandler {
@@ -87,6 +106,7 @@ extension TestStore {
       await scheduler.finish(token)
     }
 
+    dispatchActivity?.attach(task)
     trackEffectTask(token: token, task: task, context: context)
     _ = await runScheduler.attach(task, to: ticket)
     return task

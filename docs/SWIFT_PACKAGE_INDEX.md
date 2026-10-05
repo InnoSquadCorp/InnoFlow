@@ -22,6 +22,10 @@ so it is not evidence that unreleased 6.0.0 or today's main has been freshly ind
   current DocC generator does not produce a separate symbol-graph site for
   this target; its supported usage is described in the README and source.
   The SPI external link does not claim additional generated coverage.
+- `InnoFlowInspector` is an opt-in development diagnostic UI product. Its dependency
+  is Core only; it reads bounded payload-free diagnostics, and it does not add a
+  compiler plugin, test runtime or separate SPI package. Apple UI validation is
+  required before claiming platform support for a particular candidate.
 - `InnoFlowTesting` is a test-only product. Its generated documentation is
   published under the main site's `testing/documentation/innoflowtesting/` path.
 - `InnoFlowMacros` is an implementation target, not a public library product

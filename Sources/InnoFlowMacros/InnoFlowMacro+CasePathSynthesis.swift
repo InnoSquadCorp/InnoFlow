@@ -69,7 +69,7 @@ extension InnoFlowMacro {
         }
 
         return []
-      }
+      }.map(logicalIdentifier)
     )
     // Attached macros cannot resolve the semantic type of an existing member.
     // Treat the canonical static variable name as the author's explicit
@@ -89,7 +89,7 @@ extension InnoFlowMacro {
             .identifier
             .text
         }
-      }
+      }.map(logicalIdentifier)
     )
 
     var seenGeneratedNames: Set<String> = []
@@ -141,7 +141,8 @@ extension InnoFlowMacro {
       return nil
     }
 
-    let caseName = element.name.text
+    let caseName = logicalIdentifier(element.name)
+    let caseSource = identifierSource(element.name)
 
     if parameters.count == 1,
       let parameter = parameters.first,
@@ -162,7 +163,7 @@ extension InnoFlowMacro {
         )
       }
 
-      let memberName = "\(generatedActionPathBaseName(from: caseName))CasePath"
+      let memberName = "\(generatedPathBaseName(from: element.name))CasePath"
       guard
         diagnoseGeneratedActionPathCollisionIfNeeded(
           memberName: memberName,
@@ -184,16 +185,16 @@ extension InnoFlowMacro {
         )
         return .init(
           declarations: [
-            "private enum \(markerName) {}",
+            "private enum \(generatedIdentifierSource(markerName)) {}",
             """
-            \(accessPrefix)static var \(memberName): CasePath<Self, \(childActionType)> {
+            \(accessPrefix)static var \(generatedIdentifierSource(memberName)): CasePath<Self, \(childActionType)> {
               CasePath<Self, \(childActionType)>._innoFlowGenerated(
-                marker: \(markerName).self,
+                marker: \(generatedIdentifierSource(markerName)).self,
                 embed: { childAction in
-                  .\(caseName)(childAction)
+                  .\(caseSource)(childAction)
                 },
                 extract: { action in
-                  guard case .\(caseName)(let childAction) = action else { return nil }
+                  guard case .\(caseSource)(let childAction) = action else { return nil }
                   return childAction
                 }
               )
@@ -205,12 +206,12 @@ extension InnoFlowMacro {
       return .init(
         declarations: [
           """
-          \(accessPrefix)static let \(memberName) = CasePath<Self, \(childActionType)>(
+          \(accessPrefix)static let \(generatedIdentifierSource(memberName)) = CasePath<Self, \(childActionType)>(
             embed: { childAction in
-              .\(caseName)(childAction)
+              .\(caseSource)(childAction)
             },
             extract: { action in
-              guard case .\(caseName)(let childAction) = action else { return nil }
+              guard case .\(caseSource)(let childAction) = action else { return nil }
               return childAction
             }
           )
@@ -224,7 +225,7 @@ extension InnoFlowMacro {
       let labelToken = parameter.firstName,
       labelToken.text != "_"
     {
-      let actionPathBaseName = generatedActionPathBaseName(from: caseName)
+      let actionPathBaseName = generatedPathBaseName(from: element.name)
       if manualCasePathNames.contains("\(actionPathBaseName)CasePath") {
         return nil
       }
@@ -244,10 +245,10 @@ extension InnoFlowMacro {
     if parameters.count == 2,
       let idParameter = parameters.first,
       let actionParameter = parameters.last,
-      idParameter.firstName?.text == "id",
-      actionParameter.firstName?.text == "action"
+      idParameter.firstName.map(logicalIdentifier) == "id",
+      actionParameter.firstName.map(logicalIdentifier) == "action"
     {
-      let memberName = "\(generatedActionPathBaseName(from: caseName))ActionPath"
+      let memberName = "\(generatedPathBaseName(from: element.name))ActionPath"
       guard
         diagnoseGeneratedActionPathCollisionIfNeeded(
           memberName: memberName,
@@ -270,16 +271,16 @@ extension InnoFlowMacro {
         )
         return .init(
           declarations: [
-            "private enum \(markerName) {}",
+            "private enum \(generatedIdentifierSource(markerName)) {}",
             """
-            \(accessPrefix)static var \(memberName): CollectionActionPath<Self, \(idType), \(childActionType)> {
+            \(accessPrefix)static var \(generatedIdentifierSource(memberName)): CollectionActionPath<Self, \(idType), \(childActionType)> {
               CollectionActionPath<Self, \(idType), \(childActionType)>._innoFlowGenerated(
-                marker: \(markerName).self,
+                marker: \(generatedIdentifierSource(markerName)).self,
                 embed: { id, action in
-                  .\(caseName)(id: id, action: action)
+                  .\(caseSource)(id: id, action: action)
                 },
                 extract: { action in
-                  guard case let .\(caseName)(id, childAction) = action else { return nil }
+                  guard case let .\(caseSource)(id, childAction) = action else { return nil }
                   return (id, childAction)
                 }
               )
@@ -291,12 +292,12 @@ extension InnoFlowMacro {
       return .init(
         declarations: [
           """
-          \(accessPrefix)static let \(memberName) = CollectionActionPath<Self, \(idType), \(childActionType)>(
+          \(accessPrefix)static let \(generatedIdentifierSource(memberName)) = CollectionActionPath<Self, \(idType), \(childActionType)>(
             embed: { id, action in
-              .\(caseName)(id: id, action: action)
+              .\(caseSource)(id: id, action: action)
             },
             extract: { action in
-              guard case let .\(caseName)(id, childAction) = action else { return nil }
+              guard case let .\(caseSource)(id, childAction) = action else { return nil }
               return (id, childAction)
             }
           )
@@ -306,7 +307,7 @@ extension InnoFlowMacro {
     }
 
     if parameters.count >= 2 {
-      let actionPathBaseName = generatedActionPathBaseName(from: caseName)
+      let actionPathBaseName = generatedPathBaseName(from: element.name)
       let memberName = "\(actionPathBaseName)CasePath"
       if manualCasePathNames.contains(memberName) {
         return nil
@@ -329,12 +330,12 @@ extension InnoFlowMacro {
     for element in enumCase.attributes {
       guard let attribute = element.as(AttributeSyntax.self) else { continue }
       if let identifier = attribute.attributeName.as(IdentifierTypeSyntax.self),
-        identifier.name.text == "InnoFlowCasePathIgnored"
+        logicalIdentifier(identifier.name) == "InnoFlowCasePathIgnored"
       {
         return true
       }
       if let member = attribute.attributeName.as(MemberTypeSyntax.self),
-        member.name.text == "InnoFlowCasePathIgnored"
+        logicalIdentifier(member.name) == "InnoFlowCasePathIgnored"
       {
         return true
       }
@@ -388,19 +389,6 @@ extension InnoFlowMacro {
       || description.contains(".Optional<")
   }
 
-  private static func generatedActionPathBaseName(from caseName: String) -> String {
-    let identifier: String
-    if caseName.hasPrefix("`"), caseName.hasSuffix("`"), caseName.count >= 2 {
-      identifier = String(caseName.dropFirst().dropLast())
-    } else {
-      identifier = caseName
-    }
-    if identifier.hasPrefix("_"), identifier.count > 1 {
-      return String(identifier.dropFirst())
-    }
-    return identifier
-  }
-
   private static func diagnoseGeneratedActionPathCollisionIfNeeded(
     memberName: String,
     element: EnumCaseElementSyntax,
@@ -413,7 +401,7 @@ extension InnoFlowMacro {
       context.diagnose(
         Diagnostic(
           node: Syntax(element.name),
-          message: InnoFlowActionPathsMessage.leadingUnderscoreCollision
+          message: InnoFlowActionPathsMessage.leadingUnderscoreCollision(memberName: memberName)
         )
       )
       return true
@@ -442,25 +430,25 @@ private struct SynthesizedActionPathMember {
 }
 
 enum InnoFlowActionPathsMessage: DiagnosticMessage {
-  case leadingUnderscoreCollision
+  case leadingUnderscoreCollision(memberName: String)
   case optionalPayloadNote(caseName: String)
   case labeledPayloadNote(caseName: String, label: String, actionPathBaseName: String)
   case multiPayloadNote(caseName: String, actionPathBaseName: String)
 
   var message: String {
     switch self {
-    case .leadingUnderscoreCollision:
+    case .leadingUnderscoreCollision(let memberName):
       return
-        "generated action path name collides with another generated action path or existing static member; declare an explicit static alias or rename the case"
+        "generated action path `\(memberName)` collides with another generated action path or existing static member; declare an explicit static alias or rename the case"
     case .optionalPayloadNote(let caseName):
       return
         "case `\(caseName)` has an optional payload; CasePath is still synthesized but `.\(caseName)(nil)` extracts as `.some(nil)`, which is rarely intended. Why: `CasePath.extract` already wraps the payload in an outer optional, so an inner optional collapses ambiguously. Fix: split into two cases (e.g. `.\(caseName)(value)` + `.\(caseName)Cleared`) or declare a custom CasePath that flattens the inner optional"
     case .labeledPayloadNote(let caseName, let label, let actionPathBaseName):
       return
-        "case `\(caseName)` has a labeled payload (`\(label):`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, declare `static let \(actionPathBaseName)CasePath = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed"
+        "case `\(caseName)` has a labeled payload (`\(label):`); no CasePath is synthesized for this case. Why: CasePath auto-synthesis only handles the canonical unlabeled single-payload shape so the embed/extract closures remain unambiguous. Fix: drop the label, declare `static let \(InnoFlowMacro.generatedIdentifierSource("\(actionPathBaseName)CasePath")) = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed"
     case .multiPayloadNote(let caseName, let actionPathBaseName):
       return
-        "case `\(caseName)` has multiple payload parameters; no CasePath is synthesized. Why: CasePath auto-synthesis only handles unlabeled single payloads and `id:action:` collection routes. Fix: collapse the payload into a single struct/tuple, declare `static let \(actionPathBaseName)CasePath = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed"
+        "case `\(caseName)` has multiple payload parameters; no CasePath is synthesized. Why: CasePath auto-synthesis only handles unlabeled single payloads and `id:action:` collection routes. Fix: collapse the payload into a single struct/tuple, declare `static let \(InnoFlowMacro.generatedIdentifierSource("\(actionPathBaseName)CasePath")) = CasePath<Self, …>(embed:extract:)` manually, or add `@InnoFlowCasePathIgnored` when no path is needed"
     }
   }
 

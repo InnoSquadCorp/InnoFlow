@@ -6,6 +6,7 @@ import Foundation
 
 /// A lexical owner for multiple dispatch-scoped tasks.
 ///
+/// Create scopes with `withFlowScope`; direct construction is unavailable.
 /// Register only work whose lifetime belongs to this scope. Closing a scope
 /// cancels and joins its unfinished dispatches without affecting sibling scopes
 /// or Store-wide work.
@@ -16,7 +17,7 @@ public final class FlowScope {
   private var isCloseFinished = false
   private var closeWaiters: [CheckedContinuation<Void, Never>] = []
 
-  public init() {}
+  fileprivate init() {}
 
   /// Registers and returns the same dispatch handle.
   ///

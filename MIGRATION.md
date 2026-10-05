@@ -4,6 +4,109 @@ This file tracks release-to-release migration guidance when behavior, defaults, 
 
 ## 6.0.0
 
+### Stable baseline and prerelease scope
+
+The stable upgrade baseline is annotated tag `5.1.1` (tag object
+`7782c370bd6c769e1b9fc475146bd1aabce6b97f`, commit
+`00a73ed2d2cb94114b0be5c9fbd59c187a4b67c7`). The external migration gate checks
+that exact baseline; unreleased 6.0 drafts are not additional stable releases.
+
+Typed outputs, dispatch handles, optional-child lifetime ownership, scheduled
+run admission, `FlowScope`, `TestStoreScenario`, `TestStoreExplorer`, and
+`DispatchID` are new in 6.0. Changes to their earlier draft spellings or behavior
+below affect prerelease adopters, not existing 5.1.1 uses of those APIs.
+
+### Testing source locations
+
+New canonical assertion parameters are `fileID`, `filePath`, `line` and
+`column`, all defaulted at the caller. Existing stable `file:line:` assertion
+overloads remain accepted and map to column 1. Do not assume every stored
+method value breaks: a contextual signature can still select its compatibility
+overload. `send` additionally changes its return type, so a stored async
+Void-returning send still needs the explicit result-discarding adapter below.
+`TestStore.init` did not take source-location parameters in 5.1.1.
+
+### Final names for prerelease adopters
+
+`TestStoreDispatch` is the sole testing handle name. Replace the unreleased
+`TestFlowTask` alias. OptionalChildLifetime and optionalChild now use `reducer:`
+in place of their draft-only `child:` label, matching the other composition APIs.
+New receiveOutput, invariant, scenario and dispatch-finish APIs accept only the
+complete `fileID:filePath:line:column:` coordinates. Their draft-only `file:`
+overloads are removed; published 5.1.1 assertion overloads remain.
+
+Framework public enum case changes after 6.0.0 require a major release. Package
+consumers may switch exhaustively; omitting `@frozen` does not waive SwiftPM
+source compatibility. See [the API freeze decisions](docs/PUBLIC_API_FREEZE_6_0.md).
+
+### Prerelease lexical scopes and scheduler admission
+
+For earlier 6.0 drafts, direct `FlowScope` construction is now unavailable:
+move owned work into `withFlowScope`. Scenario `advance` requires
+`onceSleepersReach` to make clock progression deterministic.
+`TestStoreDispatch.effectLedger` reports bounded typed lifecycle events
+separately from action/output assertions.
+
+The new scheduler's `serial(maxPending:)` and `queueFull(maxPending:)` carry
+`UInt`. Nonnegative literals continue to work; validate signed input with
+`UInt(exactly:)` rather than trapping or clamping implicitly. The draft
+`invalidCapacity` case is removed. Exhaustive draft `EffectAdmission` switches
+must handle `cancelledBeforeStart` and `superseded`. A delayed older latest
+request no longer evicts a newer live request. Terminal admission observations
+never authorize action delivery after accepted cancellation.
+
+### Sendable key paths in reducer composition and PhaseMap
+
+`Scope`, `IfLet`, `ForEachReducer`, `ForEachIdentifiedReducer`,
+`OptionalChildLifetime` / `optionalChild`, and `PhaseMap` now require a
+Sendable state key path. This is an intentional 6.0 source change: lifetime
+metadata and phase coverage can outlive the reducer call, so captured subscript
+indices must satisfy the compiler's Sendable checks.
+
+Direct stored-property literals such as `state: \.child` still compile. Preserve
+the marker on a hoisted value or helper return type, for example
+`let path: any WritableKeyPath<Parent.State, Child.State> & Sendable = \.child`.
+The optional-child form uses `Child.State?` and collection forms use their exact
+collection value type. A plain `WritableKeyPath<...>` annotation erases this
+proof and must be changed at its declaration; do not cast it back or wrap it in
+unchecked storage. Subscript indices should be immutable Sendable values.
+A non-Sendable reference index is rejected even when the root State is Sendable.
+
+The supported Swift 6.3 and 6.4 compilers verify this contract. Independent
+consumer fixtures cover literals, explicitly typed values, Sendable indices,
+and rejection of erased or non-Sendable captured paths. Existing IfLet runtime
+behavior stays the same; its key-path input type is strengthened. IfCaseLet's
+CasePath inputs and Store selection key-path APIs are unaffected.
+
+### Optional-child lifetime adoption
+
+Existing IfLet keeps its behavior. To adopt state-owned cancellation, replace duplicate child composition with OptionalChildLifetime or the parent optionalChild modifier. Provide a fresh explicit instance ID on reopening; keeping the ID preserves the same lifetime. The wrapper already reduces the child before its complete parent. Lift typed outputs explicitly. Raw effect IDs inside a child are owner-local, so outside raw-ID cancellation no longer reaches opt-in child work. This is an additive opt-in API; see docs/OPTIONAL_CHILD_LIFETIME.md.
+
+### IfCaseLet declaration identity
+
+IfCaseLet now captures defaulted fileID, line and column parameters so optional-child lifetimes remain stable when a computed reducer body rebuilds manual CasePath values. Existing constructor calls continue to compile. A stored initializer function value with the previous four-argument signature needs a closure adapter that calls the initializer. Helpers that create separate overlapping case reducers at one declaration must supply a stable, distinct lifetimeID: EffectID<ID> for each namespace. CasePath cache identity is unchanged. The independent CollectionLifetimeConsumer checks ordinary calls, the explicit-ID overload, a function-value adapter, and rejection of the old direct initializer reference.
+
+### Testing send return value and output progress
+
+`TestStore.send`, `ScopedTestStore.send`, and phase helper sends return `TestStoreDispatch`. The unreleased `TestFlowTask` alias is removed; use the single canonical name `TestStoreDispatch`. Existing statement calls need no change. Explicit async Void method values and protocol adapters must wrap the call and discard its result. A dispatch handle's finish diagnoses only its own unverified work without consuming it; global store finish retains its whole-store role. In `.off`, receiveOutput now reduces intermediate actions and their follow-up effects while seeking the output under the original deadline. Exhaustive global finish reports both pending action and output counts together.
+
+### Prerelease perform cancellation errors
+
+`perform` is new in 6.0. Compared with its earlier draft, it maps every thrown
+error, including a directly thrown `CancellationError`, to its failure action
+while the host remains active. Accepted task/dispatch/runtime cancellation
+remains silent. Stable `run` and AsyncSequence cancellation-error behavior is
+unchanged. Draft code that used a thrown `CancellationError` to abandon an
+active request should use explicit cancellation instead.
+
+### Compiler-assisted authoring migration
+
+Apply the macro Fix-It for a missing or incorrect third reducer generic; it selects Output only when the feature declares one and otherwise Never. Swift.Never is also accepted. Explicit-reduce repairs preserve existing Never effects with an explicit promoteOutput when moving to a typed-output body. Strict totality now checks active conditional Phase declarations and map references; missing compiler configuration produces a clear error instead of silently approving incomplete coverage. Constructor renamed availability does not rename the generated CasePath helper.
+
+### Identifier corrections
+
+Keyword Phase cases no longer fail strict totality merely because declaration and reference use different optional backticks. Raw Action/Output names retain spaces and punctuation in generated CasePath names; reference those members with Swift backticks. Existing ordinary and leading-underscore path names are unchanged. Missing Phase cases and actual generated-member collisions still diagnose.
+
 ### Who is affected
 
 - Every `@InnoFlow` feature body must add the reducer output generic. Use
@@ -202,6 +305,57 @@ Use an uncancelled task to test immediate completion, and separately assert
 cancellation propagation. Nonpositive sleeps do not register a sleeper;
 positive waits still use the deterministic registration APIs before advancing
 manual time. These corrections do not require source-signature changes.
+
+
+### Nested Output is an authoring declaration
+
+A nested type named Output opts the feature into the typed-output contract. A previously unrelated nested Output in a 5.x feature must be renamed or deliberately adopted; it is not silently ignored. The body diagnostic names the expected output type. Live Store.outputs streams do not replay prior values; dispatch capture buffers from before its send is enqueued.
+
+### EffectTask extensions need an explicit output contract
+
+In 5.1.1, `EffectTask<Action>` is a nominal struct. In 6.0 it is the typealias
+`ReducerEffect<Action, Never>`. Ordinary explicitly specialized uses retain
+their output-free meaning, including helpers returning `EffectTask<Action>`.
+Extensions require a separate review on both supported Swift 6.3 and 6.4:
+
+The 5.1.1 spelling `extension EffectTask { static func helper() -> EffectTask { .none } }`
+needs an explicit review. For an output-free helper, the 6.0 replacement is:
+
+```swift
+extension ReducerEffect where Output == Never {
+  static func helper() -> Self { .none }
+}
+```
+
+Changing only the return to `Self` makes the old extension compile, but Swift
+also exposes that helper on `ReducerEffect<Int, String>`: extending the alias
+does not automatically carry its `Never` restriction. An explicit
+`EffectTask<Action>` return still returns an output-free value even when the
+helper is called on that wider receiver. If the helper intentionally supports
+every Output, declare `extension ReducerEffect` and review its implementation
+and return type accordingly. Do not add `Output == Never` to an intentionally
+generic helper or replace a concrete output-free return with `Self` blindly.
+
+The syntax-only migration CLI reports recognized `EffectTask` extensions as
+manual-review blockers and leaves their bytes intact. It cannot decide that
+semantic intent. `scripts/check-migration-consumer.sh` compiles unchanged
+stable forms, current forms, the widened receiver, and the explicitly
+restricted replacement as independent clients. A blocker-free codemod report
+still requires compilation of the complete application.
+
+### Dispatch correlation and timing JSONL
+
+`DispatchID` is new in 6.0. Compared with earlier drafts, its `rawValue` is a
+process-local monotonic `UInt64` and `init(rawValue:)` is unavailable. Use your
+own domain or tracing identifier for persisted and cross-process correlation.
+JSON consumers must retain integer precision beyond JavaScript's safe-integer
+range; use a lossless UInt64-capable parser instead of floating-point conversion.
+
+EffectTimingRecorder.Entry.dispatchID is UInt64? and new JSONL records declare schemaVersion 2. Stable 5.1.1 records without dispatch correlation still decode. UUID-string records from earlier 6.0 drafts fail with an explicit migration diagnostic rather than silently losing identity. The offline scripts/migrate-effect-timing-jsonl.py takes explicit input and a new output path; it preserves the original file and maps each archived UUID to a collision-free file-local integer while retaining legacyDispatchID in the raw converted JSON. These imported numbers are archival correlation only, not live DispatchID values. Keep both raw files; decoding and re-encoding Entry retains its public fields, not the converter's extra provenance field. Numeric IDs are not globally unique and separate process/file captures must not be concatenated as one correlation namespace.
+
+OnChange merges the base and change effects concurrently. Neither Store nor TestStore promises declaration-order emissions from those branches. If the application requires ordered work, express that order with concatenate; completing one branch earlier is not a host mismatch.
+
+PhaseMap's defaulted source coordinates distinguish coverage declaration sites without requiring new arguments at ordinary call sites. If you store the initializer as a function value, use an explicit closure adapter. On Swift6.3, a TestStoreExplorer factory with multiple statements may need an explicit TestStoreExplorer<YourFeature> generic argument; its behavior is unchanged.
 
 ## 5.1.1
 

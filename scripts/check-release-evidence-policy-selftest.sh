@@ -9,6 +9,14 @@ trap 'rm -rf "$fixture_root"' EXIT
 mkdir -p "$fixture_root/docs/contracts" "$fixture_root/Tests/InnoFlowTests" "$fixture_root/scripts"
 cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
 cp "$root_dir/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/"
+cp "$root_dir/docs/contracts/swift-test-inventory.json" "$fixture_root/docs/contracts/"
+cp "$root_dir/docs/contracts/sample-test-inventory.json" "$fixture_root/docs/contracts/"
+sample_package="Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
+mkdir -p "$fixture_root/$sample_package/Tests"
+cp "$root_dir/$sample_package/Package.swift" "$fixture_root/$sample_package/"
+cp -R "$root_dir/$sample_package/Tests/InnoFlowSampleAppFeatureTests" "$fixture_root/$sample_package/Tests/"
+cp "$root_dir/Package.swift" "$fixture_root/"
+cp -R "$root_dir/Tests/InnoFlowTests" "$root_dir/Tests/InnoFlowMacrosTests" "$fixture_root/Tests/"
 cp "$root_dir/Tests/InnoFlowTests/CompileContractTests.swift" "$fixture_root/Tests/InnoFlowTests/"
 cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
 cp "$root_dir/scripts/run-release-preflight.sh" "$root_dir/scripts/run-release-preflight.rb" \
@@ -20,12 +28,122 @@ cp "$root_dir/scripts/report-doc-fence-review.rb" "$fixture_root/scripts/"
 
 ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
 
+# Compiler-specific declarations must survive both source and focused inventories.
+# Three newer-compiler declarations plus two common controls exercise exact counts.
+python3 - "$fixture_root" <<'PY_CONDITIONAL'
+import hashlib
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+full_path = root / "docs/contracts/swift-test-inventory.json"
+runtime_path = root / "docs/contracts/runtime-test-inventory.json"
+policy_path = root / "docs/contracts/release-evidence-policy.json"
+full = json.loads(full_path.read_text())
+runtime = json.loads(runtime_path.read_text())
+policy = json.loads(policy_path.read_text())
+relative = "Tests/InnoFlowTests/IdentifiedArrayTests.swift"
+source = root / relative
+with source.open("a") as stream:
+    stream.write("\nextension IdentifiedArrayTests {\n")
+    for index in range(5):
+        condition = ["#if compiler(>=6.4)"] if index < 3 else []
+        name = "compilerInventoryFixture" + str(index)
+        if condition:
+            stream.write("#if compiler(>=6.4)\n")
+        stream.write("@Test func " + name + "() {}\n")
+        if condition:
+            stream.write("#endif\n")
+        identifier = "IdentifiedArrayTests/" + name + "()"
+        full["tests"].append({"target": "InnoFlowTests", "file": relative, "line": 1,
+            "identifier": identifier, "displayName": name + "()", "attribute": "@Test",
+            "conditionalContexts": condition})
+        runtime["expectedTestIdentifiers"].append(identifier)
+        if condition:
+            runtime.setdefault("conditionalContextsByIdentifier", {})[identifier] = condition
+    stream.write("}\n")
+full["sourceFiles"][relative] = hashlib.sha256(source.read_bytes()).hexdigest()
+full["tests"].sort(key=lambda test: (test["target"], test["identifier"]))
+runtime["expectedTestIdentifiers"].sort()
+full_path.write_text(json.dumps(full) + "\n")
+runtime_path.write_text(json.dumps(runtime) + "\n")
+for check in policy["checks"]:
+    if check["id"] in ("swift-6.3-toolchain", "swift-6.4-toolchain", "full-principle"):
+        increment = {"swift-6.3-toolchain": 2, "swift-6.4-toolchain": 5, "full-principle": 10}[check["id"]]
+        for field in ("minimumTestCount", "maximumTestCount"):
+            check[field] += increment
+        check["swiftTestInventorySha256"] = hashlib.sha256(full_path.read_bytes()).hexdigest()
+    if check["id"].startswith("runtime-"):
+        check["testIdentifierInventorySha256"] = hashlib.sha256(runtime_path.read_bytes()).hexdigest()
+policy_path.write_text(json.dumps(policy) + "\n")
+PY_CONDITIONAL
+ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
+cp "$fixture_root/docs/contracts/release-evidence-policy.json" "$fixture_root/conditional-policy.json"
+cp "$fixture_root/docs/contracts/runtime-test-inventory.json" "$fixture_root/conditional-runtime.json"
+for mode in old-compiler-overcount new-compiler-undercount full-principle-undercount missing-condition wrong-condition; do
+  python3 - "$fixture_root" "$mode" <<'PY_MUTATION'
+import hashlib
+import json
+from pathlib import Path
+import sys
+root, mode = Path(sys.argv[1]), sys.argv[2]
+policy = json.loads((root / "conditional-policy.json").read_text())
+runtime = json.loads((root / "conditional-runtime.json").read_text())
+if mode.endswith("count"):
+    check_id = {"old-compiler-overcount": "swift-6.3-toolchain", "new-compiler-undercount": "swift-6.4-toolchain", "full-principle-undercount": "full-principle"}[mode]
+    check = next(check for check in policy["checks"] if check["id"] == check_id)
+    for field in ("minimumTestCount", "maximumTestCount"):
+        check[field] += 3 if mode.startswith("old") else -3
+else:
+    conditions = runtime["conditionalContextsByIdentifier"]
+    key = next(iter(conditions))
+    if mode == "missing-condition":
+        del conditions[key]
+    else:
+        conditions[key] = ["#if compiler(>=6.3)"]
+path = root / "docs/contracts/runtime-test-inventory.json"
+path.write_text(json.dumps(runtime) + "\n")
+for check in policy["checks"]:
+    if check["id"].startswith("runtime-"):
+        check["testIdentifierInventorySha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+(root / "docs/contracts/release-evidence-policy.json").write_text(json.dumps(policy) + "\n")
+PY_MUTATION
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Conditional declaration mutation passed: $mode" >&2
+    exit 1
+  fi
+done
+cp "$root_dir/docs/contracts/"{release-evidence-policy,runtime-test-inventory,swift-test-inventory}.json "$fixture_root/docs/contracts/"
+cp "$root_dir/Tests/InnoFlowTests/IdentifiedArrayTests.swift" "$fixture_root/Tests/InnoFlowTests/"
+
 # The identity/cancellation regressions must remain in every platform run.
-for suite in IdentifiedArrayTests ManualTestClockTests; do
+for suite in CollectionLifetimeConsistencyTests IdentifiedArrayTests ManualTestClockTests RuntimeConsistencyTests TestStoreDispatchConsistencyTests TestingLocationConsistencyTests PhaseExplorationConsistencyTests OwnedSynchronousEffectConsistencyTests; do
   ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.lines.reject { |line| line.include?("-only-testing:InnoFlowTests/#{suite}") }.join)' \
     "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$suite"
   if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
     echo "Runtime suite omission passed: $suite" >&2
+    exit 1
+  fi
+  cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
+done
+
+# Discovery must exclude host-only macro tests without narrowing runtime suite discovery.
+for target in missing InnoFlowMacrosTests; do
+  ruby -e 'path, target = ARGV; source = File.read(path); replacement = target == "missing" ? "" : "  -only-testing:#{target}\n"; File.write(path, source.sub("  -only-testing:InnoFlowTests\n", replacement))' \
+    "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$target"
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Invalid runtime discovery target passed: $target" >&2
+    exit 1
+  fi
+  cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
+done
+
+# Extra or duplicate selections must not drift independently of the inventory.
+for selection in UnreviewedTests IdentifiedArrayTests; do
+  ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.sub("  test\n  -only-testing", "  test\n  -only-testing:InnoFlowTests/#{suite}\n  -only-testing"))' \
+    "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$selection"
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Unreviewed or duplicate runtime selection passed: $selection" >&2
     exit 1
   fi
   cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
@@ -41,6 +159,13 @@ expect_mutation_failure() {
   fi
 }
 
+for check_id in swift-6.3-toolchain swift-6.4-toolchain full-principle sample-swift-6.3; do
+  export COUNT_MUTATION_ID="$check_id"
+  expect_mutation_failure "unreviewed-count-$check_id" \
+    'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")==ENV.fetch("COUNT_MUTATION_ID") }; c["maximumTestCount"]+=1; File.write(p,JSON.generate(j)+"\n")'
+done
+unset COUNT_MUTATION_ID
+
 expect_mutation_failure stale-maximum \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="external-macro-consumer" }; c["maximumTestCount"]=1; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure missing-test \
@@ -51,6 +176,8 @@ expect_mutation_failure partial-filter \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="external-macro-consumer" }; c.fetch("commandContract").fetch("exclusiveOptionValues")["--filter"]="CompileContractTests/exportedMacroFeaturesWorkAcrossTargetBoundaries"; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure package-redirection \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="external-macro-consumer" }; c.fetch("commandContract").fetch("forbiddenArgumentPrefixes").delete("--package-path"); File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure full-principle-incorrect-run-count \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="full-principle" }; c["expectedTestRunCount"]=4; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure swift63-incorrect-run-count \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="swift-6.3-toolchain" }; c["expectedTestRunCount"]=2; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure swift64-incorrect-run-count \
@@ -75,6 +202,75 @@ expect_mutation_failure sample-sdk-bypass \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="sample-sdk-tvos" }; c.fetch("commandContract")["requiredArguments"].delete("--sample"); File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure unpinned-runtime-inventory \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="runtime-ios-18.5" }; c.delete("testIdentifierInventorySha256"); File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure broad-expected-failures \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("profiles").fetch("tests")["allowsExpectedFailures"]=true; File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure broad-runtime-warnings \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("checks").find { |x| x.fetch("id")=="runtime-ios-18.5" }["allowsRuntimeWarnings"]=true; File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure inline-diagnostic-override \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("checks").find { |x| x.fetch("id")=="runtime-ios-18.5" }["expectedFailureTestIdentifiers"]=[]; File.write(p,JSON.generate(j)+"\n")'
+
+cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
+printf '\n// stale source mutation\n' >>"$fixture_root/Tests/InnoFlowTests/CompileContractTests.swift"
+if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+  echo "Stale Swift test source inventory passed" >&2
+  exit 1
+fi
+cp "$root_dir/Tests/InnoFlowTests/CompileContractTests.swift" "$fixture_root/Tests/InnoFlowTests/"
+printf 'import Testing\n@Test func unreviewedAddition() {}\n' >"$fixture_root/Tests/InnoFlowTests/UnreviewedAddition.swift"
+if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+  echo "Unreviewed added Swift test source passed" >&2
+  exit 1
+fi
+rm "$fixture_root/Tests/InnoFlowTests/UnreviewedAddition.swift"
+ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null
+
+# A freshly re-pinned partial focused list still cannot hide a source test.
+ruby -rjson -rdigest -e '
+  inventory_path, policy_path = ARGV
+  inventory = JSON.parse(File.read(inventory_path))
+  inventory.fetch("expectedTestIdentifiers").shift
+  File.write(inventory_path, JSON.generate(inventory) + "\n")
+  policy = JSON.parse(File.read(policy_path))
+  policy.fetch("checks").each do |check|
+    check["testIdentifierInventorySha256"] = Digest::SHA256.file(inventory_path).hexdigest if check.fetch("id").start_with?("runtime-")
+  end
+  File.write(policy_path, JSON.generate(policy) + "\n")
+' "$fixture_root/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/release-evidence-policy.json"
+if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+  echo "Re-pinned partial focused source inventory passed" >&2
+  exit 1
+fi
+cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
+cp "$root_dir/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/"
+
+# Re-pinning a malformed or expanded diagnostic list cannot authorize it.
+for mode in missing extra substituted duplicate unsorted absent; do
+  ruby -rjson -rdigest -e '
+    inventory_path, policy_path, mode = ARGV
+    inventory = JSON.parse(File.read(inventory_path))
+    diagnostics = inventory.fetch("expectedFailureTestIdentifiers")
+    case mode
+    when "missing" then diagnostics.pop
+    when "extra" then diagnostics << inventory.fetch("expectedTestIdentifiers").first; diagnostics.sort!
+    when "substituted" then diagnostics[0] = inventory.fetch("expectedTestIdentifiers").first; diagnostics.sort!
+    when "duplicate" then diagnostics << diagnostics.last
+    when "unsorted" then diagnostics.reverse!
+    when "absent" then inventory.delete("expectedFailureTestIdentifiers")
+    end
+    File.write(inventory_path, JSON.generate(inventory) + "\n")
+    policy = JSON.parse(File.read(policy_path))
+    policy.fetch("checks").each do |check|
+      check["testIdentifierInventorySha256"] = Digest::SHA256.file(inventory_path).hexdigest if check.fetch("id").start_with?("runtime-")
+    end
+    File.write(policy_path, JSON.generate(policy) + "\n")
+  ' "$fixture_root/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/release-evidence-policy.json" "$mode"
+  if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
+    echo "Re-pinned unreviewed diagnostic inventory passed: $mode" >&2
+    exit 1
+  fi
+  cp "$root_dir/docs/contracts/release-evidence-policy.json" "$fixture_root/docs/contracts/"
+  cp "$root_dir/docs/contracts/runtime-test-inventory.json" "$fixture_root/docs/contracts/"
+done
 
 command_repository="$fixture_root/command-repository"
 command_snapshot="$fixture_root/command-candidate.json"

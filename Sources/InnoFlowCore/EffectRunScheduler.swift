@@ -49,6 +49,11 @@ package actor EffectAdmissionGate {
   }
 }
 
+package enum EffectRunCancellationCause: Sendable, Equatable {
+  case explicit
+  case superseded
+}
+
 /// Store-local admission state shared by production and testing drivers.
 @MainActor
 package final class EffectRunScheduler {
@@ -64,6 +69,7 @@ package final class EffectRunScheduler {
   package enum Plan: Sendable {
     case accepted(Ticket)
     case rejected(EffectAdmissionRejection)
+    case terminal(EffectAdmission)
   }
 
   private struct Request {
@@ -75,13 +81,20 @@ package final class EffectRunScheduler {
     let gate: EffectAdmissionGate
     let cancellationState: EffectRunCancellationState
     let dispatchID: DispatchID?
+    let context: EffectExecutionContext?
     let onStart: @MainActor @Sendable (UUID) -> Void
     let onPendingExit: @MainActor @Sendable (UUID) -> Void
+    let onCancellation: @MainActor @Sendable (DispatchID, UInt64) -> Void
+    let onAdmissionLifecycle: @MainActor @Sendable (UUID?, EffectAdmission) -> Void
+    let onCancellationEvent: @MainActor @Sendable (EffectRunCancellationCause) -> Void
+    var hasStarted = false
+    var cancellationReported = false
     var task: Task<Void, Never>?
     var operationTask: Task<Void, Never>?
   }
 
   private struct Lane {
+    let diagnosticID: EffectRunLaneID
     let policy: EffectExecutionPolicy.Kind
     var running: UUID
     var pending: [UUID]
@@ -97,6 +110,30 @@ package final class EffectRunScheduler {
     requests.count
   }
 
+  /// Snapshot work is paid only by the explicit diagnostic reader.
+  package func snapshots(limit: Int) -> [EffectRunLaneSnapshot] {
+    guard limit > 0 else { return [] }
+    return lanes.values.sorted { $0.diagnosticID.description < $1.diagnosticID.description }
+      .prefix(limit).compactMap { lane in
+        guard let head = requests[lane.running] else { return nil }
+        let policy: EffectExecutionPolicy
+        switch lane.policy {
+        case .latest: policy = .latest
+        case .dropWhileRunning: policy = .dropWhileRunning
+        case .serial(let capacity): policy = .serial(maxPending: capacity)
+        }
+        return EffectRunLaneSnapshot(
+          id: lane.diagnosticID,
+          policy: policy,
+          isStartAdmitted: head.hasStarted,
+          pendingRequestCount: lane.pending.count,
+          isCancellationRequested: head.cancellationState.isCancelled
+            || head.context?.shouldProceed == false
+            || head.task?.isCancelled == true
+        )
+      }
+  }
+
   package func admit(
     id: AnyEffectID,
     policy: EffectExecutionPolicy,
@@ -105,15 +142,33 @@ package final class EffectRunScheduler {
     dispatchID: DispatchID?,
     onCancellation: @escaping @MainActor @Sendable (DispatchID, UInt64) -> Void,
     onStart: @escaping @MainActor @Sendable (UUID) -> Void,
-    onPendingExit: @escaping @MainActor @Sendable (UUID) -> Void
+    onPendingExit: @escaping @MainActor @Sendable (UUID) -> Void,
+    context: EffectExecutionContext? = nil,
+    onAdmissionLifecycle: @escaping @MainActor @Sendable (UUID?, EffectAdmission) -> Void = {
+      _, _ in
+    },
+    onCancellationEvent: @escaping @MainActor @Sendable (EffectRunCancellationCause) -> Void = {
+      _ in
+    }
   ) async -> Plan {
-    if case .serial(let maxPending) = policy, maxPending < 0 {
-      return .rejected(.invalidCapacity(maxPending))
+    // Check the exact tokens introduced by the scheduled node, not just its
+    // enclosing structural context. A cancelled deferred request must never
+    // reserve capacity or supersede a newer live request.
+    guard !Task.isCancelled, context?.shouldProceed != false else {
+      onAdmissionLifecycle(nil, .cancelledBeforeStart)
+      return .terminal(.cancelledBeforeStart)
     }
 
     let kind = policy.kind
     if let lane = lanes[id], lane.policy != kind {
+      onAdmissionLifecycle(nil, .rejected(.conflictingPolicy))
       return .rejected(.conflictingPolicy)
+    }
+    if case .latest = kind,
+      let lane = lanes[id], let current = requests[lane.running], sequence < current.sequence
+    {
+      onAdmissionLifecycle(nil, .superseded)
+      return .terminal(.superseded)
     }
 
     let token = UUID()
@@ -128,13 +183,18 @@ package final class EffectRunScheduler {
       gate: gate,
       cancellationState: cancellationState,
       dispatchID: dispatchID,
+      context: context?.frozenForExecution(),
       onStart: onStart,
       onPendingExit: onPendingExit,
+      onCancellation: onCancellation,
+      onAdmissionLifecycle: onAdmissionLifecycle,
+      onCancellationEvent: onCancellationEvent,
       task: nil,
       operationTask: nil
     )
     switch kind {
     case .latest:
+      let diagnosticID = lanes[id]?.diagnosticID ?? EffectRunLaneID(token)
       var displacedRequests: [Request] = []
       if let lane = lanes.removeValue(forKey: id) {
         let displaced = [lane.running] + lane.pending
@@ -143,8 +203,12 @@ package final class EffectRunScheduler {
             continue
           }
           displacedRequest.cancellationState.cancel()
+          displacedRequest.onAdmissionLifecycle(displacedRequest.token, .superseded)
+          if !displacedRequest.cancellationReported {
+            displacedRequest.onCancellationEvent(.superseded)
+          }
           if let dispatchID = displacedRequest.dispatchID {
-            onCancellation(dispatchID, displacedRequest.sequence)
+            displacedRequest.onCancellation(dispatchID, displacedRequest.sequence)
           }
           displacedRequest.task?.cancel()
           displacedRequest.operationTask?.cancel()
@@ -155,7 +219,7 @@ package final class EffectRunScheduler {
         }
       }
       register(request)
-      lanes[id] = Lane(policy: kind, running: token, pending: [])
+      lanes[id] = Lane(diagnosticID: diagnosticID, policy: kind, running: token, pending: [])
       // Publish the replacement before crossing an actor boundary. Otherwise a
       // reentrant admission can install a newer lane while this call is
       // suspended, only to have that lane overwritten when this call resumes.
@@ -174,9 +238,13 @@ package final class EffectRunScheduler {
       )
 
     case .dropWhileRunning:
-      guard lanes[id] == nil else { return .rejected(.busy) }
+      guard lanes[id] == nil else {
+        onAdmissionLifecycle(nil, .rejected(.busy))
+        return .rejected(.busy)
+      }
       register(request)
-      lanes[id] = Lane(policy: kind, running: token, pending: [])
+      lanes[id] = Lane(
+        diagnosticID: EffectRunLaneID(token), policy: kind, running: token, pending: [])
       return .accepted(
         Ticket(
           token: token,
@@ -191,7 +259,8 @@ package final class EffectRunScheduler {
     case .serial(let maxPending):
       guard var lane = lanes[id] else {
         register(request)
-        lanes[id] = Lane(policy: kind, running: token, pending: [])
+        lanes[id] = Lane(
+          diagnosticID: EffectRunLaneID(token), policy: kind, running: token, pending: [])
         return .accepted(
           Ticket(
             token: token,
@@ -203,12 +272,14 @@ package final class EffectRunScheduler {
           )
         )
       }
-      guard lane.pending.count < maxPending else {
+      guard UInt(lane.pending.count) < maxPending else {
+        onAdmissionLifecycle(nil, .rejected(.queueFull(maxPending: maxPending)))
         return .rejected(.queueFull(maxPending: maxPending))
       }
       lane.pending.append(token)
       lanes[id] = lane
       register(request)
+      onAdmissionLifecycle(token, .queued(position: lane.pending.count))
       return .accepted(
         Ticket(
           token: token,
@@ -232,11 +303,34 @@ package final class EffectRunScheduler {
     }
     request.task = task
     requests[ticket.token] = request
-
-    guard lanes[ticket.id]?.running == ticket.token else { return true }
-    request.onStart(request.token)
-    await request.gate.start()
+    guard !task.isCancelled, !request.cancellationState.isCancelled else {
+      cancel(token: ticket.token)
+      await request.gate.reject()
+      return false
+    }
+    await startIfAttached(ticket.token)
     return true
+  }
+
+  private func startIfAttached(_ token: UUID) async {
+    guard var request = requests[token], let task = request.task,
+      !request.hasStarted, lanes[request.id]?.running == token
+    else { return }
+    guard !task.isCancelled, !request.cancellationState.isCancelled else {
+      cancel(token: token)
+      await request.gate.reject()
+      return
+    }
+    request.hasStarted = true
+    requests[token] = request
+    request.onAdmissionLifecycle(token, .started)
+    request.onStart(token)
+    // Callbacks may re-enter cancellation. Never open a now-invalid gate.
+    guard requests[token] != nil, !request.cancellationState.isCancelled else {
+      await request.gate.reject()
+      return
+    }
+    await request.gate.start()
   }
 
   /// Attaches the physical operation task to its scheduler request.
@@ -258,26 +352,43 @@ package final class EffectRunScheduler {
     guard var lane = lanes[request.id] else { return }
 
     if lane.running == token {
-      guard case .serial = lane.policy, let next = lane.pending.first else {
+      guard case .serial = lane.policy else {
         lanes.removeValue(forKey: request.id)
         return
       }
-
-      lane.pending.removeFirst()
-      lane.running = next
-      lanes[request.id] = lane
-      guard let nextRequest = requests[next] else {
-        await finish(next)
+      // Skip missing/cancelled reservations directly. Recursing through
+      // finish(missingToken) cannot remove a lane whose request is absent.
+      while !lane.pending.isEmpty {
+        let next = lane.pending.removeFirst()
+        guard let nextRequest = requests[next] else { continue }
+        if nextRequest.cancellationState.isCancelled {
+          _ = removeRequest(next)
+          nextRequest.task?.cancel()
+          if !nextRequest.cancellationReported {
+            nextRequest.onAdmissionLifecycle(next, .cancelledBeforeStart)
+            nextRequest.onCancellationEvent(.explicit)
+          }
+          nextRequest.onPendingExit(next)
+          Task { await nextRequest.gate.reject() }
+          continue
+        }
+        lane.running = next
+        lanes[request.id] = lane
+        // A promoted reservation can still be awaiting attachment. The
+        // attachment and promotion paths share exactly-once start admission.
+        await startIfAttached(next)
         return
       }
-      nextRequest.onStart(nextRequest.token)
-      await nextRequest.gate.start()
+      lanes.removeValue(forKey: request.id)
       return
     }
 
     lane.pending.removeAll { $0 == token }
     lanes[request.id] = lane
-    request.onPendingExit(request.token)
+    if !request.hasStarted, !request.cancellationReported {
+      request.onAdmissionLifecycle(token, .cancelledBeforeStart)
+    }
+    request.onPendingExit(token)
   }
 
   /// Cancels matching requests. A running serial/drop lane is retained until
@@ -285,68 +396,44 @@ package final class EffectRunScheduler {
   @discardableResult
   package func cancel(id: AnyEffectID, upTo sequence: UInt64) -> Set<DispatchID> {
     var dispatchIDs: Set<DispatchID> = []
-    let tokens = Array(requestTokensByCancellationID[id] ?? [])
-    for token in tokens {
+    for token in Array(requestTokensByCancellationID[id] ?? []) {
       guard let request = requests[token], request.sequence <= sequence else { continue }
-      request.cancellationState.cancel()
-      request.operationTask?.cancel()
-      if let dispatchID = request.dispatchID {
-        dispatchIDs.insert(dispatchID)
-      }
-
-      guard let lane = lanes[request.id] else {
-        _ = removeRequest(token)
-        request.task?.cancel()
-        Task { await request.gate.reject() }
-        continue
-      }
-
-      if token == lane.running {
-        request.task?.cancel()
-        if case .latest = lane.policy {
-          _ = removeRequest(token)
-          if lanes[request.id]?.running == token {
-            lanes.removeValue(forKey: request.id)
-          }
-          Task { await request.gate.reject() }
-        }
-      } else {
-        _ = removeRequest(token)
-        if var currentLane = lanes[request.id] {
-          currentLane.pending.removeAll { $0 == token }
-          lanes[request.id] = currentLane
-        }
-        request.task?.cancel()
-        request.onPendingExit(request.token)
-        Task { await request.gate.reject() }
-      }
+      if let dispatchID = request.dispatchID { dispatchIDs.insert(dispatchID) }
+      cancel(token: token)
     }
     return dispatchIDs
   }
 
   package func cancel(token: UUID) {
-    guard let request = requests[token], let lane = lanes[request.id] else { return }
-    if lane.running == token {
-      request.cancellationState.cancel()
-      request.operationTask?.cancel()
-      request.task?.cancel()
-      if case .latest = lane.policy {
-        _ = removeRequest(token)
-        lanes.removeValue(forKey: request.id)
-        Task { await request.gate.reject() }
-      }
-      return
-    }
-
-    _ = removeRequest(token)
+    guard var request = requests[token] else { return }
     request.cancellationState.cancel()
     request.operationTask?.cancel()
-    var updatedLane = lane
-    updatedLane.pending.removeAll { $0 == token }
-    lanes[request.id] = updatedLane
     request.task?.cancel()
-    request.onPendingExit(request.token)
-    Task { await request.gate.reject() }
+    let reportCancellation = !request.cancellationReported
+    request.cancellationReported = true
+    let lane = lanes[request.id]
+    if lane?.running == token, lane?.policy != .latest {
+      // Keep the physical slot, including a not-yet-attached reservation.
+      requests[token] = request
+    } else {
+      _ = removeRequest(token)
+      if var lane {
+        if lane.running == token {
+          lanes.removeValue(forKey: request.id)
+        } else {
+          lane.pending.removeAll { $0 == token }
+          lanes[request.id] = lane
+        }
+      }
+      Task { await request.gate.reject() }
+    }
+    if reportCancellation {
+      if !request.hasStarted {
+        request.onAdmissionLifecycle(token, .cancelledBeforeStart)
+      }
+      request.onCancellationEvent(.explicit)
+    }
+    if let lane, lane.running != token { request.onPendingExit(token) }
   }
 
   @discardableResult
@@ -369,6 +456,12 @@ package final class EffectRunScheduler {
       request.cancellationState.cancel()
       request.task?.cancel()
       request.operationTask?.cancel()
+      if !request.cancellationReported {
+        if !request.hasStarted {
+          request.onAdmissionLifecycle(request.token, .cancelledBeforeStart)
+        }
+        request.onCancellationEvent(.explicit)
+      }
       if pendingTokens.contains(request.token) {
         request.onPendingExit(request.token)
       }

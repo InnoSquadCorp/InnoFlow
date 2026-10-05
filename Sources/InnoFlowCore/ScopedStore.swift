@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import Observation
+public import Observation
 
 package enum ScopedStoreFailureKind {
   case parentReleased
@@ -314,7 +314,17 @@ where
 @MainActor
 @dynamicMemberLookup
 public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, ChildAction> {
-  package var cachedState: ChildState
+  @ObservationIgnored private var storedCachedState: ChildState
+  @ObservationIgnored private let cachedStateKeyPath:
+    KeyPath<ScopedStore<ParentReducer, ChildState, ChildAction>, ChildState> =
+      \ScopedStore<ParentReducer, ChildState, ChildAction>.cachedState
+  package var cachedState: ChildState {
+    get {
+      access(keyPath: cachedStateKeyPath)
+      return storedCachedState
+    }
+    set { withMutation(keyPath: cachedStateKeyPath) { storedCachedState = newValue } }
+  }
   @ObservationIgnored private weak var parent: Store<ParentReducer>?
   @ObservationIgnored private let parentLifetime: StoreLifetimeToken
   @ObservationIgnored private let stateResolver: @MainActor (ParentReducer.State) -> ChildState?
@@ -322,7 +332,17 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   @ObservationIgnored package let failureKind: ScopedStoreFailureKind
   @ObservationIgnored package let observerRegistry = ProjectionObserverRegistry<ChildState>()
   @ObservationIgnored package let selectionCache = SelectionCache()
-  package var isActive = true
+  @ObservationIgnored private var storedIsActive: Bool = true
+  @ObservationIgnored private let isActiveKeyPath:
+    KeyPath<ScopedStore<ParentReducer, ChildState, ChildAction>, Bool> =
+      \ScopedStore<ParentReducer, ChildState, ChildAction>.isActive
+  package var isActive: Bool {
+    get {
+      access(keyPath: isActiveKeyPath)
+      return storedIsActive
+    }
+    set { withMutation(keyPath: isActiveKeyPath) { storedIsActive = newValue } }
+  }
   @ObservationIgnored private var onDeactivation: (@MainActor (AnyObject) -> Void)?
   @ObservationIgnored package let stableID: AnyHashable?
   @ObservationIgnored private nonisolated let stableIDDebugDescription: String?
@@ -420,7 +440,7 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
         )
       )
     }
-    self.cachedState = initialState
+    self.storedCachedState = initialState
     self.parent = parent
     self.parentLifetime = parent.lifetime
     self.stateResolver = stateResolver

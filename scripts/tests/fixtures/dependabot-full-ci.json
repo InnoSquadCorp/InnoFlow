@@ -504,11 +504,19 @@
         "conclusion": "success"
       },
       {
+        "name": "Select supported Ruby",
+        "conclusion": "success"
+      },
+      {
         "name": "Run static principle gates",
         "conclusion": "success"
       },
       {
         "name": "Verify gate negative controls",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify independent public API and AST migration consumers",
         "conclusion": "success"
       }
     ],
@@ -672,6 +680,10 @@
         "conclusion": "success"
       },
       {
+        "name": "Preserve canonical sample UI results",
+        "conclusion": "success"
+      },
+      {
         "name": "Report cache observations",
         "conclusion": "success"
       }
@@ -706,6 +718,10 @@
         "conclusion": "success"
       },
       {
+        "name": "Verify AST migration on the audited SwiftSyntax line",
+        "conclusion": "success"
+      },
+      {
         "name": "Report cache observations",
         "conclusion": "success"
       }
@@ -737,6 +753,10 @@
       },
       {
         "name": "Test macro and external compile contracts",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify AST migration on the audited SwiftSyntax line",
         "conclusion": "success"
       },
       {

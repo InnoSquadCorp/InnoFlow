@@ -87,6 +87,9 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
 7. InnoFlow owns business/domain transitions only.
 8. `Store.send(_:)` returns a `FlowTask`; action-tree waiting and cancellation
    must remain scoped to the originating dispatch.
+   Optional-child ownership metadata must preserve bare send/output synchronous
+   scheduling. A queued child action retains its owner through admission, while
+   parent effects returned after admission remain independently owned.
    Recheck dispatch cancellation before reducing queued actions and delivering
    immediate outputs; already-applied state changes are not rolled back.
 9. Reducer `Output` is typed and ephemeral. Persisted or renderable data stays
@@ -247,6 +250,8 @@ TestStore receives outputs by exact value, predicate, or case path. Each form
 honors exhaustivity and one total deadline; cancellation is not a test timeout.
 
 ### CasePath auto-synthesis
+
+Macro identifier comparison uses logical names, independent of optional backticks. Generated members preserve raw identifier spelling (with source escaping), strip exactly one leading underscore, and never replace spaces or punctuation. Phase totality and collision/manual-path checks use the same logical identity. Actual compiler consumers and negative diagnostics enforce this contract.
 
 `@InnoFlow` auto-generates CasePath for standard patterns:
 - `case child(ChildAction)` → `Action.childCasePath`
@@ -537,3 +542,27 @@ If a change violates the documented authoring model or ownership rules, update:
 - CI
 
 Do not leave the rule enforced only by prose.
+
+### Runtime completion and result mapping
+
+The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
+
+### Testing dispatch ownership
+
+`TestStore.send`, scoped sends, and phase sends return discardable `TestStoreDispatch`. Effect actions retain their originating context and a queue activity lease through reduction and descendant registration. Task `finish(timeout:)` is non-consuming and diagnoses only its own unverified actions/outputs in both exhaustivity modes. It never drains another dispatch. Global store finish remains the terminal/draining API. In `.off`, receiveOutput progresses necessary FIFO actions, checks output between actions, and shares one total deadline. Exhaustive global finish snapshots actions and outputs together before cleanup.
+
+### Optional child ownership
+
+Use opt-in `OptionalChildLifetime` / `.optionalChild(state:action:instanceID:reducer:)` to bind child effects to an explicit instance ID. Child reduction precedes the complete parent; all owner invalidations apply before effect execution. Instance IDs must change on reopening. Slots, collection elements, nested owners and Stores isolate equal raw effect IDs. Final composed state revalidates active ownership after parent collection removal or replacement. Instance-ID projections must be pure and stable. IfCaseLet lifetime identity uses declaration source coordinates; same-helper overlapping paths require distinct stable lifetimeID values. Parent/sibling work survives child closure, and noncooperative tasks remain physically active until return. Existing IfLet runtime behavior is unchanged; its state key-path input, like Scope, ForEachReducer, ForEachIdentifiedReducer, optionalChild and PhaseMap, must preserve Sendable. Hoisted key paths use `any WritableKeyPath<...> & Sendable`; captured subscript indices must be Sendable. Lifetime projections execute as MainActor Sendable closures without unchecked lock storage. See docs/OPTIONAL_CHILD_LIFETIME.md and MIGRATION.md.
+
+### Macro migration diagnostics
+
+Third-generic diagnostics offer source Fix-Its using the feature's actual Output or Never. Swift.Never is accepted as the same output-free type. Explicit-reduce repairs never silently discard typed output. Strict Phase totality evaluates active Phase and phaseMap conditional branches using the compiler build configuration; unavailable configuration is an explicit strict error, not fail-open coverage. Synthesized path helpers preserve availability but do not copy constructor-specific renamed metadata.
+
+### Scheduler admission completeness
+
+Scheduled runs recheck their exact cancellation context before reserving capacity. A delayed older sequence cannot supersede the current latest lane. Start admission occurs exactly once after task attachment; serial promotion skips invalid pending reservations without releasing a still-running physical slot. EffectAdmission includes cancelledBeforeStart and superseded. serial(maxPending:) and queueFull capacities use UInt, removing runtime invalidCapacity rejection. Public enum cases are fixed within 6.x; additions require a major-version review.
+
+### Testing diagnostics and reproducible lifetimes
+
+Canonical Testing assertions carry fileID, filePath, line and column through asynchronous and scoped paths. Explicit legacy file: calls remain supported without default-call ambiguity. Active Swift Testing records a source-located Issue; XCTest uses XCTFail at filePath/line because XCTest exposes no column parameter. Public FlowScope construction is lexical via withFlowScope only. Scenario advance requires onceSleepersReach explicitly. Dispatch effectLedger is testing-only, bounded, typed, and closes after physical completion; it never changes reducer/runtime semantics.

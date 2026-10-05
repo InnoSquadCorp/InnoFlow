@@ -28,16 +28,16 @@ struct TestStoreFinishTests {
     store.deliverAction(.response(2), context: nil)
 
     guard
-      case .unhandledActions(let actions) =
+      case .unhandledWork(let pending) =
         await store.finishResult(timeout: .seconds(1))
     else {
       Issue.record("Expected finish to report buffered actions")
       return
     }
 
-    #expect(actions.count == 2)
-    #expect(actions[0].contains("1"))
-    #expect(actions[1].contains("2"))
+    #expect(pending.actionCount == 2)
+    #expect(pending.actions[0].contains("1"))
+    #expect(pending.actions[1].contains("2"))
   }
 
   @Test("finish waits for a running effect to complete")
@@ -123,12 +123,12 @@ struct TestStoreFinishTests {
 
     await gate.open()
 
-    guard case .unhandledActions(let actions) = await finishing.value else {
+    guard case .unhandledWork(let pending) = await finishing.value else {
       Issue.record("Expected finish to report the late action")
       return
     }
-    #expect(actions.count == 1)
-    #expect(actions[0].contains("42"))
+    #expect(pending.actionCount == 1)
+    #expect(pending.actions[0].contains("42"))
   }
 
   @Test("non-exhaustive finish reduces an action emitted while waiting")
@@ -210,11 +210,11 @@ struct TestStoreFinishTests {
     await complete.open()
     _ = await runTask.result
 
-    guard case .unhandledActions(let actions) = result else {
+    guard case .unhandledWork(let pending) = result else {
       Issue.record("Expected finish to wake for the emitted action")
       return
     }
-    #expect(actions == ["response"])
+    #expect(pending.actions == ["response"])
     #expect(store.finishActivity.snapshot.activeCount == 0)
   }
 

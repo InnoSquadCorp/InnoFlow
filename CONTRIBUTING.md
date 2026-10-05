@@ -87,3 +87,7 @@ Community-health and repository-operation changes must pass
 - Keep public APIs small and explicit.
 - Keep ownership boundaries between InnoFlow and app-owned navigation, transport, and dependency systems clear.
 - Prefer observer-style diagnostics over middleware that changes reducer behavior.
+
+## Validation prerequisites
+
+Repository validation requires Ruby 2.7 or newer on PATH. macOS system Ruby 2.6 is not sufficient. `scripts/principle-gates.sh` checks this before loading validation scripts; use a maintained Ruby installation rather than changing the system interpreter. Tagged releases require a real YYYY-MM-DD CHANGELOG date; development candidates retain Unreleased until release approval.

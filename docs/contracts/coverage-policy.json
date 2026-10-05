@@ -3,6 +3,7 @@
   "minimumLineCoverage": 85,
   "requiredModules": [
     "InnoFlowCore",
+    "InnoFlowInspector",
     "InnoFlowMacros",
     "InnoFlowSwiftUI",
     "InnoFlowTesting"

@@ -39,17 +39,23 @@ struct InnoFlowMacroAnalysisContext {
     in declaration: StructDeclSyntax
   ) -> NestedTypeKind {
     for member in declaration.memberBlock.members {
-      if let enumDecl = member.decl.as(EnumDeclSyntax.self), enumDecl.name.text == typeName {
+      if let enumDecl = member.decl.as(EnumDeclSyntax.self),
+        InnoFlowMacro.logicalIdentifier(enumDecl.name) == typeName
+      {
         return .enumDecl(enumDecl)
       }
-      if let structDecl = member.decl.as(StructDeclSyntax.self), structDecl.name.text == typeName {
+      if let structDecl = member.decl.as(StructDeclSyntax.self),
+        InnoFlowMacro.logicalIdentifier(structDecl.name) == typeName
+      {
         return .structDecl(structDecl)
       }
-      if let classDecl = member.decl.as(ClassDeclSyntax.self), classDecl.name.text == typeName {
+      if let classDecl = member.decl.as(ClassDeclSyntax.self),
+        InnoFlowMacro.logicalIdentifier(classDecl.name) == typeName
+      {
         return .classDecl(classDecl)
       }
       if let aliasDecl = member.decl.as(TypeAliasDeclSyntax.self),
-        aliasDecl.name.text == typeName
+        InnoFlowMacro.logicalIdentifier(aliasDecl.name) == typeName
       {
         return .typealiasDecl(aliasDecl)
       }

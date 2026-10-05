@@ -59,12 +59,12 @@ extension InnoFlowMacro {
     if let contextStruct = lexicalContext.as(StructDeclSyntax.self),
       let declarationStruct = declaration.as(StructDeclSyntax.self)
     {
-      return contextStruct.name.text == declarationStruct.name.text
+      return logicalIdentifier(contextStruct.name) == logicalIdentifier(declarationStruct.name)
     }
     if let contextEnum = lexicalContext.as(EnumDeclSyntax.self),
       let declarationEnum = declaration.as(EnumDeclSyntax.self)
     {
-      return contextEnum.name.text == declarationEnum.name.text
+      return logicalIdentifier(contextEnum.name) == logicalIdentifier(declarationEnum.name)
     }
     return false
   }
@@ -81,16 +81,16 @@ extension InnoFlowMacro {
   static func hasNestedType(named typeName: String, in declaration: StructDeclSyntax) -> Bool {
     declaration.memberBlock.members.contains { member in
       if let enumDecl = member.decl.as(EnumDeclSyntax.self) {
-        return enumDecl.name.text == typeName
+        return logicalIdentifier(enumDecl.name) == typeName
       }
       if let structDecl = member.decl.as(StructDeclSyntax.self) {
-        return structDecl.name.text == typeName
+        return logicalIdentifier(structDecl.name) == typeName
       }
       if let classDecl = member.decl.as(ClassDeclSyntax.self) {
-        return classDecl.name.text == typeName
+        return logicalIdentifier(classDecl.name) == typeName
       }
       if let typealiasDecl = member.decl.as(TypeAliasDeclSyntax.self) {
-        return typealiasDecl.name.text == typeName
+        return logicalIdentifier(typealiasDecl.name) == typeName
       }
       return false
     }
@@ -101,7 +101,7 @@ extension InnoFlowMacro {
   {
     declaration.memberBlock.members
       .compactMap { $0.decl.as(EnumDeclSyntax.self) }
-      .first(where: { $0.name.text == typeName })
+      .first(where: { logicalIdentifier($0.name) == typeName })
   }
 
   static func findNestedStruct(named typeName: String, in declaration: StructDeclSyntax)
@@ -109,18 +109,18 @@ extension InnoFlowMacro {
   {
     declaration.memberBlock.members
       .compactMap { $0.decl.as(StructDeclSyntax.self) }
-      .first(where: { $0.name.text == typeName })
+      .first(where: { logicalIdentifier($0.name) == typeName })
   }
 
   static func findReduceFunction(in declaration: StructDeclSyntax) -> FunctionDeclSyntax? {
     declaration.memberBlock.members
       .compactMap { $0.decl.as(FunctionDeclSyntax.self) }
       .first { function in
-        guard function.name.text == "reduce" else { return false }
+        guard logicalIdentifier(function.name) == "reduce" else { return false }
         let parameters = Array(function.signature.parameterClause.parameters)
         guard parameters.count == 2 else { return false }
-        guard parameters[0].firstName.text == "into",
-          parameters[1].firstName.text == "action"
+        guard logicalIdentifier(parameters[0].firstName) == "into",
+          logicalIdentifier(parameters[1].firstName) == "action"
         else {
           return false
         }
@@ -133,7 +133,8 @@ extension InnoFlowMacro {
       .compactMap { $0.decl.as(VariableDeclSyntax.self) }
       .first { variable in
         variable.bindings.contains { binding in
-          binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "body"
+          binding.pattern.as(IdentifierPatternSyntax.self).map { logicalIdentifier($0.identifier) }
+            == "body"
         }
       }
   }
@@ -143,9 +144,7 @@ enum MacroError: Error, CustomStringConvertible {
   case notAStruct
   case missingState
   case missingAction
-  case missingBodyProperty
-  case explicitReduceUnsupported
-  case invalidBodySignature(details: [String])
+  case missingBodyProperty(outputName: String)
 
   var description: String {
     switch self {
@@ -155,21 +154,9 @@ enum MacroError: Error, CustomStringConvertible {
       return "@InnoFlow requires a nested 'State' type"
     case .missingAction:
       return "@InnoFlow requires a nested 'Action' type"
-    case .missingBodyProperty:
+    case .missingBodyProperty(let outputName):
       return
-        "@InnoFlow requires `var body: some Reducer<State, Action, Output>`; use `Never` when no output is emitted"
-    case .explicitReduceUnsupported:
-      return
-        "@InnoFlow no longer supports explicit `reduce(into:action:)` authoring; declare `var body: some Reducer<State, Action, Output>` instead (`Never` when no output is emitted)"
-    case .invalidBodySignature(let details):
-      let joinedDetails = details.joined(separator: "; ")
-      return """
-        Invalid body signature for @InnoFlow.
-        Expected:
-        var body: some Reducer<State, Action, Output>
-        Detected issues: \(joinedDetails).
-        Remediation: expose reducer composition from `body` using `Reduce`, `CombineReducers`, and `Scope`.
-        """
+        "@InnoFlow requires `var body: some Reducer<State, Action, \(outputName)>`"
     }
   }
 }

@@ -38,6 +38,7 @@ let package = Package(
       type: .static,
       targets: ["InnoFlowSwiftUI"]
     ),
+    .library(name: "InnoFlowInspector", type: .static, targets: ["InnoFlowInspector"]),
     .library(
       name: "InnoFlowTesting",
       targets: ["InnoFlowTesting"]
@@ -81,6 +82,13 @@ let package = Package(
       swiftSettings: swift6PackageContract
     ),
 
+    .target(
+      name: "InnoFlowInspector",
+      dependencies: ["InnoFlowCore"],
+      resources: [.process("PrivacyInfo.xcprivacy")],
+      swiftSettings: swift6PackageContract
+    ),
+
     // MARK: - Macro Implementation
     .macro(
       name: "InnoFlowMacros",
@@ -90,6 +98,7 @@ let package = Package(
         .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
         .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
         .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+        .product(name: "SwiftIfConfig", package: "swift-syntax"),
       ],
       swiftSettings: swift6PackageContract
     ),
@@ -113,6 +122,7 @@ let package = Package(
         "InnoFlow",
         "InnoFlowSwiftUI",
         "InnoFlowTesting",
+        "InnoFlowInspector",
       ],
       resources: [
         .copy("Fixtures")

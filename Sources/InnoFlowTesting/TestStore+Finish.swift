@@ -64,13 +64,18 @@ package final class TestStoreFinishActivity {
     )
   }
 
+  package var pendingWaiterCount: Int { waiters.count }
+  package var waitTimeoutObserver: ((Duration) -> Void)?
+
   package func waitForChange(
     after expectedRevision: UInt64,
     until deadline: ContinuousClock.Instant
   ) async -> Bool {
+    guard !Task.isCancelled else { return false }
     guard revision == expectedRevision else { return true }
     guard clock.now < deadline else { return false }
 
+    waitTimeoutObserver?(max(clock.now.duration(to: deadline), .zero))
     let waiterID = UUID()
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
@@ -124,8 +129,7 @@ package final class TestStoreFinishActivity {
 
 package enum TestStoreFinishResult: Equatable, Sendable {
   case success
-  case unhandledActions([String])
-  case unhandledOutputs([String])
+  case unhandledWork(TestStoreUnverifiedSnapshot)
   case timedOut(TestStoreFinishActivity.Snapshot)
   case cancelled
 }
@@ -138,8 +142,9 @@ package struct TestStoreTerminalVerificationDiagnostic {
 
   package let severity: Severity
   package let message: String
-  package let file: StaticString
-  package let line: UInt
+  package let location: TestStoreSourceLocation
+  package var file: StaticString { location.filePath }
+  package var line: UInt { location.line }
 }
 
 extension TestStore {
@@ -169,52 +174,55 @@ extension TestStore {
   /// - Parameters:
   ///   - timeout: The total wall-clock deadline. Pass `nil` to use the timeout
   ///     configured when this `TestStore` was initialized.
-  ///   - file: The source file reported when terminal verification fails.
+  ///   - fileID: The source file identifier reported when terminal verification fails.
+  ///   - filePath: The source file path reported when terminal verification fails.
   ///   - line: The source line reported when terminal verification fails.
+  ///   - column: The source column reported when terminal verification fails.
   public func finish(
     timeout: Duration? = nil,
-    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async {
+    await finish(
+      timeout: timeout,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  /// Compatibility overload for an explicitly supplied legacy source file.
+  public func finish(
+    timeout: Duration? = nil,
+    file: StaticString,
     line: UInt = #line
+  ) async {
+    await finish(
+      timeout: timeout, location: .init(fileID: file, filePath: file, line: line, column: 1))
+  }
+
+  package func finish(
+    timeout: Duration? = nil,
+    location: TestStoreSourceLocation
   ) async {
     let resolvedTimeout = timeout ?? effectTimeout
     let result = await finishResult(
       timeout: resolvedTimeout,
-      file: file,
-      line: line
+      location: location
     )
 
     switch result {
     case .success, .cancelled:
       return
 
-    case .unhandledActions(let actions):
-      let actionList = actions.map { "- \($0)" }.joined(separator: "\n")
-      assertionFailureReporter(
-        """
-        TestStore finished with \(actions.count) unhandled effect action(s):
-        \(actionList)
-
-        Every effect-emitted action must be verified with `receive(_:assert:)` before the test finishes.
-        """,
-        file,
-        line
-      )
-
-    case .unhandledOutputs(let outputs):
-      let outputList = outputs.map { "- \($0)" }.joined(separator: "\n")
-      assertionFailureReporter(
-        """
-        TestStore finished with \(outputs.count) unhandled output(s):
-        \(outputList)
-
-        Every reducer output must be verified with `receiveOutput(_:)` before the test finishes.
-        """,
-        file,
-        line
+    case .unhandledWork(let snapshot):
+      issueReporter(
+        "TestStore finished with unverified work.\n\n" + snapshot.description
+          + "\n\nEvery effect action and reducer output must be verified with `receive` and `receiveOutput` before the test finishes.",
+        location
       )
 
     case .timedOut(let snapshot):
-      assertionFailureReporter(
+      issueReporter(
         """
         Timed out waiting for TestStore to become idle after \(resolvedTimeout).
 
@@ -227,18 +235,16 @@ extension TestStore {
 
         Complete or cancel long-running effects before finishing. A continuously emitted action chain can also prevent the harness from becoming idle. When using `ManualTestClock`, advance it far enough for delayed effects to fire before calling `finish()`.
         """,
-        file,
-        line
+        location
       )
     }
   }
 
   package func finishResult(
     timeout: Duration? = nil,
-    file: StaticString = #file,
-    line: UInt = #line
+    location: TestStoreSourceLocation = .init()
   ) async -> TestStoreFinishResult {
-    let terminalRevision = beginTerminalVerification(file: file, line: line)
+    _ = beginTerminalVerification(location: location)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
     var didDrainWork = false
@@ -246,40 +252,34 @@ extension TestStore {
     while true {
       if Task.isCancelled {
         cancelRemainingEffectsForFinish()
-        markTerminalVerificationHandled(terminalRevision)
+        markTerminalVerificationHandled(terminalVerificationRevision)
         return .cancelled
       }
 
       if exhaustivity.isOn {
-        let actions = await takeAllBufferedActionDescriptions()
-        if actions.isEmpty == false {
+        // Snapshot both queues before cancellation invalidates either side.
+        let pending = unverifiedSnapshot()
+        if !pending.isEmpty {
           cancelRemainingEffectsForFinish()
-          markTerminalVerificationHandled(terminalRevision)
-          return .unhandledActions(actions)
+          markTerminalVerificationHandled(terminalVerificationRevision)
+          return .unhandledWork(pending)
         }
-        let outputs = await takeAllBufferedOutputDescriptions()
-        if outputs.isEmpty == false {
-          cancelRemainingEffectsForFinish()
-          markTerminalVerificationHandled(terminalRevision)
-          return .unhandledOutputs(outputs)
-        }
-      } else if let action = await popBufferedAction() {
+      } else if let action = popBufferedQueuedAction() {
         // Always allow one already-buffered action to be reduced, even for a
         // zero timeout. Subsequent actions remain bounded by the total
         // deadline so a self-reenqueuing reducer cannot trap finish forever.
         if didDrainWork, wallClock.now >= deadline {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
-          markTerminalVerificationHandled(terminalRevision)
+          markTerminalVerificationHandled(terminalVerificationRevision)
           return .timedOut(snapshot)
         }
         reportSkippedAction(
-          action,
+          action.action,
           context: "finishing",
-          file: file,
-          line: line
+          location: location
         )
-        await applyUnassertedAction(action, file: file, line: line)
+        await applyUnassertedAction(action, location: location)
         didDrainWork = true
         continue
       } else if let output = await popBufferedOutput() {
@@ -288,14 +288,13 @@ extension TestStore {
         if didDrainWork, wallClock.now >= deadline {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
-          markTerminalVerificationHandled(terminalRevision)
+          markTerminalVerificationHandled(terminalVerificationRevision)
           return .timedOut(snapshot)
         }
         if exhaustivity.showsSkippedAssertions {
-          skippedAssertionReporter(
+          warningReporter(
             "TestStore skipped reducer output while finishing:\n\(output)",
-            file,
-            line
+            location
           )
         }
         didDrainWork = true
@@ -304,13 +303,13 @@ extension TestStore {
 
       let snapshot = finishActivity.snapshot
       if snapshot.activeCount == 0 {
-        markTerminalVerificationHandled(terminalRevision)
+        markTerminalVerificationHandled(terminalVerificationRevision)
         return .success
       }
 
       if wallClock.now >= deadline {
         cancelRemainingEffectsForFinish()
-        markTerminalVerificationHandled(terminalRevision)
+        markTerminalVerificationHandled(terminalVerificationRevision)
         return .timedOut(snapshot)
       }
 
@@ -321,33 +320,18 @@ extension TestStore {
     }
   }
 
-  private func takeAllBufferedActionDescriptions() async -> [String] {
-    var actions: [String] = []
-    while let action = await popBufferedAction() {
-      actions.append(String(describing: action))
-    }
-    return actions
-  }
-
-  private func takeAllBufferedOutputDescriptions() async -> [String] {
-    var outputs: [String] = []
-    while let output = await popBufferedOutput() {
-      outputs.append(String(describing: output))
-    }
-    return outputs
-  }
-
   private func cancelRemainingEffectsForFinish() {
     let sequence = markCancelledAll()
     cancelAllEffectsSynchronously(upTo: sequence)
+    queue.removeBuffered { _ in true }
+    outputQueue.removeBuffered { _ in true }
   }
 
   package func noteTestInteraction(
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) {
     terminalVerificationRevision &+= 1
-    terminalVerificationSource = (file, line)
+    terminalVerificationSource = location
   }
 
   package func noteUnverifiedWorkAfterTerminalVerification() {
@@ -370,10 +354,9 @@ extension TestStore {
   }
 
   private func beginTerminalVerification(
-    file: StaticString,
-    line: UInt
+    location: TestStoreSourceLocation
   ) -> UInt64 {
-    terminalVerificationSource = (file, line)
+    terminalVerificationSource = location
     return terminalVerificationRevision
   }
 
@@ -464,6 +447,7 @@ extension TestStore {
         """
         \(activityLabel):
         - run: \(activity.runCount)
+        - scheduled: \(activity.scheduledCount)
         - composite: \(activity.compositeCount)
         - debounce: \(activity.debounceCount)
         - throttle: \(activity.throttleCount)
@@ -472,12 +456,11 @@ extension TestStore {
     }
     sections.append(guidance)
 
-    let source = terminalVerificationSource ?? (#file, #line)
+    let source = terminalVerificationSource ?? .init()
     return TestStoreTerminalVerificationDiagnostic(
       severity: severity,
       message: sections.joined(separator: "\n\n"),
-      file: source.file,
-      line: source.line
+      location: source
     )
   }
 }

@@ -63,7 +63,8 @@ extension Store: EffectDriver {
     enqueue(
       action,
       animation: context?.animation,
-      flowTaskTracker: context?.flowTaskTracker
+      flowTaskTracker: context?.flowTaskTracker,
+      context: context
     )
   }
 
@@ -120,7 +121,7 @@ extension Store: EffectDriver {
   @discardableResult
   package func startRun(
     priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never> {
     let context = context?.frozenForExecution()
@@ -143,7 +144,7 @@ extension Store: EffectDriver {
       }
       await gate.wait()
       do {
-        if lifetime.isReleased {
+        if lifetime.isReleased || context?.shouldProceed == false {
           throw CancellationError()
         }
         guard
@@ -224,7 +225,8 @@ extension Store: EffectDriver {
             self.enqueue(
               action,
               animation: context?.animation,
-              flowTaskTracker: context?.flowTaskTracker
+              flowTaskTracker: context?.flowTaskTracker,
+              context: context
             )
           } else {
             self.recordDrop(action, reason: .cancellationBoundary, context: context)
@@ -233,7 +235,7 @@ extension Store: EffectDriver {
       }
 
       let checkCancellation: @Sendable () async throws -> Void = {
-        if lifetime.isReleased {
+        if lifetime.isReleased || context?.shouldProceed == false {
           throw CancellationError()
         }
         try await runtime.checkCancellation(
@@ -316,7 +318,7 @@ extension Store: EffectDriver {
     policy: EffectExecutionPolicy,
     priority: TaskPriority?,
     onAdmission: (@Sendable (EffectAdmission) -> R.Action)?,
-    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>? {
     let context = context?.frozenForExecution()
@@ -334,13 +336,7 @@ extension Store: EffectDriver {
           hasEffectID: true
         )
       },
-      onStart: { [weak self] scheduledToken in
-        self?.diagnostics?.recordAdmission(
-          .started,
-          dispatchID: context?.dispatchID,
-          sequence: context?.sequence,
-          scheduledToken: scheduledToken
-        )
+      onStart: { [weak self] _ in
         guard let action = onAdmission?(.started) else { return }
         self?.deliverAction(action, context: context)
       },
@@ -350,25 +346,25 @@ extension Store: EffectDriver {
           sequence: context?.sequence,
           scheduledToken: scheduledToken
         )
+      },
+      context: context,
+      onAdmissionLifecycle: { [weak self] token, admission in
+        self?.diagnostics?.recordAdmission(
+          admission, dispatchID: context?.dispatchID,
+          sequence: context?.sequence, scheduledToken: token
+        )
       }
     )
 
     guard case .accepted(let ticket) = plan else {
-      if case .rejected(let reason) = plan,
-        let action = onAdmission?(.rejected(reason))
-      {
-        diagnostics?.recordAdmission(
-          .rejected(reason),
-          dispatchID: context?.dispatchID,
-          sequence: context?.sequence
-        )
+      let admission: EffectAdmission
+      switch plan {
+      case .rejected(let reason): admission = .rejected(reason)
+      case .terminal(let terminal): admission = terminal
+      case .accepted: preconditionFailure("Accepted request must have a ticket")
+      }
+      if !Task.isCancelled, let action = onAdmission?(admission) {
         deliverAction(action, context: context)
-      } else if case .rejected(let reason) = plan {
-        diagnostics?.recordAdmission(
-          .rejected(reason),
-          dispatchID: context?.dispatchID,
-          sequence: context?.sequence
-        )
       }
       return nil
     }
@@ -380,20 +376,7 @@ extension Store: EffectDriver {
     if case .queued = ticket.admission,
       let action = onAdmission?(ticket.admission)
     {
-      diagnostics?.recordAdmission(
-        ticket.admission,
-        dispatchID: context?.dispatchID,
-        sequence: context?.sequence,
-        scheduledToken: ticket.token
-      )
       deliverAction(action, context: context)
-    } else if case .queued = ticket.admission {
-      diagnostics?.recordAdmission(
-        ticket.admission,
-        dispatchID: context?.dispatchID,
-        sequence: context?.sequence,
-        scheduledToken: ticket.token
-      )
     }
 
     let flowTaskTracker = context?.flowTaskTracker
@@ -445,16 +428,20 @@ extension Store: EffectDriver {
   package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
     let sequence = effectBridge.markCancelled(id: id, upTo: context?.sequence)
     recordCancellation(id: id, sequence: sequence, dispatchID: context?.dispatchID)
-    let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
-    recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    if diagnostics != nil {
+      let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
+      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    }
     await effectBridge.cancelEffects(id: id, upTo: sequence)
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
     let sequence = effectBridge.markCancelledInFlight(id: id, upTo: context?.sequence)
     recordCancellation(id: id, sequence: sequence, dispatchID: context?.dispatchID)
-    let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
-    recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    if diagnostics != nil {
+      let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
+      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    }
     await effectBridge.cancelInFlightEffects(id: id, upTo: sequence)
   }
 
@@ -543,7 +530,9 @@ extension Store: EffectDriver {
     let generation = throttleState.nextGeneration(for: id)
 
     let clock = self.clock
+    let completion = FlowTaskCompletion()
     let task = Task { [weak self] in
+      defer { completion.complete() }
       do {
         try await clock.sleep(interval)
       } catch {
@@ -583,11 +572,11 @@ extension Store: EffectDriver {
       )
     }
 
-    throttleState.setTrailingTask(task, for: id)
+    throttleState.setTrailingTask(task, completion: completion, for: id)
     // A trailing timer can outlive and serve more than one dispatch. The
     // runtime owns the shared timer; each dispatch tracks only its completion
     // so cancelling an older FlowTask cannot cancel a newer pending effect.
-    schedulingContext.flowTaskTracker?.trackCompletion(of: task)
+    schedulingContext.flowTaskTracker?.trackCompletion(of: completion)
     return task
   }
 
@@ -597,12 +586,12 @@ extension Store: EffectDriver {
   ) {
     guard
       let flowTaskTracker = context.flowTaskTracker,
-      let trailingTask = throttleState.trailingTask(for: id)
+      let completion = throttleState.trailingCompletion(for: id)
     else { return }
 
     // The timer is runtime-owned. Mirror its completion into the latest
     // dispatch without granting that dispatch authority over the shared task.
-    flowTaskTracker.trackCompletion(of: trailingTask)
+    flowTaskTracker.trackCompletion(of: completion)
   }
 
   package var now: ContinuousClock.Instant {

@@ -135,9 +135,9 @@ extension View {
     }
   #endif
 
-  /// Presents an alert driven by an optional state slice.
+  /// Presents an optional-state alert with a LocalizedStringKey title.
   public func innoFlowAlert<R: Reducer, Child, Actions: View, Message: View>(
-    _ title: String,
+    _ title: LocalizedStringKey,
     store: Store<R>,
     state stateKeyPath: KeyPath<R.State, Child?>,
     onDismiss: @escaping @Sendable () -> R.Action,
@@ -153,9 +153,46 @@ extension View {
     )
   }
 
-  /// Presents a confirmation dialog driven by an optional state slice.
+  /// Presents an optional-state alert with a StringProtocol title.
+  @_disfavoredOverload
+  public func innoFlowAlert<R: Reducer, Child, Actions: View, Message: View, Title: StringProtocol>(
+    _ title: Title,
+    store: Store<R>,
+    state stateKeyPath: KeyPath<R.State, Child?>,
+    onDismiss: @escaping @Sendable () -> R.Action,
+    @ViewBuilder actions: @escaping (Child) -> Actions,
+    @ViewBuilder message: @escaping (Child) -> Message
+  ) -> some View {
+    alert(
+      title,
+      isPresented: store.presentationBinding(state: stateKeyPath, onDismiss: onDismiss),
+      presenting: store.state[keyPath: stateKeyPath],
+      actions: actions,
+      message: message
+    )
+  }
+
+  /// Presents an optional-state alert with a Text title.
+  public func innoFlowAlert<R: Reducer, Child, Actions: View, Message: View>(
+    _ title: Text,
+    store: Store<R>,
+    state stateKeyPath: KeyPath<R.State, Child?>,
+    onDismiss: @escaping @Sendable () -> R.Action,
+    @ViewBuilder actions: @escaping (Child) -> Actions,
+    @ViewBuilder message: @escaping (Child) -> Message
+  ) -> some View {
+    alert(
+      title,
+      isPresented: store.presentationBinding(state: stateKeyPath, onDismiss: onDismiss),
+      presenting: store.state[keyPath: stateKeyPath],
+      actions: actions,
+      message: message
+    )
+  }
+
+  /// Presents an optional-state confirmationDialog with a LocalizedStringKey title.
   public func innoFlowConfirmationDialog<R: Reducer, Child, Actions: View, Message: View>(
-    _ title: String,
+    _ title: LocalizedStringKey,
     store: Store<R>,
     state stateKeyPath: KeyPath<R.State, Child?>,
     onDismiss: @escaping @Sendable () -> R.Action,
@@ -170,11 +207,53 @@ extension View {
       message: message
     )
   }
+
+  /// Presents an optional-state confirmationDialog with a StringProtocol title.
+  @_disfavoredOverload
+  public func innoFlowConfirmationDialog<
+    R: Reducer, Child, Actions: View, Message: View, Title: StringProtocol
+  >(
+    _ title: Title,
+    store: Store<R>,
+    state stateKeyPath: KeyPath<R.State, Child?>,
+    onDismiss: @escaping @Sendable () -> R.Action,
+    @ViewBuilder actions: @escaping (Child) -> Actions,
+    @ViewBuilder message: @escaping (Child) -> Message
+  ) -> some View {
+    confirmationDialog(
+      title,
+      isPresented: store.presentationBinding(state: stateKeyPath, onDismiss: onDismiss),
+      presenting: store.state[keyPath: stateKeyPath],
+      actions: actions,
+      message: message
+    )
+  }
+
+  /// Presents an optional-state confirmationDialog with a Text title.
+  public func innoFlowConfirmationDialog<R: Reducer, Child, Actions: View, Message: View>(
+    _ title: Text,
+    store: Store<R>,
+    state stateKeyPath: KeyPath<R.State, Child?>,
+    onDismiss: @escaping @Sendable () -> R.Action,
+    @ViewBuilder actions: @escaping (Child) -> Actions,
+    @ViewBuilder message: @escaping (Child) -> Message
+  ) -> some View {
+    confirmationDialog(
+      title,
+      isPresented: store.presentationBinding(state: stateKeyPath, onDismiss: onDismiss),
+      presenting: store.state[keyPath: stateKeyPath],
+      actions: actions,
+      message: message
+    )
+  }
+
 }
 
 private enum InnoFlowPresentationStyle {
   case sheet
-  case fullScreenCover
+  #if !os(macOS)
+    case fullScreenCover
+  #endif
   case navigationDestination
   #if !os(tvOS) && !os(watchOS)
     case popover
@@ -199,19 +278,12 @@ private struct InnoFlowOptionalPresentation<R: Reducer, Child, Destination: View
       content.sheet(isPresented: isPresentedBinding) {
         snapshotDestination
       }
-    case .fullScreenCover:
-      #if os(macOS)
-        // macOS has no fullScreenCover; fall back to a sheet so the helper
-        // keeps a uniform contract across platforms when authors gate on
-        // availability themselves.
-        content.sheet(isPresented: isPresentedBinding) {
-          snapshotDestination
-        }
-      #else
+    #if !os(macOS)
+      case .fullScreenCover:
         content.fullScreenCover(isPresented: isPresentedBinding) {
           snapshotDestination
         }
-      #endif
+    #endif
     case .navigationDestination:
       content.navigationDestination(isPresented: isPresentedBinding) {
         snapshotDestination

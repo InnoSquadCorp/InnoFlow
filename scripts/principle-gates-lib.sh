@@ -519,6 +519,26 @@ run_authoring_surface_checks() {
     exit 1
   fi
 
+  search_lines "static func logicalIdentifier" Sources/InnoFlowMacros/InnoFlowMacro+Identifiers.swift >/dev/null
+  search_lines "func originalEnumControl" Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift >/dev/null
+  search_lines "func missingPhaseStillDiagnoses" Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift >/dev/null
+
+  search_lines "package final class FlowTaskCompletion" Sources/InnoFlowCore/FlowTask.swift >/dev/null
+  search_lines "func trailingCompletion" Tests/InnoFlowTests/RuntimeConsistencyTests.swift >/dev/null
+
+  search_lines "public struct TestStoreDispatch" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null
+  if search_lines "public typealias TestFlowTask" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null; then
+    echo "[principle-gates] Failed: unpublished testing dispatch alias must not ship"
+    exit 1
+  fi
+
+  search_lines "public struct OptionalChildLifetime" Sources/InnoFlowCore/OptionalChildLifetime.swift >/dev/null
+  search_lines "func directSendDrainsBeforeReturnAndBeforeIndependentActions" Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null
+  search_lines "func parentFollowupsKeepIndependentLifetimeAfterChildClose" Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null
+  search_lines "func reusedReducerInDifferentScopesHasIndependentLifetimes" Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift >/dev/null
+
+  python3 scripts/check-testing-contracts.py
+
   echo "[principle-gates] Checking official composition primitives"
   search_lines "public struct Reduce<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
   search_lines "public struct CombineReducers<" Sources/InnoFlowCore/ReducerComposition.swift >/dev/null
@@ -960,6 +980,8 @@ run_authoring_policy_checks() {
     exit 1
   fi
 
+  "$SCRIPT_DIR/check-concurrency-safety.sh" "$ROOT_DIR/Sources"
+
   echo "[principle-gates] Checking macro maintainability split"
   local macro_entry="Sources/InnoFlowMacros/InnoFlowMacro.swift"
   if search_lines "@BindableField|diagnoseMissingBindableFieldSetters|BindableFieldDiagnostic" "$macro_entry"; then
@@ -1097,7 +1119,12 @@ run_macro_operations_checks() {
     echo "[principle-gates] Failed: the action-path opt-out macro must remain registered"
     exit 1
   fi
-  if ! grep -F 'identifier.name.text == "InnoFlowCasePathIgnored"' Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift >/dev/null; then
+  local action_path_source="Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift"
+  if ! grep -F 'logicalIdentifier(identifier.name) == "InnoFlowCasePathIgnored"' "$action_path_source" >/dev/null \
+      || ! grep -F 'logicalIdentifier(member.name) == "InnoFlowCasePathIgnored"' "$action_path_source" >/dev/null \
+      || ! grep -F 'let isExplicitlyIgnored = hasCasePathIgnoredAttribute(enumCaseDecl)' "$action_path_source" >/dev/null \
+      || ! grep -F 'isExplicitlyIgnored: isExplicitlyIgnored,' "$action_path_source" >/dev/null \
+      || ! search_multiline 'if isExplicitlyIgnored[[:space:]]*\{[[:space:]]*return nil' "$action_path_source" >/dev/null; then
     echo "[principle-gates] Failed: action-path synthesis must honor the per-case opt-out marker"
     exit 1
   fi
@@ -1308,6 +1335,42 @@ run_release_configuration_checks() {
   rm -rf "$RELEASE_GATE_BUILD_PATH"
 }
 
+run_independent_consumer_checks() {
+  ensure_principle_gate_context
+
+  # Keep these external-package builds inside the existing full-principle
+  # release receipt. Their own runners enforce unit/CLI/semantic controls;
+  # nested Swift Testing summaries must not alter the root-suite receipt.
+  echo "[principle-gates] Checking the independent Level 1 consumer"
+  run_logged_gate_command "Level 1 consumer" run_low_priority env \
+    INNOFLOW_PACKAGE_PATH="$ROOT_DIR" SWIFT_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-level-one-consumer.sh"
+  echo "[principle-gates] Checking the independent test dispatch consumer"
+  run_logged_gate_command "Test dispatch consumer" run_low_priority env \
+    INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-test-dispatch-consumer.sh"
+  echo "[principle-gates] Checking the independent dispatch identity consumer"
+  run_logged_gate_command "Dispatch identity consumer" run_low_priority env \
+    INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-dispatch-identity-consumer.sh"
+  echo "[principle-gates] Checking the independent effect execution consumer"
+  run_logged_gate_command "Effect execution consumer" run_low_priority env \
+    INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-effect-execution-consumer.sh"
+  echo "[principle-gates] Checking the independent collection lifetime consumer"
+  run_logged_gate_command "Collection lifetime consumer" run_low_priority env \
+    INNOFLOW_CONSUMER_PACKAGE_PATH="$ROOT_DIR" INNOFLOW_CONSUMER_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-collection-lifetime-consumer.sh"
+  echo "[principle-gates] Checking the independent Apple SwiftUI consumer"
+  run_logged_gate_command "SwiftUI consumer" run_low_priority env \
+    INNOFLOW_PACKAGE_PATH="$ROOT_DIR" SWIFT_JOBS="$SWIFTPM_JOBS" \
+    "$SCRIPT_DIR/check-swiftui-consumer.sh"
+  echo "[principle-gates] Checking the independent AST migration consumer"
+  run_logged_gate_command "AST migration consumer" run_low_priority env \
+    INNOFLOW_MIGRATION_PACKAGE_PATH="$ROOT_DIR" \
+    "$ROOT_DIR/Tools/innoflow-migrate/scripts/check.sh"
+}
+
 run_release_build_checks() {
   ensure_principle_gate_context
 
@@ -1322,6 +1385,7 @@ run_release_build_checks() {
     --no-parallel \
     -Xswiftc -warnings-as-errors
 
+  run_independent_consumer_checks
   run_release_configuration_checks
 }
 
@@ -1420,6 +1484,7 @@ run_sample_contract_checks() {
 
 run_gate_negative_controls() {
   "$SCRIPT_DIR/principle-gates-selftest.sh"
+  "$SCRIPT_DIR/check-concurrency-safety-selftest.sh"
 }
 
 run_principle_gates_impl() {
@@ -1464,6 +1529,12 @@ run_principle_gates_impl() {
     return 0
   fi
 
+  local compiler_identity
+  compiler_identity="$(swift --version)"
+  printf '[swift-test-inventory] compiler: %s\n' "${compiler_identity%%$'\n'*}"
+  if [[ "$(uname -s)" == Darwin ]]; then
+    printf '[swift-test-inventory] host-runtime: {"platform":"macOS","os":"%s"}\n' "$(sw_vers -productVersion)"
+  fi
   echo "[principle-gates] Checking gate negative controls"
   run_gate_negative_controls
   run_release_build_checks

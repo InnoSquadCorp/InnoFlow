@@ -10,50 +10,12 @@ InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단
 공개 안정 기준선은 5.1.1이었으며, 실제 6.0.0 태그와 GitHub Release 공개 상태는
 GitHub에서 별도로 확인해야 합니다.
 
-## 핵심 방향
+## Level 1부터 시작하기
 
-- 공식 feature authoring은 세 번째 reducer generic을 명시합니다. 앱 경계
-  output이 없으면 `Never`, 내보내는 경우에는 feature의 typed `Output`을
-  사용합니다.
-- 표준 합성 형태가 아닌 labeled/multi-payload `Action` case는 canonical
-  `<caseName>CasePath` 수동 선언이나 `@InnoFlowCasePathIgnored`로 경고 의도를 명시합니다.
-- 합성은 `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`를 중심으로 이뤄집니다.
-- `PhaseMap`은 phase-heavy feature의 canonical runtime phase-transition layer입니다.
-- `PhaseTransitionGraph`는 generic automata runtime이 아니라 opt-in validation layer입니다.
-- binding은 `@BindableField`와 projected key path를 통해 명시적으로 연결합니다.
-- `TestStore.exhaustivity`는 기본값이 `.on`이며, 모든 상태 전환과 effect action을 빠짐없이 검증합니다. 테스트는 `finish()`로 끝내며, 미검증 작업을 남긴 deinit은 정책에 따라 실패, 경고 또는 무음으로 처리됩니다. 실행 취소가 먼저 수락되지 않은 상태에서 `EffectTask.run`을 빠져나온 취소 이외의 오류는 이 정책과 무관하게 원래 action assertion 위치에서 한 번 실패합니다.
-- `Store.send(_:)`는 해당 dispatch에서 파생된 전체 effect 트리만 완료하거나 취소할 수 있는 `FlowTask`를 반환합니다.
-- reducer는 일회성 앱 경계 명령을 typed `Output`으로 내보낼 수 있으며, 복원·렌더링할 값은 계속 `State`에 둡니다.
-- 특정 dispatch의 output이 필요하면 `send(_:capturingOutputs:)`가 enqueue
-  전에 single-consumer `OutputFlowTask` 스트림을 설치합니다. 전역
-  `outputs()` broadcast와 섞이지 않습니다.
-- 캡처 출력의 `for await` 소비 Task를 취소하면 해당 dispatch만 취소됩니다.
-  정상 완료나 전역 구독 취소는 effect를 취소하지 않습니다. `break`로 빠져나오면서
-  캡처를 유지할 때는 작업 중단을 위해 `cancel()`을 명시적으로 호출합니다.
-- 출력 없는 자식 reducer와 effect helper는 `promoteOutput(to:)`로 재사용합니다.
-  실제 출력 타입은 여전히 `mapOutput(_:)`로 변환해야 하므로 이벤트가 묵시적으로 버려지지 않습니다.
-- `TestStore.receiveOutput`은 정확한 값 외에 predicate와 `CasePath`를 지원하여
-  `Equatable`이 아닌 출력도 검증합니다. 모든 방식이 exhaustivity와 전체 제한시간을 지킵니다.
-- `strictPhaseTotality: true`는 직접 선언된 `Phase` source/target 누락을
-  컴파일 오류로 만들며, 동적 trigger 의미는 계속 `requireComplete(...)`로 검증합니다.
-- `Store`는 effect 취소와 run 실패를 MainActor 경계에서 순서화합니다. 취소가 먼저 수락되면 협조하지 않는 작업이 뒤늦게 던진 오류를 `didFailRun`으로 재분류하지 않습니다.
-- 앱 라우팅, transport, 세션 라이프사이클, 생성 시점 의존성 그래프는 앱 경계 바깥에서 소유합니다.
-
-경계 문서:
-
-- [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
-- [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
-
-## Why InnoFlow over TCA?
-
-TCA는 dependency system, navigation pattern, test convention, 큰 생태계까지
-포함한 폭넓은 application architecture가 필요할 때 더 강한 기본 선택지입니다.
-InnoFlow는 더 작은 경계를 원할 때 선택합니다. reducer는 비즈니스 전환만
-소유하고, dependency는 생성자 주입 bundle로 명시하며, navigation/transport는
-앱 경계에 남기고, SwiftUI 전용 편의 API는 선택 product인 `InnoFlowSwiftUI`에
-둡니다.
-
-자세한 비교는 [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md)을 봅니다.
+첫 기능은 `Reduce`, `Store`, `@BindableField`, `TestStore`로 완성합니다.
+State와 Action을 명시하고 단순한 `@InnoFlow` body에는
+`some Reducer<State, Action, Never>`를 선언하세요. 카운터·폼·일반 요청부터
+시작한 뒤 필요한 기능에만 합성이나 수명 제어를 추가합니다.
 
 ## 설치
 
@@ -224,3 +186,61 @@ scope한 row는 새 path로 라우팅됩니다. 매크로가 생성한 path는 �
 - reducer 내부에 `state.phase = ...`가 여러 branch에 흩어져 있을 때
 
 반대로 strict totality enforcement, optional metrics package 같은 항목은 현재 코어 요구사항이 아니라 조건부 roadmap입니다.
+
+### 키워드와 raw case 이름
+
+Phase totality는 선택적인 백틱 표기를 같은 논리 식별자로 비교합니다. Action과 Output case path는 공백·구두점·Unicode를 보존하며, 생성된 raw 이름은 Swift 백틱으로 참조합니다. 일반 이름과 선행 underscore 하나 제거 규칙은 유지됩니다. 실제 누락과 멤버 충돌은 계속 진단합니다.
+
+## 핵심 방향
+
+- 공식 feature authoring은 세 번째 reducer generic을 명시합니다. 앱 경계
+  output이 없으면 `Never`, 내보내는 경우에는 feature의 typed `Output`을
+  사용합니다.
+- 표준 합성 형태가 아닌 labeled/multi-payload `Action` case는 canonical
+  `<caseName>CasePath` 수동 선언이나 `@InnoFlowCasePathIgnored`로 경고 의도를 명시합니다.
+- 합성은 `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`를 중심으로 이뤄집니다.
+- `PhaseMap`은 phase-heavy feature의 canonical runtime phase-transition layer입니다.
+- `PhaseTransitionGraph`는 generic automata runtime이 아니라 opt-in validation layer입니다.
+- binding은 `@BindableField`와 projected key path를 통해 명시적으로 연결합니다.
+- `TestStore.exhaustivity`는 기본값이 `.on`이며, 모든 상태 전환과 effect action을 빠짐없이 검증합니다. 테스트는 `finish()`로 끝내며, 미검증 작업을 남긴 deinit은 정책에 따라 실패, 경고 또는 무음으로 처리됩니다. 실행 취소가 먼저 수락되지 않은 상태에서 `EffectTask.run`을 빠져나온 취소 이외의 오류는 이 정책과 무관하게 원래 action assertion 위치에서 한 번 실패합니다.
+- `Store.send(_:)`는 해당 dispatch에서 파생된 전체 effect 트리만 완료하거나 취소할 수 있는 `FlowTask`를 반환합니다.
+- reducer는 일회성 앱 경계 명령을 typed `Output`으로 내보낼 수 있으며, 복원·렌더링할 값은 계속 `State`에 둡니다.
+- 특정 dispatch의 output이 필요하면 `send(_:capturingOutputs:)`가 enqueue
+  전에 single-consumer `OutputFlowTask` 스트림을 설치합니다. 전역
+  `outputs()` broadcast와 섞이지 않습니다.
+- 캡처 출력의 `for await` 소비 Task를 취소하면 해당 dispatch만 취소됩니다.
+  정상 완료나 전역 구독 취소는 effect를 취소하지 않습니다. `break`로 빠져나오면서
+  캡처를 유지할 때는 작업 중단을 위해 `cancel()`을 명시적으로 호출합니다.
+- 출력 없는 자식 reducer와 effect helper는 `promoteOutput(to:)`로 재사용합니다.
+  실제 출력 타입은 여전히 `mapOutput(_:)`로 변환해야 하므로 이벤트가 묵시적으로 버려지지 않습니다.
+- `TestStore.receiveOutput`은 정확한 값 외에 predicate와 `CasePath`를 지원하여
+  `Equatable`이 아닌 출력도 검증합니다. 모든 방식이 exhaustivity와 전체 제한시간을 지킵니다.
+- `strictPhaseTotality: true`는 직접 선언된 `Phase` source/target 누락을
+  컴파일 오류로 만들며, 동적 trigger 의미는 계속 `requireComplete(...)`로 검증합니다.
+- `Store`는 effect 취소와 run 실패를 MainActor 경계에서 순서화합니다. 취소가 먼저 수락되면 협조하지 않는 작업이 뒤늦게 던진 오류를 `didFailRun`으로 재분류하지 않습니다.
+- 앱 라우팅, transport, 세션 라이프사이클, 생성 시점 의존성 그래프는 앱 경계 바깥에서 소유합니다.
+
+경계 문서:
+
+- [Cross-Framework Boundaries](./docs/CROSS_FRAMEWORK.md)
+- [Dependency Patterns](./docs/DEPENDENCY_PATTERNS.md)
+
+## Why InnoFlow over TCA?
+
+TCA는 dependency system, navigation pattern, test convention, 큰 생태계까지
+포함한 폭넓은 application architecture가 필요할 때 더 강한 기본 선택지입니다.
+InnoFlow는 더 작은 경계를 원할 때 선택합니다. reducer는 비즈니스 전환만
+소유하고, dependency는 생성자 주입 bundle로 명시하며, navigation/transport는
+앱 경계에 남기고, SwiftUI 전용 편의 API는 선택 product인 `InnoFlowSwiftUI`에
+둡니다.
+
+자세한 비교는 [Framework Comparison](./docs/FRAMEWORK_COMPARISON.md)을 봅니다.
+
+
+### 세 단계로 익히기
+
+- Level 1: Reduce, Store, BindableField, TestStore로 카운터·폼과 테스트 완성
+- Level 2: 필요할 때 Scope, ForEach, select, typed Output 추가
+- Level 3: FlowTask, optional child 수명, run lane, withFlowScope, PhaseMap, diagnostics, 선택적 InnoFlowInspector
+
+SwiftUI 헬퍼는 sheet, macOS 외 full-screen cover, navigation destination, 지원 플랫폼의 popover, alert, confirmation dialog를 제공합니다. Alert/dialog 제목은 LocalizedStringKey·StringProtocol·Text를 지원합니다. innoFlowTask는 뷰가 사라지거나 ID가 바뀔 때 자신이 시작한 dispatch만 취소합니다. Inspector는 payload-free 진단과 명시적인 phase label만 읽으며 DEBUG에서 사용을 권장합니다. 플랫폼 제약은 docs/SWIFTUI_DX_6_0.md를 참고하세요.

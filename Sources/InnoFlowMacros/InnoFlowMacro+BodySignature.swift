@@ -3,7 +3,9 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
+import SwiftDiagnostics
 import SwiftSyntax
+import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
 extension InnoFlowMacro {
@@ -12,6 +14,8 @@ extension InnoFlowMacro {
     hasOutput: Bool
   ) -> [String] {
     var issues: [String] = []
+    let expectedOutput = hasOutput ? "Output" : "Never"
+    let expectedSignature = "some Reducer<State, Action, \(expectedOutput)>"
     guard let binding = variable.bindings.first else {
       issues.append("missing `body` binding")
       return issues
@@ -19,7 +23,7 @@ extension InnoFlowMacro {
 
     guard let typeAnnotation = binding.typeAnnotation else {
       issues.append(
-        "`body` must declare an explicit `some Reducer<State, Action, Never>` or `some Reducer<State, Action, Output>` type"
+        "`body` must declare an explicit `\(expectedSignature)` type"
       )
       return issues
     }
@@ -28,7 +32,7 @@ extension InnoFlowMacro {
 
     guard let someOrAny = type.as(SomeOrAnyTypeSyntax.self) else {
       issues.append(
-        "`body` type `\(type.trimmedDescription)` must be an opaque `some Reducer<State, Action, Output>` type"
+        "`body` type `\(type.trimmedDescription)` must be an opaque `\(expectedSignature)` type"
       )
       return issues
     }
@@ -44,14 +48,14 @@ extension InnoFlowMacro {
     let constraintName: String
     let genericArgumentClause: GenericArgumentClauseSyntax?
     if let identifierType = someOrAny.constraint.as(IdentifierTypeSyntax.self) {
-      constraintName = identifierType.name.text
+      constraintName = logicalIdentifier(identifierType.name)
       genericArgumentClause = identifierType.genericArgumentClause
     } else if let memberType = someOrAny.constraint.as(MemberTypeSyntax.self),
       let base = memberType.baseType.as(IdentifierTypeSyntax.self),
-      base.name.text == "InnoFlow" || base.name.text == "InnoFlowCore",
+      logicalIdentifier(base.name) == "InnoFlow" || logicalIdentifier(base.name) == "InnoFlowCore",
       base.genericArgumentClause == nil
     {
-      constraintName = memberType.name.text
+      constraintName = logicalIdentifier(memberType.name)
       genericArgumentClause = memberType.genericArgumentClause
     } else {
       issues.append(
@@ -65,7 +69,7 @@ extension InnoFlowMacro {
     }
 
     guard let genericArgs = genericArgumentClause else {
-      issues.append("`body` type must specify `Reducer<State, Action, Output>`")
+      issues.append("`body` type must specify `Reducer<State, Action, \(expectedOutput)>`")
       return issues
     }
 
@@ -93,10 +97,10 @@ extension InnoFlowMacro {
     if hasOutput {
       if !isNestedTypeReference(outputArgument, named: "Output") {
         issues.append(
-          "third generic parameter must be `Output` (or `Self.Output`), found `\(outputArgument.trimmedDescription)`"
+          "third generic parameter must be `Output` (or `Self.Output`) because the nested `Output` declares this feature’s output type, found `\(outputArgument.trimmedDescription)`"
         )
       }
-    } else if outputArgument.trimmedDescription != "Never" {
+    } else if !isNeverTypeReference(outputArgument) {
       issues.append(
         "third generic parameter must be `Never` when the feature declares no nested `Output`, found `\(outputArgument.trimmedDescription)`"
       )
@@ -122,6 +126,102 @@ extension InnoFlowMacro {
     }
   }
 
+  /// Keep diagnostics and safe source repairs together. A Fix-It is offered
+  /// only when the State/Action arguments already satisfy the contract; it
+  /// never guesses how to repair an unrelated reducer or foreign state type.
+  static func diagnoseBodySignatureIssues(
+    _ issues: [String],
+    in variable: VariableDeclSyntax,
+    hasOutput: Bool,
+    anchoredAt anchor: some SyntaxProtocol,
+    context: some MacroExpansionContext
+  ) {
+    let expectedOutput = hasOutput ? "Output" : "Never"
+    let message = InnoFlowBodySignatureMessage(issues: issues, outputName: expectedOutput)
+    var fixIts: [FixIt] = []
+    if issues.count == 1,
+      let oldType = variable.bindings.first?.typeAnnotation?.type,
+      let newType = repairedOutputArgument(in: oldType, outputName: expectedOutput)
+    {
+      fixIts.append(
+        .replace(
+          message: InnoFlowBodySignatureFixIt(outputName: expectedOutput),
+          oldNode: oldType,
+          newNode: newType
+        ))
+    }
+    context.diagnose(Diagnostic(node: anchor, message: message, fixIts: fixIts))
+  }
+
+  private static func repairedOutputArgument(in type: TypeSyntax, outputName: String) -> TypeSyntax?
+  {
+    guard let opaque = type.as(SomeOrAnyTypeSyntax.self),
+      opaque.someOrAnySpecifier.tokenKind == .keyword(.some)
+    else { return nil }
+
+    let clause: GenericArgumentClauseSyntax?
+    if let identifier = opaque.constraint.as(IdentifierTypeSyntax.self),
+      logicalIdentifier(identifier.name) == "Reducer"
+    {
+      clause = identifier.genericArgumentClause
+    } else if let member = opaque.constraint.as(MemberTypeSyntax.self),
+      logicalIdentifier(member.name) == "Reducer",
+      let base = member.baseType.as(IdentifierTypeSyntax.self),
+      ["InnoFlow", "InnoFlowCore"].contains(logicalIdentifier(base.name)),
+      base.genericArgumentClause == nil
+    {
+      clause = member.genericArgumentClause
+    } else {
+      return nil
+    }
+    guard let clause else { return nil }
+    let arguments = Array(clause.arguments)
+    guard arguments.count == 2 || arguments.count == 3,
+      isNestedTypeReference(arguments[0].argument, named: "State"),
+      isNestedTypeReference(arguments[1].argument, named: "Action")
+    else { return nil }
+
+    if arguments.count == 3 {
+      let existingOutput = arguments[2].argument
+      let isAlreadyCorrect =
+        outputName == "Output"
+        ? isNestedTypeReference(existingOutput, named: "Output")
+        : isNeverTypeReference(existingOutput)
+      guard !isAlreadyCorrect else { return nil }
+    }
+    // Operate on the already-validated argument's exact source range. This
+    // preserves comments/trivia and works with both SwiftSyntax 603's type
+    // arguments and 604's type-or-value argument representation.
+    let offset = type.position.utf8Offset
+    var bytes = Array(type.description.utf8)
+    if arguments.count == 2 {
+      let insertion = clause.rightAngle.position.utf8Offset - offset
+      let separator = arguments[1].trailingComma == nil ? ", " : " "
+      bytes.insert(contentsOf: (separator + outputName).utf8, at: insertion)
+    } else {
+      let argument = arguments[2].argument
+      let start = argument.positionAfterSkippingLeadingTrivia.utf8Offset - offset
+      let end = argument.endPositionBeforeTrailingTrivia.utf8Offset - offset
+      bytes.replaceSubrange(start..<end, with: outputName.utf8)
+    }
+    let repaired = TypeSyntax(stringLiteral: String(decoding: bytes, as: UTF8.self))
+    return repaired.hasError ? nil : repaired
+  }
+
+  private static func isNeverTypeReference(_ type: some SyntaxProtocol) -> Bool {
+    if let identifier = type.as(IdentifierTypeSyntax.self) {
+      return logicalIdentifier(identifier.name) == "Never"
+        && identifier.genericArgumentClause == nil
+    }
+    if let member = type.as(MemberTypeSyntax.self),
+      logicalIdentifier(member.name) == "Never", member.genericArgumentClause == nil,
+      let base = member.baseType.as(IdentifierTypeSyntax.self)
+    {
+      return logicalIdentifier(base.name) == "Swift" && base.genericArgumentClause == nil
+    }
+    return false
+  }
+
   /// Returns `true` when `argument` spells a reference to the nested type
   /// `named` — either the bare identifier (`State`) or the explicitly
   /// qualified `Self.State`. Both resolve to the same nested declaration, so
@@ -131,17 +231,41 @@ extension InnoFlowMacro {
     named expected: String
   ) -> Bool {
     if let identifier = argument.as(IdentifierTypeSyntax.self) {
-      return identifier.name.text == expected && identifier.genericArgumentClause == nil
+      return logicalIdentifier(identifier.name) == expected
+        && identifier.genericArgumentClause == nil
     }
     if let member = argument.as(MemberTypeSyntax.self),
-      member.name.text == expected,
+      logicalIdentifier(member.name) == expected,
       member.genericArgumentClause == nil,
       let base = member.baseType.as(IdentifierTypeSyntax.self),
-      base.name.text == "Self",
+      logicalIdentifier(base.name) == "Self",
       base.genericArgumentClause == nil
     {
       return true
     }
     return false
   }
+}
+
+private struct InnoFlowBodySignatureMessage: DiagnosticMessage {
+  let issues: [String]
+  let outputName: String
+
+  var message: String {
+    """
+    Invalid body signature for @InnoFlow.
+    Expected:
+    var body: some Reducer<State, Action, \(outputName)>
+    Detected issues: \(issues.joined(separator: "; ")).
+    """
+  }
+
+  var diagnosticID: MessageID { .init(domain: "InnoFlowMacro", id: "InvalidBodySignature") }
+  var severity: DiagnosticSeverity { .error }
+}
+
+private struct InnoFlowBodySignatureFixIt: FixItMessage {
+  let outputName: String
+  var message: String { "use explicit `\(outputName)` as the third reducer generic parameter" }
+  var fixItID: MessageID { .init(domain: "InnoFlowMacro", id: "ExplicitReducerOutputParameter") }
 }

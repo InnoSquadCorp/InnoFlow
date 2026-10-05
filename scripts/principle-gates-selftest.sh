@@ -489,7 +489,8 @@ run_release_sync_lifecycle_tests() {
   tmp_root="$(mktemp -d)"
   trap 'rm -rf "$tmp_root"' RETURN
   mkdir -p "$tmp_root/scripts"
-  cp "$SCRIPT_DIR/check-release-sync.sh" "$SCRIPT_DIR/release-tag-policy.sh" "$tmp_root/scripts/"
+  cp "$SCRIPT_DIR/check-release-sync.sh" "$SCRIPT_DIR/release-tag-policy.sh" \
+    "$SCRIPT_DIR/check-release-date.rb" "$tmp_root/scripts/"
   cp "$ROOT_DIR/STABLE_VERSION" "$ROOT_DIR/RELEASING.md" "$ROOT_DIR/README.md" \
     "$ROOT_DIR/README.kr.md" "$ROOT_DIR/README.jp.md" "$ROOT_DIR/README.cn.md" \
     "$ROOT_DIR/RELEASE_NOTES.md" "$ROOT_DIR/CHANGELOG.md" "$ROOT_DIR/MIGRATION.md" \
@@ -508,6 +509,12 @@ run_release_sync_lifecycle_tests() {
   assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
     "$tmp_root/scripts/check-release-sync.sh"
   printf '5.1.1\n' >"$tmp_root/STABLE_VERSION"
+  # A tagged release requires an actual calendar date. Keep the repository's
+  # Unreleased heading untouched; date only this isolated lifecycle fixture.
+  ruby -e 'path=ARGV.fetch(0); body=File.read(path); count=body.scan(/^## \[6\.0\.0\] - .*$/).size; abort "missing unique fixture heading" unless count == 1; File.write(path, body.sub(/^## \[6\.0\.0\] - .*$/, "## [6.0.0] - 2026-10-04"))' \
+    "$tmp_root/CHANGELOG.md"
+  git -C "$tmp_root" add CHANGELOG.md
+  git -C "$tmp_root" commit -qm "dated release fixture"
   git -C "$tmp_root" tag 6.0.0
   assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
@@ -594,6 +601,9 @@ assert_success "$SCRIPT_DIR/run-release-preflight-selftest.sh"
 assert_success "$SCRIPT_DIR/report-public-api-inventory-selftest.rb"
 assert_success "$SCRIPT_DIR/inventory-doc-swift-blocks-selftest.rb"
 assert_success ruby "$SCRIPT_DIR/report-doc-fence-review-selftest.rb"
+assert_success "$SCRIPT_DIR/check-independent-consumers-selftest.sh"
+assert_success python3 -B -m unittest discover -s "$SCRIPT_DIR/tests" -p 'test_focused_runtime_result.py'
+assert_success python3 -B -m unittest discover -s "$SCRIPT_DIR/tests" -p 'test_timing_jsonl_migration.py'
 assert_success "$SCRIPT_DIR/check-migration-consumer-selftest.sh"
 assert_success ruby "$SCRIPT_DIR/release-evidence-artifact-selftest.rb"
 assert_success ruby "$SCRIPT_DIR/release-evidence-output-parser-selftest.rb"

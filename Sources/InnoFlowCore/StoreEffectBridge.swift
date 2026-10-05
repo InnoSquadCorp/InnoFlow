@@ -30,6 +30,7 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
     let context: EffectExecutionContext?
   }
 
+  package let childLifetimeRegistry = ChildLifetimeRegistry()
   package let runtime = EffectRuntime<Action>()
   package let throttleState = ThrottleStateMap<Action, Output>()
   package let runScheduler = EffectRunScheduler()
@@ -81,6 +82,22 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
       origin: origin,
       flowTaskTracker: flowTaskTracker
     )
+  }
+
+  /// Applies lifetime boundaries before any same-reduction output/effect can run.
+  package func prepareLifetimes<State>(_ effect: ReducerEffect<Action, Output>, state: State)
+    -> ReducerEffect<
+      Action, Output
+    >
+  {
+    childLifetimeRegistry.prepare(effect, state: state) { id in
+      let sequence = markCancelled(id: id)
+      runScheduler.cancel(id: id, upTo: sequence)
+      cancelCompositeTasks(id: id, upTo: sequence)
+      cancelDelayedState(id: id, upTo: sequence)
+      let runtime = runtime
+      Task { await runtime.cancel(id: id, upTo: sequence) }
+    }
   }
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
@@ -388,6 +405,7 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
   /// boundary used for instrumentation and tests.
   @discardableResult
   package func shutdown() -> UInt64 {
+    childLifetimeRegistry.removeAll()
     let sequence = boundaries.markCancelledAll()
     runScheduler.cancelAll()
     cancelAllCompositeTasks()

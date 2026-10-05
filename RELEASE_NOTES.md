@@ -40,6 +40,28 @@ validation workflows that previously required application-level adapters.
     checks and deterministic reusable scenarios.
 13. Macro-synthesized `Output` case paths and scoped root-output matching.
 
+### Additional 6.0 candidate work
+
+Testing sends now return `TestStoreDispatch`, with
+non-consuming dispatch verification and bounded typed effect ledgers. Optional
+children can opt into instance-scoped lifetimes that suppress stale responses
+without cancelling siblings or parent work. Test tooling adds four-coordinate
+failure reporting, scoped output parity, structural diffs, observed PhaseMap
+coverage and reproducible seeded exploration.
+
+Macro diagnostics normalize escaped identifiers and offer output-aware Fix-Its.
+The standalone `innoflow-migrate` AST tool supplies reviewed dry-run patches,
+backed-up writes and explicit unsupported-case reports. The SwiftUI candidate
+adds localized/title-value overloads, view-owned dispatch tasks, a separate
+`InnoFlowInspector` product, and layered learning examples.
+
+Operation closures explicitly preserve concurrent execution under future
+isolation defaults. Run lanes expose anonymous bounded snapshots, serial
+capacity is unsigned, and dispatch/timing identities migrate to process-local
+UInt64. These are pre-release source contracts: consult MIGRATION and the
+candidate validation ledger. Source presence is not Apple, performance, or
+32-check release certification; the tag remains unpublished by this task.
+
 ### Release hardening
 
 Dependency integration keeps Swift 6.3 and Xcode 26.6 while moving the root,

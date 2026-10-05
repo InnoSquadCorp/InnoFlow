@@ -42,7 +42,7 @@ public actor EffectTimingRecorder {
     public let sequence: UInt64
     public let effectID: String?
     public let actionLabel: String?
-    public let dispatchID: UUID?
+    public let dispatchID: UInt64?
     public let timestampNanos: UInt64
 
     public init(
@@ -50,7 +50,7 @@ public actor EffectTimingRecorder {
       sequence: UInt64,
       effectID: String?,
       actionLabel: String?,
-      dispatchID: UUID? = nil,
+      dispatchID: UInt64? = nil,
       timestampNanos: UInt64
     ) {
       self.phase = phase
@@ -59,6 +59,47 @@ public actor EffectTimingRecorder {
       self.actionLabel = actionLabel
       self.dispatchID = dispatchID
       self.timestampNanos = timestampNanos
+    }
+
+    /// Version 2 uses process-local UInt64 dispatch correlation, not UUID strings.
+    public static let schemaVersion = 2
+
+    private enum CodingKeys: String, CodingKey {
+      case schemaVersion, phase, sequence, effectID, actionLabel, dispatchID, timestampNanos
+    }
+
+    public init(from decoder: any Decoder) throws {
+      let values = try decoder.container(keyedBy: CodingKeys.self)
+      let version = try values.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+      guard version == 1 || version == Self.schemaVersion else {
+        throw DecodingError.dataCorruptedError(
+          forKey: .schemaVersion, in: values,
+          debugDescription: "Unsupported effect timing schema version")
+      }
+      if (try? values.decode(String.self, forKey: .dispatchID)) != nil {
+        throw DecodingError.dataCorruptedError(
+          forKey: .dispatchID, in: values,
+          debugDescription:
+            "Legacy UUID dispatchID requires scripts/migrate-effect-timing-jsonl.py; retain the original capture"
+        )
+      }
+      phase = try values.decode(Phase.self, forKey: .phase)
+      sequence = try values.decode(UInt64.self, forKey: .sequence)
+      effectID = try values.decodeIfPresent(String.self, forKey: .effectID)
+      actionLabel = try values.decodeIfPresent(String.self, forKey: .actionLabel)
+      dispatchID = try values.decodeIfPresent(UInt64.self, forKey: .dispatchID)
+      timestampNanos = try values.decode(UInt64.self, forKey: .timestampNanos)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+      var values = encoder.container(keyedBy: CodingKeys.self)
+      try values.encode(Self.schemaVersion, forKey: .schemaVersion)
+      try values.encode(phase, forKey: .phase)
+      try values.encode(sequence, forKey: .sequence)
+      try values.encodeIfPresent(effectID, forKey: .effectID)
+      try values.encodeIfPresent(actionLabel, forKey: .actionLabel)
+      try values.encodeIfPresent(dispatchID, forKey: .dispatchID)
+      try values.encode(timestampNanos, forKey: .timestampNanos)
     }
   }
 
@@ -220,7 +261,7 @@ public actor EffectTimingRecorder {
     runToken: UUID? = nil,
     effectID: String?,
     actionLabel: String?,
-    dispatchID: UUID? = nil,
+    dispatchID: UInt64? = nil,
     timestampNanos: UInt64
   ) {
     storage.withLock { state in

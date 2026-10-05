@@ -30,6 +30,12 @@ package struct EffectWalker<D: EffectDriver> {
     awaited: Bool = false
   ) async {
     switch effect.operation {
+    case .optionalChild, .lifetimeScope:
+      preconditionFailure("Child lifetime metadata must be prepared synchronously after reduction")
+
+    case .owned(let owner, let nested):
+      await walk(nested, context: .withOwner(owner, on: context), awaited: awaited)
+
     case .none:
       return
 
@@ -175,7 +181,7 @@ package struct EffectWalker<D: EffectDriver> {
   /// retain the driver while the operation is suspended.
   private func prepareRun(
     priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<D.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<D.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>? {
     guard let driver else { return nil }
@@ -192,7 +198,7 @@ package struct EffectWalker<D: EffectDriver> {
     policy: EffectExecutionPolicy,
     priority: TaskPriority?,
     onAdmission: (@Sendable (EffectAdmission) -> D.Action)?,
-    operation: @escaping @Sendable (Send<D.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<D.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>? {
     guard let driver else { return nil }

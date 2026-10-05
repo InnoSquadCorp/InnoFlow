@@ -72,7 +72,7 @@ scenario APIs; a count match alone is not approval of their runtime semantics.
    statement-style calls remain source-compatible, while stored or passed
    method values explicitly typed as returning `Void` must be adjusted.
 3. `TestStore` now checks typed outputs during exhaustive finishing.
-   `TestStoreFinishResult` gains `unhandledOutputs`, and callers use
+   The package-only `TestStoreFinishResult` now uses one bounded combined snapshot, and callers use
    `receiveOutput(_:)` to consume them.
 4. `TestStore.assertNoMoreActions()` and its scoped forwarding overload are
    removed after their 5.x deprecation window. Use `finish()` or
@@ -161,3 +161,56 @@ safe. The final candidate-bound four-product inventory and owner approval
 remain open. Patch and minor
 releases must not reuse this classification to waive new breakage; they require
 a fresh comparison and no unexplained consumer-facing diagnostics.
+
+### 2026-10-03 identifier correction
+
+M1/M2 normalize logical identifiers separately from source escaping. Ordinary generated path names and one-leading-underscore removal are retained. Previously invalid generated raw-name members now compile; this is a compiler-correctness correction, not a renamed ordinary API. Current consumer and negative diagnostic fixtures supplement the historical inventory above; they do not regenerate its historical symbol counts.
+
+### 2026-10-03 testing dispatch signature
+
+TestStore, ScopedTestStore and phase-send helpers return TestStoreDispatch. The unpublished TestFlowTask spelling is removed before release. Statement calls remain compatible via discardable results. Assigning an unwrapped method value to async Void is intentionally source-breaking and is tested by an external Core+Testing consumer with a positive explicit adapter. This adds a consumer migration to the historical list above.
+
+### Optional child adoption
+
+OptionalChildLifetime and Reducer.optionalChild are additive, opt-in wrappers. Existing IfLet retains its runtime behavior; its key-path input now requires Sendable as classified below. Child instance identity is Hashable/Sendable; parent and child Output must match after explicit lifting. Public examples compile from Core-only generic and macro authoring consumers.
+
+### Scheduler 6.0 signature changes
+
+EffectExecutionPolicy.serial and EffectAdmissionRejection.queueFull capacities change from Int to UInt; invalidCapacity is removed. EffectAdmission adds cancelledBeforeStart and superseded. Typed nonnegative constants migrate directly; signed variables need explicit validation. Public enum case additions are reviewed as major-version changes within this compatibility policy.
+
+### Testing source-location and lexical-lifetime changes
+
+Canonical Testing call signatures use fileID/filePath/line/column; explicit legacy file: overloads remain. Stored function values must select an appropriate adapter. FlowScope.init is fileprivate; use withFlowScope. TestStoreScenario.advance requires an explicit onceSleepersReach argument. TestStoreDispatch.effectLedger and scoped output exact/predicate overloads are additive. XCTest's public failure API preserves path/line but has no column equivalent.
+
+### Process-local dispatch identity and timing records
+
+DispatchID.rawValue and EffectTimingRecorder.Entry.dispatchID intentionally change UUID to UInt64 (optional for Entry), and caller-provided DispatchID raw-value construction is removed. New timing JSONL uses schemaVersion2. Legacy absent-ID records remain readable; UUID strings require the explicit archived-file converter described in MIGRATION. Fresh public consumer/schema tests accompany this change; historical API counts above are not a final regenerated inventory.
+
+### Additional opt-in products and authoring surfaces
+
+InnoFlowInspector is a fifth public product with its own privacy manifest and Core-only runtime dependency. PhaseCoverageRecorder/TestStoreExplorer, anonymous lane snapshots and view-owned innoFlowTask are additive opt-ins. Alert/dialog overload sets now follow SwiftUI title categories; explicit stored function references may need a concrete title-type adapter. Concurrent operation function types pin execution semantics while preserving ordinary closure call syntax. The independent Apple title/task consumer and non-Apple execution consumer cover these distinct boundaries; final Apple digester and five-product symbol inventory are still required.
+
+PhaseMap initialization also adds defaulted source coordinates to identify coverage declarations. Ordinary trailing-closure construction remains source-compatible; a stored initializer function value must explicitly adapt the new argument list. Coverage never re-evaluates the transition matcher or resolver merely to observe it.
+
+### IfCaseLet lifetime declaration coordinates
+
+IfCaseLet.init(state:action:reducer:onMissing:) gains defaulted fileID, line and column parameters. Constructor call syntax remains source-compatible, but the old exact four-argument initializer function type no longer matches; use an explicit closure adapter. The overload with lifetimeID: EffectID<ID> is additive and distinguishes overlapping case reducers built at the same helper declaration. Existing CasePath identity and public collection ID constraints do not change. Tests/Fixtures/CollectionLifetimeConsumer provides a positive consumer and an exact old-signature negative compile control.
+
+### 2026-10-04 Sendable composition and phase paths
+
+State key-path parameters of Scope, IfLet, ForEachReducer,
+ForEachIdentifiedReducer, OptionalChildLifetime / Reducer.optionalChild and
+PhaseMap are now `any WritableKeyPath<...> & Sendable`. This changes public
+signatures and previously erased stored key-path values must preserve the marker
+at their declaration. Direct literals and Sendable subscript indices remain
+valid. Non-Sendable captured indices are rejected by the compiler. IfCaseLet
+CasePath inputs and Store selection APIs are unchanged.
+
+This closes an Apple OSAllocatedUnfairLock compile failure and removes the
+attempt to carry non-Sendable lifetime/coverage projections through lock-backed
+Sendable metadata. Projections are immutable MainActor Sendable closures;
+coverage storage is compiler-checked Sendable. No unchecked lock escape is used.
+The historical digester/symbol counts above do not include this change and must
+not be reported as the final candidate's API inventory. The external
+CollectionLifetimeConsumer now checks each affected composition/phase boundary
+and its source migration on supported toolchains.

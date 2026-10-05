@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import Observation
+public import Observation
 
 /// A store that manages feature state and executes effects.
 ///
@@ -15,14 +15,20 @@ import Observation
 @dynamicMemberLookup
 public final class Store<R: Reducer> {
   /// The current state.
-  public private(set) var state: R.State
+  @ObservationIgnored private var storedState: R.State
+  @ObservationIgnored private let stateKeyPath: KeyPath<Store<R>, R.State> = \Store<R>.state
+
+  public var state: R.State {
+    access(keyPath: stateKeyPath)
+    return storedState
+  }
 
   private let reducer: R
   package let clock: StoreClock
   package let instrumentation: StoreInstrumentation<R.Action>
   package let diagnostics: StoreDiagnostics?
   package let lifetime = StoreLifetimeToken()
-  private let actionQueue = StoreActionQueue<R.Action>()
+  private let actionQueue: StoreActionQueue<R.Action>
   package let effectBridge = StoreEffectBridge<R.Action, R.Output>()
   package let outputHub = StoreOutputHub<R.Output>()
   package let singleScopeCache = SingleScopeCache()
@@ -44,7 +50,7 @@ public final class Store<R: Reducer> {
     diagnostics: StoreDiagnostics? = nil
   ) {
     self.reducer = reducer
-    self.state = initialState
+    self.storedState = initialState
     self.clock = clock
     self.diagnostics = diagnostics
     if let diagnostics {
@@ -52,6 +58,7 @@ public final class Store<R: Reducer> {
     } else {
       self.instrumentation = instrumentation
     }
+    self.actionQueue = StoreActionQueue(collectingMetrics: self.instrumentation.isEnabled)
   }
 
   /// Creates a store with default-initialized state.
@@ -86,12 +93,7 @@ public final class Store<R: Reducer> {
   public func send(_ action: R.Action) -> FlowTask {
     let dispatchID = DispatchID()
     diagnostics?.recordSubmitted(dispatchID)
-    let diagnostics = diagnostics
-    let tracker = FlowTaskTracker(
-      dispatchID: dispatchID,
-      onFinish: { dispatchID in diagnostics?.recordTerminated(dispatchID) },
-      onCancel: { dispatchID in diagnostics?.recordCancellationRequested(dispatchID) }
-    )
+    let tracker = makeDispatchTracker(dispatchID: dispatchID)
     enqueue(action, animation: nil, flowTaskTracker: tracker)
     return FlowTask(tracker: tracker)
   }
@@ -110,18 +112,25 @@ public final class Store<R: Reducer> {
     let capture = TypedFlowTaskOutputCapture<R.Output>(bufferingPolicy: bufferingPolicy)
     let dispatchID = DispatchID()
     diagnostics?.recordSubmitted(dispatchID)
-    let diagnostics = diagnostics
-    let tracker = FlowTaskTracker(
-      dispatchID: dispatchID,
-      outputCapture: capture,
-      onFinish: { dispatchID in diagnostics?.recordTerminated(dispatchID) },
-      onCancel: { dispatchID in diagnostics?.recordCancellationRequested(dispatchID) }
-    )
+    let tracker = makeDispatchTracker(dispatchID: dispatchID, outputCapture: capture)
     capture.cancelDispatchOnConsumerTermination(tracker)
     enqueue(action, animation: nil, flowTaskTracker: tracker)
     return OutputFlowTask(
       flowTask: FlowTask(tracker: tracker),
       outputs: capture.stream
+    )
+  }
+
+  private func makeDispatchTracker(
+    dispatchID: DispatchID, outputCapture: (any FlowTaskOutputCapturing)? = nil
+  ) -> FlowTaskTracker {
+    guard let diagnostics else {
+      return FlowTaskTracker(dispatchID: dispatchID, outputCapture: outputCapture)
+    }
+    return FlowTaskTracker(
+      dispatchID: dispatchID, outputCapture: outputCapture,
+      onFinish: { diagnostics.recordTerminated($0) },
+      onCancel: { diagnostics.recordCancellationRequested($0) }
     )
   }
 
@@ -142,11 +151,13 @@ public final class Store<R: Reducer> {
     let erasedID = AnyEffectID(id)
     let sequence = effectBridge.markCancelled(id: erasedID)
     recordCancellation(id: erasedID, sequence: sequence)
-    let targets = await effectBridge.cancellationTargetDispatchIDs(
-      id: erasedID,
-      upTo: sequence
-    )
-    recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    if diagnostics != nil {
+      let targets = await effectBridge.cancellationTargetDispatchIDs(
+        id: erasedID,
+        upTo: sequence
+      )
+      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+    }
     await effectBridge.cancelEffects(id: erasedID, upTo: sequence)
   }
 
@@ -154,8 +165,10 @@ public final class Store<R: Reducer> {
   public func cancelAllEffects() async {
     let sequence = effectBridge.markCancelledAll()
     recordCancellation(id: nil, sequence: sequence)
-    let targets = await effectBridge.cancellationTargetDispatchIDs(upTo: sequence)
-    recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: false)
+    if diagnostics != nil {
+      let targets = await effectBridge.cancellationTargetDispatchIDs(upTo: sequence)
+      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: false)
+    }
     await effectBridge.cancelAllEffects(upTo: sequence)
   }
 
@@ -188,31 +201,42 @@ public final class Store<R: Reducer> {
     sequence: UInt64,
     flowTaskTracker: FlowTaskTracker?
   ) {
+    let context: EffectExecutionContext
     switch effect.operation {
     case .none:
       return
-
-    case .send(let action):
-      recordEmission(
-        action,
-        context: .unmanaged(sequence: sequence, flowTaskTracker: flowTaskTracker)
-      )
-      enqueue(action, animation: nil, flowTaskTracker: flowTaskTracker)
-
-    case .output(let output):
-      deliverOutput(
-        output,
-        context: .unmanaged(sequence: sequence, flowTaskTracker: flowTaskTracker)
-      )
-
+    case .send, .output:
+      context = .unmanaged(sequence: sequence, flowTaskTracker: flowTaskTracker)
     default:
       // The scope and interpreter lease are registered synchronously before
       // the root Task can race with store-level cancellation.
-      let context = effectBridge.makeEffectContext(
+      context = effectBridge.makeEffectContext(
         sequence: sequence,
         potentialCancellationIDs: effect.potentialCancellationIDs,
         flowTaskTracker: flowTaskTracker
       )
+    }
+    executeEffect(effect, context: context)
+  }
+
+  private func executeEffect(
+    _ effect: ReducerEffect<R.Action, R.Output>,
+    context: EffectExecutionContext
+  ) {
+    switch effect.operation {
+    case .none:
+      return
+    case .owned(let owner, let nested):
+      // Ownership is metadata, not a scheduling boundary. Keep the immediate
+      // emission and queue cancellation checks of the wrapped effect.
+      executeEffect(nested, context: .withOwner(owner, on: context))
+    case .send(let action):
+      recordEmission(action, context: context)
+      enqueue(action, animation: nil, flowTaskTracker: context.flowTaskTracker, context: context)
+    case .output(let output):
+      deliverOutput(output, context: context)
+    default:
+      let flowTaskTracker = context.flowTaskTracker
       let activity = flowTaskTracker?.beginActivity()
       let predecessor = rootEffectInterpreterTail
       let task = Task { @MainActor [weak self, weak flowTaskTracker] in
@@ -249,12 +273,14 @@ public final class Store<R: Reducer> {
   package func enqueue(
     _ action: R.Action,
     animation: EffectAnimation?,
-    flowTaskTracker: FlowTaskTracker? = nil
+    flowTaskTracker: FlowTaskTracker? = nil,
+    context: EffectExecutionContext? = nil
   ) {
     actionQueue.enqueue(
       action,
       animation: animation,
-      flowTaskTracker: flowTaskTracker
+      flowTaskTracker: flowTaskTracker,
+      context: context
     )
     drainActionQueueIfNeeded()
   }
@@ -263,18 +289,22 @@ public final class Store<R: Reducer> {
     guard actionQueue.beginDrain() else { return }
 
     defer {
-      let snapshot = actionQueue.finishDrain()
-      instrumentation.didDrainActionQueue(
-        .init(
-          processedActionCount: snapshot.processedActionCount,
-          pendingActionHighWaterMark: snapshot.pendingActionHighWaterMark,
-          storageHighWaterMark: snapshot.storageHighWaterMark,
-          retainedCapacity: snapshot.retainedCapacity,
-          retainedByteEstimate: snapshot.retainedByteEstimate,
-          retentionBudgetBytes: storeActionQueueRetainedStorageBudget,
-          didReleaseExcessCapacity: snapshot.didReleaseExcessCapacity
+      if instrumentation.isEnabled {
+        let snapshot = actionQueue.finishDrain()
+        instrumentation.didDrainActionQueue(
+          .init(
+            processedActionCount: snapshot.processedActionCount,
+            pendingActionHighWaterMark: snapshot.pendingActionHighWaterMark,
+            storageHighWaterMark: snapshot.storageHighWaterMark,
+            retainedCapacity: snapshot.retainedCapacity,
+            retainedByteEstimate: snapshot.retainedByteEstimate,
+            retentionBudgetBytes: storeActionQueueRetainedStorageBudget,
+            didReleaseExcessCapacity: snapshot.didReleaseExcessCapacity
+          )
         )
-      )
+      } else {
+        actionQueue.finishDrainDiscardingMetrics()
+      }
     }
 
     while let queuedAction = actionQueue.next() {
@@ -287,7 +317,9 @@ public final class Store<R: Reducer> {
       // Cancellation can arrive after emission but before this FIFO entry is
       // reduced (including inside a synchronous observation/instrumentation
       // callback). Do not let a cancelled tree mutate state or start new work.
-      guard queuedAction.flowTaskTracker?.isCancelled != true else {
+      guard queuedAction.flowTaskTracker?.isCancelled != true,
+        queuedAction.context?.shouldProceed != false
+      else {
         recordDrop(
           queuedAction.action,
           reason: .cancellationBoundary,
@@ -298,19 +330,31 @@ public final class Store<R: Reducer> {
         )
         continue
       }
-      let previousState = state
+      let previousState = storedState
       let effect: ReducerEffect<R.Action, R.Output>
 
       if let animation = queuedAction.animation {
         var animatedEffect: ReducerEffect<R.Action, R.Output> = .none
         animation.perform {
-          animatedEffect = reducer.reduce(into: &state, action: queuedAction.action)
-          observerRegistry.refresh(from: previousState, to: state)
+          animatedEffect = withMutation(keyPath: stateKeyPath) {
+            let reduced = reducer.reduce(into: &storedState, action: queuedAction.action)
+            guard effectBridge.childLifetimeRegistry.requiresPreparation(for: reduced) else {
+              return reduced
+            }
+            return effectBridge.prepareLifetimes(reduced, state: storedState)
+          }
+          observerRegistry.refresh(from: previousState, to: storedState)
         }
         effect = animatedEffect
       } else {
-        effect = reducer.reduce(into: &state, action: queuedAction.action)
-        observerRegistry.refresh(from: previousState, to: state)
+        effect = withMutation(keyPath: stateKeyPath) {
+          let reduced = reducer.reduce(into: &storedState, action: queuedAction.action)
+          guard effectBridge.childLifetimeRegistry.requiresPreparation(for: reduced) else {
+            return reduced
+          }
+          return effectBridge.prepareLifetimes(reduced, state: storedState)
+        }
+        observerRegistry.refresh(from: previousState, to: storedState)
       }
 
       executeEffect(

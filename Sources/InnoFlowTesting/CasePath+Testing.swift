@@ -26,8 +26,10 @@ func casePathExtractionFailureMessage<Root>(
 ///   - root: The enum value to inspect.
 ///   - path: The case path expected to match.
 ///   - caseName: Optional case label used to make failures easier to read.
-///   - fileID: The source file reported when extraction fails.
+///   - fileID: The source file identifier reported when extraction fails.
+///   - filePath: The source file path reported when extraction fails.
 ///   - line: The source line reported when extraction fails.
+///   - column: The source column reported when extraction fails.
 /// - Returns: The extracted value when the case path matches, otherwise `nil`
 ///   after recording a test failure.
 @discardableResult
@@ -36,7 +38,21 @@ public func assertCasePathExtracts<Root, Value>(
   via path: CasePath<Root, Value>,
   caseName: String? = nil,
   fileID: StaticString = #fileID,
-  line: UInt = #line
+  filePath: StaticString = #filePath,
+  line: UInt = #line,
+  column: UInt = #column
+) -> Value? {
+  assertCasePathExtracts(
+    root, via: path, caseName: caseName,
+    location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+}
+
+@discardableResult
+package func assertCasePathExtracts<Root, Value>(
+  _ root: Root,
+  via path: CasePath<Root, Value>,
+  caseName: String? = nil,
+  location: TestStoreSourceLocation
 ) -> Value? {
   if let value = path.extract(root) {
     return value
@@ -44,8 +60,7 @@ public func assertCasePathExtracts<Root, Value>(
 
   testStoreAssertionFailure(
     casePathExtractionFailureMessage(root: root, caseName: caseName),
-    file: fileID,
-    line: line
+    location: location
   )
   return nil
 }

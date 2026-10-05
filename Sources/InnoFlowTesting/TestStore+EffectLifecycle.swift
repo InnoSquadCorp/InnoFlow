@@ -102,16 +102,21 @@ extension TestStore {
       shouldProceed: { [weak self] context in
         self?.shouldProceed(context: context) ?? false
       },
+      didStartRun: { [weak self] context in
+        self?.recordEffectEvent(.started, context: context)
+      },
       didEnqueueAction: { [weak self] in
+        self?.noteUnverifiedWorkAfterTerminalVerification()
         self?.finishActivity.noteProgress()
       },
-      reportRunFailure: { [weak self] message, origin in
+      reportRunFailure: { [weak self] message, origin, context in
         guard let self else { return }
+        self.recordEffectEvent(.failed(message), context: context)
         let source =
-          origin.map { ($0.file, $0.line) }
+          origin.map(TestStoreSourceLocation.init)
           ?? self.terminalVerificationSource
-          ?? (#file, #line)
-        self.assertionFailureReporter(message, source.0, source.1)
+          ?? .init()
+        self.issueReporter(message, source)
       },
       finishTrackedTask: { [weak self] token in
         self?.finishTrackedRunTask(token: token)
@@ -121,7 +126,7 @@ extension TestStore {
 
   func startRunTask(
     priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) -> Task<Void, Never> {
     let context = context?.frozenForExecution()
@@ -139,7 +144,9 @@ extension TestStore {
     let manualClock = self.manualClock
     let wallClock = self.wallClock
 
+    let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
     let task = Task(priority: priority) {
+      defer { dispatchActivity?.finish() }
       guard await startGate.wait() else {
         await runBridge.finish()
         return
@@ -152,6 +159,7 @@ extension TestStore {
         await runBridge.finish()
         return
       }
+      endpoint.didStartRun(context: context)
 
       let send = Send<R.Action> { action in
         await runBridge.emit(action)
@@ -214,6 +222,7 @@ extension TestStore {
       await runBridge.finish()
     }
 
+    dispatchActivity?.attach(task)
     trackEffectTask(token: token, task: task, context: context)
 
     Task { @MainActor in
@@ -250,7 +259,7 @@ extension TestStore {
         || trackedTask.context?.isCancelled(id: id) == true
       guard isPastBoundary else { continue }
       trackedTask.task.cancel()
-      removeTrackedTask(token: token)
+      markTrackedTaskCancelled(token: token)
     }
   }
 
@@ -264,7 +273,7 @@ extension TestStore {
     }
     for token in tokens {
       runningTasks[token]?.task.cancel()
-      removeTrackedTask(token: token)
+      markTrackedTaskCancelled(token: token)
     }
     cancelDebounceTasks { scope in
       scope.sequence <= sequence
@@ -276,7 +285,20 @@ extension TestStore {
     }
   }
 
+  private func markTrackedTaskCancelled(token: UUID) {
+    // Cancellation closes delivery immediately, while the task remains in the
+    // physical registry until its completion callback actually arrives.
+    guard cancelledTaskTokens.insert(token).inserted else { return }
+    recordEffectEvent(.cancelled(.effect), context: runningTasks[token]?.context)
+    removeTaskIDIndexes(token: token)
+    for id in Array(throttleActivityTokenByID.keys)
+    where throttleActivityTokenByID[id] == token {
+      throttleActivityTokenByID.removeValue(forKey: id)
+    }
+  }
+
   private func removeTrackedTask(token: UUID) {
+    cancelledTaskTokens.remove(token)
     runningTasks.removeValue(forKey: token)
     removeTaskIDIndexes(token: token)
 
@@ -300,25 +322,31 @@ extension TestStore {
 
   // MARK: - Receiving
 
-  package func nextActionWithinTimeout() async -> R.Action? {
-    let queue = self.queue
-    while let queuedAction = await queue.next(timeout: effectTimeout) {
-      guard shouldProceed(context: queuedAction.context) else { continue }
-      return queuedAction.action
+  package func popBufferedQueuedAction() -> ActionQueue<R.Action>.QueuedAction? {
+    while let entry = queue.popBuffered() {
+      guard shouldProceed(context: entry.context) else {
+        entry.finish()
+        continue
+      }
+      return entry
     }
     return nil
   }
 
   package func popBufferedAction() async -> R.Action? {
-    while let queuedAction = queue.popBuffered() {
-      guard shouldProceed(context: queuedAction.context) else { continue }
-      return queuedAction.action
-    }
-    return nil
+    guard let entry = popBufferedQueuedAction() else { return nil }
+    defer { entry.finish() }
+    return entry.action
+  }
+
+  package func discardInvalidatedActions() {
+    queue.removeBuffered { !shouldProceed(context: $0.context) }
+    outputQueue.removeBuffered { !shouldProceed(context: $0.context) }
+    finishActivity.noteProgress()
   }
 
   private func isRunTaskActive(token: UUID) -> Bool {
-    runningTasks[token] != nil
+    runningTasks[token] != nil && !cancelledTaskTokens.contains(token)
   }
 
   func finishTrackedRunTask(token: UUID) {

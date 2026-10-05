@@ -1,0 +1,28 @@
+# Optional child lifetime
+
+Use `parent.optionalChild(state:action:instanceID:reducer:)` or `OptionalChildLifetime(parent:state:action:instanceID:reducer:)` to opt into state-owned effects. The wrapper reduces a matching child first and then the complete parent. Do not also install IfLet for that child slot. Existing IfLet behavior is unchanged.
+
+Supply a Hashable and Sendable child instance identity. Its projection must be pure and stable: the host may evaluate it again against the final composed state, without rerunning reducers or phase matchers. A business record ID is not a lifetime ID: create a fresh instance ID when closing/reopening the same record. Replacing payload while keeping the instance ID preserves the lifetime. A close/reopen hidden within one reducer call using the same ID cannot be inferred.
+
+The shared host boundary resolves all reduction lifetime metadata before interpreting any effect. Removal/replacement invalidates old owners before same-action output or subsequent queued-action admission. Outstanding events retain their captured owner; they cannot be reassigned to a reopened child. Cancellation requests do not pretend uncooperative work has physically returned.
+
+Ownership is transparent to scheduling: a bare child send is drained before
+Store.send returns, and a bare output is delivered synchronously. Emission and
+queue-drop/output-suppression observations remain visible during reentrant
+closure or replacement. Explicit merge/concatenate/run effects keep their normal
+asynchronous boundary. TestStore still requires explicit receives in exhaustive
+mode; its dispatch handle stays unfinished while that action is unverified.
+
+Composition location, enclosing owner, Store and instance generation isolate ownership. Collection locations include the collection state key path and element ID, so a row reducer reused by ForEachReducer or ForEachIdentifiedReducer has separate child lifetimes for every element. After complete reduction, the host reprojects active slots from final state: parent removal or replacement of a row closes its old child even when that row receives no action. Reordering rows preserves their owners. Reusing a removed row ID cannot revive a retired owner. Equal raw cancellation/scheduler IDs in sibling children do not share lanes. A raw ID cancellation outside a child cannot accidentally cancel its namespaced work. Parent effects returned outside the child wrapper retain the root dispatch without inheriting child ownership. Closing an outer child closes nested owners while preserving unrelated parents and siblings.
+
+IfCaseLet uses its declaration source coordinates for the lifetime path, so rebuilding manual CasePath values in a computed body preserves ownership. If a helper builds distinct overlapping case reducers at one declaration, pass a stable, distinct lifetimeID: EffectID<ID> for each namespace. This does not change CasePath cache identity.
+
+Parent and child Output types must match. Use mapOutput for typed lifting or promoteOutput for a Never-output child. There is no Core-to-Testing dependency. Production Store and TestStore share the same registry, owner tokens, preparation and admission rules.
+
+The registry stores active slots only. Retired tokens remain referenced only by outstanding events/operations and are reclaimed with them. Tests cover 1,000 open/close cycles, same-action output, late uncooperative action, ID replacement, nested/sibling isolation, and unchanged IfLet behavior. See `Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift` for executable examples. Linux mirror validation does not certify Apple lock or SwiftUI integration.
+
+State key paths at optionalChild and its Scope/IfLet/collection composition
+boundaries must be Sendable. Direct literals retain compiler inference; a hoisted
+path must explicitly preserve `any WritableKeyPath<...> & Sendable`. Non-Sendable
+subscript captures are rejected. This strengthens the 6.0 source contract while
+preserving IfLet's runtime behavior; see the migration guide.

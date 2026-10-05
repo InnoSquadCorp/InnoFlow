@@ -29,7 +29,7 @@ extension TestStore: EffectDriver {
   package func deliverOutput(_ output: R.Output, context: EffectExecutionContext?) {
     guard shouldProceed(context: context) else { return }
     noteUnverifiedWorkAfterTerminalVerification()
-    outputQueue.enqueue(output, context: context)
+    outputQueue.enqueue(output, context: context, tracksActivity: false)
     finishActivity.noteProgress()
   }
 
@@ -46,7 +46,7 @@ extension TestStore: EffectDriver {
   @discardableResult
   package func startRun(
     priority: TaskPriority?,
-    operation: @escaping @Sendable (Send<R.Action>, EffectContext) async -> Void,
+    operation: @escaping @concurrent @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
   ) async -> Task<Void, Never> {
     startRunTask(
@@ -94,7 +94,9 @@ extension TestStore: EffectDriver {
     beginFinishActivity(.debounce, token: activityToken, context: context)
     let endpoint = makeRunEndpoint()
 
+    let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
     let task = Task { [weak self] in
+      defer { dispatchActivity?.finish() }
       let didFinishDelay: Bool
       do {
         try await delayClock.sleep(interval)
@@ -125,6 +127,7 @@ extension TestStore: EffectDriver {
       endpoint.finishTrackedTask(token: activityToken)
     }
 
+    dispatchActivity?.attach(task)
     guard setDebounceTask(task, for: id, generation: generation) else {
       return nil
     }
@@ -154,7 +157,9 @@ extension TestStore: EffectDriver {
       context: schedulingContext
     )
     let endpoint = makeRunEndpoint()
+    let completion = FlowTaskCompletion()
     let task = Task { [weak self] in
+      defer { completion.complete() }
       let pending: ThrottleStateMap<R.Action, R.Output>.PendingTrailing?
       do {
         try await delayClock.sleep(interval)
@@ -190,7 +195,8 @@ extension TestStore: EffectDriver {
 
       endpoint.finishTrackedTask(token: activityToken)
     }
-    throttleState.setTrailingTask(task, for: id)
+    throttleState.setTrailingTask(task, completion: completion, for: id)
+    schedulingContext.flowTaskTracker?.trackCompletion(of: completion)
     throttleActivityTokenByID[id] = activityToken
     trackEffectTask(token: activityToken, task: task, context: schedulingContext)
     return task
@@ -206,6 +212,9 @@ extension TestStore: EffectDriver {
       return
     }
     refreshTrackedTask(token: token, context: context)
+    if let completion = throttleState.trailingCompletion(for: id) {
+      context.flowTaskTracker?.trackCompletion(of: completion)
+    }
   }
 
   package var now: ContinuousClock.Instant {
@@ -239,8 +248,10 @@ extension TestStore: EffectDriver {
       for child in children {
         let token = UUID()
         beginFinishActivity(.composite, token: token, context: context)
+        let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
         let task = Task { @MainActor [weak self] in
           defer {
+            dispatchActivity?.finish()
             self?.finishTrackedRunTask(token: token)
           }
           guard self != nil else { return }
@@ -251,6 +262,7 @@ extension TestStore: EffectDriver {
         // outlive their owning TestStore drain and break the assertion that
         // cancellation reliably winds the entire effect tree down — a
         // divergence from the Store path that this commit closes.
+        dispatchActivity?.attach(task)
         trackEffectTask(token: token, task: task, context: context)
       }
     }
@@ -274,8 +286,10 @@ extension TestStore: EffectDriver {
       beginFinishActivity(.composite, token: token, context: context)
       let startGate = TestStoreRunStartGate()
       let endpoint = makeRunEndpoint()
+      let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
       let task = Task { @MainActor in
         defer {
+          dispatchActivity?.finish()
           endpoint.finishTrackedTask(token: token)
         }
         guard await startGate.wait() else {
@@ -288,6 +302,7 @@ extension TestStore: EffectDriver {
           await recurse(child, context, true)
         }
       }
+      dispatchActivity?.attach(task)
       trackEffectTask(token: token, task: task, context: context)
       Task { @MainActor in
         await startGate.open()

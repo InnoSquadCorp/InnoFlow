@@ -57,6 +57,16 @@ func effectOperationSignature<Action: Sendable, Output: Sendable>(
   case .lazyMap(let lazy):
     return effectOperationSignature(lazy.materialize())
 
+  case .optionalChild(_, let before, let after, let child, let parent):
+    return
+      "optionalChild(before:\(String(describing: before)),after:\(String(describing: after)),child:\(effectOperationSignature(child)),parent:\(effectOperationSignature(parent)))"
+
+  case .lifetimeScope(_, let nested):
+    return "lifetimeScope(nested:\(effectOperationSignature(nested)))"
+
+  case .owned(_, let nested):
+    return "owned(nested:\(effectOperationSignature(nested)))"
+
   case .diagnosticDrop(let action, let reason):
     let actionDescription = String(describing: action)
     let reasonDescription = String(describing: reason)

@@ -60,6 +60,7 @@ public final class StoreDiagnostics: Sendable {
   private struct State: Sendable {
     var nextIndex: UInt64 = 0
     var records: [DispatchDiagnosticRecord] = []
+    var oldestRecord = 0
     var active: [DispatchID: ActiveState] = [:]
     var droppedRecordCount: UInt64 = 0
   }
@@ -86,8 +87,14 @@ public final class StoreDiagnostics: Sendable {
           )
         }
         .sorted { $0.dispatchID.description < $1.dispatchID.description }
+      // Copy into independent chronological storage. A retained snapshot must
+      // not force the next ring-buffer write to copy the entire history.
+      var records: [DispatchDiagnosticRecord] = []
+      records.reserveCapacity(state.records.count)
+      records.append(contentsOf: state.records[state.oldestRecord...])
+      records.append(contentsOf: state.records[..<state.oldestRecord])
       return StoreDiagnosticsSnapshot(
-        records: state.records,
+        records: records,
         activeDispatches: Array(active.prefix(limit)),
         droppedRecordCount: state.droppedRecordCount
       )
@@ -236,7 +243,7 @@ public final class StoreDiagnostics: Sendable {
         if let runToken {
           active?.queuedRunTokens.insert(runToken)
         }
-      case .admission(.started):
+      case .admission(.started), .admission(.cancelledBeforeStart), .admission(.superseded):
         if let runToken {
           active?.queuedRunTokens.remove(runToken)
         }
@@ -273,10 +280,13 @@ public final class StoreDiagnostics: Sendable {
         return
       }
       if state.records.count == capacity {
-        state.records.removeFirst()
+        state.records[state.oldestRecord] = record
+        state.oldestRecord += 1
+        if state.oldestRecord == capacity { state.oldestRecord = 0 }
         state.droppedRecordCount &+= 1
+      } else {
+        state.records.append(record)
       }
-      state.records.append(record)
     }
   }
 }

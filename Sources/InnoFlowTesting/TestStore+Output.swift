@@ -9,18 +9,30 @@ extension TestStore {
   /// Receives the next reducer output and verifies its exact value.
   ///
   /// In non-exhaustive mode, skips mismatches under one total timeout, just
-  /// like `receive`. An already-buffered match can be received with `.zero`.
+  /// like `receive`, and advances intermediate FIFO actions and their effects.
+  /// An already-buffered match can be received with `.zero`.
   public func receiveOutput(
     _ expectedOutput: R.Output,
     timeout: Duration? = nil,
-    file: StaticString = #file,
-    line: UInt = #line
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async where R.Output: Equatable {
+    await receiveOutput(
+      expectedOutput, timeout: timeout,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  package func receiveOutput(
+    _ expectedOutput: R.Output,
+    timeout: Duration? = nil,
+    location: TestStoreSourceLocation
   ) async where R.Output: Equatable {
     _ = await receiveMatchedOutput(
       expectation: String(describing: expectedOutput),
       timeout: timeout,
-      file: file,
-      line: line
+      location: location
     ) { output in
       output == expectedOutput ? .matched(()) : .mismatched
     }
@@ -36,14 +48,27 @@ extension TestStore {
     where predicate: (R.Output) -> Bool,
     description: String? = nil,
     timeout: Duration? = nil,
-    file: StaticString = #file,
-    line: UInt = #line
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async -> R.Output? {
+    await receiveOutput(
+      where: predicate, description: description, timeout: timeout,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  @discardableResult
+  package func receiveOutput(
+    where predicate: (R.Output) -> Bool,
+    description: String? = nil,
+    timeout: Duration? = nil,
+    location: TestStoreSourceLocation
   ) async -> R.Output? {
     await receiveMatchedOutput(
       expectation: description.map { "predicate '\($0)'" } ?? "the supplied predicate",
       timeout: timeout,
-      file: file,
-      line: line
+      location: location
     ) { output in
       predicate(output) ? .matched(output) : .mismatched
     }
@@ -58,14 +83,27 @@ extension TestStore {
     _ path: CasePath<R.Output, Value>,
     caseName: String? = nil,
     timeout: Duration? = nil,
-    file: StaticString = #file,
-    line: UInt = #line
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) async -> Value? {
+    await receiveOutput(
+      path, caseName: caseName, timeout: timeout,
+      location: .init(fileID: fileID, filePath: filePath, line: line, column: column))
+  }
+
+  @discardableResult
+  package func receiveOutput<Value>(
+    _ path: CasePath<R.Output, Value>,
+    caseName: String? = nil,
+    timeout: Duration? = nil,
+    location: TestStoreSourceLocation
   ) async -> Value? {
     await receiveMatchedOutput(
       expectation: caseName.map { "case path '\($0)'" } ?? "the supplied case path",
       timeout: timeout,
-      file: file,
-      line: line
+      location: location
     ) { output in
       switch path.extract(output) {
       case .some(let value): .matched(value)
@@ -77,33 +115,59 @@ extension TestStore {
   package func receiveMatchedOutput<Value>(
     expectation: String,
     timeout: Duration?,
-    file: StaticString,
-    line: UInt,
+    location: TestStoreSourceLocation,
     matching matcher: (R.Output) -> TestStoreActionMatch<Value>
   ) async -> Value? {
-    noteTestInteraction(file: file, line: line)
+    noteTestInteraction(location: location)
     let resolvedTimeout = timeout ?? effectTimeout
     let deadline = wallClock.now.advanced(by: resolvedTimeout)
-    var didSkipOutput = false
+    var didProgress = false
 
     func reportTimeout() {
-      assertionFailureReporter(
+      issueReporter(
         "Expected to receive output:\n\(expectation)\n\nBut timed out after \(resolvedTimeout).",
-        file,
-        line
+        location
       )
     }
 
     while true {
       guard !Task.isCancelled else { return nil }
-      if didSkipOutput, wallClock.now >= deadline {
+      if didProgress, wallClock.now >= deadline {
         reportTimeout()
         return nil
       }
 
+      // Capture before inspecting either queue; waiting never consumes a value.
+      let revision = finishActivity.snapshot.revision
       let queuedOutput: ActionQueue<R.Output>.QueuedAction
       if let buffered = outputQueue.popBuffered() {
         queuedOutput = buffered
+      } else if !exhaustivity.isOn {
+        // Prefer an already-delivered output, then advance exactly one FIFO
+        // action before checking outputs again. An action flood cannot starve
+        // the output side, and the original deadline covers all progress.
+        if let action = queue.popBuffered() {
+          guard shouldProceed(context: action.context) else {
+            action.finish()
+            didProgress = true
+            continue
+          }
+          reportSkippedAction(action.action, context: "receiving an output", location: location)
+          await applyUnassertedAction(action, location: location)
+          didProgress = true
+          continue
+        }
+        guard wallClock.now < deadline else {
+          reportTimeout()
+          return nil
+        }
+        let changed = await finishActivity.waitForChange(after: revision, until: deadline)
+        if !changed {
+          if !Task.isCancelled { reportTimeout() }
+          return nil
+        }
+        didProgress = true
+        continue
       } else {
         let remaining = wallClock.now.duration(to: deadline)
         guard remaining > .zero,
@@ -116,7 +180,7 @@ extension TestStore {
       }
 
       guard shouldProceed(context: queuedOutput.context) else {
-        didSkipOutput = true
+        didProgress = true
         continue
       }
       switch matcher(queuedOutput.action) {
@@ -127,21 +191,19 @@ extension TestStore {
       }
 
       if exhaustivity.isOn {
-        assertionFailureReporter(
+        issueReporter(
           "Received unexpected output.\n\nExpected:\n\(expectation)\n\nReceived:\n\(queuedOutput.action)",
-          file,
-          line
+          location
         )
         return nil
       }
       if exhaustivity.showsSkippedAssertions {
-        skippedAssertionReporter(
+        warningReporter(
           "TestStore skipped output while receiving another output:\n\(queuedOutput.action)",
-          file,
-          line
+          location
         )
       }
-      didSkipOutput = true
+      didProgress = true
     }
   }
 

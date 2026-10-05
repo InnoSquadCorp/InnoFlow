@@ -11,11 +11,11 @@ trap 'rm -rf "$fixture_root"' EXIT
 
 repository="$fixture_root/repository"
 evidence="$fixture_root/evidence"
-policy="$fixture_root/policy.json"
+policy="$fixture_root/docs/contracts/policy.json"
 snapshot="$fixture_root/candidate.json"
 manifest="$fixture_root/manifest.tsv"
 fake_bin="$fixture_root/bin"
-mkdir -p "$repository" "$evidence" "$fake_bin"
+mkdir -p "$repository" "$evidence" "$fake_bin" "$fixture_root/docs/contracts"
 git -C "$repository" init -q
 git -C "$repository" config user.name selftest
 git -C "$repository" config user.email selftest@example.invalid
@@ -49,6 +49,56 @@ cat >"$policy" <<'JSON'
   "matrices":[]
 }
 JSON
+
+cat >"$fixture_root/docs/contracts/diagnostic-inventory.json" <<'JSON'
+{
+  "schemaVersion":1,
+  "suites":["OtherTests","PhaseExplorationConsistencyTests","TestingLocationConsistencyTests"],
+  "expectedTestIdentifiers":["OtherTests/control()","PhaseExplorationConsistencyTests/actualTransitionCoverage()","TestingLocationConsistencyTests/swiftTestingUsesCallSite()"],
+  "expectedFailureTestIdentifiers":["PhaseExplorationConsistencyTests/actualTransitionCoverage()","TestingLocationConsistencyTests/swiftTestingUsesCallSite()"]
+}
+JSON
+ruby -rjson -rdigest -e '
+  path, inventory = ARGV
+  policy = JSON.parse(File.read(path))
+  check = policy.fetch("checks").find { |entry| entry.fetch("id") == "ui" }.dup
+  check.merge!("id" => "diagnostics", "requirement" => "optional",
+    "testIdentifierInventory" => "docs/contracts/diagnostic-inventory.json",
+    "testIdentifierInventorySha256" => Digest::SHA256.file(inventory).hexdigest)
+  check.delete("expectedTestIdentifiers")
+  policy.fetch("checks") << check
+  File.write(path, JSON.generate(policy) + "\n")
+' "$policy" "$fixture_root/docs/contracts/diagnostic-inventory.json"
+
+# Inline check/profile/matrix data cannot widen the pinned diagnostic contract.
+for mode in check profile matrix broad-failures broad-warnings; do
+  invalid_policy="$fixture_root/docs/contracts/invalid-policy.json"
+  ruby -rjson -e '
+    source, destination, mode = ARGV
+    policy = JSON.parse(File.read(source))
+    case mode
+    when "check" then policy.fetch("checks").first["expectedFailureTestIdentifiers"] = []
+    when "profile" then policy.fetch("profiles").fetch("tests")["expectedFailureTestIdentifiers"] = []
+    when "matrix"
+      matrix = policy.fetch("checks").find { |check| check["id"] == "ui" }.dup
+      matrix.delete("id")
+      matrix.merge!("idTemplate" => "fixture-{platform}", "axes" => {"platform" => ["iOS"]},
+        "expectedFailureTestIdentifiers" => [])
+      policy["matrices"] = [matrix]
+    else
+      field = mode == "broad-failures" ? "allowsExpectedFailures" : "allowsRuntimeWarnings"
+      policy.fetch("checks").find { |check| check["id"] == "diagnostics" }[field] = true
+    end
+    File.write(destination, JSON.generate(policy) + "\n")
+  ' "$policy" "$invalid_policy" "$mode"
+  if "$script_dir/release-evidence-tool.rb" validate-command --policy "$invalid_policy" \
+      >"$fixture_root/invalid-policy.log" 2>&1; then
+    echo "Unpinned diagnostic override passed: $mode" >&2
+    exit 1
+  fi
+  grep -Ei 'expected failure identities must come from a pinned test inventory|must not broadly allow failures or warnings' \
+    "$fixture_root/invalid-policy.log" >/dev/null
+done
 
 "$snapshot_tool" --repository "fixture=$repository" --policy "$policy" >"$snapshot"
 candidate_hash="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV.fetch(0))).fetch("aggregateDigest")' "$snapshot")"
@@ -176,6 +226,79 @@ $voiceover_row"
 write_manifest "$all_local"
 verify_local
 verify_one ui
+
+# A valid raw artifact cannot authenticate a forged execution/unavailability report.
+for check_id in ui swift; do
+  cp "$evidence/$check_id.receipt" "$fixture_root/$check_id.receipt.original"
+  for field in executedTestCount unavailableTestCount unavailableTestIdentifiers; do
+    ruby -rjson -e '
+      path, field = ARGV
+      receipt = JSON.parse(File.read(path))
+      receipt.fetch("result")[field] = field.end_with?("Identifiers") ? ["NeverRan/forged()"] : 999
+      File.write(path, JSON.generate(receipt) + "\n")
+    ' "$evidence/$check_id.receipt" "$field"
+    expect_failure "forged $check_id receipt $field" verify_one "$check_id"
+    cp "$fixture_root/$check_id.receipt.original" "$evidence/$check_id.receipt"
+  done
+  verify_one "$check_id"
+done
+
+# Required known diagnostics must keep exact identities and counters all the way
+# through record and re-verification of the unchanged raw artifact.
+for mode in good missing extra swapped failed skipped duplicate-issue wrong-passed-count warning \
+    duplicate-id missing-id unknown-id malformed-counter missing-counter; do
+  name="diagnostic-$mode"
+  mkdir -p "$SELFTEST_XCRESULT_FIXTURES/$name.xcresult"
+  ruby -rjson -e '
+    root, mode, inventory_path = ARGV
+    inventory = JSON.parse(File.read(inventory_path))
+    identifiers = inventory.fetch("expectedTestIdentifiers")
+    diagnostics = inventory.fetch("expectedFailureTestIdentifiers")
+    cases = identifiers.map { |id| {"nodeType" => "Test Case", "nodeIdentifier" => id,
+      "result" => diagnostics.include?(id) ? "Expected Failure" : "Passed"} }
+    case mode
+    when "missing" then cases[1]["result"] = "Passed"
+    when "extra" then cases[0]["result"] = "Expected Failure"
+    when "swapped" then cases[0]["result"], cases[1]["result"] = "Expected Failure", "Passed"
+    when "failed" then cases[1]["result"] = "Failed"
+    when "skipped" then cases[1]["result"] = "Skipped"
+    when "duplicate-id" then cases[2]["nodeIdentifier"] = cases[1]["nodeIdentifier"]
+    when "missing-id" then cases.pop
+    when "unknown-id" then cases[1]["nodeIdentifier"] = "PhaseExplorationConsistencyTests/unknown()"
+    end
+    summary = {"result" => "Passed", "totalTestCount" => cases.length,
+      "passedTests" => cases.count { |item| item["result"] == "Passed" },
+      "failedTests" => cases.count { |item| item["result"] == "Failed" },
+      "skippedTests" => cases.count { |item| item["result"] == "Skipped" },
+      "expectedFailures" => cases.count { |item| item["result"] == "Expected Failure" },
+      "runtimeWarnings" => [], "devicesAndConfigurations" => [{"device" => {
+        "platform" => "iOS Simulator", "osVersion" => "18.5", "deviceId" => "fixture-device"}}]}
+    case mode
+    when "duplicate-issue" then summary["expectedFailures"] += 1
+    when "wrong-passed-count" then summary["passedTests"] = cases.length
+    when "warning" then summary["runtimeWarnings"] = ["unexpected runtime issue"]
+    when "malformed-counter" then summary["passedTests"] = 1.0
+    when "missing-counter" then summary.delete("expectedFailures")
+    end
+    File.write(File.join(root, "summary.json"), JSON.generate(summary) + "\n")
+    File.write(File.join(root, "tests.json"), JSON.generate({"nodes" => cases}) + "\n")
+  ' "$SELFTEST_XCRESULT_FIXTURES/$name.xcresult" "$mode" "$fixture_root/docs/contracts/diagnostic-inventory.json"
+  if [[ "$mode" == good ]]; then
+    diagnostic_row="$(record diagnostics "$name.log" "$name.receipt" --raw-artifact "$name.xcresult" \
+      --environment-json '{"platform":"iOS Simulator","os":"18.5"}' \
+      -- xcodebuild test -resultBundlePath "$evidence/$name.xcresult" --fixture "$name")"
+    write_manifest "$all_local
+$diagnostic_row"
+    verify_one diagnostics
+    verify_local
+    write_manifest "$all_local"
+  else
+    expect_failure "invalid diagnostic result: $mode" record diagnostics "$name.log" "$name.receipt" \
+      --raw-artifact "$name.xcresult" --environment-json '{"platform":"iOS Simulator","os":"18.5"}' \
+      -- xcodebuild test -resultBundlePath "$evidence/$name.xcresult" --fixture "$name"
+    [[ ! -e "$evidence/$name.receipt" ]] || { echo "Invalid diagnostic receipt exists: $mode" >&2; exit 1; }
+  fi
+done
 
 SELFTEST_MUTATE_RAW_ON_SUMMARY=1 expect_failure "raw artifact changed during verification" verify_one ui
 cp "$SELFTEST_XCRESULT_FIXTURES/ui.xcresult/summary.json" "$evidence/ui.xcresult/summary.json"
@@ -328,4 +451,6 @@ for status in PASS FAIL BLOCKED INTERRUPTED; do
     "$evidence/attempts.tsv" || { echo "Attempt index is missing $status" >&2; exit 1; }
 done
 
+ruby "$script_dir/release-evidence-conditions-selftest.rb"
+ruby "$script_dir/release-evidence-availability-selftest.rb"
 echo "[verify-release-evidence-selftest] All checks passed"

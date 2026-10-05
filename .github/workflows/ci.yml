@@ -101,6 +101,8 @@ jobs:
           python3 -B scripts/check-ci-workflows.py
           scripts/check-workflow-action-pins.sh
           scripts/check-workflow-job-timeouts.sh
+          scripts/check-validation-prerequisites-selftest.sh
+          python3 scripts/check-testing-contracts-selftest.py
           ruby scripts/check-ci-efficiency.rb
           scripts/check-ci-efficiency-selftest.sh
           ruby scripts/check-coverage-workflow.rb
@@ -536,9 +538,10 @@ jobs:
         run: python3 -B scripts/ci-cache.py report --profile focused-runtime-tests --variant '${{ matrix.platform }}'
 
   principle-gates:
+    # Keep the existing check name; independent consumer compilation is an added step.
     name: Principle Gates (Static)
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 90
     needs: [ci-plan, lint, coverage]
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.principle-gates
 
@@ -550,6 +553,11 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Select supported Ruby
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+        with:
+          ruby-version: '3.4.4'
+
       - name: Run static principle gates
         run: |
           set -eo pipefail
@@ -557,6 +565,9 @@ jobs:
 
       - name: Verify gate negative controls
         run: '"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'
+
+      - name: Verify independent public API and AST migration consumers
+        run: '"$GITHUB_WORKSPACE/scripts/check-independent-consumers.sh"'
 
   sample-package-builds:
     name: Sample Package Build (${{ matrix.platform }})
@@ -784,9 +795,19 @@ jobs:
             -disableAutomaticPackageResolution \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.udid }}" \
             -only-testing:InnoFlowSampleAppUITests \
+            -resultBundlePath "$RUNNER_TEMP/sample-ui-results.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test
+
+      - name: Preserve canonical sample UI results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sample-ui-results-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sample-ui-results.xcresult
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Report cache observations
         if: always()
@@ -869,6 +890,13 @@ jobs:
           set -euo pipefail
           swift test --jobs 1 --no-parallel -Xswiftc -warnings-as-errors \
             --filter 'InnoFlowMacrosTests|CompileContractTests'
+          # Compile the Sendable key-path migration against both audited compilers.
+          "$GITHUB_WORKSPACE/scripts/check-collection-lifetime-consumer.sh"
+
+      - name: Verify AST migration on the audited SwiftSyntax line
+        env:
+          INNOFLOW_MIGRATE_SWIFT_SYNTAX_VERSION: ${{ matrix.syntax }}
+        run: '"$GITHUB_WORKSPACE/Tools/innoflow-migrate/scripts/check.sh"'
 
       - name: Report cache observations
         if: always()

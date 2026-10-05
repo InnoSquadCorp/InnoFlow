@@ -394,6 +394,10 @@ begin
       '.product(name: "InnoFlowSwiftUI", package: "InnoFlow")',
     ]
     dependencies << '.product(name: "InnoFlowTesting", package: "InnoFlow")' if runtime_examples.include?(name)
+    # Preserve the actual sample's optional Inspector import in these contexts.
+    # The dependency is explicit; never strip source imports to make a fence pass.
+    dependencies << '.product(name: "InnoFlowInspector", package: "InnoFlow")' if
+      %w[DocCWalkthrough DependencyPatternA].include?(name)
     package << <<~SWIFT
         #{target_kind}(name: "#{name}", dependencies: [#{dependencies.join(", ")}]),
     SWIFT

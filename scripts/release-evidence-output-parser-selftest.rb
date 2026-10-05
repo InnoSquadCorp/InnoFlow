@@ -59,6 +59,31 @@ unquoted = <<~OUTPUT
 OUTPUT
 assert_result("unquoted", unquoted, accepted: true)
 
+# Swift Testing reports unnamed tests as identifiers. These are not run, suite,
+# or XCTest case events even when their identifiers start with reserved words.
+reserved_prefix_names = %w[runLaneSnapshotProvider() SuiteStatus() CaseExtraction() run() Suite() Case()]
+reserved_prefix_check = {
+  "minimumTestCount" => reserved_prefix_names.length,
+  "maximumTestCount" => reserved_prefix_names.length,
+  "expectedTestRunCount" => 1,
+  "expectedTestNames" => reserved_prefix_names,
+}
+reserved_prefix_output = "◇ Test run started.\n" + reserved_prefix_names.map do |name|
+  "◇ Test #{name} started.\n✔ Test #{name} passed after 0.001 seconds.\n"
+end.join + "✔ Test run with #{reserved_prefix_names.length} tests in 0 suites passed after 0.001 seconds.\n"
+assert_result("reserved-prefix identifiers", reserved_prefix_output, accepted: true, check: reserved_prefix_check)
+%w[failed skipped cancelled].each do |result|
+  assert_result("reserved-prefix #{result}",
+    reserved_prefix_output.sub("runLaneSnapshotProvider() passed", "runLaneSnapshotProvider() #{result}"),
+    accepted: false, check: reserved_prefix_check)
+end
+%w[started passed].each do |event|
+  missing_event = reserved_prefix_output.lines.reject { |line| line.include?("runLaneSnapshotProvider() #{event}") }.join
+  assert_result("reserved-prefix missing #{event}", missing_event, accepted: false, check: reserved_prefix_check)
+end
+assert_result("reserved-prefix summary count mismatch",
+  reserved_prefix_output.sub("with 6 tests", "with 7 tests"), accepted: false)
+
 actual_skip = normal.sub(
   'Test "normal completion" passed after 0.001 seconds.',
   'Test "normal completion" skipped: "test probe"'
@@ -123,6 +148,19 @@ assert_result(
   check: { "minimumTestCount" => 2, "maximumTestCount" => 2, "expectedTestRunCount" => 2 }
 )
 
+# Counts are exact source-declaration expectations. Passing additional leaves
+# or a parameterized case count must not silently widen the inventory.
+assert_result("exact declaration count", normal, accepted: true,
+  check: { "minimumTestCount" => 1, "maximumTestCount" => 1 })
+assert_result("passing extra bundle exceeds inventory", normal + second_bundle, accepted: false,
+  check: { "minimumTestCount" => 1, "maximumTestCount" => 1 })
+assert_result("missing bundle below inventory", normal, accepted: false,
+  check: { "minimumTestCount" => 2, "maximumTestCount" => 2 })
+assert_result("parameterized declarations counted once", parameterized, accepted: true,
+  check: { "minimumTestCount" => 2, "maximumTestCount" => 2 })
+assert_result("parameter cases do not inflate declaration count", parameterized, accepted: false,
+  check: { "minimumTestCount" => 3, "maximumTestCount" => 3 })
+
 duplicate_terminal = normal.sub(
   'Suite "FlowTask dispatch lifetime" passed after 0.051 seconds.',
   "Test \"normal completion\" passed after 0.001 seconds.\nSuite \"FlowTask dispatch lifetime\" passed after 0.051 seconds."
@@ -183,4 +221,13 @@ xctest_noise = <<~OUTPUT
 OUTPUT
 assert_result("XCTest noise around Swift Testing", xctest_noise + normal, accepted: true)
 
+capability_check = {"requiredCapabilityTests" => [{"suite" => "FlowTask dispatch lifetime", "name" => "normal completion", "occurrences" => 1}]}
+assert_result("capability must execute", normal, accepted: true, check: capability_check)
+assert_result("capability cannot skip", normal.sub("passed after 0.001", "skipped after 0.001"), accepted: false, check: capability_check)
+assert_result("capability cannot be substituted", normal.gsub("normal completion", "another completion"), accepted: false, check: capability_check)
+assert_result("capability cannot change suite", normal.gsub("FlowTask dispatch lifetime", "Other suite"), accepted: false, check: capability_check)
+assert_result("full principle requires both executions", normal, accepted: false,
+  check: {"requiredCapabilityTests" => [capability_check.fetch("requiredCapabilityTests").first.merge("occurrences" => 2)]})
+assert_result("full principle two executions", normal + normal, accepted: true,
+  check: {"requiredCapabilityTests" => [capability_check.fetch("requiredCapabilityTests").first.merge("occurrences" => 2)]})
 puts "[release-evidence-output-parser-selftest] All checks passed"

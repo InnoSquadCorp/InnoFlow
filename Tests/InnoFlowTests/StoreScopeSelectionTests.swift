@@ -149,8 +149,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.setUnrelated(1))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.setUnrelated(1)).finish()
 
     #expect(probe.count == 0)
     #expect(scoped.step == 1)
@@ -173,8 +172,7 @@ struct StoreScopeSelectionTests {
 
     store.send(.setUnrelated(1))
     store.send(.setUnrelated(2))
-    store.send(.setUnrelated(3))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.setUnrelated(3)).finish()
 
     #expect(probe.count == 0)
     #expect(scoped.step == 1)
@@ -195,8 +193,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.child(.setStep(7)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setStep(7))).finish()
 
     #expect(probe.count == 1)
     #expect(scoped.step == 7)
@@ -876,22 +873,19 @@ struct StoreScopeSelectionTests {
     }
     let initial = store.projectionObserverStats
 
-    store.send(.setUnrelated(1))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.setUnrelated(1)).finish()
     let afterUnrelated = store.projectionObserverStats
     #expect(afterUnrelated.evaluatedObservers == initial.evaluatedObservers)
     #expect(afterUnrelated.refreshedObservers == initial.refreshedObservers)
     #expect(selected.requireAlive() == "Child-1")
 
-    store.send(.child(.setStep(4)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setStep(4))).finish()
     let afterStep = store.projectionObserverStats
     #expect(afterStep.evaluatedObservers == afterUnrelated.evaluatedObservers + 1)
     #expect(afterStep.refreshedObservers == afterUnrelated.refreshedObservers + 1)
     #expect(selected.requireAlive() == "Child-4")
 
-    store.send(.child(.setTitle("Updated")))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setTitle("Updated"))).finish()
     let afterTitle = store.projectionObserverStats
     #expect(afterTitle.evaluatedObservers == afterStep.evaluatedObservers + 1)
     #expect(afterTitle.refreshedObservers == afterStep.refreshedObservers + 1)
@@ -916,13 +910,11 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.child(.setNote("Still ignored")))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setNote("Still ignored"))).finish()
     #expect(probe.count == 0)
     #expect(selected.requireAlive() == "Child-1-0")
 
-    store.send(.setUnrelated(2))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.setUnrelated(2)).finish()
     #expect(probe.count == 1)
     #expect(selected.requireAlive() == "Child-1-2")
   }
@@ -1051,8 +1043,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.setUnrelated(1))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.setUnrelated(1)).finish()
 
     #expect(probe.count == 0)
     #expect(selected.step == 1)
@@ -1072,8 +1063,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.child(.setStep(9)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setStep(9))).finish()
 
     #expect(probe.count == 1)
     #expect(selected.step == 9)
@@ -1095,10 +1085,8 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.setUnrelated(1))
-    try? await Task.sleep(for: .milliseconds(20))
-    store.send(.child(.setStep(8)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.setUnrelated(1)).finish()
+    await store.send(.child(.setStep(8))).finish()
 
     #expect(probe.count == 0)
     #expect(selected.requireAlive() == "CHILD")
@@ -1120,8 +1108,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.child(.setTitle("Updated")))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setTitle("Updated"))).finish()
 
     #expect(probe.count == 1)
     #expect(selected.requireAlive() == "UPDATED")
@@ -1262,8 +1249,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.child(.setStep(6)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setStep(6))).finish()
 
     #expect(probe.count == 0)
     #expect(selected.requireAlive() == "Child")
@@ -1287,10 +1273,8 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.setUnrelated(1))
-    try? await Task.sleep(for: .milliseconds(20))
-    store.send(.child(.setStep(6)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.setUnrelated(1)).finish()
+    await store.send(.child(.setStep(6))).finish()
 
     #expect(probe.count == 0)
     #expect(selected.requireAlive() == "CHILD")
@@ -1314,8 +1298,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.child(.setTitle("Ready")))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setTitle("Ready"))).finish()
 
     #expect(probe.count == 1)
     #expect(selected.requireAlive() == "READY")
@@ -1339,13 +1322,11 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.setUnrelated(1))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.setUnrelated(1)).finish()
     #expect(probe.count == 0)
     #expect(selected.requireAlive() == "Child-1-Ready")
 
-    store.send(.child(.setNote("Updated")))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.child(.setNote("Updated"))).finish()
     #expect(probe.count == 1)
     #expect(selected.requireAlive() == "Child-1-Updated")
   }
@@ -1850,8 +1831,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.todo(id: scopedTodos[1].id, action: .setDone(true)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.todo(id: scopedTodos[1].id, action: .setDone(true))).finish()
 
     #expect(probe.count == 0)
     #expect(scopedTodos[0].isDone == false)
@@ -1878,8 +1858,7 @@ struct StoreScopeSelectionTests {
         probe.recordChange()
       })
 
-    store.send(.todo(id: scopedTodos[0].id, action: .setDone(true)))
-    try? await Task.sleep(for: .milliseconds(20))
+    await store.send(.todo(id: scopedTodos[0].id, action: .setDone(true))).finish()
 
     #expect(probe.count == 1)
     #expect(scopedTodos[0].isDone == true)

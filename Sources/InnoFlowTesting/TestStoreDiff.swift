@@ -33,12 +33,15 @@ func renderStateDiff(
   lineLimit: Int = defaultStateDiffLineLimit
 ) -> String? {
   guard lineLimit > 0 else { return nil }
-  let lines = diffLines(expected: expected, actual: actual, path: "", remaining: lineLimit)
+  let lines = diffLines(
+    expected: expected, actual: actual, path: "", remaining: lineLimit, depth: 0)
   guard !lines.isEmpty else { return nil }
   return lines.joined(separator: "\n")
 }
 
-private func diffLines(expected: Any, actual: Any, path: String, remaining: Int) -> [String] {
+private func diffLines(expected: Any, actual: Any, path: String, remaining: Int, depth: Int)
+  -> [String]
+{
   guard remaining > 0 else { return [] }
 
   let expectedMirror = Mirror(reflecting: expected)
@@ -55,16 +58,23 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
   let expectedDescription = String(reflecting: expected)
   let actualDescription = String(reflecting: actual)
 
-  guard expectedDescription != actualDescription else {
-    return []
+  // Descriptions can intentionally hide fields (CustomDebugStringConvertible).
+  // Compare structural children before using descriptions as a leaf fallback.
+  guard depth < 64 else {
+    return expectedDescription == actualDescription
+      ? [] : [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
   }
 
   switch expectedMirror.displayStyle {
   case .struct, .tuple:
     let expectedChildren = Array(expectedMirror.children)
     let actualChildren = Array(actualMirror.children)
-    guard expectedChildren.count == actualChildren.count else {
-      return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
+    guard expectedChildren.count == actualChildren.count,
+      expectedChildren.map(\.label) == actualChildren.map(\.label),
+      !expectedChildren.isEmpty
+    else {
+      return expectedDescription == actualDescription
+        ? [] : [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
     }
 
     var lines: [String] = []
@@ -76,7 +86,8 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
         expected: expectedChildren[index].value,
         actual: actualChildren[index].value,
         path: childPath,
-        remaining: remaining - lines.count
+        remaining: remaining - lines.count,
+        depth: depth + 1
       )
     }
     let bounded = Array(lines.prefix(remaining))
@@ -93,23 +104,27 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
   case .collection:
     let expectedChildren = Array(expectedMirror.children)
     let actualChildren = Array(actualMirror.children)
-    guard expectedChildren.count == actualChildren.count else {
-      return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
-    }
-
     var lines: [String] = []
-    for index in expectedChildren.indices {
+    for index in 0..<max(expectedChildren.count, actualChildren.count) {
       guard lines.count < remaining else { break }
       let childPath = path.isEmpty ? "[\(index)]" : "\(path)[\(index)]"
-      lines += diffLines(
-        expected: expectedChildren[index].value,
-        actual: actualChildren[index].value,
-        path: childPath,
-        remaining: remaining - lines.count
-      )
+      if index >= expectedChildren.count {
+        lines.append(
+          formatDiff(
+            path: childPath, expected: "<missing>",
+            actual: String(reflecting: actualChildren[index].value)))
+      } else if index >= actualChildren.count {
+        lines.append(
+          formatDiff(
+            path: childPath, expected: String(reflecting: expectedChildren[index].value),
+            actual: "<missing>"))
+      } else {
+        lines += diffLines(
+          expected: expectedChildren[index].value, actual: actualChildren[index].value,
+          path: childPath, remaining: remaining - lines.count, depth: depth + 1)
+      }
     }
-    let bounded = Array(lines.prefix(remaining))
-    return bounded
+    return lines
 
   case .optional:
     let expectedChildren = Array(expectedMirror.children)
@@ -118,7 +133,8 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
     case (nil, nil):
       return []
     case (let lhs?, let rhs?):
-      return diffLines(expected: lhs.value, actual: rhs.value, path: path, remaining: remaining)
+      return diffLines(
+        expected: lhs.value, actual: rhs.value, path: path, remaining: remaining, depth: depth + 1)
     default:
       return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
     }
@@ -127,9 +143,11 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
     let expectedChildren = Array(expectedMirror.children)
     let actualChildren = Array(actualMirror.children)
     guard expectedChildren.count == actualChildren.count,
+      expectedChildren.map(\.label) == actualChildren.map(\.label),
       !expectedChildren.isEmpty
     else {
-      return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
+      return expectedDescription == actualDescription
+        ? [] : [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
     }
 
     var lines: [String] = []
@@ -142,7 +160,8 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
         expected: expectedChildren[index].value,
         actual: actualChildren[index].value,
         path: childPath,
-        remaining: remaining - lines.count
+        remaining: remaining - lines.count,
+        depth: depth + 1
       )
     }
     let bounded = Array(lines.prefix(remaining))
@@ -163,7 +182,8 @@ private func diffLines(expected: Any, actual: Any, path: String, remaining: Int)
     ]
 
   default:
-    return [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
+    return expectedDescription == actualDescription
+      ? [] : [formatDiff(path: path, expected: expectedDescription, actual: actualDescription)]
   }
 }
 

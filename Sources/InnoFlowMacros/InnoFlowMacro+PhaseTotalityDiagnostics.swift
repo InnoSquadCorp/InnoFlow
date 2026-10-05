@@ -3,6 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import SwiftDiagnostics
+import SwiftIfConfig
 import SwiftSyntax
 import SwiftSyntaxMacros
 
@@ -60,25 +61,39 @@ extension InnoFlowMacro {
       return
     }
 
-    let phaseElements = phaseEnum.memberBlock.members
-      .compactMap { $0.decl.as(EnumCaseDeclSyntax.self) }
-      .flatMap { caseDecl in caseDecl.elements.map { $0 } }
-    guard !phaseElements.isEmpty else {
-      return
-    }
-
     guard let phaseMapMember = findStaticPhaseMapVariable(in: declaration) else {
       return
     }
 
-    let referencedNames = collectPhaseMapDSLPhaseReferences(in: phaseMapMember)
+    var unresolvedConditional: Syntax?
+    let phaseElements = phaseCaseElements(
+      in: phaseEnum.memberBlock.members,
+      configuration: context.buildConfiguration,
+      unresolvedConditional: &unresolvedConditional
+    )
+    var referencedNames: Set<String> = []
+    collectPhaseMapDSLPhaseReferences(
+      in: Syntax(phaseMapMember),
+      configuration: context.buildConfiguration,
+      unresolvedConditional: &unresolvedConditional,
+      into: &referencedNames
+    )
+    if let unresolvedConditional {
+      context.diagnose(
+        Diagnostic(
+          node: unresolvedConditional,
+          message: PhaseTotalityDiagnosticMessage.conditionalConfigurationUnavailable(
+            strict: strict)
+        ))
+      return
+    }
 
-    for element in phaseElements where !referencedNames.contains(element.name.text) {
+    for element in phaseElements where !referencedNames.contains(logicalIdentifier(element.name)) {
       context.diagnose(
         Diagnostic(
           node: Syntax(element.name),
           message: PhaseTotalityDiagnosticMessage.unreferencedCase(
-            caseName: element.name.text,
+            caseName: logicalIdentifier(element.name),
             strict: strict
           )
         )
@@ -124,7 +139,7 @@ extension InnoFlowMacro {
   ) -> EnumDeclSyntax? {
     memberBlock.members
       .compactMap { $0.decl.as(EnumDeclSyntax.self) }
-      .first(where: { $0.name.text == typeName })
+      .first(where: { logicalIdentifier($0.name) == typeName })
   }
 
   private static func findStaticPhaseMapVariable(in declaration: StructDeclSyntax)
@@ -136,29 +151,72 @@ extension InnoFlowMacro {
         guard variable.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) })
         else { return false }
         return variable.bindings.contains { binding in
-          binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "phaseMap"
+          binding.pattern.as(IdentifierPatternSyntax.self).map { logicalIdentifier($0.identifier) }
+            == "phaseMap"
         }
       }
   }
 
-  private static func collectPhaseMapDSLPhaseReferences(in node: some SyntaxProtocol)
-    -> Set<String>
-  {
-    var names: Set<String> = []
-    collectPhaseMapDSLPhaseReferences(in: Syntax(node), into: &names)
-    return names
+  private static func phaseCaseElements(
+    in members: MemberBlockItemListSyntax,
+    configuration: (any BuildConfiguration)?,
+    unresolvedConditional: inout Syntax?
+  ) -> [EnumCaseElementSyntax] {
+    var elements: [EnumCaseElementSyntax] = []
+    for member in members {
+      if let enumCase = member.decl.as(EnumCaseDeclSyntax.self) {
+        elements.append(contentsOf: enumCase.elements)
+      } else if let conditional = member.decl.as(IfConfigDeclSyntax.self) {
+        guard let configuration else {
+          unresolvedConditional = unresolvedConditional ?? Syntax(conditional)
+          continue
+        }
+        if let clause = conditional.activeClause(in: configuration).clause,
+          let activeMembers = clause.elements?.as(MemberBlockItemListSyntax.self)
+        {
+          elements.append(
+            contentsOf: phaseCaseElements(
+              in: activeMembers,
+              configuration: configuration,
+              unresolvedConditional: &unresolvedConditional
+            ))
+        }
+      }
+    }
+    return elements
   }
 
   private static func collectPhaseMapDSLPhaseReferences(
     in node: Syntax,
+    configuration: (any BuildConfiguration)?,
+    unresolvedConditional: inout Syntax?,
     into names: inout Set<String>
   ) {
+    if let conditional = node.as(IfConfigDeclSyntax.self) {
+      guard let configuration else {
+        unresolvedConditional = unresolvedConditional ?? node
+        return
+      }
+      if let clause = conditional.activeClause(in: configuration).clause {
+        collectPhaseMapDSLPhaseReferences(
+          in: Syntax(clause),
+          configuration: configuration,
+          unresolvedConditional: &unresolvedConditional,
+          into: &names
+        )
+      }
+      return
+    }
     if let call = node.as(FunctionCallExprSyntax.self) {
       collectPhaseReferences(from: call, into: &names)
     }
-
     for child in node.children(viewMode: .sourceAccurate) {
-      collectPhaseMapDSLPhaseReferences(in: child, into: &names)
+      collectPhaseMapDSLPhaseReferences(
+        in: child,
+        configuration: configuration,
+        unresolvedConditional: &unresolvedConditional,
+        into: &names
+      )
     }
   }
 
@@ -166,7 +224,8 @@ extension InnoFlowMacro {
     from call: FunctionCallExprSyntax,
     into names: inout Set<String>
   ) {
-    let callee = call.calledExpression.trimmedDescription
+    let callee = call.calledExpression.as(DeclReferenceExprSyntax.self)
+      .map { logicalIdentifier($0.baseName) }
 
     if callee == "From", let firstArgument = call.arguments.first {
       collectMemberAccessNames(in: Syntax(firstArgument.expression), into: &names)
@@ -175,7 +234,8 @@ extension InnoFlowMacro {
 
     guard callee == "On" else { return }
     for argument in call.arguments {
-      guard let label = argument.label?.text, label == "to" || label == "targets" else {
+      guard let label = argument.label.map(logicalIdentifier), label == "to" || label == "targets"
+      else {
         continue
       }
       collectMemberAccessNames(in: Syntax(argument.expression), into: &names)
@@ -190,7 +250,7 @@ extension InnoFlowMacro {
 
   private static func collectMemberAccessNames(in node: Syntax, into names: inout Set<String>) {
     if let memberAccess = node.as(MemberAccessExprSyntax.self) {
-      names.insert(memberAccess.declName.baseName.text)
+      names.insert(logicalIdentifier(memberAccess.declName.baseName))
     }
 
     for child in node.children(viewMode: .sourceAccurate) {
@@ -205,7 +265,7 @@ extension InnoFlowMacro {
   private static func containsPhaseMapCall(in node: Syntax) -> Bool {
     if let call = node.as(FunctionCallExprSyntax.self),
       let memberAccess = call.calledExpression.as(MemberAccessExprSyntax.self),
-      memberAccess.declName.baseName.text == "phaseMap"
+      logicalIdentifier(memberAccess.declName.baseName) == "phaseMap"
     {
       return true
     }
@@ -249,12 +309,17 @@ private enum PhaseManagedContractDiagnosticMessage: DiagnosticMessage {
 private enum PhaseTotalityDiagnosticMessage: DiagnosticMessage {
   case unreferencedCase(caseName: String, strict: Bool)
   case phaseEnumUnavailable
+  case conditionalConfigurationUnavailable(strict: Bool)
 
   var message: String {
     switch self {
     case .unreferencedCase(let caseName, _):
+      let source = InnoFlowMacro.generatedIdentifierSource(caseName)
       return
-        "`Phase.\(caseName)` is declared but never referenced from the static `phaseMap` — add a `From(.\(caseName)) { ... }` rule, an `On(..., to: .\(caseName))` target, or remove the case if it is unused"
+        "`Phase.\(source)` is declared but never referenced from the static `phaseMap` — add a `From(.\(source)) { ... }` rule, an `On(..., to: .\(source))` target, or remove the case if it is unused"
+    case .conditionalConfigurationUnavailable:
+      return
+        "phase totality cannot validate conditional `Phase` cases or `phaseMap` rules without the compiler’s build configuration; use a supported compiler that provides macro build configuration or make these declarations unconditional"
     case .phaseEnumUnavailable:
       return
         "strict phase totality requires a directly nested `Phase` enum on the feature or its nested `State`; aliases and dynamically declared phase types cannot be proven at macro-expansion time"
@@ -268,6 +333,8 @@ private enum PhaseTotalityDiagnosticMessage: DiagnosticMessage {
         domain: "InnoFlowMacro",
         id: strict ? "StrictPhaseUnreferencedCase" : "PhaseUnreferencedCase"
       )
+    case .conditionalConfigurationUnavailable:
+      return .init(domain: "InnoFlowMacro", id: "PhaseConditionalConfigurationUnavailable")
     case .phaseEnumUnavailable:
       return .init(domain: "InnoFlowMacro", id: "StrictPhaseEnumUnavailable")
     }
@@ -275,7 +342,7 @@ private enum PhaseTotalityDiagnosticMessage: DiagnosticMessage {
 
   var severity: DiagnosticSeverity {
     switch self {
-    case .unreferencedCase(_, let strict):
+    case .unreferencedCase(_, let strict), .conditionalConfigurationUnavailable(let strict):
       return strict ? .error : .warning
     case .phaseEnumUnavailable:
       return .error

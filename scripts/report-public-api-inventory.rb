@@ -4,7 +4,7 @@
 require "json"
 require "optparse"
 
-MODULES = %w[InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting].freeze
+MODULES = %w[InnoFlow InnoFlowCore InnoFlowInspector InnoFlowSwiftUI InnoFlowTesting].freeze
 
 def fail_inventory(message)
   abort "[public-api-inventory] #{message}"
@@ -51,7 +51,11 @@ fail_inventory("Usage: report-public-api-inventory.rb --baseline-dir DIR --candi
 
 report = { "schema" => "innoflow-public-api-inventory-v1", "comparison" => "5.1.1-to-6.0.0", "reviewStatus" => "unreviewed", "modules" => {} }
 MODULES.each do |module_name|
-  before = symbols(options.fetch(:baseline), module_name)
+  before = if module_name == "InnoFlowInspector" && !File.exist?(File.join(options.fetch(:baseline), "#{module_name}.symbols.json"))
+    {} # A new product has no 5.1.1 baseline graph; candidate remains mandatory.
+  else
+    symbols(options.fetch(:baseline), module_name)
+  end
   after = symbols(options.fetch(:candidate), module_name)
   common = before.keys & after.keys
   changed = common.filter_map do |key|

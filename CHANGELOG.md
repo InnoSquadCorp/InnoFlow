@@ -11,6 +11,16 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Added
 
+- Observed PhaseMap coverage, seeded exploration with bounded cleanup/replay diagnostics, a conservative AST migration CLI, anonymous run-lane snapshots, and separate opt-in Flow Inspector product.
+- SwiftUI localized/StringProtocol/Text presentation titles and view-owned dispatch task modifiers; layered beginner-to-advanced examples and a search tutorial.
+- Explicit concurrent operation contracts, unsigned admission capacity, and process-local UInt64 dispatch correlation with versioned timing JSONL migration support.
+
+- Testing assertions preserve four-coordinate call sites across scoped and asynchronous work and route to the active testing framework. Dispatch handles expose bounded typed effect ledgers. Scoped output overloads, structural diffs and deterministic scenario waits improve test diagnostics; FlowScope construction is lexical.
+
+- OptionalChildLifetime and the parent optionalChild modifier bind optional-child effects to explicit instance identity, synchronously block stale actions/outputs, and isolate child scheduler/cancellation IDs without cancelling parent or sibling work.
+
+- TestStore sends return TestStoreDispatch (TestFlowTask alias), preserving descendant ownership and selective cancellation. Its finite finish verifies without consuming queues. Non-exhaustive output reception progresses intermediate actions, and exhaustive global finish reports actions and outputs together.
+
 - `Store.send(_:)` and `ScopedStore.send(_:)` now return a `FlowTask`. Its
   `finish()` waits for the complete descendant action/effect tree, while
   `cancel()` cancels only work descended from that dispatch.
@@ -94,6 +104,14 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
   boundaries or `assertNoBufferedActions()` for immediate checkpoints.
 
 ### Fixed
+
+- Scheduled admission rejects pre-cancelled contexts, protects newer latest sequences, and emits exactly one start after attachment. Serial pending cleanup retains physical running slots. Unsigned capacities and explicit cancelled-before-start/superseded admission states complete the 6.0 public contract.
+
+- Authoring diagnostics provide typed third-generic and explicit-reduce Fix-Its, accept Swift.Never, normalize OS conditional aliases, and validate active conditional Phase coverage. Generated path availability no longer copies constructor-specific renamed metadata.
+
+- Shared throttle completion now survives discarded handles and releases independent observers on cancellation. `perform` maps directly thrown CancellationError as failure when the host has not accepted cancellation.
+
+- Phase totality compares logical keyword/raw identifiers; Action and Output path synthesis emits valid escaped Swift names without collapsing distinct spellings. Actual compiler consumers cover ordinary-name compatibility and collision/missing-case negative controls.
 
 - `IdentifiedArray` equality and hashing now include the stored ID-to-position
   mapping, so replacing equal element values with different identities refreshes

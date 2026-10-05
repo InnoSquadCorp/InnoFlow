@@ -10,7 +10,7 @@ Dir.mktmpdir("innoflow-api-inventory-") do |root|
   before = File.join(root, "before")
   after = File.join(root, "after")
   FileUtils.mkdir_p([before, after])
-  modules = %w[InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting]
+  modules = %w[InnoFlow InnoFlowCore InnoFlowInspector InnoFlowSwiftUI InnoFlowTesting]
   modules.each do |module_name|
     make_symbol = lambda do |precise, name, spelling|
       { "identifier" => { "precise" => precise }, "pathComponents" => [name],
@@ -25,7 +25,7 @@ Dir.mktmpdir("innoflow-api-inventory-") do |root|
       new_symbols << make_symbol.call("added", "added", "func added()")
       new_symbols[0]["declarationFragments"] = [{ "spelling" => "func same() async" }]
     end
-    File.write(File.join(before, "#{module_name}.symbols.json"), JSON.generate({ "symbols" => old_symbols }))
+    File.write(File.join(before, "#{module_name}.symbols.json"), JSON.generate({ "symbols" => old_symbols })) unless module_name == "InnoFlowInspector"
     File.write(File.join(after, "#{module_name}.symbols.json"), JSON.generate({ "symbols" => new_symbols }))
   end
   output, error, status = Open3.capture3(File.join(__dir__, "report-public-api-inventory.rb"),
@@ -36,5 +36,10 @@ Dir.mktmpdir("innoflow-api-inventory-") do |root|
     core.fetch("added").map { |entry| entry.fetch("precise") } == ["added"] &&
     core.fetch("removed").map { |entry| entry.fetch("precise") } == ["removed"] &&
     core.fetch("changed").length == 1
+  inspector = JSON.parse(output).fetch("modules").fetch("InnoFlowInspector")
+  abort "New product was omitted" unless inspector.fetch("baselineCount") == 0 && inspector.fetch("added").length == 1
+  FileUtils.rm(File.join(after, "InnoFlowInspector.symbols.json"))
+  _, _, missing = Open3.capture3(File.join(__dir__, "report-public-api-inventory.rb"), "--baseline-dir", before, "--candidate-dir", after)
+  abort "Missing candidate product graph accepted" if missing.success?
   puts "[public-api-inventory-selftest] added, removed, changed controls passed"
 end

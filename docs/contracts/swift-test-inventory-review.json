@@ -1,0 +1,1955 @@
+{
+  "schemaVersion": 1,
+  "status": "Reviewed source expectation only; final Apple test execution and complete 32-check preflight remain pending.",
+  "countSemantics": "Swift Testing declarations, not parameterized invocations or XCTest tests.",
+  "policyBaseline": {
+    "commit": "41e92d9be0a52a268cea4d18af9c70385aa90bb9",
+    "runtime": 723,
+    "macro": 68,
+    "total": 791
+  },
+  "remoteMain": {
+    "commit": "138992674025cb6faa69d224c30580e0fce63e85",
+    "run": "https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37120540957",
+    "runtime": 731,
+    "macro": 68,
+    "total": 799,
+    "swift63TestRuns": 1,
+    "swift64TestRuns": 2,
+    "fullPrincipleCount": 1599,
+    "fullPrincipleTestRuns": 5
+  },
+  "baselineToRemoteMain": {
+    "beforeCount": 791,
+    "afterCount": 799,
+    "added": [
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompiledHarnessCacheTests/coalescesConcurrentRequests()",
+        "file": "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift",
+        "displayName": "Concurrent requests publish one completed executable",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompiledHarnessCacheTests/isolatesInstancesAndCleansUp()",
+        "file": "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift",
+        "displayName": "New cache instances do not inherit previous invocation artifacts",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompiledHarnessCacheTests/preservesProcessIsolation()",
+        "file": "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift",
+        "displayName": "Reusing the executable still runs each scenario in a fresh process",
+        "conditionalContexts": [
+          "#if os(macOS) || os(Linux)"
+        ]
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompiledHarnessCacheTests/rebuildsMissingExecutable()",
+        "file": "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift",
+        "displayName": "A deleted executable is rebuilt instead of returning a stale path",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompiledHarnessCacheTests/rejectsMissingOutput()",
+        "file": "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift",
+        "displayName": "A missing compiler output is not cached as success",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompiledHarnessCacheTests/retriesFailure()",
+        "file": "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift",
+        "displayName": "A failed build is removed and the same key can retry successfully",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompiledHarnessCacheTests/reusesFiveVariants()",
+        "file": "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift",
+        "displayName": "Sixteen scenario requests compile only their five distinct variants",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompiledHarnessCacheTests/separatesCompilerInputs()",
+        "file": "Tests/InnoFlowTests/CompiledHarnessCacheTests.swift",
+        "displayName": "Source, optimization, input files and toolchain inputs never alias",
+        "conditionalContexts": []
+      }
+    ],
+    "removed": []
+  },
+  "remoteMainToCandidate": {
+    "beforeCount": 799,
+    "afterCount": 953,
+    "added": [
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ConditionalMacroConsistencyTests/complementaryOSConditionsDoNotCollide()",
+        "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+        "displayName": "equivalent OS spellings in complementary conditions stay exclusive",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ConditionalMacroConsistencyTests/equivalentOSConditionsCollide(secondCondition:)",
+        "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+        "displayName": "equivalent OS spellings still overlap",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ConditionalMacroConsistencyTests/inactiveRulesDoNotCountAsCoverage()",
+        "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+        "displayName": "an inactive rule cannot hide a missing active phase",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ConditionalMacroConsistencyTests/nestedConditionalCoverage(targetOS:)",
+        "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+        "displayName": "nested conditional phase coverage succeeds in either active branch",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ConditionalMacroConsistencyTests/outputRenameDoesNotRetargetAPath()",
+        "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+        "displayName": "helper availability retains deprecation without a constructor rename",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ConditionalMacroConsistencyTests/phaseCasesFollowTheCompilerConfiguration()",
+        "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+        "displayName": "strict totality checks active conditional cases only",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ConditionalMacroConsistencyTests/unknownConfigurationIsNotAPass()",
+        "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+        "displayName": "unknown build configuration is an explicit strict failure",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ExplicitReduceMigrationMacroTests/legacyEffectTaskRepair()",
+        "file": "Tests/InnoFlowMacrosTests/ExplicitReduceMigrationMacroTests.swift",
+        "displayName": "legacy EffectTask repair retains its effect type and promotes Output",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "ExplicitReduceMigrationMacroTests/typedReducerEffectRepair()",
+        "file": "Tests/InnoFlowMacrosTests/ExplicitReduceMigrationMacroTests.swift",
+        "displayName": "typed ReducerEffect repair keeps the declared Output",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/conditionalOutputBoundaries()",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "raw names retain conditional, availability, and manual-path boundaries",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/distinctRawNamesStayDistinct()",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "spaces and punctuation do not collapse into underscore aliases",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/duplicateLabelsNormalize()",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "escaped and unescaped duplicate tuple labels remain a diagnostic",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/existingMemberCollisions(output:)",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "escaped existing static functions still collide",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/generatedCollisions(output:)",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "logical generated-name collisions survive escaping",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/manualAndIgnoredPaths(output:)",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "manual and ignored raw paths do not synthesize or warn",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/missingPhaseStillDiagnoses()",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "a genuinely missing escaped phase still fails strict totality",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/overlappingConditionalCollision()",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "overlapping output branches continue diagnosing logical collisions",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "IdentifierConsistencyMacroTests/phaseReferencesNormalize(reference:)",
+        "file": "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift",
+        "displayName": "phase declarations and references normalize independently",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "OutputGenericMigrationMacroTests/foreignStateHasNoOutputFixIt()",
+        "file": "Tests/InnoFlowMacrosTests/OutputGenericMigrationMacroTests.swift",
+        "displayName": "a foreign state parameter is not silently rewritten",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "OutputGenericMigrationMacroTests/mismatchedOutputFixIt(hasOutput:)",
+        "file": "Tests/InnoFlowMacrosTests/OutputGenericMigrationMacroTests.swift",
+        "displayName": "a mismatched third generic gets a targeted fix",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowMacrosTests",
+        "identifier": "OutputGenericMigrationMacroTests/missingOutputFixIt(hasOutput:)",
+        "file": "Tests/InnoFlowMacrosTests/OutputGenericMigrationMacroTests.swift",
+        "displayName": "a missing third generic gets the actual output type",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/collectionInsideIfLetReconcilesOptionalParent(useTestStore:useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "collectionInsideIfLetReconcilesOptionalParent(useTestStore:useIdentified:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/collectionInsideScopeAndCaseClosesAtFinalParentState(useTestStore:useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "collectionInsideScopeAndCaseClosesAtFinalParentState(useTestStore:useIdentified:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/equalRawSchedulerIDsHaveSeparateRowLanes(useTestStore:useIdentified:equalInstances:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "equalRawSchedulerIDsHaveSeparateRowLanes(useTestStore:useIdentified:equalInstances:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/explicitHelperIdentitiesIsolateOverlappingCasePaths(useTestStore:useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "explicitHelperIdentitiesIsolateOverlappingCasePaths(useTestStore:useIdentified:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/parentRemovalSuppressesSameReductionChildOutput(useTestStore:useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "parentRemovalSuppressesSameReductionChildOutput(useTestStore:useIdentified:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/reconstructedCasePathKeepsOneStructuralOwner(useTestStore:useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "reconstructedCasePathKeepsOneStructuralOwner(useTestStore:useIdentified:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/reorderingPreservesElementOwner(useTestStore:useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "reorderingPreservesElementOwner(useTestStore:useIdentified:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/repeatedParentRemovalReleasesRegistrations(useTestStore:useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "repeatedParentRemovalReleasesRegistrations(useTestStore:useIdentified:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CollectionLifetimeConsistencyTests/rowsOwnIndependentLifetimes(useTestStore:useIdentified:equalInstances:mutation:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "displayName": "rowsOwnIndependentLifetimes(useTestStore:useIdentified:equalInstances:mutation:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompletionRelayConsistencyTests/cancellationDetachesOnlyItsSubscription()",
+        "file": "Tests/InnoFlowTests/CompletionRelayConsistencyTests.swift",
+        "displayName": "cancellation removes only one observer without retaining a suspended task",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompletionRelayConsistencyTests/completedAndCancelledRegistration()",
+        "file": "Tests/InnoFlowTests/CompletionRelayConsistencyTests.swift",
+        "displayName": "registering after completion or cancellation leaves no observers",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompletionRelayConsistencyTests/completionCancellationRace()",
+        "file": "Tests/InnoFlowTests/CompletionRelayConsistencyTests.swift",
+        "displayName": "completion racing cancellation releases every subscription",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "CompletionRelayConsistencyTests/retainedUntilCompletion()",
+        "file": "Tests/InnoFlowTests/CompletionRelayConsistencyTests.swift",
+        "displayName": "completion owns a discarded tracker and releases it exactly once",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "DiagnosticsRingConsistencyTests/concurrentRecordingKeepsBoundedOrderedSnapshots()",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "displayName": "concurrentRecordingKeepsBoundedOrderedSnapshots()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "DiagnosticsRingConsistencyTests/retainedSnapshotDoesNotChangeWhenRingWrapsAgain()",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "displayName": "retainedSnapshotDoesNotChangeWhenRingWrapsAgain()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "DiagnosticsRingConsistencyTests/ringPreservesChronologyAndExactDiscardCount(capacity:)",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "displayName": "ringPreservesChronologyAndExactDiscardCount(capacity:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "DispatchIdentityConsistencyTests/legacyUUIDAndFutureSchemasFailExplicitly()",
+        "file": "Tests/InnoFlowTests/DispatchIdentityConsistencyTests.swift",
+        "displayName": "legacyUUIDAndFutureSchemasFailExplicitly()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "DispatchIdentityConsistencyTests/monotonicWithinProcessAndUniqueAcrossConcurrentCallers()",
+        "file": "Tests/InnoFlowTests/DispatchIdentityConsistencyTests.swift",
+        "displayName": "monotonicWithinProcessAndUniqueAcrossConcurrentCallers()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "DispatchIdentityConsistencyTests/numericTimingSchemaRoundTripsAndOldAbsentIDRemainsReadable()",
+        "file": "Tests/InnoFlowTests/DispatchIdentityConsistencyTests.swift",
+        "displayName": "numericTimingSchemaRoundTripsAndOldAbsentIDRemainsReadable()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "EffectIsolationConsistencyTests/operationFactoriesExecuteOffMainQueue(useTestStore:)",
+        "file": "Tests/InnoFlowTests/EffectIsolationConsistencyTests.swift",
+        "displayName": "operationFactoriesExecuteOffMainQueue(useTestStore:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "EffectRunSchedulerTests/serialAcceptsMaximumCapacity()",
+        "file": "Tests/InnoFlowTests/EffectRunSchedulerTests.swift",
+        "displayName": "maximum unsigned serial capacity does not overflow",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerFailureBoundaryConsistencyTests/correctControl()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "a correct reducer control runs the budget without a false failure",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerFailureBoundaryConsistencyTests/effectError()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "effect runtime errors are preserved with their origin",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerFailureBoundaryConsistencyTests/generatorError()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "generator exceptions are diagnostics, never advertised as reducer reproductions",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerFirstDiagnosticConsistencyTests/cancelledIdleStoreHasCompleteCleanup()",
+        "file": "Tests/InnoFlowTests/ExplorerFirstDiagnosticConsistencyTests.swift",
+        "displayName": "a pre-cancelled no-effect run has physically completed cleanup",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerFirstDiagnosticConsistencyTests/firstDiagnosticSurvivesClockTimeout()",
+        "file": "Tests/InnoFlowTests/ExplorerFirstDiagnosticConsistencyTests.swift",
+        "displayName": "a later clock timeout does not erase the runtime diagnostic already observed",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerFirstDiagnosticConsistencyTests/immediateClockAdvanceHasNoRegistrationTimeout()",
+        "file": "Tests/InnoFlowTests/ExplorerFirstDiagnosticConsistencyTests.swift",
+        "displayName": "an advance with no registration wait does not race a zero timeout",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerFirstDiagnosticConsistencyTests/registeredClockAdvanceHasNoRegistrationTimeout()",
+        "file": "Tests/InnoFlowTests/ExplorerFirstDiagnosticConsistencyTests.swift",
+        "displayName": "an already registered positive threshold wins over a zero timeout",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerSafetyConsistencyTests/incompletePhysicalCleanupStopsFurtherReplays()",
+        "file": "Tests/InnoFlowTests/ExplorerSafetyConsistencyTests.swift",
+        "displayName": "incompletePhysicalCleanupStopsFurtherReplays()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerSafetyConsistencyTests/invalidAdvanceDoesNotBecomeReducerReproduction()",
+        "file": "Tests/InnoFlowTests/ExplorerSafetyConsistencyTests.swift",
+        "displayName": "invalidAdvanceDoesNotBecomeReducerReproduction()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ExplorerSafetyConsistencyTests/missingClockIsConfigurationFailure()",
+        "file": "Tests/InnoFlowTests/ExplorerSafetyConsistencyTests.swift",
+        "displayName": "missingClockIsConfigurationFailure()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "InspectorGraphConsistencyTests/currentPhaseAndTopologyArePreserved()",
+        "file": "Tests/InnoFlowTests/InspectorGraphConsistencyTests.swift",
+        "displayName": "currentPhaseAndTopologyArePreserved()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "InspectorGraphConsistencyTests/duplicateLabelsDoNotMergeDistinctPhases()",
+        "file": "Tests/InnoFlowTests/InspectorGraphConsistencyTests.swift",
+        "displayName": "duplicateLabelsDoNotMergeDistinctPhases()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "InspectorGraphConsistencyTests/isolatedCurrentPhaseIsStillVisible()",
+        "file": "Tests/InnoFlowTests/InspectorGraphConsistencyTests.swift",
+        "displayName": "isolatedCurrentPhaseIsStillVisible()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroIdentifierConsistencyTests/actionPathsRoundTrip()",
+        "file": "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift",
+        "displayName": "Action names round-trip without changing logical names",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroIdentifierConsistencyTests/computedPathsRoundTrip()",
+        "file": "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift",
+        "displayName": "generic and extension consumers escape stable identity markers",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroIdentifierConsistencyTests/conditionalPathsRoundTrip()",
+        "file": "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift",
+        "displayName": "conditional and available raw output paths preserve branch ownership",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroIdentifierConsistencyTests/originalEnumControl()",
+        "file": "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift",
+        "displayName": "the original enum accepts the same keyword and raw identifier spellings",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroIdentifierConsistencyTests/outputPathsRoundTrip()",
+        "file": "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift",
+        "displayName": "Output names and tuple labels retain their spelling",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroIdentifierConsistencyTests/phaseKeywordReferencesMatch()",
+        "file": "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift",
+        "displayName": "strict totality accepts escaped declarations and unescaped references",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroMigrationConsistencyTests/conditionalPhaseConsumer()",
+        "file": "Tests/InnoFlowTests/MacroMigrationConsistencyTests.swift",
+        "displayName": "strict totality follows the real compiler’s conditional configuration",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroMigrationConsistencyTests/moduleQualifiedNeverCompiles()",
+        "file": "Tests/InnoFlowTests/MacroMigrationConsistencyTests.swift",
+        "displayName": "Swift.Never retains the explicit output-free contract",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "MacroMigrationConsistencyTests/promotedLegacyBodyCompiles()",
+        "file": "Tests/InnoFlowTests/MacroMigrationConsistencyTests.swift",
+        "displayName": "legacy output-free effects can be repaired into a typed output feature",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ObservationConsistencyTests/childAndSelectedOnlyInvalidateForChangedValues()",
+        "file": "Tests/InnoFlowTests/ObservationConsistencyTests.swift",
+        "displayName": "childAndSelectedOnlyInvalidateForChangedValues()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ObservationConsistencyTests/releasingParentInvalidatesProjectedLiveness()",
+        "file": "Tests/InnoFlowTests/ObservationConsistencyTests.swift",
+        "displayName": "releasingParentInvalidatesProjectedLiveness()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ObservationConsistencyTests/rootInvalidationPrecedesEachReductionExactlyOnce()",
+        "file": "Tests/InnoFlowTests/ObservationConsistencyTests.swift",
+        "displayName": "rootInvalidationPrecedesEachReductionExactlyOnce()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OnChangeHostConsistencyTests/effectsFollowCompletionInBothHosts(baseFirst:)",
+        "file": "Tests/InnoFlowTests/OnChangeHostConsistencyTests.swift",
+        "displayName": "effectsFollowCompletionInBothHosts(baseFirst:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/closeKeepsSameDispatchParentAndSiblingAliveAndJoinsPhysicalChild()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "closeKeepsSameDispatchParentAndSiblingAliveAndJoinsPhysicalChild()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/legacyIfLetKeepsItsExistingLifetimeBehavior()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "legacyIfLetKeepsItsExistingLifetimeBehavior()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/nestedOwnerSameRawLaneAndInnerClosePreserveOuter(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "nestedOwnerSameRawLaneAndInnerClosePreserveOuter(useTestStore:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/outerCloseInvalidatesAllNestedWork(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "outerCloseInvalidatesAllNestedWork(useTestStore:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/rawCancellationOutsideChildDoesNotCancelItsNamespacedWork()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "rawCancellationOutsideChildDoesNotCancelItsNamespacedWork()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/repeatedCloseReopenReleasesActiveRegistrations()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "repeatedCloseReopenReleasesActiveRegistrations()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/replaceAndReopenSameBusinessIDDropsOldInstanceEvents()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "replaceAndReopenSameBusinessIDDropsOldInstanceEvents()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/retainingInstanceIDKeepsLifetimeDespitePayloadReplacement()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "retainingInstanceIDKeepsLifetimeDespitePayloadReplacement()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/reusedReducerInDifferentScopesHasIndependentLifetimes(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "reusedReducerInDifferentScopesHasIndependentLifetimes(useTestStore:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/sameRawSchedulerIDIsIsolatedBySiblingAndStore()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "sameRawSchedulerIDIsIsolatedBySiblingAndStore()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/sameReductionChildOutputIsSuppressedButParentOutputSurvives()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "sameReductionChildOutputIsSuppressedButParentOutputSurvives()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/testStoreClosePreservesSiblingAndDropsLateAction()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "testStoreClosePreservesSiblingAndDropsLateAction()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "OptionalChildLifetimeConsistencyTests/testStoreSameReductionChildOutputIsSuppressed()",
+        "file": "Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift",
+        "displayName": "testStoreSameReductionChildOutputIsSuppressed()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PerformanceSemanticsConsistencyTests/disabledQueueMetricsStillReleaseOversizedStorageAndResetDrain()",
+        "file": "Tests/InnoFlowTests/PerformanceSemanticsConsistencyTests.swift",
+        "displayName": "disabledQueueMetricsStillReleaseOversizedStorageAndResetDrain()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PerformanceSemanticsConsistencyTests/mutatingDisabledInstrumentationReenablesItsQueueCallbacks()",
+        "file": "Tests/InnoFlowTests/PerformanceSemanticsConsistencyTests.swift",
+        "displayName": "mutatingDisabledInstrumentationReenablesItsQueueCallbacks()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PerformanceSemanticsConsistencyTests/thousandRowScopesNotifyOnlyTheChangedRowIncludingRearmedObservers()",
+        "file": "Tests/InnoFlowTests/PerformanceSemanticsConsistencyTests.swift",
+        "displayName": "thousandRowScopesNotifyOnlyTheChangedRowIncludingRearmedObservers()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PhaseExplorationConsistencyTests/actualTransitionCoverage()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "coverage distinguishes accepted self transition, guarded nil and duplicate topology",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PhaseExplorationConsistencyTests/cancellation()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "canceling exploration while waiting for clock registration completes without a false failure",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PhaseExplorationConsistencyTests/clockProgression()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "manual time and explicit receive replay on fresh clocks",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PhaseExplorationConsistencyTests/phaseViolationsAreSearchable()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "illegal PhaseMap mutation becomes a TestStore diagnostic without trapping",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PhaseExplorationConsistencyTests/randomVectors()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "SplitMix64 uses fixed reference vectors",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PhaseExplorationConsistencyTests/rejectedTransitions()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "undeclared targets and forbidden self transitions report without inventing coverage",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PhaseExplorationConsistencyTests/seededReplayAndMinimization()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "same seed discovers invariant bug within budget and minimizes with valid prerequisites",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "PhaseExplorationConsistencyTests/sharedRecorder()",
+        "file": "Tests/InnoFlowTests/PhaseExplorationConsistencyTests.swift",
+        "displayName": "parallel stores aggregate exact counts while independent map sites do not mix",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RunLaneSnapshotConsistencyTests/identicalIDsAcrossStoresHaveDifferentOpaqueLaneIDs()",
+        "file": "Tests/InnoFlowTests/RunLaneSnapshotConsistencyTests.swift",
+        "displayName": "identicalIDsAcrossStoresHaveDifferentOpaqueLaneIDs()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RunLaneSnapshotConsistencyTests/latestReplacementKeepsLiveLaneIdentityAndRetiredFinishCannotRemoveIt()",
+        "file": "Tests/InnoFlowTests/RunLaneSnapshotConsistencyTests.swift",
+        "displayName": "latestReplacementKeepsLiveLaneIdentityAndRetiredFinishCannotRemoveIt()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RunLaneSnapshotConsistencyTests/snapshotContainsOnlyOpaqueIdentityAndAdmissionMetadata()",
+        "file": "Tests/InnoFlowTests/RunLaneSnapshotConsistencyTests.swift",
+        "displayName": "snapshotContainsOnlyOpaqueIdentityAndAdmissionMetadata()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RunLaneSnapshotConsistencyTests/storeSnapshotsReflectPhysicalSlotRetentionAndDoNotRetainStore(cancelDispatch:)",
+        "file": "Tests/InnoFlowTests/RunLaneSnapshotConsistencyTests.swift",
+        "displayName": "storeSnapshotsReflectPhysicalSlotRetentionAndDoNotRetainStore(cancelDispatch:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RuntimeConsistencyTests/cancellationBeforeFailure(throwsCancellation:)",
+        "file": "Tests/InnoFlowTests/RuntimeConsistencyTests.swift",
+        "displayName": "accepted cancellation suppresses a later thrown error without faking physical completion",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RuntimeConsistencyTests/discardedControls(mode:)",
+        "file": "Tests/InnoFlowTests/RuntimeConsistencyTests.swift",
+        "displayName": "discarded run and debounce handles complete as controls",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RuntimeConsistencyTests/discardedSharedThrottle(count:)",
+        "file": "Tests/InnoFlowTests/RuntimeConsistencyTests.swift",
+        "displayName": "throttle replacement releases every discarded dispatch",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RuntimeConsistencyTests/ordinaryRunCancellationErrorControl()",
+        "file": "Tests/InnoFlowTests/RuntimeConsistencyTests.swift",
+        "displayName": "ordinary sequence run keeps its silent CancellationError contract",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RuntimeConsistencyTests/performMapping(outcome:)",
+        "file": "Tests/InnoFlowTests/RuntimeConsistencyTests.swift",
+        "displayName": "perform maps all errors while active in both hosts",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RuntimeConsistencyTests/sharedThrottleCancellation()",
+        "file": "Tests/InnoFlowTests/RuntimeConsistencyTests.swift",
+        "displayName": "shared throttle dispatch cancellation leaves newer work alive",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RuntimeConsistencyTests/storeReleaseClosesTrailingDispatch()",
+        "file": "Tests/InnoFlowTests/RuntimeConsistencyTests.swift",
+        "displayName": "releasing the Store cancels a trailing timer and closes its dispatch",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "RuntimeConsistencyTests/trailingCompletion(retainsHandle:count:)",
+        "file": "Tests/InnoFlowTests/RuntimeConsistencyTests.swift",
+        "displayName": "trailing dispatch completion is independent of handle retention",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "SchedulerAdmissionConsistencyTests/cancellationBeforeAttachmentDoesNotAnnounceStart()",
+        "file": "Tests/InnoFlowTests/SchedulerAdmissionConsistencyTests.swift",
+        "displayName": "cancellationBeforeAttachmentDoesNotAnnounceStart()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "SchedulerAdmissionConsistencyTests/cancelledRequestDoesNotReserveSerialCapacity()",
+        "file": "Tests/InnoFlowTests/SchedulerAdmissionConsistencyTests.swift",
+        "displayName": "cancelledRequestDoesNotReserveSerialCapacity()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "SchedulerAdmissionConsistencyTests/delayedOldLatestCannotDisplaceNewer(preCancel:useTestStore:)",
+        "file": "Tests/InnoFlowTests/SchedulerAdmissionConsistencyTests.swift",
+        "displayName": "delayedOldLatestCannotDisplaceNewer(preCancel:useTestStore:)",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "SchedulerAdmissionConsistencyTests/latestSupersessionUsesDisplacedRequestsOwnCallbacks()",
+        "file": "Tests/InnoFlowTests/SchedulerAdmissionConsistencyTests.swift",
+        "displayName": "latestSupersessionUsesDisplacedRequestsOwnCallbacks()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "SchedulerAdmissionConsistencyTests/olderSequenceCannotReplaceLiveLatestLane()",
+        "file": "Tests/InnoFlowTests/SchedulerAdmissionConsistencyTests.swift",
+        "displayName": "olderSequenceCannotReplaceLiveLatestLane()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "SchedulerAdmissionConsistencyTests/pendingCancellationReleasesCapacityAndPublishesTerminalOnce()",
+        "file": "Tests/InnoFlowTests/SchedulerAdmissionConsistencyTests.swift",
+        "displayName": "pendingCancellationReleasesCapacityAndPublishesTerminalOnce()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "SchedulerAdmissionConsistencyTests/serialPromotionWaitsForAttachmentAndPublishesStartedOnce()",
+        "file": "Tests/InnoFlowTests/SchedulerAdmissionConsistencyTests.swift",
+        "displayName": "serialPromotionWaitsForAttachmentAndPublishesStartedOnce()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestEffectLedgerConsistencyTests/boundedSnapshot()",
+        "file": "Tests/InnoFlowTests/TestEffectLedgerConsistencyTests.swift",
+        "displayName": "bounded ledgers preserve chronological order and stop at physical completion",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestEffectLedgerConsistencyTests/discardedDispatchRegistrations()",
+        "file": "Tests/InnoFlowTests/TestEffectLedgerConsistencyTests.swift",
+        "displayName": "discarded immediate dispatches release ledger registrations synchronously",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestEffectLedgerConsistencyTests/dropAdmission()",
+        "file": "Tests/InnoFlowTests/TestEffectLedgerConsistencyTests.swift",
+        "displayName": "drop rejection and successful physical start remain distinct",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestEffectLedgerConsistencyTests/failureEvent()",
+        "file": "Tests/InnoFlowTests/TestEffectLedgerConsistencyTests.swift",
+        "displayName": "run errors are captured once before dispatch completion",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestEffectLedgerConsistencyTests/latestSupersession()",
+        "file": "Tests/InnoFlowTests/TestEffectLedgerConsistencyTests.swift",
+        "displayName": "latest replacement is recorded in the displaced dispatch ledger",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestEffectLedgerConsistencyTests/serialAdmissionLifecycle()",
+        "file": "Tests/InnoFlowTests/TestEffectLedgerConsistencyTests.swift",
+        "displayName": "serial pending, rejection, cancellation-before-start, and capacity return are observable",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/boundedTerminalSnapshotAndRevision()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "terminal value previews are bounded, new work reopens verification",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/callerCancellation()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "caller cancellation cleans task finish waiters and suppresses false timeout",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/combinedTerminalSnapshot(actionCount:outputCount:)",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "terminal verification snapshots both queue types with exact counts",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/descendantsKeepOneDispatchAlive()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "receiving a descendant registers follow-up work before releasing its queue lease",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/exhaustiveOutputDoesNotAdvance()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "exhaustive output reception never silently reduces a queued action",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/finishIgnoresSiblingDispatch()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "one task's finish ignores another dispatch's unverified output",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/flowScopeAdapter()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "FlowScope can own a testing dispatch without a Core-to-Testing dependency",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/outputAdvancesActions(showWarnings:)",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "non-exhaustive output reception advances the complete FIFO action chain",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/outputDeadlineDoesNotReset()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "zero output budget permits one intermediate action and preserves its produced value",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/outputFollowsAsynchronousDescendant()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "non-exhaustive output reception follows an asynchronous descendant effect",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/outputPriorityPreservesAction()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "a ready output wins over a simultaneously buffered action without losing either",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/outputWaitBudgetsOnlyDecrease()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "skipped outputs and shared wakeups consume one remaining budget",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/outputWaitCancellation()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "cancelling an output wait removes only the shared waiter",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/outputWaitObservesBothQueues()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "the shared non-consuming output wakeup cannot lose the action or output side",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/phaseSendHandle()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "phase helpers return the original dispatch handle",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/physicalCompletionAfterCancellation()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "cancelled noncooperative work remains physically unfinished until its gate opens",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/repeatedDispatchesReleaseRegistrations()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "dispatch lease and waiter registrations return to baseline over repeated chains",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/runtimeCompletionDoesNotHideOutput()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "runtime-complete output remains an assertion obligation",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/scopedDispatch()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "scoped sends return the root dispatch and scoped receive preserves descendants",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/selectiveCancellation()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "cancellation suppresses queued descendants without cancelling a sibling",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/storeReleaseWithStaleHandle()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "handles and a pending finish do not retain their test store",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/taskFinishDoesNotDrain(exhaustive:)",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "task finish is non-consuming in both exhaustivity modes",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestStoreDispatchConsistencyTests/taskTimeoutIsSelective()",
+        "file": "Tests/InnoFlowTests/TestStoreDispatchConsistencyTests.swift",
+        "displayName": "timeout cancels only the selected dispatch and does not fake completion",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/asynchronousFailureLocation()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "asynchronous run failures retain the originating public call site",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/defaultsUseCaller()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "default source arguments are captured at the caller",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/enumCaseDiff()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "different enum cases with equal payloads still produce a structural diff",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/legacyFileOverload()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "explicit legacy file overload remains supported with a defined column",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/scenarioAndInvariantLocations()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "scenario decoration and invariant diagnostics keep their configured origins",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/scopedAndPhaseLocations()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "scoped and phase helpers forward every source coordinate",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/scopedOutputCancellation()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "scoped predicate output cancellation does not turn into a timeout",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/scopedOutputOverloads(exhaustive:)",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "scoped exact and predicate outputs use the shared root queue",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/scopedOutputProgressAndTimeout()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "scoped predicate output honors non-exhaustive action progress and total timeout",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/structuralDiffSnapshots()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "structural diff penetrates hidden descriptions and retains nested collection paths",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/swiftTestingUsesCallSite()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "Swift Testing records the exact supplied four-coordinate source location",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "TestingLocationConsistencyTests/terminalLocations()",
+        "file": "Tests/InnoFlowTests/TestingLocationConsistencyTests.swift",
+        "displayName": "dispatch/global finish and deinit preserve complete source locations",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ViewDispatchLifetimeConsistencyTests/disappearanceCancelsOnlyOwnedDispatch()",
+        "file": "Tests/InnoFlowTests/ViewDispatchLifetimeConsistencyTests.swift",
+        "displayName": "disappearanceCancelsOnlyOwnedDispatch()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ViewDispatchLifetimeConsistencyTests/preCancelledTaskDoesNotReduce()",
+        "file": "Tests/InnoFlowTests/ViewDispatchLifetimeConsistencyTests.swift",
+        "displayName": "preCancelledTaskDoesNotReduce()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowTests",
+        "identifier": "ViewDispatchLifetimeConsistencyTests/replacementRejectsOldResponses()",
+        "file": "Tests/InnoFlowTests/ViewDispatchLifetimeConsistencyTests.swift",
+        "displayName": "replacementRejectsOldResponses()",
+        "conditionalContexts": []
+      }
+    ],
+    "removed": [
+      {
+        "target": "InnoFlowTests",
+        "identifier": "EffectRunSchedulerTests/serialRejectsInvalidCapacity()",
+        "file": "Tests/InnoFlowTests/EffectRunSchedulerTests.swift",
+        "displayName": "negative serial capacity is reported without trapping",
+        "conditionalContexts": []
+      }
+    ]
+  },
+  "candidateSourceInventory": "docs/contracts/swift-test-inventory.json",
+  "candidateSourceInventorySha256": "31f79d0beda7ed1f900bbaf79a3fa42fea5477ee0cffe3bded4fd5c5451fc9b5",
+  "sample": {
+    "scope": "Separate sample-swift-6.3 check; never included in root953 or full-principle1907",
+    "beforeCount": 44,
+    "afterCount": 48,
+    "added": [
+      {
+        "target": "InnoFlowSampleAppFeatureTests",
+        "identifier": "AdvancedTestingTests/phaseCoverage()",
+        "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/AdvancedTestingTests.swift",
+        "displayName": "Observe only the exercised todo phase transitions",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowSampleAppFeatureTests",
+        "identifier": "AdvancedTestingTests/seededSearch()",
+        "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/AdvancedTestingTests.swift",
+        "displayName": "Seeded state and clock choices reproduce a successful load",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowSampleAppFeatureTests",
+        "identifier": "optionalChildCloseAndReopenDropsOldOutput()",
+        "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/OptionalChildLifetimeExampleTests.swift",
+        "displayName": "optionalChildCloseAndReopenDropsOldOutput()",
+        "conditionalContexts": []
+      },
+      {
+        "target": "InnoFlowSampleAppFeatureTests",
+        "identifier": "viewOwnedSampleCancellationPreservesIndependentRequest()",
+        "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/ViewOwnedTaskExampleTests.swift",
+        "displayName": "viewOwnedSampleCancellationPreservesIndependentRequest()",
+        "conditionalContexts": []
+      }
+    ],
+    "removed": [],
+    "sourceInventory": "docs/contracts/sample-test-inventory.json",
+    "sourceInventorySha256": "2d5dc6f1531feca1e613e5609953b3af47616bde5399f6aa4a1f7197cbf2fbea"
+  },
+  "stateCopyGuardRegression": {
+    "baseCommit": "99a68dbfa07d1143be20eb1b41eca1c52023bbc3",
+    "beforeCount": 953,
+    "afterCount": 955,
+    "added": [
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "conditionalContexts": [],
+        "displayName": "animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "identifier": "CollectionLifetimeConsistencyTests/animatedParentMutationReconcilesExistingOwnersWithoutMetadata(useIdentified:removeAndReenter:)",
+        "line": 300,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "firstAnimatedChildOutputUsesFinalComposedState(useIdentified:)",
+        "file": "Tests/InnoFlowTests/CollectionLifetimeConsistencyTests.swift",
+        "identifier": "CollectionLifetimeConsistencyTests/firstAnimatedChildOutputUsesFinalComposedState(useIdentified:)",
+        "line": 266,
+        "target": "InnoFlowTests"
+      }
+    ],
+    "removed": [],
+    "scope": "Two animated lifetime regression declarations, six parameterized cases. Source expectations only; Apple release execution remains pending."
+  },
+  "appleCISampleAdmissionRegression": {
+    "baseCommit": "b28c761c1798f18699da50a864db74b9843311d0",
+    "beforeCount": 48,
+    "afterCount": 49,
+    "added": [
+      {
+        "attribute": "@Test(\n    \"Terminal admission preserves an independently running sync\",\n    arguments: [EffectAdmission.cancelledBeforeStart, .superseded]\n  )",
+        "conditionalContexts": [],
+        "displayName": "Terminal admission preserves an independently running sync",
+        "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
+        "identifier": "InnoFlowSampleAppFeatureTests/orchestrationTerminalAdmissionPreservesActiveSync(admission:)",
+        "line": 67,
+        "target": "InnoFlowSampleAppFeatureTests"
+      }
+    ],
+    "removed": [],
+    "sourceInventory": "docs/contracts/sample-test-inventory.json",
+    "sourceInventorySha256": "3254db04feeefd4f290d2ae379d15cfcca1659e86c2914a64e6c461446c2ee85",
+    "scope": "One declaration with cancelledBeforeStart/superseded parameter cases preserves another running sync. Exact source expectations; Apple execution is separate."
+  },
+  "ownedSynchronousRegression": {
+    "baseCount": 955,
+    "finalCount": 969,
+    "fullPrincipleCount": 1939,
+    "added": [
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "childFollowupRunKeepsOwnerAndJoinsPhysicalCancellation(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/childFollowupRunKeepsOwnerAndJoinsPhysicalCancellation(useTestStore:)",
+        "line": 477,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "directOutputIsCapturedAndObservedBeforeReturn(managed:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/directOutputIsCapturedAndObservedBeforeReturn(managed:)",
+        "line": 154,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "directSendDrainsBeforeReturnAndBeforeIndependentActions(managed:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/directSendDrainsBeforeReturnAndBeforeIndependentActions(managed:)",
+        "line": 140,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "discardedHandlesStillDrainSynchronously()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/discardedHandlesStillDrainSynchronously()",
+        "line": 175,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "explicitCompositeKeepsAsynchronousScheduling(parallel:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/explicitCompositeKeepsAsynchronousScheduling(parallel:)",
+        "line": 239,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "nestedOwnersAndEqualIdentitySiblingsKeepSynchronousFollowups(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/nestedOwnersAndEqualIdentitySiblingsKeepSynchronousFollowups(useTestStore:)",
+        "line": 374,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "observationCancellationPreservesImmediateEmissionThenQueueDrop(managed:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/observationCancellationPreservesImmediateEmissionThenQueueDrop(managed:)",
+        "line": 448,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "parentFollowupsKeepIndependentLifetimeAfterChildClose(useTestStore:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/parentFollowupsKeepIndependentLifetimeAfterChildClose(useTestStore:)",
+        "line": 284,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: SynchronousOwnerChange.allCases)",
+        "conditionalContexts": [],
+        "displayName": "reentrantCloseOrReplacementDropsQueuedOldOwner(change:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/reentrantCloseOrReplacementDropsQueuedOldOwner(change:)",
+        "line": 210,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "sameReductionCloseObservesSuppressedSendAndOutput()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/sameReductionCloseObservesSuppressedSendAndOutput()",
+        "line": 186,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "testStoreAutomaticDrainPreservesParentIndependence()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreAutomaticDrainPreservesParentIndependence()",
+        "line": 325,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "testStoreDirectOutputAndSameReductionSuppression()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreDirectOutputAndSameReductionSuppression()",
+        "line": 269,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "testStoreDirectSendRetainsDispatchUntilReceive(managed:)",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreDirectSendRetainsDispatchUntilReceive(managed:)",
+        "line": 249,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "testStoreScopedReceivePreservesParentIndependence()",
+        "file": "Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift",
+        "identifier": "OwnedSynchronousEffectConsistencyTests/testStoreScopedReceivePreservesParentIndependence()",
+        "line": 416,
+        "target": "InnoFlowTests"
+      }
+    ],
+    "evidence": "Source recovered byte-exact after environment transition. Fresh strict Linux run37 tests/4suites, before-control3 declarations fails14 assertions. Earlier219/20 and independent32/4 historical results retain summaries only; final Apple execution required."
+  },
+  "componentBoundaryRegression": {
+    "baseCommit": "e15dfac8e0c97edb4706ac35595f22fc2cff5c1d",
+    "productSourceCommit": "81a84a4ac8928245a4dc05e35d69e11b3eb577bd",
+    "testAvailabilityDelta": "05f6c9b",
+    "beforeDeclarations": 969,
+    "afterUnionDeclarations": 994,
+    "hostDeclarations": {
+      "6.3": 991,
+      "6.4": 994,
+      "full-principle": 1989
+    },
+    "focusedCompiledDeclarations": {
+      "6.3": 344,
+      "6.4": 347
+    },
+    "focusedSuites": 37,
+    "addedBySuite": {
+      "CollectionMultiScopeReconciliationTests": 4,
+      "CollectionReconciliationBoundaryTests": 5,
+      "DiagnosticsRingConsistencyTests": 4,
+      "ProjectionRegistrationBoundaryTests": 3,
+      "SnapshotBoundaryConsistencyTests": 9
+    },
+    "added": [
+      {
+        "attribute": "@Test(arguments: [false, true], [1, 8, 32, 128])",
+        "conditionalContexts": [],
+        "displayName": "denseScopesKeepDistinctOwnersAcrossActions(testing:groups:)",
+        "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+        "identifier": "CollectionMultiScopeReconciliationTests/denseScopesKeepDistinctOwnersAcrossActions(testing:groups:)",
+        "line": 201,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "duplicateSlotsDoNotInflateCollectionDensity(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+        "identifier": "CollectionMultiScopeReconciliationTests/duplicateSlotsDoNotInflateCollectionDensity(testing:)",
+        "line": 236,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "removingOneDenseScopeJoinsItsPhysicalWorkAndPreservesOthers(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+        "identifier": "CollectionMultiScopeReconciliationTests/removingOneDenseScopeJoinsItsPhysicalWorkAndPreservesOthers(testing:)",
+        "line": 251,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [1, 8, 32, 128])",
+        "conditionalContexts": [],
+        "displayName": "singletonScopesNeedNoIndexAndPreserveReplacement(testing:groups:)",
+        "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+        "identifier": "CollectionMultiScopeReconciliationTests/singletonScopesNeedNoIndexAndPreserveReplacement(testing:groups:)",
+        "line": 221,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "denseDuplicatesUseFirstIdentityAndRecheckReplacement(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/denseDuplicatesUseFirstIdentityAndRecheckReplacement(testing:)",
+        "line": 141,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [1, 32, 128, 512, 1_000])",
+        "conditionalContexts": [],
+        "displayName": "denseReadsCurrentCollectionOncePerAction(testing:count:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/denseReadsCurrentCollectionOncePerAction(testing:count:)",
+        "line": 97,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "denseSiblingCollectionsWithEqualIDsHaveDistinctIndexes(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/denseSiblingCollectionsWithEqualIDsHaveDistinctIndexes(testing:)",
+        "line": 176,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "equalRelativeCollectionPathsUnderDistinctParentOwnersStaySeparate(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/equalRelativeCollectionPathsUnderDistinctParentOwnersStaySeparate(testing:)",
+        "line": 235,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(\n    arguments: [false, true], [[Int](), [0], [500], [999], [0, 142, 285, 428, 571, 714, 857, 999]])",
+        "conditionalContexts": [],
+        "displayName": "sparseOwnersKeepDirectFirstLookup(testing:ids:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/sparseOwnersKeepDirectFirstLookup(testing:ids:)",
+        "line": 122,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [0, 1, 24])",
+        "conditionalContexts": [],
+        "displayName": "activeLimitPreservesLexicalIdentifierOrderAndValues(count:)",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "identifier": "DiagnosticsRingConsistencyTests/activeLimitPreservesLexicalIdentifierOrderAndValues(count:)",
+        "line": 23,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "emptyActiveSetAcceptsEveryLimit()",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "identifier": "DiagnosticsRingConsistencyTests/emptyActiveSetAcceptsEveryLimit()",
+        "line": 130,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "retainedActiveSnapshotSurvivesTerminationAndLaterSubmissions()",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "identifier": "DiagnosticsRingConsistencyTests/retainedActiveSnapshotSurvivesTerminationAndLaterSubmissions()",
+        "line": 103,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "singleActiveDispatchPreservesEveryValueAndLimit()",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "identifier": "DiagnosticsRingConsistencyTests/singleActiveDispatchPreservesEveryValueAndLimit()",
+        "line": 70,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "conditionalContexts": [],
+        "displayName": "emptyDependencyPackCreatedDuringReductionKeepsItsAlwaysRefreshContract(changed:animated:)",
+        "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+        "identifier": "ProjectionRegistrationBoundaryTests/emptyDependencyPackCreatedDuringReductionKeepsItsAlwaysRefreshContract(changed:animated:)",
+        "line": 93,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [0, 1])",
+        "conditionalContexts": [],
+        "displayName": "lateDependencyNeedsThePreMutationValueEvenWhenFinalValuesMatch(initial:)",
+        "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+        "identifier": "ProjectionRegistrationBoundaryTests/lateDependencyNeedsThePreMutationValueEvenWhenFinalValuesMatch(initial:)",
+        "line": 123,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: RegistrationBoundaryKind.allCases, [false, true])",
+        "conditionalContexts": [],
+        "displayName": "latePackageRegistrationPreservesOldAndNewSnapshots(kind:changed:)",
+        "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+        "identifier": "ProjectionRegistrationBoundaryTests/latePackageRegistrationPreservesOldAndNewSnapshots(kind:changed:)",
+        "line": 42,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "availabilityAttributes": [
+          "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+        ],
+        "conditionalContexts": [
+          "#if compiler(>=6.4)"
+        ],
+        "displayName": "didSetPrecedesProjectionRefresh(animated:observed:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/didSetPrecedesProjectionRefresh(animated:observed:)",
+        "line": 248,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "availabilityAttributes": [
+          "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+        ],
+        "conditionalContexts": [
+          "#if compiler(>=6.4)"
+        ],
+        "displayName": "didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()",
+        "line": 280,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "availabilityAttributes": [
+          "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+        ],
+        "conditionalContexts": [
+          "#if compiler(>=6.4)"
+        ],
+        "displayName": "didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)",
+        "line": 304,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "optionalNilIsARealSnapshotForDependencyComparison(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/optionalNilIsARealSnapshotForDependencyComparison(animated:)",
+        "line": 220,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "reentrantObservationQueuesAfterTheCurrentProjectionRefresh(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/reentrantObservationQueuesAfterTheCurrentProjectionRefresh(animated:)",
+        "line": 167,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "releasedAndLaterRegisteredSelectionsSeeCurrentValues(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/releasedAndLaterRegisteredSelectionsSeeCurrentValues(animated:)",
+        "line": 203,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "retainedSelectedAndScopedValuesKeepTheirSnapshots(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/retainedSelectedAndScopedValuesKeepTheirSnapshots(animated:)",
+        "line": 98,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "rootObservationPrecedesMutationWithoutProjections(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/rootObservationPrecedesMutationWithoutProjections(animated:)",
+        "line": 73,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "conditionalContexts": [],
+        "displayName": "willSetRegistrationPreservesChangedAndUnchangedDependencies(animated:changedDependency:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/willSetRegistrationPreservesChangedAndUnchangedDependencies(animated:changedDependency:)",
+        "line": 129,
+        "target": "InnoFlowTests"
+      }
+    ],
+    "removed": [],
+    "compiler64RuntimeExpectations": {
+      "legacy": {
+        "compiled": 347,
+        "executed": 344,
+        "unavailable": 3,
+        "expectedDiagnostics": 2
+      },
+      "OS27": {
+        "compiled": 347,
+        "executed": 347,
+        "unavailable": 0,
+        "expectedDiagnostics": 2
+      }
+    },
+    "scope": "Source-derived expectations only. S keeps pre-mutation state for late registration; I covers indexed/sparse/multiscope lifetimes; D2 preserves lexical/limit/singleton values. Three didSet declarations retain exact compiler/runtime applicability rather than empty passes. Native Apple/xcresult and the complete main-only 32 checks require final-source execution. Original large-state pre-COW optimization remains unresolved; no timing claim follows from this inventory."
+  },
+  "functionalCIIntegration": {
+    "productSourceCommit": "e15dfac8e0c97edb4706ac35595f22fc2cff5c1d",
+    "preservedTrialCommit": "9008e338d9c2dca6c30e876b476c299000bf651b",
+    "testSourceCommit": "452513cc1f700146ef9f1527794509b80ebe9f7f",
+    "scope": "Sources remain byte-identical to the functional baseline. The historical componentBoundaryRegression entry describes the preserved trial, not this functional source. Exactly two mixed trial tests are extracted as separately named semantic regressions; original operation-count oracles remain unchanged at preservedTrialCommit. No count threshold is relaxed and no skip is added.",
+    "semanticExtractions": {
+      "CollectionReconciliationBoundaryTests/denseReadsCurrentCollectionOncePerAction(testing:count:)": "CollectionReconciliationBoundaryTests/denseOwnersPreserveLifetimeAcrossActions(testing:count:)",
+      "CollectionMultiScopeReconciliationTests/denseScopesKeepDistinctOwnersAcrossActions(testing:groups:)": "CollectionMultiScopeReconciliationTests/denseDirectScopesPreserveOwnerLifetimes(testing:groups:)"
+    },
+    "beforeDeclarations": 969,
+    "afterUnionDeclarations": 994,
+    "hostDeclarations": {
+      "6.3": 991,
+      "6.4": 994,
+      "full-principle": 1989
+    },
+    "focusedCompiledDeclarations": {
+      "6.3": 344,
+      "6.4": 347
+    },
+    "focusedSuites": 37,
+    "added": [
+      {
+        "attribute": "@Test(arguments: [false, true], [1, 8, 32, 128])",
+        "conditionalContexts": [],
+        "displayName": "denseDirectScopesPreserveOwnerLifetimes(testing:groups:)",
+        "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+        "identifier": "CollectionMultiScopeReconciliationTests/denseDirectScopesPreserveOwnerLifetimes(testing:groups:)",
+        "line": 201,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "duplicateSlotsDoNotInflateCollectionDensity(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+        "identifier": "CollectionMultiScopeReconciliationTests/duplicateSlotsDoNotInflateCollectionDensity(testing:)",
+        "line": 234,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "removingOneDenseScopeJoinsItsPhysicalWorkAndPreservesOthers(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+        "identifier": "CollectionMultiScopeReconciliationTests/removingOneDenseScopeJoinsItsPhysicalWorkAndPreservesOthers(testing:)",
+        "line": 249,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [1, 8, 32, 128])",
+        "conditionalContexts": [],
+        "displayName": "singletonScopesNeedNoIndexAndPreserveReplacement(testing:groups:)",
+        "file": "Tests/InnoFlowTests/CollectionMultiScopeReconciliationTests.swift",
+        "identifier": "CollectionMultiScopeReconciliationTests/singletonScopesNeedNoIndexAndPreserveReplacement(testing:groups:)",
+        "line": 219,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "denseDuplicatesUseFirstIdentityAndRecheckReplacement(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/denseDuplicatesUseFirstIdentityAndRecheckReplacement(testing:)",
+        "line": 138,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [1, 32, 128, 512, 1_000])",
+        "conditionalContexts": [],
+        "displayName": "denseOwnersPreserveLifetimeAcrossActions(testing:count:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/denseOwnersPreserveLifetimeAcrossActions(testing:count:)",
+        "line": 97,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "denseSiblingCollectionsWithEqualIDsHaveDistinctIndexes(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/denseSiblingCollectionsWithEqualIDsHaveDistinctIndexes(testing:)",
+        "line": 173,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "equalRelativeCollectionPathsUnderDistinctParentOwnersStaySeparate(testing:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/equalRelativeCollectionPathsUnderDistinctParentOwnersStaySeparate(testing:)",
+        "line": 232,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(\n    arguments: [false, true], [[Int](), [0], [500], [999], [0, 142, 285, 428, 571, 714, 857, 999]])",
+        "conditionalContexts": [],
+        "displayName": "sparseOwnersKeepDirectFirstLookup(testing:ids:)",
+        "file": "Tests/InnoFlowTests/CollectionReconciliationBoundaryTests.swift",
+        "identifier": "CollectionReconciliationBoundaryTests/sparseOwnersKeepDirectFirstLookup(testing:ids:)",
+        "line": 119,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [0, 1, 24])",
+        "conditionalContexts": [],
+        "displayName": "activeLimitPreservesLexicalIdentifierOrderAndValues(count:)",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "identifier": "DiagnosticsRingConsistencyTests/activeLimitPreservesLexicalIdentifierOrderAndValues(count:)",
+        "line": 23,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "emptyActiveSetAcceptsEveryLimit()",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "identifier": "DiagnosticsRingConsistencyTests/emptyActiveSetAcceptsEveryLimit()",
+        "line": 130,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "retainedActiveSnapshotSurvivesTerminationAndLaterSubmissions()",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "identifier": "DiagnosticsRingConsistencyTests/retainedActiveSnapshotSurvivesTerminationAndLaterSubmissions()",
+        "line": 103,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "conditionalContexts": [],
+        "displayName": "singleActiveDispatchPreservesEveryValueAndLimit()",
+        "file": "Tests/InnoFlowTests/DiagnosticsRingConsistencyTests.swift",
+        "identifier": "DiagnosticsRingConsistencyTests/singleActiveDispatchPreservesEveryValueAndLimit()",
+        "line": 70,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "conditionalContexts": [],
+        "displayName": "emptyDependencyPackCreatedDuringReductionKeepsItsAlwaysRefreshContract(changed:animated:)",
+        "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+        "identifier": "ProjectionRegistrationBoundaryTests/emptyDependencyPackCreatedDuringReductionKeepsItsAlwaysRefreshContract(changed:animated:)",
+        "line": 93,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [0, 1])",
+        "conditionalContexts": [],
+        "displayName": "lateDependencyNeedsThePreMutationValueEvenWhenFinalValuesMatch(initial:)",
+        "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+        "identifier": "ProjectionRegistrationBoundaryTests/lateDependencyNeedsThePreMutationValueEvenWhenFinalValuesMatch(initial:)",
+        "line": 123,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: RegistrationBoundaryKind.allCases, [false, true])",
+        "conditionalContexts": [],
+        "displayName": "latePackageRegistrationPreservesOldAndNewSnapshots(kind:changed:)",
+        "file": "Tests/InnoFlowTests/ProjectionRegistrationBoundaryTests.swift",
+        "identifier": "ProjectionRegistrationBoundaryTests/latePackageRegistrationPreservesOldAndNewSnapshots(kind:changed:)",
+        "line": 42,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "availabilityAttributes": [
+          "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+        ],
+        "conditionalContexts": [
+          "#if compiler(>=6.4)"
+        ],
+        "displayName": "didSetPrecedesProjectionRefresh(animated:observed:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/didSetPrecedesProjectionRefresh(animated:observed:)",
+        "line": 248,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test",
+        "availabilityAttributes": [
+          "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+        ],
+        "conditionalContexts": [
+          "#if compiler(>=6.4)"
+        ],
+        "displayName": "didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/didSetRegistrationDoesNotRecomputeAnUnchangedMemoizedSelection()",
+        "line": 280,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "availabilityAttributes": [
+          "@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"
+        ],
+        "conditionalContexts": [
+          "#if compiler(>=6.4)"
+        ],
+        "displayName": "didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/didSetRegistrationPreservesSelectorCallsAndReturnedValues(memoize:changed:)",
+        "line": 304,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "optionalNilIsARealSnapshotForDependencyComparison(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/optionalNilIsARealSnapshotForDependencyComparison(animated:)",
+        "line": 220,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "reentrantObservationQueuesAfterTheCurrentProjectionRefresh(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/reentrantObservationQueuesAfterTheCurrentProjectionRefresh(animated:)",
+        "line": 167,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "releasedAndLaterRegisteredSelectionsSeeCurrentValues(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/releasedAndLaterRegisteredSelectionsSeeCurrentValues(animated:)",
+        "line": 203,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "retainedSelectedAndScopedValuesKeepTheirSnapshots(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/retainedSelectedAndScopedValuesKeepTheirSnapshots(animated:)",
+        "line": 98,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true])",
+        "conditionalContexts": [],
+        "displayName": "rootObservationPrecedesMutationWithoutProjections(animated:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/rootObservationPrecedesMutationWithoutProjections(animated:)",
+        "line": 73,
+        "target": "InnoFlowTests"
+      },
+      {
+        "attribute": "@Test(arguments: [false, true], [false, true])",
+        "conditionalContexts": [],
+        "displayName": "willSetRegistrationPreservesChangedAndUnchangedDependencies(animated:changedDependency:)",
+        "file": "Tests/InnoFlowTests/SnapshotBoundaryConsistencyTests.swift",
+        "identifier": "SnapshotBoundaryConsistencyTests/willSetRegistrationPreservesChangedAndUnchangedDependencies(animated:changedDependency:)",
+        "line": 129,
+        "target": "InnoFlowTests"
+      }
+    ],
+    "removed": []
+  }
+}

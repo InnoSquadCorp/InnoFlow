@@ -139,23 +139,26 @@ struct FlowScopeTests {
     let store = Store(
       reducer: FlowScopeFeature(probes: [1: firstProbe, 2: secondProbe])
     )
-    let firstScope = FlowScope()
-    let secondScope = FlowScope()
-    let first = await firstScope.track(store.send(.start(1)))
-    let second = await secondScope.track(store.send(.start(2)))
-    #expect(await firstProbe.started.wait())
-    #expect(await secondProbe.started.wait())
+    await withFlowScope { firstScope in
+      await withFlowScope { secondScope in
+        let first = await firstScope.track(store.send(.start(1)))
+        let second = await secondScope.track(store.send(.start(2)))
+        #expect(await firstProbe.started.wait())
+        #expect(await secondProbe.started.wait())
 
-    await firstScope.cancelAndFinish()
-    #expect(await firstProbe.cancelled.wait())
-    #expect(first.isCancelled)
-    #expect(second.isCancelled == false)
+        await firstScope.cancelAndFinish()
+        #expect(await firstProbe.cancelled.wait())
+        #expect(first.isCancelled)
+        #expect(second.isCancelled == false)
 
-    await secondProbe.release()
-    await second.finish()
-    await secondScope.cancelAndFinish()
-    #expect(store.state.completed == [2])
-    #expect(second.isCancelled == false)
+        await secondProbe.release()
+        await second.finish()
+        await secondScope.cancelAndFinish()
+        #expect(store.state.completed == [2])
+        #expect(second.isCancelled == false)
+
+      }
+    }
   }
 
   @Test("closing a nested scope leaves its outer scope work alive")
@@ -193,33 +196,37 @@ struct FlowScopeTests {
   func lateRegistrationIsRejected() async {
     let probe = CancellationAwareSleepProbe()
     let store = Store(reducer: FlowScopeFeature(probes: [1: probe]))
-    let scope = FlowScope()
-    await scope.cancelAndFinish()
+    await withFlowScope { scope in
+      await scope.cancelAndFinish()
 
-    let late = store.send(.start(1))
-    #expect(await probe.started.wait())
-    _ = await scope.track(late)
+      let late = store.send(.start(1))
+      #expect(await probe.started.wait())
+      _ = await scope.track(late)
 
-    #expect(late.isCancelled)
-    #expect(late.isFinished)
-    #expect(await probe.cancelled.wait())
+      #expect(late.isCancelled)
+      #expect(late.isFinished)
+      #expect(await probe.cancelled.wait())
+
+    }
   }
 
   @Test("output tracking preserves the original buffered stream")
   func outputTaskKeepsItsStream() async {
     let store = Store(reducer: FlowScopeOutputFeature())
-    let scope = FlowScope()
-    let outputTask = await scope.track(
-      store.send(.start, capturingOutputs: .bufferingNewest(1))
-    )
-    var values: [String] = []
-    for await value in outputTask.outputs {
-      values.append(value)
-    }
-    await scope.cancelAndFinish()
+    await withFlowScope { scope in
+      let outputTask = await scope.track(
+        store.send(.start, capturingOutputs: .bufferingNewest(1))
+      )
+      var values: [String] = []
+      for await value in outputTask.outputs {
+        values.append(value)
+      }
+      await scope.cancelAndFinish()
 
-    #expect(values == ["finished"])
-    #expect(outputTask.isCancelled == false)
+      #expect(values == ["finished"])
+      #expect(outputTask.isCancelled == false)
+
+    }
   }
 
   @Test("leaving a captured output loop early cancels and joins remaining scoped work")
@@ -253,17 +260,19 @@ struct FlowScopeTests {
   @Test("many completed registrations do not accumulate")
   func completedRegistrationsAreReleased() async {
     let store = Store(reducer: FlowScopeFeature(probes: [:]))
-    let scope = FlowScope()
+    await withFlowScope { scope in
 
-    for value in 0..<256 {
-      let task = store.send(.completeImmediately(value))
-      await task.finish()
-      _ = await scope.track(task)
+      for value in 0..<256 {
+        let task = store.send(.completeImmediately(value))
+        await task.finish()
+        _ = await scope.track(task)
+      }
+
+      #expect(scope.trackedTaskCount == 0)
+      await scope.cancelAndFinish()
+      #expect(store.state.completed.count == 256)
+
     }
-
-    #expect(scope.trackedTaskCount == 0)
-    await scope.cancelAndFinish()
-    #expect(store.state.completed.count == 256)
   }
 
   @Test("completion observation does not retain the scope")
@@ -271,13 +280,11 @@ struct FlowScopeTests {
     let store = Store(reducer: FlowScopeFeature(probes: [:]))
     weak var releasedScope: FlowScope?
 
-    do {
-      var scope: FlowScope? = FlowScope()
+    await withFlowScope { scope in
       releasedScope = scope
       let task = store.send(.completeImmediately(1))
-      _ = await scope?.track(task)
+      _ = await scope.track(task)
       await task.finish()
-      scope = nil
     }
 
     await drainAsyncWork()
@@ -288,32 +295,34 @@ struct FlowScopeTests {
   func concurrentCloseCallersJoinTheSameCleanup() async {
     let probe = FlowScopeUncooperativeProbe()
     let store = Store(reducer: ConcurrentFlowScopeFeature(probe: probe))
-    let scope = FlowScope()
-    let handle = await scope.track(store.send(.start))
-    #expect(await probe.started.wait())
+    await withFlowScope { scope in
+      let handle = await scope.track(store.send(.start))
+      #expect(await probe.started.wait())
 
-    var firstReturned = false
-    var secondReturned = false
-    let first = Task { @MainActor in
-      await scope.cancelAndFinish()
-      firstReturned = true
+      var firstReturned = false
+      var secondReturned = false
+      let first = Task { @MainActor in
+        await scope.cancelAndFinish()
+        firstReturned = true
+      }
+      #expect(await probe.cancelled.wait())
+      let second = Task { @MainActor in
+        await scope.cancelAndFinish()
+        secondReturned = true
+      }
+      await Task.yield()
+
+      #expect(firstReturned == false)
+      #expect(secondReturned == false)
+      await probe.release()
+      await first.value
+      await second.value
+
+      #expect(firstReturned)
+      #expect(secondReturned)
+      #expect(handle.isFinished)
+
     }
-    #expect(await probe.cancelled.wait())
-    let second = Task { @MainActor in
-      await scope.cancelAndFinish()
-      secondReturned = true
-    }
-    await Task.yield()
-
-    #expect(firstReturned == false)
-    #expect(secondReturned == false)
-    await probe.release()
-    await first.value
-    await second.value
-
-    #expect(firstReturned)
-    #expect(secondReturned)
-    #expect(handle.isFinished)
   }
 }
 

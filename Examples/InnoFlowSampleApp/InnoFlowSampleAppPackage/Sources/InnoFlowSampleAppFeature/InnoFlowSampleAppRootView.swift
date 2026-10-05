@@ -16,7 +16,9 @@ public struct InnoFlowSampleAppRootView: View {
   public var body: some View {
     Group {
       if let launchDemo {
-        sampleDemoView(for: launchDemo)
+        NavigationStack {
+          sampleDemoView(for: launchDemo)
+        }
       } else {
         sampleHubView
       }
@@ -62,25 +64,29 @@ public struct InnoFlowSampleAppRootView: View {
           .listRowSeparator(.hidden)
         #endif
 
-        ForEach(SampleDemo.catalog) { metadata in
-          let demo = metadata.demo
-          if metadata.prefersModalPresentation {
-            Button {
-              presentedModalDemo = demo
-            } label: {
-              sampleRow(for: metadata)
+        ForEach(1...3, id: \.self) { level in
+          Section("Level \(level)") {
+            ForEach(SampleDemo.catalog.filter { $0.demo.learningLevel == level }) { metadata in
+              let demo = metadata.demo
+              if metadata.prefersModalPresentation {
+                Button {
+                  presentedModalDemo = demo
+                } label: {
+                  sampleRow(for: metadata)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(metadata.accessibilityIdentifier)
+                .accessibilityLabel(metadata.accessibilityLabel)
+                .accessibilityHint(metadata.accessibilityHint)
+              } else {
+                NavigationLink(value: demo) {
+                  sampleRow(for: metadata)
+                }
+                .accessibilityIdentifier(metadata.accessibilityIdentifier)
+                .accessibilityLabel(metadata.accessibilityLabel)
+                .accessibilityHint(metadata.accessibilityHint)
+              }
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier(metadata.accessibilityIdentifier)
-            .accessibilityLabel(metadata.accessibilityLabel)
-            .accessibilityHint(metadata.accessibilityHint)
-          } else {
-            NavigationLink(value: demo) {
-              sampleRow(for: metadata)
-            }
-            .accessibilityIdentifier(metadata.accessibilityIdentifier)
-            .accessibilityLabel(metadata.accessibilityLabel)
-            .accessibilityHint(metadata.accessibilityHint)
           }
         }
       }

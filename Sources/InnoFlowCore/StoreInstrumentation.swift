@@ -55,6 +55,7 @@ public enum StoreInstrumentationEvent<Action: Sendable>: Sendable {
 
 /// Optional runtime hooks for observing effect execution without changing semantics.
 public struct StoreInstrumentation<Action: Sendable>: Sendable {
+  package private(set) var isEnabled = true
   public struct RunEvent: Sendable {
     public let token: UUID
     public let cancellationID: AnyEffectID?
@@ -305,14 +306,18 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
     }
   }
 
-  public var didStartRun: @Sendable (RunEvent) -> Void
-  public var didFinishRun: @Sendable (RunEvent) -> Void
-  public var didFailRun: @Sendable (RunFailedEvent) -> Void
-  public var didEmitAction: @Sendable (ActionEvent) -> Void
-  public var didDropAction: @Sendable (ActionDropEvent) -> Void
-  public var didDeliverOutput: @Sendable (OutputDeliveryEvent) -> Void
-  public var didDrainActionQueue: @Sendable (ActionQueueEvent) -> Void
-  public var didCancelEffects: @Sendable (CancellationEvent) -> Void
+  public var didStartRun: @Sendable (RunEvent) -> Void { didSet { isEnabled = true } }
+  public var didFinishRun: @Sendable (RunEvent) -> Void { didSet { isEnabled = true } }
+  public var didFailRun: @Sendable (RunFailedEvent) -> Void { didSet { isEnabled = true } }
+  public var didEmitAction: @Sendable (ActionEvent) -> Void { didSet { isEnabled = true } }
+  public var didDropAction: @Sendable (ActionDropEvent) -> Void { didSet { isEnabled = true } }
+  public var didDeliverOutput: @Sendable (OutputDeliveryEvent) -> Void {
+    didSet { isEnabled = true }
+  }
+  public var didDrainActionQueue: @Sendable (ActionQueueEvent) -> Void {
+    didSet { isEnabled = true }
+  }
+  public var didCancelEffects: @Sendable (CancellationEvent) -> Void { didSet { isEnabled = true } }
 
   public init(
     didStartRun: @escaping @Sendable (RunEvent) -> Void = { _ in },
@@ -335,7 +340,9 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   }
 
   public static var disabled: Self {
-    .init()
+    var value = Self()
+    value.isEnabled = false
+    return value
   }
 
   public static func sink(
@@ -362,7 +369,8 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
   /// flag matrix or a host application's optional adapters) where the
   /// variadic form would require call-site splatting.
   public static func combined(_ instrumentations: [Self]) -> Self {
-    .init(
+    guard instrumentations.contains(where: \.isEnabled) else { return .disabled }
+    return .init(
       didStartRun: { event in
         for instrumentation in instrumentations {
           instrumentation.didStartRun(event)

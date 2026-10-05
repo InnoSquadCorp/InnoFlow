@@ -110,7 +110,7 @@ This document captures the stable framework guarantees that should not drift wit
   assertions compare the complete root state; actions that intentionally
   change parent or sibling state should be asserted through the parent
   `TestStore`.
-- `finish()` is the terminal assertion. `.on` fails on unreceived actions;
+- `finish()` is the terminal assertion. `.on` reports unreceived actions and outputs from one bounded terminal snapshot;
   `.off` reduces buffered, late, and follow-up actions until the harness is
   idle. It also fails on unreceived reducer outputs. `receiveOutput(_:)`
   consumes outputs explicitly. `assertNoBufferedActions()` is an immediate
@@ -265,6 +265,14 @@ guarantees two things before returning:
    an unstructured `Task`, but the body of that task has not necessarily started
    yet.
 
+Lifetime ownership metadata does not introduce a scheduling boundary. A bare
+child `.send` or output stays synchronous through `optionalChild`; emitted
+actions retain the captured owner until queue admission. Reentrant removal or
+replacement can reject that queued action with the normal drop observation.
+Once an action is admitted, the new reducer composition determines ownership:
+parent effects outside the child wrapper remain independent. Explicit merge,
+concatenate and run operations keep their asynchronous scheduling semantics.
+
 `FlowTask.finish()` then waits until every effect and follow-up action descended
 from that dispatch becomes idle. `FlowTask.cancel()` requests cancellation only
 for that tree; it does not cancel work started by another send. Cancellation
@@ -321,3 +329,15 @@ removes that sleeper and leaves the clock reusable.
 - Canonical sample interactions keep stable `accessibilityIdentifier` values for hub rows, modal dismiss actions, destructive actions, and cancellation actions.
 - Prefer explicit VoiceOver semantics over relying on button text alone.
 - Prefer Dynamic Type-friendly system layout over fixed sizing.
+
+## Macro identifier contract
+
+Phase declarations and references compare the same logical Swift identifier, regardless of optional backticks. Action and Output path names preserve raw spelling and strip exactly one leading underscore. Code emission separately escapes generated members, case references, and payload labels. Missing cases and active-context member collisions remain errors; manual paths and ignored cases keep their existing meaning. Valid language spellings are tested through real consumers, including keywords, spaces, punctuation, numbers, and Unicode.
+
+### TestStoreDispatch
+
+Root, scoped, and phase helper sends return one discardable TestStoreDispatch. Queued actions keep their dispatch activity until the receive reduction has registered follow-up work. Runtime completion is separate from unverified delivered outputs. Dispatch finish never consumes either queue, regardless of exhaustivity, and can be retried after explicit receive. Timeout/caller cancellation cancels only that dispatch and does not mark uncooperative physical work finished. Handles weakly reference their store. Non-exhaustive receiveOutput advances intermediate actions using a non-consuming shared queue revision, preserving per-queue FIFO and one total deadline.
+
+### Optional-child lifetime boundary
+
+OptionalChildLifetime is an opt-in composition wrapper around the complete parent reducer. It observes child instance identity before and after child-first/parent-second reduction, resolves all lifetime changes synchronously, and invalidates old owners before action/output admission. Stable business identity does not imply instance lifetime. Namespaced effect IDs and composition paths isolate siblings and nested scopes, including the same reusable reducer under different Scope locations. Parent/sibling work keeps its own lifetime. Owners are reclaimed after outstanding work releases them; no unbounded tombstone history is maintained. Existing IfLet semantics are unchanged.

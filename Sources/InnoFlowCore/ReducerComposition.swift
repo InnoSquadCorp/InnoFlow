@@ -193,13 +193,13 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   public typealias Action = ParentAction
   public typealias Output = Child.Output
 
-  @usableFromInline let state: WritableKeyPath<ParentState, Child.State>
+  @usableFromInline let state: any WritableKeyPath<ParentState, Child.State> & Sendable
   @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
   @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
   @usableFromInline let reducer: Child
 
   private init(
-    state: WritableKeyPath<ParentState, Child.State>,
+    state: any WritableKeyPath<ParentState, Child.State> & Sendable,
     extractAction: @escaping @Sendable (ParentAction) -> Child.Action?,
     embedAction: @escaping @Sendable (Child.Action) -> ParentAction,
     reducer: Child
@@ -211,7 +211,7 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   }
 
   public init(
-    state: WritableKeyPath<ParentState, Child.State>,
+    state: any WritableKeyPath<ParentState, Child.State> & Sendable,
     action: CasePath<ParentAction, Child.Action>,
     reducer: Child
   ) {
@@ -232,7 +232,7 @@ public struct Scope<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
     }
 
     let childEffect = reducer.reduce(into: &state[keyPath: self.state], action: childAction)
-    return childEffect.map(embedAction)
+    return childEffect.map(embedAction).inLifetimeScope(state: self.state)
   }
 }
 
@@ -262,14 +262,14 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   public typealias Action = ParentAction
   public typealias Output = Child.Output
 
-  @usableFromInline let state: WritableKeyPath<ParentState, Child.State?>
+  @usableFromInline let state: any WritableKeyPath<ParentState, Child.State?> & Sendable
   @usableFromInline let extractAction: @Sendable (ParentAction) -> Child.Action?
   @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
   @usableFromInline let reducer: Child
   @usableFromInline let onMissing: OnMissingPolicy
 
   private init(
-    state: WritableKeyPath<ParentState, Child.State?>,
+    state: any WritableKeyPath<ParentState, Child.State?> & Sendable,
     extractAction: @escaping @Sendable (ParentAction) -> Child.Action?,
     embedAction: @escaping @Sendable (Child.Action) -> ParentAction,
     reducer: Child,
@@ -283,7 +283,7 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
   }
 
   public init(
-    state: WritableKeyPath<ParentState, Child.State?>,
+    state: any WritableKeyPath<ParentState, Child.State?> & Sendable,
     action: CasePath<ParentAction, Child.Action>,
     reducer: Child,
     onMissing: OnMissingPolicy = .assertOnly
@@ -310,7 +310,7 @@ public struct IfLet<ParentState: Sendable, ParentAction: Sendable, Child: Reduce
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
     state[keyPath: self.state] = childState
-    return childEffect.map(embedAction)
+    return childEffect.map(embedAction).inLifetimeScope(state: self.state)
   }
 
   /// Cold path for a child action arriving while child state is `nil`.
@@ -343,33 +343,67 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
   @usableFromInline let embedAction: @Sendable (Child.Action) -> ParentAction
   @usableFromInline let reducer: Child
   @usableFromInline let onMissing: OnMissingPolicy
+  @usableFromInline let lifetimeScopeID: AnyEffectID
 
   private init(
     state: CasePath<ParentState, Child.State>,
     extractAction: @escaping @Sendable (ParentAction) -> Child.Action?,
     embedAction: @escaping @Sendable (Child.Action) -> ParentAction,
     reducer: Child,
-    onMissing: OnMissingPolicy
+    onMissing: OnMissingPolicy,
+    lifetimeScopeID: AnyEffectID
   ) {
     self.state = state
     self.extractAction = extractAction
     self.embedAction = embedAction
     self.reducer = reducer
     self.onMissing = onMissing
+    self.lifetimeScopeID = lifetimeScopeID
   }
 
   public init(
     state: CasePath<ParentState, Child.State>,
     action: CasePath<ParentAction, Child.Action>,
     reducer: Child,
-    onMissing: OnMissingPolicy = .assertOnly
+    onMissing: OnMissingPolicy = .assertOnly,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column
   ) {
     self.init(
       state: state,
       extractAction: action.extract,
       embedAction: action.embed,
       reducer: reducer,
-      onMissing: onMissing
+      onMissing: onMissing,
+      lifetimeScopeID: ChildLifetimeCaseLocation(
+        state: state, fileID: fileID, line: line, column: column
+      ).effectID
+    )
+  }
+
+  /// Gives separate lifetime namespaces to case reducers created by the same
+  /// helper declaration. The ID must remain stable across body reconstruction.
+  public init<ID: Hashable & Sendable>(
+    state: CasePath<ParentState, Child.State>,
+    action: CasePath<ParentAction, Child.Action>,
+    reducer: Child,
+    onMissing: OnMissingPolicy = .assertOnly,
+    lifetimeID: EffectID<ID>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    column: UInt = #column
+  ) {
+    self.init(
+      state: state,
+      extractAction: action.extract,
+      embedAction: action.embed,
+      reducer: reducer,
+      onMissing: onMissing,
+      lifetimeScopeID: ChildLifetimeCaseLocation(
+        state: state, explicitID: AnyEffectID(lifetimeID),
+        fileID: fileID, line: line, column: column
+      ).effectID
     )
   }
 
@@ -386,7 +420,7 @@ public struct IfCaseLet<ParentState: Sendable, ParentAction: Sendable, Child: Re
 
     let childEffect = reducer.reduce(into: &childState, action: childAction)
     state = self.state.embed(childState)
-    return childEffect.map(embedAction)
+    return childEffect.map(embedAction).inLifetimeScope(state: self.state, id: lifetimeScopeID)
   }
 
   /// Cold path for a child action arriving while parent state is in a
@@ -428,13 +462,13 @@ where
   public typealias Action = ParentAction
   public typealias Output = Child.Output
 
-  @usableFromInline let state: WritableKeyPath<ParentState, CollectionState>
+  @usableFromInline let state: any WritableKeyPath<ParentState, CollectionState> & Sendable
   @usableFromInline let action:
     CollectionActionPath<ParentAction, CollectionState.Element.ID, Child.Action>
   @usableFromInline let reducer: Child
 
   public init(
-    state: WritableKeyPath<ParentState, CollectionState>,
+    state: any WritableKeyPath<ParentState, CollectionState> & Sendable,
     action: CollectionActionPath<ParentAction, CollectionState.Element.ID, Child.Action>,
     reducer: Child
   ) {
@@ -463,6 +497,8 @@ where
     let elementID = id
     return childEffect.map { followUpAction in
       actionPath.embed(elementID, followUpAction)
+    }.inLifetimeScope(state: self.state, elementID: elementID) { collection, id in
+      collection.first { $0.id == id }
     }
   }
 }
@@ -494,7 +530,8 @@ where
   public typealias Action = ParentAction
   public typealias Output = Child.Output
 
-  @usableFromInline let state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>
+  @usableFromInline let state:
+    any WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>> & Sendable
   @usableFromInline let action: CollectionActionPath<ParentAction, ElementID, Child.Action>
   @usableFromInline let reducer: Child
 
@@ -504,7 +541,7 @@ where
   /// `reduce(into:action:)`; this reducer writes the copied child state back
   /// through the same `IdentifiedArray[id:]` address used for lookup.
   public init(
-    state: WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>>,
+    state: any WritableKeyPath<ParentState, IdentifiedArray<ElementID, Child.State>> & Sendable,
     action: CollectionActionPath<ParentAction, ElementID, Child.Action>,
     reducer: Child
   ) {
@@ -531,6 +568,8 @@ where
     let elementID = id
     return childEffect.map { followUpAction in
       actionPath.embed(elementID, followUpAction)
+    }.inLifetimeScope(state: self.state, elementID: elementID) { collection, id in
+      collection[id: id]
     }
   }
 }

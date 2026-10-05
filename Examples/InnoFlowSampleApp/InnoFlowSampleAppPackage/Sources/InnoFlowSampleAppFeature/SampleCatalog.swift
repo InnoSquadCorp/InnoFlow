@@ -242,3 +242,13 @@ public enum SampleDemo: String, CaseIterable, Identifiable, Hashable, Sendable {
     self = demo
   }
 }
+
+extension SampleDemo {
+  public var learningLevel: Int {
+    switch self {
+    case .basics, .formValidation: 1
+    case .listDetailPagination, .routerComposition: 2
+    default: 3
+    }
+  }
+}

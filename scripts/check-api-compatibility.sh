@@ -53,6 +53,6 @@ fi
 
 echo "[api-compatibility] Comparing public products with $BASELINE_VERSION"
 swift package diagnose-api-breaking-changes "$BASELINE_VERSION" \
-  --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting
+  --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting InnoFlowInspector
 
 echo "[api-compatibility] Public API is compatible with $BASELINE_VERSION"
