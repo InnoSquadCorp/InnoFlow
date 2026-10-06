@@ -7,8 +7,10 @@
 
 Key reminders that earn their own line here so search tooling still surfaces them:
 
-- **CI-only release validation:** run the full 32-check release preflight,
-  including tvOS 18.5 / watchOS 11.5 runtimes, only in `Release Preflight` CI.
+- **CI-only release validation:** run all 28 required release preflight checks,
+  including the four OS 27 runtimes, only in `Release Preflight` CI.
+  Under the 2026-10-06 policy, iOS 18.5 / tvOS 18.5 / watchOS 11.5 /
+  visionOS 2.5 runtime checks are optional and are not run automatically.
   Do not install release-matrix runtimes or run `execute`/`resume` on the user's
   Mac. Local `plan`/`report`, static checks and focused diagnostic/fixture tests
   are allowed; they are not release evidence. See CLAUDE.md and RELEASING.md.

@@ -73,7 +73,7 @@ resolution. See [integration evidence](DEPENDENCY_INTEGRATION_2026_09_30.md).
 InnoFlow retains its stronger existing release pipeline instead of replacing it
 with a simpler shared template:
 
-1. **Release Preflight** on exact main SHA runs all 32 unchanged checks in isolated
+1. **Release Preflight** on exact main SHA runs all 28 required checks in isolated
    hosted CI jobs, including pinned tvOS/watchOS runtimes
 2. After separate tag authorization, **Release Evidence Producer** binds the
    exact tag/SHA to successful CI preflight and records raw artifacts/provenance
@@ -86,7 +86,7 @@ with a simpler shared template:
 
 A tag is already public SwiftPM publication, even before a GitHub Release. Do not
 create tags from an unapproved candidate run. Local static/selftests are diagnostics,
-never substitutes for the 32-check CI bundle. Live environment protection, repository
+never substitutes for the 28-check required CI bundle. Live environment protection, repository
 settings, tags and releases are not changed by this implementation. See
 [RELEASING.md](../RELEASING.md).
 
@@ -234,7 +234,7 @@ coverage and its exact-SHA artifacts, API baseline/previous-stable migration,
 focused runtime matrices, all sample build/test/UI work, static principles and
 negative controls, both aggregates, DocC upload and current-main publication checks.
 Dynamic simulator selection is deliberately not reusable. No PR artifacts are
-consumed and no check conclusion is synthesized by this optimization. The 32-check
+consumed and no check conclusion is synthesized by this optimization. The 28-check required
 Release Preflight, tag-bound evidence producer and explicit
 `publish_release=false`/publication approval contract are unchanged. Successful
 PR reuse is ordinary CI evidence, never a replacement release receipt.

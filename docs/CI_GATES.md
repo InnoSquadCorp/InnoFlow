@@ -22,7 +22,8 @@ modules and candidate evidence. This is not evidence that InnoFlow has shipped.
 
 ## Local execution
 
-The full 32-check release matrix is CI-only as of 2026-09-29. Do not install
+The required 28-check release matrix remains CI-only under the 2026-09-29
+execution policy and 2026-10-06 runtime policy below. Do not install
 its simulator runtimes or collect final release receipts on the user's Mac.
 The commands below are development diagnostics, not release approval; see
 the CI-only release pipeline below.
@@ -97,32 +98,50 @@ unit tests exercise malformed reports, module omission, floor changes,
 multiple SwiftPM test bundles, stale profiles and failed LLVM exports.
 The canonical release-evidence policy also requires the `coverage` command at
 the legacy `local-preflight` stage, now executed in CI. The current policy
-requires 32 checks; earlier adoption counts are historical.
+requires 28 checks; earlier adoption counts are historical.
 
-## CI-only release pipeline (2026-09-29)
+## Runtime gate policy (2026-10-06)
+
+The owner-approved policy supersedes the earlier 32-check requirement. Only
+`runtime-ios-18.5`, `runtime-tvos-18.5`, `runtime-watchos-11.5`, and
+`runtime-visionos-2.5` are optional, omitted from the required gate without an
+automatic advisory run. [Preflight 37475277403](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37475277403)
+could not download any of those exact runtimes from Apple in either arm64 or
+universal format before tests ran. Preserve those failures and earlier records;
+they do not establish final-candidate legacy runtime coverage and are not PASS.
+
+All four OS 27 runtimes, five SDK checks, three sample SDK checks and toolchains
+remain required. Source test inventories and receipt/raw-artifact validators
+remain unchanged.
+Minimum deployment support remains iOS 18 / macOS 15 / tvOS 18 / watchOS 11 /
+visionOS 2. The required 28 checks still need original receipts/raw artifacts
+for one exact SHA. A new candidate requires a new successful CI preflight;
+the failed run cannot be reused as release evidence.
+
+## CI-only release pipeline (2026-09-29; runtime scope revised 2026-10-06)
 
 - Problem: a local 32-check matrix required large runtime installations and
   local evidence transfers before CI could validate a release.
-- Constraints: retain all 32 checks, exact SHA, Swift 6.3/6.4, five SDKs, eight
-  runtime targets, raw evidence, separate public tag/Release approvals and
-  fresh GitHub-hosted job isolation. Mulbyul remains excluded. Self-hosted
+- Constraints: retain all 28 required checks, exact SHA, Swift 6.3/6.4, five SDKs,
+  three sample SDKs, four OS 27 runtime targets, raw evidence, separate public
+  tag/Release approvals and fresh GitHub-hosted job isolation. Mulbyul remains excluded. Self-hosted
   runners are not used or required.
 - Alternatives: keep local collection; re-execute everything after tagging;
   or execute once on main CI and let the tag producer verify that successful
   exact-SHA run. The third option avoids local installs and duplicate matrices.
 - Execution: manually dispatch `Release Preflight` on main, never PR code.
-  The complete policy generates 32 isolated jobs (maximum concurrency six).
+  The required policy generates 28 isolated jobs (maximum concurrency six).
   Swift 6.3 uses `macos-26` / Xcode 26.6; other jobs use `xcode-27` / Xcode 27.0.
   Each runtime job downloads/imports only its exact missing runtime from Apple.
   A final hosted job combines unchanged receipt/raw bytes and independently
-  verifies all 32 checks. Successful artifacts are SHA-bound;
+  verifies all 28 required checks. Successful artifacts are SHA-bound;
   failure/cancellation artifacts have a distinct name. The producer also uses
   `xcode-27`; no local SDK path or preinstalled custom Swift toolchain is assumed.
-- Failure behavior: absent runners/runtime images leave the gate queued or
-  failed. Do not fall back to local execution or remove checks. The producer
+- Failure behavior: absent runners/required runtime images leave the gate queued or
+  failed. Do not fall back to local execution or remove required checks. The producer
   rejects incomplete/failed, wrong-workflow/ref/SHA, expired or ambiguous runs.
 - Validation: workflow/provenance mutation tests and isolated execution-guard
-  fixtures run in ordinary PR lint. Actual 32-check runtime proof requires the
+  fixtures run in ordinary PR lint. Actual 28-check release proof requires the
   main CI run. `local-preflight` remains the serialized stage name only.
 
 Runner availability and installed versions were checked against GitHub's
@@ -131,9 +150,9 @@ and the successful PR #44 CI log (Xcode 26.6 / Swift 6.3.3). The `xcode-27`
 label is a public preview: environment checks fail closed if the selected Xcode
 or Swift changes. Runtime provisioning uses Apple's documented
 [`xcodebuild -downloadPlatform` / `-importPlatform`](https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components).
-Provisioning failures, hosted storage limits, or removed pinned images are CI
-failures, not grounds to skip checks or run the matrix locally. Failed jobs can
-be retried; to repeat already-successful jobs start a new workflow dispatch,
+Provisioning failures, hosted storage limits, or removed pinned images for required
+checks are CI failures, not grounds to skip them or run the matrix locally. Failed
+jobs can be retried; to repeat already-successful jobs start a new workflow dispatch,
 because successful artifacts are immutable and never overwritten.
 
 Every shard, complete preflight and producer artifact transports one

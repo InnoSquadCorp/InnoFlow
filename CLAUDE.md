@@ -50,8 +50,8 @@ evidence-ledger example, not as reusable proof for a later revision.
 
 ### CI-only release validation
 
-The complete 32-check release preflight runs only in the `Release Preflight`
-GitHub Actions workflow on `main`, including tvOS 18.5 and watchOS 11.5.
+All 28 required release preflight checks run only in the `Release Preflight`
+GitHub Actions workflow on `main`, including all four OS 27 runtimes.
 Do not install matrix runtimes on the user's Mac or run release-preflight
 `execute`/`resume` locally. Local `plan`/`report`, static validation, focused
 diagnostics and isolated tooling selftests remain allowed, but do not replace
@@ -62,14 +62,24 @@ Use GitHub-hosted runners only: `macos-26` / Xcode 26.6 for Swift 6.3,
 `xcode-27` / Xcode 27.0 for Swift 6.4 and the release evidence producer.
 There is no self-hosted release runner requirement. Preflight enumerates every
 required policy check into isolated jobs (at most six concurrent), provisions
-only each job's exact runtime if missing, then verifies all 32 unchanged receipts
+only each job's exact runtime if missing, then verifies all 28 required receipts
 against the same SHA before uploading a complete bundle. Do not replace a
 missing pinned toolchain/runtime with an unverified newer version.
 
-Keep all 32 checks and exact-SHA/raw-artifact verification. Missing CI runners,
-toolchains or runtimes block the CI gate; never waive them or fall back to local
-execution. The tag producer accepts only a successful main CI preflight run
-for that exact SHA, not a manually preloaded local bundle. Tag and Release
+The 2026-10-06 policy supersedes the earlier 32-check requirement: only
+`runtime-ios-18.5`, `runtime-tvos-18.5`, `runtime-watchos-11.5`, and
+`runtime-visionos-2.5` are optional, omitted from the required gate without an
+automatic advisory run. Their failed/unavailable evidence is not a PASS or
+final-candidate runtime verification. The five SDK checks, three sample SDK
+checks, toolchains, source test inventories and minimum deployment support
+(iOS 18 / macOS 15 / tvOS 18 / watchOS 11 / visionOS 2) remain unchanged.
+
+Keep all 28 required checks and exact-SHA/raw-artifact verification. Missing CI
+runners, toolchains or required runtimes block the CI gate; never waive them or
+fall back to local execution. The tag producer accepts only a successful main
+CI preflight run for that exact SHA, not a manually preloaded local bundle.
+A new candidate requires a new preflight; the failed earlier run cannot be
+reused as release evidence. Tag and Release
 publication still require separate user authorization. See RELEASING.md.
 
 ### Framework contracts

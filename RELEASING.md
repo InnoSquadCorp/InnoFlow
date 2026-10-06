@@ -2,9 +2,22 @@
 
 This document defines the minimum release quality bar for InnoFlow.
 
-> Execution policy, 2026-09-29: the owner requires the full 32-check preflight
-> to run **only in CI**, including tvOS 18.5 / watchOS 11.5. Do not install
-> these runtimes or execute the release matrix on the user's Mac. Dispatch
+> Runtime gate policy, 2026-10-06: the owner-approved policy supersedes the
+> earlier 32-check requirement. The required preflight now has **28 checks**;
+> only `runtime-ios-18.5`, `runtime-tvos-18.5`, `runtime-watchos-11.5`, and
+> `runtime-visionos-2.5` are optional. They are omitted from the required gate,
+> with no automatic advisory run. [Preflight 37475277403](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37475277403)
+> could not download any of those four exact runtimes from Apple in either
+> arm64 or universal format, before tests ran. Those failures remain historical
+> evidence; they are not PASS results or final-candidate legacy runtime validation.
+> All four OS 27 runtime checks, five SDK checks, three sample SDK checks,
+> toolchains, source test inventories, receipt/raw-artifact validators and exact-SHA
+> requirements remain unchanged. Minimum deployment support remains iOS 18 /
+> macOS 15 / tvOS 18 / watchOS 11 / visionOS 2. A new candidate requires a new
+> successful CI preflight; the failed run cannot be reused as release evidence.
+
+> Execution policy, 2026-09-29: release preflight runs **only in CI**. Do not install
+> release-matrix runtimes or execute the release matrix on the user's Mac. Dispatch
 > `Release Preflight` on main. The legacy serialized stage name
 > `local-preflight` is retained, but all its release evidence is CI-produced.
 > Earlier local-execution plans and historical receipts do not override this
@@ -199,13 +212,13 @@ Before tagging a release (automated release checks execute in CI):
     between a completed gate and the later GitHub Release API call.
 19. Dispatch `Release Preflight` (`release-preflight.yml`) on `main` at the
     exact frozen candidate SHA. GitHub-hosted jobs create `candidate.json`,
-    execute all 32 required checks from the canonical
+    execute all 28 required checks from the canonical
     [JSON evidence policy](docs/contracts/release-evidence-policy.json), retains
     receipts/raw xcresults, and verifies the full `local-preflight` stage.
     Only success uploads `innoflow-release-preflight-<exact-SHA>`; failed or
     cancelled runs preserve a separately named diagnostic artifact, never a
     release input. Record the successful run ID before authorizing the tag.
-    Missing runtimes/toolchains block CI and must be provisioned on the CI
+    Missing required runtimes/toolchains block CI and must be provisioned on the CI
     runner, not the user's Mac. Do not change main while freezing the release;
     a new candidate SHA requires a new run. No preloaded local bundle is used.
     Swift 6.3 uses `macos-26` / Xcode 26.6; other checks use `xcode-27` /
@@ -269,6 +282,11 @@ attestations require the expected environment, reviewer, UTC observation time,
 and a hashed non-empty artifact; generating a receipt is not a substitute for
 performing the manual check.
 
+Optional checks may be omitted; any optional receipt that is submitted still
+undergoes the same strict validation. The `local-preflight` completion log's
+`expected=32` counts the full policy inventory, including the four optional
+checks; the required receipt count is 28. It does not claim 32 executed passes.
+
 For a candidate, `scripts/run-release-preflight.sh plan
 --evidence-root <outside-repository-directory>` lists the policy's required local
 check IDs, their reviewed commands, and expected environments without running
@@ -330,9 +348,10 @@ The three compiler-6.4 Observation didSet declarations also require OS 27 APIs.
 They carry function-level `@available` attributes, preserved in the AST inventory,
 and the exact `observation-didset-os27` capability is pinned by test identifier.
 Focused runs resolve their actual simulator device/runtime before discovery and
-compare it with the raw xcresult device identity. The reviewed legacy runtimes
-must report those three declarations as `Skipped`; OS 27 must report each as
-`Passed`. Missing IDs, empty legacy passes, modern skips, other skips and unknown
+compare it with the raw xcresult device identity. When explicitly run, the
+optional legacy runtimes must report those three declarations as `Skipped`;
+OS 27 must report each as `Passed`. Missing IDs, empty legacy passes, modern
+skips, other skips and unknown
 runtime identities fail closed. Receipts report executed and unavailable counts
 separately while retaining the complete compiled declaration count and the two
 existing diagnostic outcomes. Native discovery/result schemas remain subject to
@@ -385,7 +404,7 @@ minimum and Xcode 26.6 remains the primary. Mandatory CI also validates the
 603.0.0 floor on Swift 6.3 and the 604 line on Xcode 27 / Swift 6.4. Source
 fallback remains an existing supported path, with clean-build diagnostics;
 a green build is not evidence of matching prebuilt use. No runtime performance,
-coverage, job timeout, public API or 32-check release threshold is weakened.
+coverage, job timeout, public API or 28-check required release threshold is weakened.
 An intentional release-hardening dependency update includes:
 
 1. Updating `Package.swift`, the root/sample/Xcode/DocC locks and DocC generator metadata together; regenerate SwiftPM locks from their actual manifests and verify the Xcode lock on hosted Apple CI.

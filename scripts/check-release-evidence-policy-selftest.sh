@@ -159,6 +159,19 @@ expect_mutation_failure() {
   fi
 }
 
+# Required status is pinned for every stage, not just the runtime matrix.
+while IFS= read -r check_id; do
+  export REQUIREMENT_MUTATION_ID="$check_id"
+  expect_mutation_failure "changed-requirement-$check_id" \
+    'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")==ENV.fetch("REQUIREMENT_MUTATION_ID") }; c["requirement"]=c.fetch("requirement")=="required" ? "optional" : "required"; File.write(p,JSON.generate(j)+"\n")'
+done < <(ruby -rjson -e 'JSON.parse(File.read(ARGV[0])).fetch("checks").each { |c| puts c.fetch("id") }' \
+  "$root_dir/docs/contracts/release-evidence-policy.json")
+unset REQUIREMENT_MUTATION_ID
+expect_mutation_failure invalid-requirement \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("checks").first["requirement"]="advisory"; File.write(p,JSON.generate(j)+"\n")'
+expect_mutation_failure deleted-legacy-definition \
+  'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); j.fetch("checks").reject! { |c| c.fetch("id")=="runtime-ios-18.5" }; File.write(p,JSON.generate(j)+"\n")'
+
 for check_id in swift-6.3-toolchain swift-6.4-toolchain full-principle sample-swift-6.3; do
   export COUNT_MUTATION_ID="$check_id"
   expect_mutation_failure "unreviewed-count-$check_id" \
