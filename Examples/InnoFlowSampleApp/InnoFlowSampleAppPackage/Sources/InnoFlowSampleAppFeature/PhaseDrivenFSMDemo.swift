@@ -293,7 +293,7 @@ struct PhaseDrivenFSMDemoView: View {
         Button("Inspector") { inspectorPresented = true }
         .accessibilityIdentifier("phase.inspector")
       }
-      .sheet(isPresented: $inspectorPresented) {
+      .sheet(isPresented: $inspectorPresented) { [store] in
         NavigationStack {
           FlowInspector(
             diagnostics: diagnostics,
