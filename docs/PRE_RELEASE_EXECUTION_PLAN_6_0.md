@@ -1,5 +1,16 @@
 # InnoFlow 6.0.0 — 최종 배포 전 실행 계획
 
+> 2026-10-06 필수 runtime 정책 변경: 소유자 승인에 따라 iOS 18.5 / tvOS 18.5 /
+> watchOS 11.5 / visionOS 2.5 네 검증은 선택 사항이며, 필수 gate에서 제외하고
+> 자동 advisory 실행도 추가하지 않는다. 아래 과거 계획의 32개 필수 검증·8개
+> runtime 요구는 이 정책으로 대체된다. [Preflight 37475277403](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37475277403)에서
+> Apple arm64와 universal 모두 네 runtime을 제공하지 않아 테스트 실행 전에
+> 실패했다. 과거 기록은 보존하며 최종 후보의 구형 runtime 검증 완료나 PASS로
+> 바꾸지 않는다. OS 27 runtime 4개를 포함한 나머지 28개 필수 검증, SDK 5개,
+> sample SDK 3개, toolchain, source test inventory와 최소 배포 지원 버전은 유지한다.
+> 원본 artifact와 동일 SHA 검증도 유지하며, 새 후보는 새 CI preflight를 통과해야 한다.
+> 이전 실패 run은 재사용할 수 없다. 현재 절차는 [RELEASING.md](../RELEASING.md)를 따른다.
+
 > 2026-09-29 실행 위치 변경: 사용자의 지시에 따라 최종 32개 검증은
 > `Release Preflight` CI에서만 실행한다. 이 문서의 R66/local 증거 수집·runtime
 > 설치 설명은 이전 계획이며, 사용자 Mac에서 실행하거나 설치하라는 지시가 아니다.

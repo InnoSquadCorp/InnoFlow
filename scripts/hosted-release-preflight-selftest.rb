@@ -73,9 +73,16 @@ end
 
 source = File.expand_path("..", __dir__)
 matrix = HostedReleasePreflight.new(source).matrix.fetch("include")
-assert(matrix.length == 32 && matrix.map { |row| row.fetch("check") }.uniq.length == 32, "Missing required matrix check")
+legacy_ids = %w[runtime-ios-18.5 runtime-tvos-18.5 runtime-watchos-11.5 runtime-visionos-2.5]
+matrix_ids = matrix.map { |row| row.fetch("check") }
+policy_checks = JSON.parse(File.read(File.join(source, "docs/contracts/release-evidence-policy.json"))).fetch("checks")
+expected_ids = policy_checks.select { |check| check["stage"] == "local-preflight" }
+  .map { |check| check.fetch("id") } - legacy_ids
+assert(matrix_ids.length == 28 && matrix_ids.uniq.length == 28 && matrix_ids == expected_ids, "Missing required matrix check")
+assert((matrix_ids & legacy_ids).empty?, "Optional legacy runtime entered required matrix")
+assert(matrix_ids.grep(/\Aruntime-/) == %w[runtime-ios-27.0 runtime-tvos-27.0 runtime-watchos-27.0 runtime-visionos-27.0], "Current runtime gates changed")
 assert(matrix.count { |row| row["runner"] == "macos-26" && row["swift"] == "6.3" && row["xcode"] == "26.6" } == 2, "Wrong minimum toolchain jobs")
-assert(matrix.count { |row| row["runner"] == "xcode-27" && row["swift"] == "6.4" && row["xcode"] == "27.0" } == 30, "Wrong current toolchain jobs")
+assert(matrix.count { |row| row["runner"] == "xcode-27" && row["swift"] == "6.4" && row["xcode"] == "27.0" } == 26, "Wrong current toolchain jobs")
 workflow = YAML.safe_load(File.read(File.join(source, ".github/workflows/release-preflight.yml")))
 diagnostics = workflow.fetch("jobs").fetch("preflight").fetch("steps").find do |step|
   step["name"] == "Preserve failed or cancelled diagnostics separately"
@@ -98,10 +105,11 @@ Dir.mktmpdir("innoflow-hosted-selftest-") do |fixture|
       "component" => "innoflow", "allowedCommand" => "ruby -e", "commandContract" => {
         "executable" => "ruby", "exactArguments" => ["-e", "puts '#{id}'"] } }
   end
+  optional = checks.first.merge("id" => "optional-check", "requirement" => "optional")
   policy = { "schema" => "inno-flow-release-evidence-policy-v3",
     "stageOrder" => %w[local-preflight pre-publication post-publication],
     "profiles" => { "command" => { "evidenceKind" => "automated", "resultFormat" => "command-exit", "artifactContent" => "non-empty" } },
-    "checks" => checks, "matrices" => [] }
+    "checks" => checks + [optional], "matrices" => [] }
   policy_path = File.join(repo, "docs/contracts/release-evidence-policy.json")
   File.write(policy_path, JSON.pretty_generate(policy) + "\n")
   command!("git", "init", "-q", chdir: repo)
@@ -115,6 +123,7 @@ Dir.mktmpdir("innoflow-hosted-selftest-") do |fixture|
   ENV.update("GITHUB_ACTIONS" => "true", "RUNNER_ENVIRONMENT" => "github-hosted",
     "GITHUB_REF" => "refs/heads/main", "GITHUB_SHA" => sha, "RUNNER_TEMP" => fixture)
   runner = HostedReleasePreflight.new(repo)
+  assert(runner.matrix.fetch("include").map { |row| row.fetch("check") } == %w[first-check second-check], "Optional fixture entered required matrix")
   ENV["RUNNER_ENVIRONMENT"] = "self-hosted"
   rejects("CI-only") { runner.hosted! }
   ENV["RUNNER_ENVIRONMENT"] = "github-hosted"
@@ -148,6 +157,13 @@ Dir.mktmpdir("innoflow-hosted-selftest-") do |fixture|
   archives = File.join(fixture, "archives")
   pack_shards(shards, archives)
   runner.merge(archives, File.join(fixture, "complete"))
+  optional_archives = File.join(fixture, "optional-archives")
+  FileUtils.cp_r(archives, optional_archives)
+  FileUtils.cp_r(File.join(archives, "innoflow-preflight-shard-#{sha}-first-check"),
+    File.join(optional_archives, "innoflow-preflight-shard-#{sha}-optional-check"))
+  rejects("Missing or unexpected shard artifacts") do
+    runner.merge(optional_archives, File.join(fixture, "optional-rejected"))
+  end
   original = File.join(shards, "innoflow-preflight-shard-#{sha}-first-check")
   %w[receipt.json output.log].each do |name|
     assert(File.binread(File.join(original, "runs/first-check", name)) == File.binread(File.join(fixture, "complete/runs/first-check", name)), "Evidence bytes changed")
@@ -316,4 +332,4 @@ Dir.mktmpdir("innoflow-hosted-selftest-") do |fixture|
   assert(!log.include?("must-not-appear-in-log"), "Diagnostics dumped unrestricted environment")
   assert(!File.exist?(streamed), "Diagnostics mixed with verified receipts")
 end
-puts "[hosted-release-preflight-selftest] 32-check mapping, hosted/main/SHA guards, immutable receipt merge, adversarial evidence, exact-version bounded runtime fallback and durable early diagnostics passed"
+puts "[hosted-release-preflight-selftest] 28-required-check mapping, optional legacy exclusion, hosted/main/SHA guards, immutable receipt merge, adversarial evidence, exact-version bounded runtime fallback and durable early diagnostics passed"

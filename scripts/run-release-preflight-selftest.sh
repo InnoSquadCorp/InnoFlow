@@ -306,14 +306,23 @@ git -C "$aggregate_repo" config user.email "preflight@example.invalid"
 ruby -rjson -e '
   path = ARGV.fetch(0)
   policy = JSON.parse(File.read(path))
-  policy.fetch("checks").reject! { |check| check.fetch("id").start_with?("runtime-") }
+  policy.fetch("checks").each do |check|
+    check["requirement"] = "optional" if check.fetch("id").start_with?("runtime-")
+  end
   File.write(path, JSON.pretty_generate(policy) + "\n")
 ' "$aggregate_repo/docs/contracts/release-evidence-policy.json"
 git -C "$aggregate_repo" add -- docs/contracts/release-evidence-policy.json
 git -C "$aggregate_repo" commit -qm aggregate-fixture
 "$aggregate_repo/scripts/run-release-preflight.sh" resume \
   --evidence-root "$fixture_root/aggregate-evidence" >"$fixture_root/aggregate.log"
-grep -q 'RELEASE_EVIDENCE_COMPLETE.*rows=2 expected=2' "$fixture_root/aggregate.log"
+grep -q 'RELEASE_EVIDENCE_COMPLETE.*rows=2 expected=3' "$fixture_root/aggregate.log"
+if "$aggregate_repo/scripts/run-release-preflight.sh" plan \
+  --evidence-root "$fixture_root/aggregate-evidence" --check-id runtime-visionos-2.5 \
+  >"$fixture_root/optional-plan.log" 2>&1; then
+  echo "Optional runtime entered required preflight plan" >&2
+  exit 1
+fi
+grep -q 'Unknown local-preflight check' "$fixture_root/optional-plan.log"
 verify_aggregate_manifest() {
   ruby -e '
     lines = File.readlines(ARGV.fetch(0), chomp: true)

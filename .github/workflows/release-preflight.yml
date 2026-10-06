@@ -123,7 +123,7 @@ jobs:
           evidence_root="$RUNNER_TEMP/innoflow-release-preflight-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           [[ ! -e "$evidence_root" && ! -L "$evidence_root" ]]
           echo "root=$evidence_root" >>"$GITHUB_OUTPUT"
-      - name: Merge unchanged receipts and verify all 32 checks
+      - name: Merge unchanged receipts and verify all 28 required checks
         working-directory: components/InnoFlow
         env:
           SHARDS: ${{ runner.temp }}/innoflow-preflight-shards

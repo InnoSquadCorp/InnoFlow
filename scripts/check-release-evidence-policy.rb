@@ -27,6 +27,12 @@ begin
   actual_ids_by_stage = policy.fetch("checks").group_by { |entry| entry.fetch("stage") }
     .transform_values { |entries| entries.map { |entry| entry.fetch("id") } }
   abort "[release-evidence-policy] framework-only check inventory changed" unless actual_ids_by_stage == expected_ids_by_stage
+  optional_legacy_ids = %w[runtime-ios-18.5 runtime-tvos-18.5 runtime-watchos-11.5 runtime-visionos-2.5]
+  policy.fetch("checks").each do |check|
+    requirement = optional_legacy_ids.include?(check.fetch("id")) ? "optional" : "required"
+    abort "[release-evidence-policy] requirement changed for #{check.fetch('id')}" unless
+      check["requirement"] == requirement
+  end
   abort "[release-evidence-policy] framework-only policy must not contain product matrices" unless policy.fetch("matrices", []).empty?
   abort "[release-evidence-policy] retired product dependency remains" if File.read(policy_path).match?(/mulbyul/i)
   migration = policy.fetch("checks").find { |entry| entry["id"] == "migration-consumer" }
@@ -88,8 +94,8 @@ begin
   plan, error, status = Open3.capture3(runner, "plan", "--evidence-root", File.join(Dir.tmpdir, "innoflow-preflight-plan"))
   abort "[release-evidence-policy] preflight catalog failed: #{error.strip}" unless status.success?
   planned_ids = plan.lines.map { |line| line.split("\t", 2).first }
-  abort "[release-evidence-policy] preflight catalog does not cover every local check" unless
-    planned_ids == expected_ids_by_stage.fetch("local-preflight")
+  abort "[release-evidence-policy] preflight catalog does not cover every required local check" unless
+    planned_ids == expected_ids_by_stage.fetch("local-preflight") - optional_legacy_ids
   check = policy.fetch("checks").find { |entry| entry.fetch("id") == "external-macro-consumer" }
   abort "[release-evidence-policy] external-macro-consumer is missing" unless check
 
@@ -196,7 +202,7 @@ begin
   end
 
   runtime_checks = policy.fetch("checks").select { |entry| entry.fetch("id").start_with?("runtime-") }
-  abort "[release-evidence-policy] eight runtime checks are required" unless runtime_checks.length == 8
+  abort "[release-evidence-policy] eight runtime definitions must be retained" unless runtime_checks.length == 8
   inventory_relative = "docs/contracts/runtime-test-inventory.json"
   inventory_path = File.join(root, inventory_relative)
   inventory = JSON.parse(File.read(inventory_path))

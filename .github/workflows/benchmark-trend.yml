@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   paired-apple-trend:
-    # Advisory only. Never add this job to the 32-check Release Preflight or
+    # Advisory only. Never add this job to the required Release Preflight or
     # treat a tolerated capture/build failure as green performance evidence.
     continue-on-error: true
     runs-on: macos-26

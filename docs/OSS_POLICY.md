@@ -28,7 +28,7 @@ compiler compatibility remain deliberate maintainer decisions, with no
 automatic broadening of the consumer dependency constraint.
 
 [RELEASING.md](../RELEASING.md) is the release authority. The candidate path is
-read-only by default: all 32 hosted preflight checks bind receipts and raw
+read-only by default: all 28 required hosted preflight checks bind receipts and raw
 artifacts to the same exact SHA, and the evidence producer adds the existing
 tag and explicit review approval. A verify-only Release Gate dispatch keeps
 `publish_release=false`. A public tag already exposes a SwiftPM version;

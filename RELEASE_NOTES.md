@@ -60,7 +60,23 @@ isolation defaults. Run lanes expose anonymous bounded snapshots, serial
 capacity is unsigned, and dispatch/timing identities migrate to process-local
 UInt64. These are pre-release source contracts: consult MIGRATION and the
 candidate validation ledger. Source presence is not Apple, performance, or
-32-check release certification; the tag remains unpublished by this task.
+28-check required release certification; the tag remains unpublished by this task.
+
+### Runtime verification coverage
+
+The 2026-10-06 policy supersedes the earlier 32-check release requirement.
+iOS 18.5, tvOS 18.5, watchOS 11.5 and visionOS 2.5 runtime checks are optional
+and omitted from the required gate, with no automatic advisory run.
+[Preflight 37475277403](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37475277403)
+could not download those four exact runtimes from Apple in either arm64 or
+universal format before tests ran. Final-candidate legacy runtime coverage
+remains unverified; historical failures are not relabeled PASS.
+
+The remaining 28 required checks retain all four OS 27 runtimes, five SDKs,
+three sample SDKs, toolchains, source test inventories, receipt/raw-artifact validators and
+exact-SHA/raw-artifact verification. Minimum deployment support remains
+iOS 18 / macOS 15 / tvOS 18 / watchOS 11 / visionOS 2. A new candidate needs
+a new successful CI preflight; the earlier failed run is not release evidence.
 
 ### Release hardening
 

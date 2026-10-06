@@ -189,6 +189,14 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Notes
 
+- The 2026-10-06 release policy makes iOS 18.5, tvOS 18.5, watchOS 11.5 and
+  visionOS 2.5 runtime checks optional, leaving 28 required preflight checks
+  including all four OS 27 runtimes. [Preflight 37475277403](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37475277403)
+  could not obtain any of those legacy runtimes from Apple in either arm64 or
+  universal format before tests ran, so final-candidate legacy runtime coverage
+  remains unverified. Optional checks are not run automatically or relabeled PASS.
+  Minimum deployment support is unchanged; a new candidate still requires a new
+  successful exact-SHA preflight with original receipts and raw artifacts.
 - Xcode 26.6 / Swift 6.3.3 Release builds require a narrowly scoped
   `@_optimize(none)` workaround on `StoreOutputHub.deinit` for an upstream SIL
   performance-inliner crash. The module remains optimized, and the workaround
