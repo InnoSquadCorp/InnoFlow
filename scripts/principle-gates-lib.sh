@@ -1482,10 +1482,22 @@ run_sample_contract_checks() {
   run_with_principle_gate_cleanup run_sample_contract_checks_impl "$@"
 }
 
-run_gate_negative_controls() {
-  "$SCRIPT_DIR/principle-gates-selftest.sh"
-  "$SCRIPT_DIR/check-concurrency-safety-selftest.sh"
-}
+run_gate_negative_controls() (
+  # Successful fixtures must not contribute synthetic compiler identities,
+  # test events or failure diagnostics to the enclosing release evidence.
+  local log_file script status
+  log_file="$(mktemp "${TMPDIR:-/tmp}/innoflow-principle-selftests.XXXXXX")" || exit $?
+  trap 'rm -f "$log_file"' EXIT
+  for script in principle-gates-selftest.sh check-concurrency-safety-selftest.sh; do
+    if "$SCRIPT_DIR/$script" >"$log_file" 2>&1; then
+      echo "[principle-gates] $script passed"
+    else
+      status=$?
+      cat "$log_file" >&2
+      exit "$status"
+    fi
+  done
+)
 
 run_principle_gates_impl() {
   # --static skips the build/test gates (release builds, debug + release
@@ -1531,7 +1543,9 @@ run_principle_gates_impl() {
 
   local compiler_identity
   compiler_identity="$(swift --version)"
-  printf '[swift-test-inventory] compiler: %s\n' "${compiler_identity%%$'\n'*}"
+  # swift --version can leave driver text without a newline on stderr.
+  # Frame the stdout identity separately without merging the two streams.
+  printf '\n[swift-test-inventory] compiler: %s\n' "${compiler_identity%%$'\n'*}"
   if [[ "$(uname -s)" == Darwin ]]; then
     printf '[swift-test-inventory] host-runtime: {"platform":"macOS","os":"%s"}\n' "$(sw_vers -productVersion)"
   fi

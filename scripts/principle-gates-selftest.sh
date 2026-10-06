@@ -584,6 +584,7 @@ run_release_configuration_split_tests() {
 }
 
 run_source_preserves_cwd_test
+assert_success "$SCRIPT_DIR/principle-gates-logging-selftest.sh"
 run_cleanup_trap_isolation_tests
 run_workflow_action_pin_tests
 run_docc_plugin_pin_tests
