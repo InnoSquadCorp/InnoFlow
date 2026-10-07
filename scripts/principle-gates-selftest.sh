@@ -495,42 +495,48 @@ run_release_sync_lifecycle_tests() {
     "$ROOT_DIR/README.kr.md" "$ROOT_DIR/README.jp.md" "$ROOT_DIR/README.cn.md" \
     "$ROOT_DIR/RELEASE_NOTES.md" "$ROOT_DIR/CHANGELOG.md" "$ROOT_DIR/MIGRATION.md" \
     "$ROOT_DIR/ARCHITECTURE_CONTRACT.md" "$tmp_root/"
+  # Start with an undated candidate to reproduce the original late tagged failure.
+  ruby -e 'p=ARGV.fetch(0); s=File.read(p); File.write(p, s.sub(/^## \[6\.0\.1\] - .*$/, "## [6.0.1] - Unreleased"))' "$tmp_root/CHANGELOG.md"
   git -C "$tmp_root" init -q
   git -C "$tmp_root" config user.name "InnoFlow Selftest"
   git -C "$tmp_root" config user.email "selftest@invalid.example"
   git -C "$tmp_root" add .
   git -C "$tmp_root" commit -qm "candidate fixture"
 
-  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
     "$tmp_root/scripts/check-release-sync.sh"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+    INNOFLOW_REQUIRE_RELEASE_DATE=1 "$tmp_root/scripts/check-release-sync.sh"
   printf '999999999999999999999999999999.0.0\n' >"$tmp_root/STABLE_VERSION"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
     "$tmp_root/scripts/check-release-sync.sh"
   printf '5.1.1\n' >"$tmp_root/STABLE_VERSION"
-  # A tagged release requires an actual calendar date. Keep the repository's
-  # Unreleased heading untouched; date only this isolated lifecycle fixture.
-  ruby -e 'path=ARGV.fetch(0); body=File.read(path); count=body.scan(/^## \[6\.0\.0\] - .*$/).size; abort "missing unique fixture heading" unless count == 1; File.write(path, body.sub(/^## \[6\.0\.0\] - .*$/, "## [6.0.0] - 2026-10-04"))' \
+  # A dated candidate must pass preflight without a tag; strict tagged checks
+  # below still require the exact tag and the earlier published stable baseline.
+  ruby -e 'path=ARGV.fetch(0); body=File.read(path); count=body.scan(/^## \[6\.0\.1\] - .*$/).size; abort "missing unique fixture heading" unless count == 1; File.write(path, body.sub(/^## \[6\.0\.1\] - .*$/, "## [6.0.1] - 2026-10-04"))' \
     "$tmp_root/CHANGELOG.md"
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+    INNOFLOW_REQUIRE_RELEASE_DATE=1 "$tmp_root/scripts/check-release-sync.sh"
   git -C "$tmp_root" add CHANGELOG.md
   git -C "$tmp_root" commit -qm "dated release fixture"
-  git -C "$tmp_root" tag 6.0.0
-  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+  git -C "$tmp_root" tag 6.0.1
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
   assert_failure env ROOT_DIR="$tmp_root" GITHUB_REF_TYPE=tag GITHUB_REF_NAME=5.1.1 \
-    INNOFLOW_RELEASE_VERSION=6.0.0 INNOFLOW_REQUIRE_RELEASE_TAG=1 \
+    INNOFLOW_RELEASE_VERSION=6.0.1 INNOFLOW_REQUIRE_RELEASE_TAG=1 \
     "$tmp_root/scripts/check-release-sync.sh"
-  printf '6.0.0\n' >"$tmp_root/STABLE_VERSION"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+  printf '6.0.1\n' >"$tmp_root/STABLE_VERSION"
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
-  ruby -e 'path=ARGV.fetch(0); body=File.read(path); old="Current stable public release: `5.1.1`"; abort "missing fixture marker" unless body.include?(old); File.write(path, body.sub(old, "Current stable public release: `6.0.0`"))' \
+  ruby -e 'path=ARGV.fetch(0); body=File.read(path); old="Current stable public release: `5.1.1`"; abort "missing fixture marker" unless body.include?(old); File.write(path, body.sub(old, "Current stable public release: `6.0.1`"))' \
     "$tmp_root/RELEASING.md"
   git -C "$tmp_root" add STABLE_VERSION RELEASING.md
   git -C "$tmp_root" commit -qm "post-publication metadata fixture"
-  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
     "$tmp_root/scripts/check-release-sync.sh"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.0 \
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
 
   trap - RETURN

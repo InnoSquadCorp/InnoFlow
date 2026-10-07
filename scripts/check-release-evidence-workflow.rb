@@ -243,7 +243,7 @@ begin
   planner = plan.fetch("steps").find { |step| step["id"] == "matrix" }
   fail_contract("plan must enumerate the entire validated policy") unless planner &&
     planner["working-directory"] == "components/InnoFlow" && !planner.key?("if") &&
-    planner["run"] == "set -euo pipefail\nruby scripts/check-release-evidence-policy.rb\nmatrix=\"$(ruby scripts/hosted-release-preflight.rb matrix)\"\necho \"matrix=$matrix\" >>\"$GITHUB_OUTPUT\"\n"
+    planner["run"] == "set -euo pipefail\nruby scripts/check-release-evidence-policy.rb\nINNOFLOW_REQUIRE_RELEASE_DATE=1 scripts/check-release-sync.sh\nmatrix=\"$(ruby scripts/hosted-release-preflight.rb matrix)\"\necho \"matrix=$matrix\" >>\"$GITHUB_OUTPUT\"\n"
   preflight_job = job!(preflight_jobs, "preflight")
   fail_contract("preflight must use the complete hosted matrix") unless preflight_job["needs"] == "plan" &&
     preflight_job["runs-on"] == "${{ matrix.runner }}" &&

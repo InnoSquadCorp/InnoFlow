@@ -52,17 +52,27 @@ This document defines the minimum release quality bar for InnoFlow.
 Current stable public release: `5.1.1` (at 6.0.0 candidate freeze; tagged and
 published on GitHub Releases, 2026-08-26)
 
-Release target: `6.0.0` (verify live tag/Release status on GitHub)
+Release target: `6.0.1` (verify live tag/Release status on GitHub)
 
-The 6.0.0 development source carries the staged contract; record the actual
+The 6.0.1 development source carries the staged contract; record the actual
 candidate branch and immutable commit when freezing each release attempt.
 Installation snippets and non-tag release metadata are aligned with that
 candidate. A frozen tagged source snapshot keeps the prior published-stable
 marker; tag creation and GitHub Release publication remain separate gates.
 
+The 6.0.1 candidate is dated 2026-10-07. The existing 6.0.0 tag at
+`188c2732d26350cf01afadade3dac89a2b73b68f` is preserved; its `Unreleased`
+CHANGELOG entry failed the tagged date gate and no GitHub Release was published
+at this check. Its prior evidence is not 6.0.1 evidence. Run a new full required
+CI preflight on the final merged 6.0.1 SHA before creating its new tag.
+
+The preflight plan runs `INNOFLOW_REQUIRE_RELEASE_DATE=1 scripts/check-release-sync.sh`
+before launching the matrix, so an undated candidate fails before tagging. This
+checks candidate metadata only; it neither proves publication nor creates a tag.
+
 ## Stable release readiness
 
-The 6.0.0 release tag must be exactly `6.0.0`; do not create or document a `v6.0.0`
+The 6.0.1 release tag must be exactly `6.0.1`; do not create or document a `v6.0.1`
 tag. A release is publish-ready only after its exact tag triggers a successful
 GitHub Actions `Release Gate`.
 
@@ -141,15 +151,15 @@ tag, run and confirm the following in CI (not a local release matrix):
     See [gate mapping and limits](docs/CI_GATES.md) for the InnoRouter adoption.
 
 `STABLE_VERSION` records the public stable version at the source revision. Keep
-it at `5.1.1` in the frozen 6.0.0 candidate and exact tag: promoting it before
+it at `5.1.1` in the frozen 6.0.1 candidate and exact tag: promoting it before
 the tag exists would make the API baseline gate require a nonexistent tag and
 invalidate the candidate snapshot. The mandatory CI migration consumer
-instead builds both the exact `5.1.1` baseline and 6.0.0 candidate, while the
+instead builds both the exact `5.1.1` baseline and 6.0.1 candidate, while the
 reviewed four-product API inventory must classify the major breakage. After
 GitHub Release publication, update `STABLE_VERSION` and the current-stable
-wording on the development branch in a separate commit. Then the 6.0.0 API
+wording on the development branch in a separate commit. Then the 6.0.1 API
 baseline is mandatory; deletion or loss of that published tag fails closed.
-The immutable 6.0.0 tag retains its historically accurate candidate-freeze
+The immutable 6.0.1 tag retains its historically accurate candidate-freeze
 metadata. Override `INNOFLOW_API_BASELINE` only when intentionally opening a
 new major development line.
 
@@ -157,14 +167,14 @@ After separate authorization to create the exact candidate tag,
 release-tag enforcement must also pass:
 
 ```bash
-INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=6.0.0 scripts/check-release-sync.sh
+INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=6.0.1 scripts/check-release-sync.sh
 ```
 
-That command intentionally requires the exact local tag `6.0.0` to point at
+That command intentionally requires the exact local tag `6.0.1` to point at
 the checked-out commit and `STABLE_VERSION` to remain earlier than the target
 in the tagged candidate. In GitHub Actions, the triggering `GITHUB_REF_NAME` is authoritative
 and must match the staged version. The gate must not normalize or accept
-`v6.0.0`. The command is expected to fail while the candidate is deliberately
+`v6.0.1`. The command is expected to fail while the candidate is deliberately
 untagged.
 
 ## Release Checklist

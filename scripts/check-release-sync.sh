@@ -95,7 +95,7 @@ if [[ -z "$version" ]]; then
   exit 1
 fi
 
-if is_truthy "${INNOFLOW_REQUIRE_RELEASE_TAG:-0}"; then
+if is_truthy "${INNOFLOW_REQUIRE_RELEASE_TAG:-0}" || is_truthy "${INNOFLOW_REQUIRE_RELEASE_DATE:-0}"; then
   ruby "$SCRIPT_DIR/check-release-date.rb" CHANGELOG.md "$version"
 fi
 

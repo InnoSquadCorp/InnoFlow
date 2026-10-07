@@ -116,3 +116,6 @@ docs-build/
 # Python validation helpers generate disposable bytecode caches.
 __pycache__/
 *.pyc
+
+# Reproducible external agent-skill consumer.
+!/skills/innoflow/assets/consumer/Package.resolved

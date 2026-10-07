@@ -7,6 +7,25 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-10-07
+
+### Added
+
+- Library-owned InnoFlow 6.0.x AI skill and an independently validated exact-6.0.0 consumer fixture.
+
+### Fixed
+
+- Align the 6.0.1 candidate date, installation guidance, migration and release metadata. Check the candidate date before CI preflight, in addition to the unchanged tagged release gate.
+
+### Release status
+
+This is the candidate preparation date, not a claim of GitHub Release publication.
+The existing 6.0.0 tag at `188c2732d26350cf01afadade3dac89a2b73b68f`
+is preserved. Its source retained an `Unreleased` heading and failed the tagged
+date gate; no 6.0.0 GitHub Release was published at this check. The 6.0.1 candidate
+requires fresh exact-SHA CI preflight and producer/verification/publication evidence.
+`STABLE_VERSION` remains 5.1.1 until publication succeeds.
+
 ## [6.0.0] - Unreleased
 
 ### Added

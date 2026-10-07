@@ -2,6 +2,14 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
+## 6.0.1
+
+No runtime or public API migration from the existing 6.0.0 tag is required.
+This patch adds library-owned AI guidance and corrects release metadata and
+preflight date validation. The skill's exact consumer receipt remains bound to
+6.0.0; 6.0.1 publication and consumer validation must be established separately.
+For upgrades from the last published stable 5.1.1, follow the 6.0 migration below.
+
 ## 6.0.0
 
 ### Stable baseline and prerelease scope

@@ -122,6 +122,10 @@ expect_preflight_mutation_failure() {
     exit 1
   fi
 }
+expect_preflight_mutation_failure missing-candidate-date \
+  's=File.read(ARGV[0]); s.sub!("          INNOFLOW_REQUIRE_RELEASE_DATE=1 scripts/check-release-sync.sh\n", ""); File.write(ARGV[1],s)'
+expect_preflight_mutation_failure ignored-candidate-date \
+  's=File.read(ARGV[0]); s.sub!("INNOFLOW_REQUIRE_RELEASE_DATE=1 scripts/check-release-sync.sh", "INNOFLOW_REQUIRE_RELEASE_DATE=1 scripts/check-release-sync.sh || true"); File.write(ARGV[1],s)'
 expect_preflight_mutation_failure untrusted-branch \
   's=File.read(ARGV[0]); s.sub!("refs/heads/main", "refs/heads/feature"); File.write(ARGV[1],s)'
 expect_preflight_mutation_failure subset \

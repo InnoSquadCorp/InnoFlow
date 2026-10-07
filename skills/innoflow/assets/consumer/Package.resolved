@@ -1,0 +1,24 @@
+{
+  "originHash": "56bf6dd50530cbc50f69d35c7f6ebd963298b04d42d6efb416afa482e242b2a7",
+  "pins": [
+    {
+      "identity": "innoflow",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/InnoSquadCorp/InnoFlow.git",
+      "state": {
+        "version": "6.0.0",
+        "revision": "188c2732d26350cf01afadade3dac89a2b73b68f"
+      }
+    },
+    {
+      "identity": "swift-syntax",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/swiftlang/swift-syntax.git",
+      "state": {
+        "version": "604.0.0",
+        "revision": "050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf"
+      }
+    }
+  ],
+  "version": 3
+}

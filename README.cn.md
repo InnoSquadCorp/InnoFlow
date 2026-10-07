@@ -6,8 +6,8 @@
 
 InnoFlow 是一个面向业务/领域状态转换的 SwiftUI-first 单向架构框架。
 
-本文及下方安装示例描述 6.0.0 候选版本的 API 契约。候选版本冻结时的公开稳定基线为 5.1.1；
-6.0.0 标签和 GitHub Release 是否已公开，需在 GitHub 上另行确认。
+本文及下方安装示例描述 6.0.1 候选版本的 API 契约。候选版本冻结时的公开稳定基线为 5.1.1；
+6.0.1 标签和 GitHub Release 是否已公开，需在 GitHub 上另行确认。
 
 ## 从Level 1开始
 
@@ -20,7 +20,7 @@ InnoFlow 是一个面向业务/领域状态转换的 SwiftUI-first 单向架构�
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.0")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.1")
 ]
 ```
 
@@ -223,6 +223,10 @@ bundle 显式传入，navigation/transport 留在 app boundary，SwiftUI 专用�
 - Level 3: FlowTask、optional child生命周期、run lane、withFlowScope、PhaseMap、diagnostics及可选InnoFlowInspector
 
 SwiftUI辅助方法包括sheet、非macOS的full-screen cover、navigation destination、受支持平台的popover、alert和confirmation dialog。标题支持LocalizedStringKey、StringProtocol与Text。innoFlowTask在视图消失或ID变化时只取消自己的dispatch。Inspector只读取payload-free诊断和显式phase label，建议在DEBUG中使用。平台限制见docs/SWIFTUI_DX_6_0.md。
+
+## AI 编程技能
+
+由库维护的 [InnoFlow 技能](skills/README.md) 为 Codex 和 Claude Code 提供稳定版 6.0.x 指引。已精确验证的使用方基线仍为现有的 6.0.0 标签。SwiftPM 安装与 AI 技能安装相互独立。
 
 ## 赞助
 

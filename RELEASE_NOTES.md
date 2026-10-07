@@ -1,5 +1,23 @@
 # InnoFlow Release Notes
 
+## 6.0.1 Release
+
+Candidate prepared on **2026-10-07**. Publication remains pending fresh exact-SHA
+CI preflight, tag-bound evidence production, verification and explicit publication.
+
+- Adds the library-owned 6.0.x AI skill; its exact tested consumer baseline remains
+  the existing 6.0.0 tag, not an unverified 6.0.1 consumer.
+- Corrects release date/version metadata and checks the dated candidate before CI
+  preflight, while preserving strict tag/SHA validation.
+- Preserves the existing 6.0.0 tag at `188c2732d26350cf01afadade3dac89a2b73b68f`.
+  That tagged source failed the `Unreleased` date gate; it has no GitHub Release
+  at this check. The 6.0.1 source does not reuse its earlier release evidence.
+- No framework runtime or public API change is introduced by this patch.
+
+For the underlying 6.0 API additions and migration, see the historical candidate
+notes below and [MIGRATION.md](MIGRATION.md). `STABLE_VERSION` remains 5.1.1
+until successful publication, then changes in a separate development commit.
+
 ## 6.0.0 Release
 
 This section describes the 6.0.0 target changes; its presence does not mean

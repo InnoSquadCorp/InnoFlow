@@ -432,7 +432,7 @@ begin
   install_files = %w[README.md README.kr.md README.jp.md README.cn.md]
   install_files.each do |relative|
     fragments = {
-      dependency: "87f545fba124419949b9929d471df51639c161e35f18f437d125490c180a1019",
+      dependency: "74ac88232cce73c3c57ce136f6d0a493246a18fc256b3cf3b76723b6bf423065",
       targets: "56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85",
     }.transform_values do |digest|
       matches = selected.fetch(relative).select { |sha, _source| sha == digest }
@@ -461,7 +461,7 @@ begin
     target_names = package.fetch("targets").map { |target| target.fetch("name") }
     abort "[doc-copyable] #{relative} install targets drifted" unless
       target_names.sort == %w[YourAppTests YourDomain YourSwiftUIApp]
-    abort "[doc-copyable] #{relative} install version drifted" unless output.include?("6.0.0")
+    abort "[doc-copyable] #{relative} install version drifted" unless output.include?("6.0.1")
   end
   puts "[doc-copyable] Compiled #{examples.length} external targets from #{examples.values.flatten(1).uniq.length} distinct exact Swift fences (#{examples.values.sum(&:length)} uses)"
   puts "[doc-copyable] Parsed four localized installation manifests from eight exact Swift fences"
