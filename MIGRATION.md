@@ -2,6 +2,14 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
+## 6.0.2
+
+No runtime or public API migration from the existing 6.0.1 tag is required.
+This patch isolates the release tooling's synthetic test fixtures from inherited
+workflow variables. It preserves real release gates, the prior tags and the
+library-owned skill's exact 6.0.0 consumer baseline. For 5.1.1 upgrades, use the
+6.0 migration guidance below.
+
 ## 6.0.1
 
 No runtime or public API migration from the existing 6.0.0 tag is required.

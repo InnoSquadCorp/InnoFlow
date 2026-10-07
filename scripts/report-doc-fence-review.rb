@@ -44,7 +44,7 @@ copyable_source = File.read(File.join(root, "scripts/check-doc-copyable-examples
 copyable_pairs = copyable_source.scan(/\["([^"\n]+\.md)", "([0-9a-f]{64})"\]/)
 copyable_pairs += DocExampleContexts::EXAMPLES.values.flatten(1)
 copyable_install_digests = %w[
-  74ac88232cce73c3c57ce136f6d0a493246a18fc256b3cf3b76723b6bf423065
+  663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84
   56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85
 ]
 review.each do |row|

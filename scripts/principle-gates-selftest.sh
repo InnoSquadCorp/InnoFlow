@@ -371,13 +371,15 @@ EOF
   rm -rf "$tmp_root"
 }
 
-run_release_tag_policy_tests() {
+run_release_tag_policy_tests() (
+  # Isolate synthetic repository fixtures from the caller's real release context.
+  unset GITHUB_REF_TYPE GITHUB_REF_NAME INNOFLOW_TRIGGER_TAG
   local tmp_root
   local original_dir
   source "$SCRIPT_DIR/release-tag-policy.sh"
   tmp_root="$(mktemp -d)"
   original_dir="$PWD"
-  trap 'cd "$original_dir"; rm -rf "$tmp_root"' RETURN
+  trap 'cd "$original_dir"; rm -rf "$tmp_root"' EXIT
 
   cd "$tmp_root"
   git init -q
@@ -409,9 +411,9 @@ run_release_tag_policy_tests() {
   assert_failure require_release_tag_at_head "6.0.0"
 
   cd "$original_dir"
-  trap - RETURN
+  trap - EXIT
   rm -rf "$tmp_root"
-}
+)
 
 run_workflow_job_timeout_tests() {
   local tmp_root
@@ -461,10 +463,12 @@ EOF
   rm -rf "$tmp_root"
 }
 
-run_api_compatibility_mode_tests() {
+run_api_compatibility_mode_tests() (
+  # Isolate synthetic repository fixtures from the caller's real release context.
+  unset INNOFLOW_API_BASELINE INNOFLOW_REQUIRE_API_BASELINE INNOFLOW_STABLE_VERSION_FILE
   local tmp_root
   tmp_root="$(mktemp -d)"
-  trap 'rm -rf "$tmp_root"' RETURN
+  trap 'rm -rf "$tmp_root"' EXIT
 
   mkdir -p "$tmp_root/scripts"
   cp "$SCRIPT_DIR/check-api-compatibility.sh" "$tmp_root/scripts/"
@@ -480,14 +484,19 @@ run_api_compatibility_mode_tests() {
   printf 'invalid\n' >"$tmp_root/STABLE_VERSION"
   assert_failure "$tmp_root/scripts/check-api-compatibility.sh"
 
-  trap - RETURN
+  trap - EXIT
   rm -rf "$tmp_root"
-}
+)
 
-run_release_sync_lifecycle_tests() {
-  local tmp_root
+run_release_sync_lifecycle_tests() (
+  # Isolate synthetic repository fixtures from the caller's real release context.
+  unset GITHUB_REF_TYPE GITHUB_REF_NAME INNOFLOW_TRIGGER_TAG INNOFLOW_REQUIRE_RELEASE_TAG INNOFLOW_REQUIRE_RELEASE_DATE INNOFLOW_RELEASE_VERSION
+  local tmp_root version baseline
+  version="$(awk '/^## [0-9]+\.[0-9]+\.[0-9]+ Release$/ { print $2; exit }' "$ROOT_DIR/RELEASE_NOTES.md")"
+  [[ -n "$version" ]] || { echo 'Missing fixture release version' >&2; exit 1; }
+  baseline=0.0.0
   tmp_root="$(mktemp -d)"
-  trap 'rm -rf "$tmp_root"' RETURN
+  trap 'rm -rf "$tmp_root"' EXIT
   mkdir -p "$tmp_root/scripts"
   cp "$SCRIPT_DIR/check-release-sync.sh" "$SCRIPT_DIR/release-tag-policy.sh" \
     "$SCRIPT_DIR/check-release-date.rb" "$tmp_root/scripts/"
@@ -495,53 +504,61 @@ run_release_sync_lifecycle_tests() {
     "$ROOT_DIR/README.kr.md" "$ROOT_DIR/README.jp.md" "$ROOT_DIR/README.cn.md" \
     "$ROOT_DIR/RELEASE_NOTES.md" "$ROOT_DIR/CHANGELOG.md" "$ROOT_DIR/MIGRATION.md" \
     "$ROOT_DIR/ARCHITECTURE_CONTRACT.md" "$tmp_root/"
-  # Start with an undated candidate to reproduce the original late tagged failure.
-  ruby -e 'p=ARGV.fetch(0); s=File.read(p); File.write(p, s.sub(/^## \[6\.0\.1\] - .*$/, "## [6.0.1] - Unreleased"))' "$tmp_root/CHANGELOG.md"
+  # The source docs supply the candidate version; publication state belongs to
+  # this disposable fixture, not the real repository's current stable marker.
+  printf '%s\n' "$baseline" > "$tmp_root/STABLE_VERSION"
+  ruby -e 'path, baseline=ARGV; body=File.read(path); abort "missing stable marker" unless body.sub!(/^Current stable public release: `[^`]+`/, "Current stable public release: `#{baseline}`"); File.write(path, body)' "$tmp_root/RELEASING.md" "$baseline"
+  # Reproduce the undated candidate failure before supplying a valid date.
+  ruby -e 'path, version=ARGV; body=File.read(path); pattern=/^## \[#{Regexp.escape(version)}\] - .*$/; abort "missing unique fixture heading" unless body.scan(pattern).size == 1; File.write(path, body.sub(pattern, "## [#{version}] - Unreleased"))' "$tmp_root/CHANGELOG.md" "$version"
   git -C "$tmp_root" init -q
   git -C "$tmp_root" config user.name "InnoFlow Selftest"
   git -C "$tmp_root" config user.email "selftest@invalid.example"
   git -C "$tmp_root" add .
   git -C "$tmp_root" commit -qm "candidate fixture"
 
-  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     "$tmp_root/scripts/check-release-sync.sh"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     INNOFLOW_REQUIRE_RELEASE_DATE=1 "$tmp_root/scripts/check-release-sync.sh"
   printf '999999999999999999999999999999.0.0\n' >"$tmp_root/STABLE_VERSION"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     "$tmp_root/scripts/check-release-sync.sh"
-  printf '5.1.1\n' >"$tmp_root/STABLE_VERSION"
+  printf '%s\n' "$baseline" >"$tmp_root/STABLE_VERSION"
   # A dated candidate must pass preflight without a tag; strict tagged checks
   # below still require the exact tag and the earlier published stable baseline.
-  ruby -e 'path=ARGV.fetch(0); body=File.read(path); count=body.scan(/^## \[6\.0\.1\] - .*$/).size; abort "missing unique fixture heading" unless count == 1; File.write(path, body.sub(/^## \[6\.0\.1\] - .*$/, "## [6.0.1] - 2026-10-04"))' \
-    "$tmp_root/CHANGELOG.md"
-  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  ruby -e 'path, version=ARGV; body=File.read(path); pattern=/^## \[#{Regexp.escape(version)}\] - .*$/; abort "missing unique fixture heading" unless body.scan(pattern).size == 1; File.write(path, body.sub(pattern, "## [#{version}] - 2026-10-04"))' "$tmp_root/CHANGELOG.md" "$version"
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     INNOFLOW_REQUIRE_RELEASE_DATE=1 "$tmp_root/scripts/check-release-sync.sh"
+  # Date validation succeeds, but an exact release tag is still mandatory.
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
+    INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
   git -C "$tmp_root" add CHANGELOG.md
   git -C "$tmp_root" commit -qm "dated release fixture"
-  git -C "$tmp_root" tag 6.0.1
-  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  git -C "$tmp_root" tag "$version"
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
-  assert_failure env ROOT_DIR="$tmp_root" GITHUB_REF_TYPE=tag GITHUB_REF_NAME=5.1.1 \
-    INNOFLOW_RELEASE_VERSION=6.0.1 INNOFLOW_REQUIRE_RELEASE_TAG=1 \
+  assert_failure env ROOT_DIR="$tmp_root" GITHUB_REF_TYPE=tag GITHUB_REF_NAME="$baseline" \
+    INNOFLOW_RELEASE_VERSION="$version" INNOFLOW_REQUIRE_RELEASE_TAG=1 \
     "$tmp_root/scripts/check-release-sync.sh"
-  printf '6.0.1\n' >"$tmp_root/STABLE_VERSION"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  printf '%s\n' "$version" >"$tmp_root/STABLE_VERSION"
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
-  ruby -e 'path=ARGV.fetch(0); body=File.read(path); old="Current stable public release: `5.1.1`"; abort "missing fixture marker" unless body.include?(old); File.write(path, body.sub(old, "Current stable public release: `6.0.1`"))' \
-    "$tmp_root/RELEASING.md"
+  ruby -e 'path, baseline, version=ARGV; body=File.read(path); old="Current stable public release: `#{baseline}`"; abort "missing fixture marker" unless body.include?(old); File.write(path, body.sub(old, "Current stable public release: `#{version}`"))' "$tmp_root/RELEASING.md" "$baseline" "$version"
+  # A coherent but prematurely promoted stable marker must still fail the tag gate.
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
+    INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
   git -C "$tmp_root" add STABLE_VERSION RELEASING.md
   git -C "$tmp_root" commit -qm "post-publication metadata fixture"
-  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  assert_success env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     "$tmp_root/scripts/check-release-sync.sh"
-  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION=6.0.1 \
+  assert_failure env ROOT_DIR="$tmp_root" INNOFLOW_RELEASE_VERSION="$version" \
     INNOFLOW_REQUIRE_RELEASE_TAG=1 "$tmp_root/scripts/check-release-sync.sh"
 
-  trap - RETURN
+  trap - EXIT
   rm -rf "$tmp_root"
-}
+)
 
 run_release_test_command_tests() {
   local tmp_root
@@ -588,6 +605,20 @@ run_release_configuration_split_tests() {
   trap - RETURN
   rm -rf "$tmp_root"
 }
+
+# This focused fixture mode is for hostile-environment regressions only. The
+# default invocation below still executes the complete selftest suite in CI.
+if (( $# > 0 )); then
+  if [[ "$#" != 1 || "$1" != --release-fixtures-only ]]; then
+    echo 'Usage: principle-gates-selftest.sh [--release-fixtures-only]' >&2
+    exit 2
+  fi
+  run_release_tag_policy_tests
+  run_api_compatibility_mode_tests
+  run_release_sync_lifecycle_tests
+  echo '[principle-gates-selftest] Isolated release fixtures passed'
+  exit 0
+fi
 
 run_source_preserves_cwd_test
 assert_success "$SCRIPT_DIR/principle-gates-logging-selftest.sh"

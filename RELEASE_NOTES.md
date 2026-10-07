@@ -1,9 +1,34 @@
 # InnoFlow Release Notes
 
+## 6.0.2 Release
+
+Candidate prepared on **2026-10-07**. This patch fixes test-fixture environment
+isolation; it does not change framework runtime code or public APIs.
+
+- Synthetic tag/date/API-baseline fixtures no longer inherit the workflow's real
+  tag or enforcement overrides. Explicit wrong-tag, missing-tag, moved-SHA,
+  invalid-date and premature-stable controls still fail as required.
+- Lifecycle fixtures follow the candidate version without treating the source
+  repository's publication state as their synthetic starting state.
+- CI exercises hostile release environments before tagging, as well as normal
+  branch context. All 28 required final-SHA preflight checks and the subsequent
+  producer, verify-only and publication gates remain mandatory.
+
+The immutable 6.0.0 and 6.0.1 tags are retained. 6.0.1's main CI and preflight
+passed, but its tag Release Gate exposed this fixture bug, so its GitHub Release
+was not published. 6.0.2 needs new evidence and is not published by this source
+update. The last published stable marker remains 5.1.1 until publication succeeds.
+
 ## 6.0.1 Release
 
-Candidate prepared on **2026-10-07**. Publication remains pending fresh exact-SHA
-CI preflight, tag-bound evidence production, verification and explicit publication.
+Historical candidate attempt: its tag exists at `70fb831b2481ee9fe4b92d3087cc467baeaded80`,
+but the tag-environment selftest failure stopped GitHub Release publication.
+The corrected candidate is 6.0.2; earlier validation is retained as historical evidence.
+
+
+Candidate prepared on **2026-10-07**. Its main CI, required preflight and
+producer succeeded, but the tag-triggered selftest failure stopped publication.
+The following records describe that historical attempt, not 6.0.2 evidence.
 
 - Adds the library-owned 6.0.x AI skill; its exact tested consumer baseline remains
   the existing 6.0.0 tag, not an unverified 6.0.1 consumer.
