@@ -1230,3 +1230,9 @@ longer comparison against TCA, ReactorKit, ReSwift, and SwiftRex.
 - Level 3: FlowTask, optional child lifetimes, run lanes, withFlowScope, PhaseMap, diagnostics and the optional InnoFlowInspector product
 
 SwiftUI presentation helpers cover sheet, full-screen cover (non-macOS), navigation destination, popover where supported, alert and confirmation dialog. Alert/dialog titles accept LocalizedStringKey, StringProtocol and Text; literals retain SwiftUI localization behavior. innoFlowTask ties only its own dispatch to disappearance or ID changes. Inspector reads payload-free diagnostics and explicit phase labels and is recommended behind DEBUG. See docs/SWIFTUI_DX_6_0.md for platform limits and examples.
+
+## Sponsorship
+
+Support InnoFlow development through
+[GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
+[Patreon](https://www.patreon.com/15188938/join)
