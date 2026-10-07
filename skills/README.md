@@ -51,7 +51,11 @@ The standard-library-only helper copies the fixture to external scratch space,
 resolves exact remote dependencies, verifies graph/workspace/checkouts, then runs
 strict-concurrency tests with warnings as errors. Logs and JSON remain in that
 scratch directory. It never replaces the application's graph or installs an AI
-plugin. See [validation.md](validation.md) for results and boundaries.
+plugin. Each external command has a 3,600-second timeout; use
+`--command-timeout 7200` for a deliberately longer cold build. A timeout kills
+that command's process group, reaps the direct child, and records failed JSON
+evidence with the timeout, exit code and retained log. It never counts as a pass.
+See [validation.md](validation.md) for results and boundaries.
 
 The fixture covers macro authoring, binding, phases, failure/retry, active error
 mapping, typed outputs, scoped composition, manual time, dispatch cancellation,

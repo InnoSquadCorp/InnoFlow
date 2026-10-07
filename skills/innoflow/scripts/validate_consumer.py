@@ -5,17 +5,43 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 
 
+def run_bounded_command(argv, output, timeout_seconds):
+    """Bound a command and reap it; kill its process group on timeout."""
+    with subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT, start_new_session=True) as process:
+        try:
+            return process.wait(timeout=timeout_seconds), False
+        except subprocess.TimeoutExpired:
+            # Swift/git can spawn children. Killing just the leader leaves those
+            # tools using the scratch directory after failure evidence is written.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # The complete group exited between wait and kill.
+            return process.wait(), True
+
+
+def positive_timeout(value):
+    seconds = int(value)
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("command timeout must be a positive number of seconds")
+    return seconds
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scratch-path", type=Path, help="External SwiftPM cache and logs, retained after the run")
+    parser.add_argument("--command-timeout", type=positive_timeout, default=3600,
+                        help="Per-command timeout in seconds (default: 3600; increase for slow cold builds)")
     args = parser.parse_args()
     skill = Path(__file__).resolve().parents[1]
     scratch = (args.scratch_path or Path(tempfile.mkdtemp(prefix="innoflow-skill-"))).resolve()
@@ -33,12 +59,16 @@ def main():
 
     def command(label, argv):
         log = run / (label + ".log")
-        entry = {"argv": [str(a) for a in argv], "log": str(log)}
+        entry = {"argv": [str(a) for a in argv], "log": str(log), "timeout_seconds": args.command_timeout}
         evidence["commands"].append(entry)
         with log.open("w") as output:
-            result = subprocess.run(entry["argv"], stdout=output, stderr=subprocess.STDOUT, check=False)
-        entry["exit_code"] = result.returncode
-        check(result.returncode == 0, f"{label} failed ({result.returncode}); see {log}")
+            return_code, timed_out = run_bounded_command(entry["argv"], output, args.command_timeout)
+            if timed_out:
+                output.write(f"\n[consumer-validation] Command timed out after {args.command_timeout}s; process group killed.\n")
+        entry["exit_code"] = return_code
+        entry["timed_out"] = timed_out
+        check(not timed_out, f"{label} timed out after {args.command_timeout}s; see {log}")
+        check(return_code == 0, f"{label} failed ({return_code}); see {log}")
         return log.read_text(errors="replace").strip()
 
     def flatten(node):
