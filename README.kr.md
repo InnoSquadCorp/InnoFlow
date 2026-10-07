@@ -6,8 +6,8 @@
 
 InnoFlow는 비즈니스/도메인 상태 전환에 집중한 SwiftUI 우선 단방향 아키텍처 프레임워크입니다.
 
-이 문서와 아래 설치 예시는 6.0.0 후보의 API 계약을 설명합니다. 후보 고정 시점의
-공개 안정 기준선은 5.1.1이었으며, 실제 6.0.0 태그와 GitHub Release 공개 상태는
+이 문서와 아래 설치 예시는 6.0.1 후보의 API 계약을 설명합니다. 후보 고정 시점의
+공개 안정 기준선은 5.1.1이었으며, 실제 6.0.1 태그와 GitHub Release 공개 상태는
 GitHub에서 별도로 확인해야 합니다.
 
 ## Level 1부터 시작하기
@@ -21,7 +21,7 @@ State와 Action을 명시하고 단순한 `@InnoFlow` body에는
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.0")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.1")
 ]
 ```
 
@@ -244,3 +244,7 @@ InnoFlow는 더 작은 경계를 원할 때 선택합니다. reducer는 비즈�
 - Level 3: FlowTask, optional child 수명, run lane, withFlowScope, PhaseMap, diagnostics, 선택적 InnoFlowInspector
 
 SwiftUI 헬퍼는 sheet, macOS 외 full-screen cover, navigation destination, 지원 플랫폼의 popover, alert, confirmation dialog를 제공합니다. Alert/dialog 제목은 LocalizedStringKey·StringProtocol·Text를 지원합니다. innoFlowTask는 뷰가 사라지거나 ID가 바뀔 때 자신이 시작한 dispatch만 취소합니다. Inspector는 payload-free 진단과 명시적인 phase label만 읽으며 DEBUG에서 사용을 권장합니다. 플랫폼 제약은 docs/SWIFTUI_DX_6_0.md를 참고하세요.
+
+## AI 코딩 스킬
+
+라이브러리 소유 [InnoFlow 스킬](skills/README.md)은 Codex와 Claude Code용 안정 6.0.x 지침을 제공합니다. 정확히 검증된 소비자 기준은 기존 6.0.0 태그입니다. SwiftPM 설치와 AI 스킬 설치는 별개입니다.

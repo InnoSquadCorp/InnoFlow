@@ -6,8 +6,8 @@
 
 InnoFlow は、ビジネス/ドメイン状態遷移に集中した SwiftUI ファーストの一方向アーキテクチャフレームワークです。
 
-この文書と下記のインストール例は、6.0.0 候補の API 契約を説明します。
-候補を固定した時点の公開安定版は 5.1.1 でした。6.0.0 タグと GitHub Release の
+この文書と下記のインストール例は、6.0.1 候補の API 契約を説明します。
+候補を固定した時点の公開安定版は 5.1.1 でした。6.0.1 タグと GitHub Release の
 公開状態は GitHub で別途確認してください。
 
 ## Level 1から始める
@@ -21,7 +21,7 @@ StateとActionを明示し、単純な `@InnoFlow` bodyには
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.0")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.1")
 ]
 ```
 
@@ -227,3 +227,7 @@ optional product の `InnoFlowSwiftUI` に置きます。
 - Level 3: FlowTask、optional childの寿命、run lane、withFlowScope、PhaseMap、diagnostics、任意のInnoFlowInspector
 
 SwiftUIヘルパーはsheet、macOS以外のfull-screen cover、navigation destination、対応環境のpopover、alert、confirmation dialogを提供します。タイトルはLocalizedStringKey・StringProtocol・Textに対応します。innoFlowTaskはビュー消失やID変更で自分のdispatchだけをキャンセルします。Inspectorはpayload-free診断と明示したphase labelを読み取り、DEBUGでの利用を推奨します。制約はdocs/SWIFTUI_DX_6_0.mdを参照してください。
+
+## AI コーディングスキル
+
+ライブラリが管理する [InnoFlow スキル](skills/README.md) は、Codex と Claude Code 向けに安定版 6.0.x の指針を提供します。正確に検証された利用側の基準は既存の 6.0.0 タグです。SwiftPM の導入と AI スキルの導入は別々です。

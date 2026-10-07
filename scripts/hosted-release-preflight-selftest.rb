@@ -84,6 +84,9 @@ assert(matrix_ids.grep(/\Aruntime-/) == %w[runtime-ios-27.0 runtime-tvos-27.0 ru
 assert(matrix.count { |row| row["runner"] == "macos-26" && row["swift"] == "6.3" && row["xcode"] == "26.6" } == 2, "Wrong minimum toolchain jobs")
 assert(matrix.count { |row| row["runner"] == "xcode-27" && row["swift"] == "6.4" && row["xcode"] == "27.0" } == 26, "Wrong current toolchain jobs")
 workflow = YAML.safe_load(File.read(File.join(source, ".github/workflows/release-preflight.yml")))
+plan_script = workflow.fetch("jobs").fetch("plan").fetch("steps").filter_map { |step| step["run"] }.join("\n")
+assert(plan_script.include?("INNOFLOW_REQUIRE_RELEASE_DATE=1 scripts/check-release-sync.sh"), "Missing pre-tag candidate date gate")
+assert(plan_script.index("INNOFLOW_REQUIRE_RELEASE_DATE=1") < plan_script.index("hosted-release-preflight.rb matrix"), "Candidate date gate must precede the matrix")
 diagnostics = workflow.fetch("jobs").fetch("preflight").fetch("steps").find do |step|
   step["name"] == "Preserve failed or cancelled diagnostics separately"
 end
