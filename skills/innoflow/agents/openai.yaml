@@ -1,0 +1,6 @@
+interface:
+  display_name: "InnoFlow"
+  short_description: "Build and test version-aware InnoFlow features"
+  default_prompt: "Use $innoflow to implement and test a feature for this project's resolved InnoFlow version."
+policy:
+  allow_implicit_invocation: true

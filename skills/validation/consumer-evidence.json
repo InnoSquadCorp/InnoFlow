@@ -1,0 +1,42 @@
+{
+  "status": "passed",
+  "started_at": "2026-10-07T03:03:55.564761+00:00",
+  "finished_at": "2026-10-07T03:04:12.801052+00:00",
+  "supported_range": ">=6.0.0 <6.1.0",
+  "include_prereleases": false,
+  "validation_scope": "exact_baseline",
+  "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)\nTarget: arm64-apple-macosx27.0.0",
+  "xcode": "Xcode 27.0\nBuild version 27A266a",
+  "source_sha256": {
+    "Package.resolved": "6fedb205bfd8558083d099115e08a900efb11c24e17b85726765c1e11fcb13bb",
+    "Package.swift": "56bf6dd50530cbc50f69d35c7f6ebd963298b04d42d6efb416afa482e242b2a7",
+    "Sources/FlowSkillExample/CounterView.swift": "d3facd2a01cb806ac1f9260474b9e7e392544ba00174665a882244b760d477f9",
+    "Sources/FlowSkillExample/Features.swift": "de865bae739d65ea2ee3b700f1ca087c6456fc2213ff3d4a91bbd34250f34150",
+    "Tests/FlowSkillExampleTests/ConsumerTests.swift": "9d8d917051e9cf0f7770129ec1ffc00f0acbad9d2d0369954464836bf1fdcfdd"
+  },
+  "dependencies": {
+    "innoflow": {
+      "version": "6.0.0",
+      "revision": "188c2732d26350cf01afadade3dac89a2b73b68f",
+      "clean": true,
+      "prebuilt_selected": false
+    },
+    "swift-syntax": {
+      "version": "604.0.0",
+      "revision": "050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf",
+      "clean": true,
+      "prebuilt_selected": true
+    }
+  },
+  "swift_test_result": {
+    "tests": 11,
+    "suites": 1,
+    "failures": 0,
+    "strict_concurrency": "complete",
+    "warnings_as_errors": true
+  },
+  "command": "python3 skills/innoflow/scripts/validate_consumer.py --scratch-path /tmp/innoflow-skill-validation",
+  "baseline_tag": "6.0.0",
+  "baseline_revision": "188c2732d26350cf01afadade3dac89a2b73b68f",
+  "scope": "Exact tagged external consumer only; not local working-tree library tests, AI behavior, or release-preflight evidence."
+}

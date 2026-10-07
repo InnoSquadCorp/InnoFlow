@@ -1116,6 +1116,12 @@ redesign.
 - **Scoped phase examples** — the canonical sample now covers phase-managed authoring; additional
   payment, permission, or onboarding examples should be added when real product flows need them.
 
+## AI coding skill
+
+The library-owned [InnoFlow skill](skills/README.md) provides stable 6.0.x guidance
+for Codex and Claude Code, with an exact tagged 6.0.0 consumer baseline.
+SwiftPM installation and AI skill installation are separate.
+
 ## Development
 
 Use these commands locally:
