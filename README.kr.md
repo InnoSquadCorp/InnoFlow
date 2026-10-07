@@ -249,4 +249,4 @@ SwiftUI 헬퍼는 sheet, macOS 외 full-screen cover, navigation destination, �
 
 다음 링크를 통해 InnoFlow 개발을 후원할 수 있습니다:
 [GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
-[Patreon](https://www.patreon.com/c/InnoSquad)
+[Patreon](https://www.patreon.com/15188938/join)

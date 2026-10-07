@@ -1235,4 +1235,4 @@ SwiftUI presentation helpers cover sheet, full-screen cover (non-macOS), navigat
 
 Support InnoFlow development through
 [GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
-[Patreon](https://www.patreon.com/c/InnoSquad)
+[Patreon](https://www.patreon.com/15188938/join)

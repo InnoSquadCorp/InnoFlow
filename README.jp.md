@@ -232,4 +232,4 @@ SwiftUIヘルパーはsheet、macOS以外のfull-screen cover、navigation desti
 
 以下のリンクから InnoFlow の開発を支援できます。
 [GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
-[Patreon](https://www.patreon.com/c/InnoSquad)
+[Patreon](https://www.patreon.com/15188938/join)

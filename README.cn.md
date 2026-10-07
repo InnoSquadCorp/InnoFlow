@@ -228,4 +228,4 @@ SwiftUI辅助方法包括sheet、非macOS的full-screen cover、navigation desti
 
 您可以通过以下链接支持 InnoFlow 的开发：
 [GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
-[Patreon](https://www.patreon.com/c/InnoSquad)
+[Patreon](https://www.patreon.com/15188938/join)
