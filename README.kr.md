@@ -248,3 +248,9 @@ SwiftUI 헬퍼는 sheet, macOS 외 full-screen cover, navigation destination, �
 ## AI 코딩 스킬
 
 라이브러리 소유 [InnoFlow 스킬](skills/README.md)은 Codex와 Claude Code용 안정 6.0.x 지침을 제공합니다. 정확히 검증된 소비자 기준은 기존 6.0.0 태그입니다. SwiftPM 설치와 AI 스킬 설치는 별개입니다.
+
+## 후원
+
+다음 링크를 통해 InnoFlow 개발을 후원할 수 있습니다:
+[GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
+[Patreon](https://www.patreon.com/15188938/join)

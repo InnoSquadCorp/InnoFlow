@@ -227,3 +227,9 @@ SwiftUI辅助方法包括sheet、非macOS的full-screen cover、navigation desti
 ## AI 编程技能
 
 由库维护的 [InnoFlow 技能](skills/README.md) 为 Codex 和 Claude Code 提供稳定版 6.0.x 指引。已精确验证的使用方基线仍为现有的 6.0.0 标签。SwiftPM 安装与 AI 技能安装相互独立。
+
+## 赞助
+
+您可以通过以下链接支持 InnoFlow 的开发：
+[GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
+[Patreon](https://www.patreon.com/15188938/join)

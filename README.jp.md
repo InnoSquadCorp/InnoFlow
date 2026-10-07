@@ -231,3 +231,9 @@ SwiftUIヘルパーはsheet、macOS以外のfull-screen cover、navigation desti
 ## AI コーディングスキル
 
 ライブラリが管理する [InnoFlow スキル](skills/README.md) は、Codex と Claude Code 向けに安定版 6.0.x の指針を提供します。正確に検証された利用側の基準は既存の 6.0.0 タグです。SwiftPM の導入と AI スキルの導入は別々です。
+
+## スポンサーシップ
+
+以下のリンクから InnoFlow の開発を支援できます。
+[GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
+[Patreon](https://www.patreon.com/15188938/join)
