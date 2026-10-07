@@ -14,12 +14,12 @@ Keep state and actions explicit; a simple `@InnoFlow` body declares
 policies for a counter, form, or ordinary request.
 
 Follow the counter and deterministic test below, then add concepts only when
-that feature needs them. This documentation describes the 6.0.1 candidate;
+that feature needs them. This documentation describes the 6.0.2 candidate;
 5.1.1 remains the stable baseline until publication is verified.
 
 ## Installation
 
-InnoFlow 6.0.1 requires a Swift 6.3 or newer toolchain and compiles all package
+InnoFlow 6.0.2 requires a Swift 6.3 or newer toolchain and compiles all package
 targets in Swift 6 language mode. The canonical sample and DocC workflow use
 the same toolchain contract.
 
@@ -27,7 +27,7 @@ the same toolchain contract.
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.1")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
 ]
 ```
 
@@ -1168,11 +1168,11 @@ canonical sample.
 
 Phase totality treats optional backticks as the same logical identifier. Action and Output case paths preserve spaces, punctuation, and Unicode; use Swift backticks when referencing a generated raw-name member. Ordinary names and the removal of exactly one leading underscore are unchanged. Real missing cases and member collisions still diagnose.
 
-## InnoFlow 6.0.1
+## InnoFlow 6.0.2
 
-This source revision documents the 6.0.1 release candidate and target API.
+This source revision documents the 6.0.2 release candidate and target API.
 Version 5.1.1 was the published stable baseline at candidate freeze; verify
-the live 6.0.1 tag and GitHub Release status before treating it as published.
+the live 6.0.2 tag and GitHub Release status before treating it as published.
 
 The framework now treats the following as source-of-truth principles:
 

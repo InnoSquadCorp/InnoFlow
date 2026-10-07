@@ -7,6 +7,23 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+## [6.0.2] - 2026-10-07
+
+### Fixed
+
+- Isolate release tag, date and API-baseline selftest fixtures from the real workflow's inherited release environment, while retaining exact tag/SHA checks and negative controls.
+- Derive the disposable lifecycle fixture's candidate version from release notes and keep its stable baseline synthetic, so later patches and stable promotion do not invalidate the test itself.
+- Exercise clean, real-tag-like and standalone trigger/date environments in CI before another public tag is created.
+
+### Release status
+
+Candidate prepared on 2026-10-07; GitHub Release publication is not yet established.
+The existing 6.0.0 and 6.0.1 tags are preserved. The 6.0.1 tag at
+`70fb831b2481ee9fe4b92d3087cc467baeaded80` passed main CI and all 28 required
+preflight checks, but its tag-triggered Release Gate rejected a selftest fixture
+that inherited the real tag. Those results do not certify this new 6.0.2 SHA.
+`STABLE_VERSION` remains 5.1.1 until successful publication.
+
 ## [6.0.1] - 2026-10-07
 
 ### Added

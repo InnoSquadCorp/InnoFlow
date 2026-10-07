@@ -6,8 +6,8 @@
 
 InnoFlow 是一个面向业务/领域状态转换的 SwiftUI-first 单向架构框架。
 
-本文及下方安装示例描述 6.0.1 候选版本的 API 契约。候选版本冻结时的公开稳定基线为 5.1.1；
-6.0.1 标签和 GitHub Release 是否已公开，需在 GitHub 上另行确认。
+本文及下方安装示例描述 6.0.2 候选版本的 API 契约。候选版本冻结时的公开稳定基线为 5.1.1；
+6.0.2 标签和 GitHub Release 是否已公开，需在 GitHub 上另行确认。
 
 ## 从Level 1开始
 
@@ -20,7 +20,7 @@ InnoFlow 是一个面向业务/领域状态转换的 SwiftUI-first 单向架构�
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.1")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
 ]
 ```
 
