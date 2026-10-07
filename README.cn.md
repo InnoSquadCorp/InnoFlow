@@ -223,3 +223,9 @@ bundle 显式传入，navigation/transport 留在 app boundary，SwiftUI 专用�
 - Level 3: FlowTask、optional child生命周期、run lane、withFlowScope、PhaseMap、diagnostics及可选InnoFlowInspector
 
 SwiftUI辅助方法包括sheet、非macOS的full-screen cover、navigation destination、受支持平台的popover、alert和confirmation dialog。标题支持LocalizedStringKey、StringProtocol与Text。innoFlowTask在视图消失或ID变化时只取消自己的dispatch。Inspector只读取payload-free诊断和显式phase label，建议在DEBUG中使用。平台限制见docs/SWIFTUI_DX_6_0.md。
+
+## 赞助
+
+您可以通过以下链接支持 InnoFlow 的开发：
+[GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
+[Patreon](https://www.patreon.com/c/InnoSquad)

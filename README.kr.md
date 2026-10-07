@@ -244,3 +244,9 @@ InnoFlow는 더 작은 경계를 원할 때 선택합니다. reducer는 비즈�
 - Level 3: FlowTask, optional child 수명, run lane, withFlowScope, PhaseMap, diagnostics, 선택적 InnoFlowInspector
 
 SwiftUI 헬퍼는 sheet, macOS 외 full-screen cover, navigation destination, 지원 플랫폼의 popover, alert, confirmation dialog를 제공합니다. Alert/dialog 제목은 LocalizedStringKey·StringProtocol·Text를 지원합니다. innoFlowTask는 뷰가 사라지거나 ID가 바뀔 때 자신이 시작한 dispatch만 취소합니다. Inspector는 payload-free 진단과 명시적인 phase label만 읽으며 DEBUG에서 사용을 권장합니다. 플랫폼 제약은 docs/SWIFTUI_DX_6_0.md를 참고하세요.
+
+## 후원
+
+다음 링크를 통해 InnoFlow 개발을 후원할 수 있습니다:
+[GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
+[Patreon](https://www.patreon.com/c/InnoSquad)

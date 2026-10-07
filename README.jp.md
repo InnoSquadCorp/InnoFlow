@@ -227,3 +227,9 @@ optional product の `InnoFlowSwiftUI` に置きます。
 - Level 3: FlowTask、optional childの寿命、run lane、withFlowScope、PhaseMap、diagnostics、任意のInnoFlowInspector
 
 SwiftUIヘルパーはsheet、macOS以外のfull-screen cover、navigation destination、対応環境のpopover、alert、confirmation dialogを提供します。タイトルはLocalizedStringKey・StringProtocol・Textに対応します。innoFlowTaskはビュー消失やID変更で自分のdispatchだけをキャンセルします。Inspectorはpayload-free診断と明示したphase labelを読み取り、DEBUGでの利用を推奨します。制約はdocs/SWIFTUI_DX_6_0.mdを参照してください。
+
+## スポンサーシップ
+
+以下のリンクから InnoFlow の開発を支援できます。
+[GitHub Sponsors](https://github.com/sponsors/InnoSquadCorp) ·
+[Patreon](https://www.patreon.com/c/InnoSquad)
