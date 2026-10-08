@@ -23,7 +23,7 @@ check(ci_trigger.key?("workflow_dispatch") && ci_trigger.dig("merge_group", "typ
 metadata_only = "(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base)))"
 check(ci.dig("concurrency", "cancel-in-progress") == "${{ !#{metadata_only} }}",
   "Code/validation events must cancel superseded runs; metadata must wait")
-check(ci.dig("concurrency", "group").to_s.include?("github.event.pull_request.number"),
+check(ci.dig("concurrency", "group").to_s.include?("github.event.pull_request.number") && ci.dig("concurrency", "group").to_s.include?("'metadata'"),
   "CI concurrency must be scoped to a pull request or ref")
 
 jobs = ci.fetch("jobs")
@@ -34,20 +34,17 @@ required_job_names = %w[
 ]
 check((jobs.keys - ["ci-required"]).sort == required_job_names.sort,
   "CI Required inventory must classify every non-aggregate CI job")
-# Original build/test dependency edges are kept; the planner is added as a
-# predecessor so a selected job can never start with incomplete change evidence.
-prior_dependencies = {
-  "documentation" => [], "coverage" => [], "lint" => [],
-  "tests" => ["lint"], "release-tests" => ["lint"], "api-compatibility" => ["lint"],
-  "thread-sanitizer" => ["lint"], "sample-tests" => ["lint"], "package-builds" => ["lint"],
-  "focused-runtime-tests" => ["lint"], "principle-gates" => %w[lint coverage],
-  "sample-package-builds" => ["sample-tests"], "sample-build" => ["lint"],
-  "address-sanitizer" => ["lint"], "sample-ui-tests" => ["sample-build"], "swift-syntax-compatibility" => ["lint"],
-}
+# Native jobs share no generated artifacts. Run them independently after the
+# exact plan; CI Required still rejects every selected failure/cancellation.
+prior_dependencies = %w[
+  documentation coverage lint tests release-tests api-compatibility thread-sanitizer
+  sample-tests package-builds focused-runtime-tests principle-gates sample-package-builds
+  sample-build address-sanitizer sample-ui-tests swift-syntax-compatibility
+].to_h { |name| [name, []] }
 prior_dependencies.each do |name, prior|
   job = jobs.fetch(name)
   check(Array(job["needs"]).sort == (["ci-plan"] + prior).sort,
-    "#{name}: original dependencies plus CI Plan must be retained")
+    "#{name}: independent job must depend only on CI Plan")
   reusable = %w[tests release-tests thread-sanitizer address-sanitizer package-builds swift-syntax-compatibility]
   expected_condition = reusable.include?(name) ? "needs.ci-plan.outputs.#{name} == 'true'" : "fromJSON(needs.ci-plan.outputs.plan).jobs.#{name}"
   check(job["if"] == expected_condition,
@@ -152,8 +149,8 @@ check(asan_trigger.keys == ["workflow_dispatch"],
   metadata = steps.last
   check(metadata["name"] == "Verify prior validation for metadata" &&
     metadata["if"] == "${{ #{metadata_only} }}" &&
-    metadata["run"] == "python3 -B scripts/verify-ci-metadata.py --check '#{name}'" &&
-    metadata["env"] == {"GH_TOKEN" => '${{ github.token }}'},
+    metadata["run"] == "python3 -B scripts/metadata_wait.py -- python3 -B scripts/verify-ci-metadata.py --check '#{name}'" &&
+    metadata["env"] == ({"GH_TOKEN" => '${{ github.token }}'}.merge(id == "ci-required" ? {"INNO_METADATA_WAIT" => "${{ needs.docs-required.result == 'success' && 'enabled' || 'disabled' }}"} : {})),
     "#{name}: metadata must revalidate the latest exact native CI evidence")
   check(final_gate["permissions"] == {"contents" => "read", "actions" => "read", "checks" => "read", "pull-requests" => "read"},
     "#{name}: metadata verification must remain read-only")

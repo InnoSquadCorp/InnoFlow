@@ -22,6 +22,10 @@ METADATA_PREFIX = 'CI metadata-only v1 '
 VERIFY_STEP = 'Verify prior validation for metadata'
 
 
+class PendingValidation(ValueError):
+    """Only a correctly bound native validation still running may be retried."""
+
+
 def require(value, message):
     if not value:
         raise ValueError(message)
@@ -128,8 +132,11 @@ def prove(api, event, env, check_name='CI Required'):
     require(run.get('id') == listed['id'] and run.get('run_number') == listed['run_number'] and
             run.get('workflow_id') == workflow and run.get('path') == CONFIG['workflow'] and
             run.get('event') == 'pull_request' and run.get('head_sha') == head and
-            run.get('repository', {}).get('full_name') == repo and
-            run.get('status') == 'completed' and run.get('conclusion') == 'success',
+            run.get('repository', {}).get('full_name') == repo,
+            'latest real validation identity mismatch')
+    if run.get('status') in {'queued', 'in_progress', 'waiting', 'pending', 'requested'} and run.get('conclusion') is None:
+        raise PendingValidation('latest bound native validation is still running')
+    require(run.get('status') == 'completed' and run.get('conclusion') == 'success',
             'latest real validation has not succeeded')
     attempt = run['run_attempt']
     require(type(attempt) is int and attempt > 0, 'invalid validation attempt')
@@ -186,6 +193,9 @@ def main():
             with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
                 stream.write(message + '\n')
         return 0
+    except PendingValidation as error:
+        print('CI metadata waiting: ' + str(error), file=sys.stderr)
+        return 75
     except Exception as error:
         print('CI metadata gate rejected: ' + str(error), file=sys.stderr)
         return 1

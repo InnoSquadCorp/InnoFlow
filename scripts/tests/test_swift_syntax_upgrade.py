@@ -76,7 +76,7 @@ class SwiftSyntaxUpgradeTests(unittest.TestCase):
             'puts YAML.safe_load(File.read(ARGV[0]), aliases: false).to_json',
             str(ROOT / '.github/workflows/ci.yml')], text=True))
         job = ci['jobs']['swift-syntax-compatibility']
-        self.assertEqual(job['needs'], ['ci-plan', 'lint'])
+        self.assertEqual(job['needs'], 'ci-plan')
         self.assertEqual(job['if'], "needs.ci-plan.outputs.swift-syntax-compatibility == 'true'")
         self.assertIs(job['strategy']['fail-fast'], False)
         rows = job['strategy']['matrix']['include']
