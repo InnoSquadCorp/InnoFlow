@@ -1,14 +1,15 @@
-// MARK: - StoreSwiftUIPreviewTests.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
 import SwiftUI
 import Testing
 
 @testable import InnoFlowCore
+@testable import InnoFlowCoreTestSupport
 @testable import InnoFlowSwiftUI
 @testable import InnoFlowTesting
+
+// MARK: - StoreSwiftUIPreviewTests.swift
+// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// Copyright © 2025 InnoSquad. All rights reserved.
 
 private struct PreviewFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {

@@ -524,7 +524,7 @@ run_authoring_surface_checks() {
   search_lines "func missingPhaseStillDiagnoses" Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift >/dev/null
 
   search_lines "package final class FlowTaskCompletion" Sources/InnoFlowCore/FlowTask.swift >/dev/null
-  search_lines "func trailingCompletion" Tests/InnoFlowTests/RuntimeConsistencyTests.swift >/dev/null
+  search_lines "func trailingCompletion" Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift >/dev/null
 
   search_lines "public struct TestStoreDispatch" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null
   if search_lines "public typealias TestFlowTask" Sources/InnoFlowTesting/TestStoreDispatch.swift >/dev/null; then
@@ -533,9 +533,9 @@ run_authoring_surface_checks() {
   fi
 
   search_lines "public struct OptionalChildLifetime" Sources/InnoFlowCore/OptionalChildLifetime.swift >/dev/null
-  search_lines "func directSendDrainsBeforeReturnAndBeforeIndependentActions" Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null
-  search_lines "func parentFollowupsKeepIndependentLifetimeAfterChildClose" Tests/InnoFlowTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null
-  search_lines "func reusedReducerInDifferentScopesHasIndependentLifetimes" Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift >/dev/null
+  search_lines "func directSendDrainsBeforeReturnAndBeforeIndependentActions" Tests/InnoFlowTestingTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null
+  search_lines "func parentFollowupsKeepIndependentLifetimeAfterChildClose" Tests/InnoFlowTestingTests/OwnedSynchronousEffectConsistencyTests.swift >/dev/null
+  search_lines "func reusedReducerInDifferentScopesHasIndependentLifetimes" Tests/InnoFlowTestingTests/OptionalChildLifetimeConsistencyTests.swift >/dev/null
 
   python3 scripts/check-testing-contracts.py
 
@@ -568,11 +568,11 @@ run_authoring_surface_checks() {
   search_multiline 'extension Reducer where Output == Never[\s\S]{0,500}public func promoteOutput' Sources/InnoFlowCore/ReducerOutputMapping.swift >/dev/null
   search_multiline 'extension ReducerEffect where Output == Never[\s\S]{0,400}public func promoteOutput' Sources/InnoFlowCore/ReducerOutputMapping.swift >/dev/null
   search_lines 'func cancellingCapturedOutputConsumerCancelsDispatch' Tests/InnoFlowTests/ReducerOutputTests.swift >/dev/null
-  search_lines 'func cancellationBeforeReductionDropsDescendants' Tests/InnoFlowTests/FlowTaskCancellationBoundaryTests.swift >/dev/null
-  search_lines 'func cancellationDuringObservationSuppressesOutput' Tests/InnoFlowTests/FlowTaskCancellationBoundaryTests.swift >/dev/null
+  search_lines 'func cancellationBeforeReductionDropsDescendants' Tests/InnoFlowTestingTests/FlowTaskCancellationBoundaryTests.swift >/dev/null
+  search_lines 'func cancellationDuringObservationSuppressesOutput' Tests/InnoFlowTestingTests/FlowTaskCancellationBoundaryTests.swift >/dev/null
   search_lines 'func outputPromotionCannotDiscardRealOutputs' Tests/InnoFlowTests/CompileContractTests.swift >/dev/null
-  search_lines 'func predicateReceivesNonEquatableOutput' Tests/InnoFlowTests/TestStoreOutputMatchingTests.swift >/dev/null
-  search_lines 'func invalidatedOutputHonorsTotalDeadline' Tests/InnoFlowTests/TestStoreOutputMatchingTests.swift >/dev/null
+  search_lines 'func predicateReceivesNonEquatableOutput' Tests/InnoFlowTestingTests/TestStoreOutputMatchingTests.swift >/dev/null
+  search_lines 'func invalidatedOutputHonorsTotalDeadline' Tests/InnoFlowTestingTests/TestStoreOutputMatchingTests.swift >/dev/null
   search_lines "public actor ManualTestClock" Sources/InnoFlowTesting/ManualTestClock.swift >/dev/null
   search_lines "public static func preview\\(" Sources/InnoFlowSwiftUI/Store+SwiftUIPreviews.swift >/dev/null
   search_lines "public func map<" Sources/InnoFlowCore/EffectTask.swift >/dev/null
@@ -590,9 +590,9 @@ run_authoring_surface_checks() {
     exit 1
   fi
   if ! search_multiline 'public func select<[\s\S]{0,280}dependingOn dependency:[\s\S]{0,100}id: String\? = nil' Sources/InnoFlowCore/SelectedStore.swift >/dev/null \
-    || ! search_lines 'func keylessClosureSelectionsDoNotAliasCapturedInput' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null \
-    || ! search_lines 'func explicitSelectionIDsReuseOnlyLiveHandles' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null \
-    || ! search_lines 'func parentReleaseInvalidatesProjectionObservers' Tests/InnoFlowTests/StoreScopeSelectionTests.swift >/dev/null; then
+    || ! search_lines 'func keylessClosureSelectionsDoNotAliasCapturedInput' Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift >/dev/null \
+    || ! search_lines 'func explicitSelectionIDsReuseOnlyLiveHandles' Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift >/dev/null \
+    || ! search_lines 'func parentReleaseInvalidatesProjectionObservers' Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift >/dev/null; then
     echo "[principle-gates] Failed: 6.0 selection identity/lifetime contract is missing"
     exit 1
   fi
@@ -1454,7 +1454,7 @@ run_sample_runtime_contract_checks() {
   set -e
 
   if [[ $phase_managed_status -le 1 && -n "$phase_managed_uses" ]]; then
-    if ! grep -RqE "assertPhaseMapCovers" Tests/InnoFlowTests 2>/dev/null; then
+    if ! grep -RqE "assertPhaseMapCovers" Tests 2>/dev/null; then
       echo "[principle-gates] Failed: phase-managed features found in Sources/InnoFlowCore but Tests/InnoFlowTests has no assertPhaseMapCovers(...) call"
       echo "[principle-gates] Files containing @InnoFlow(phaseManaged: true):"
       printf '  %s\n' "${phase_managed_uses}"

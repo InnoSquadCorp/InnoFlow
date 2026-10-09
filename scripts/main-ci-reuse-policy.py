@@ -51,7 +51,9 @@ CORE = {'CI Plan': {'Plan exact changed paths'},
                                   'Show Xcode version'},
  'Package Tests (Release)': {'Run release configuration checks',
                              'Show Xcode version'},
- 'Package Tests (Core)': {'Run package tests including output lifetime and '
+ 'Package Tests (Core)': {'Select dependency-complete package tests',
+                          'Require complete package suite for main reuse',
+                          'Run package tests including output lifetime and '
                           'composition contracts',
                           'Show Xcode version',
                           'Verify macro source fallback'},
@@ -101,6 +103,7 @@ CORE = {'CI Plan': {'Plan exact changed paths'},
                                                     'Test macro and external '
                                                     'compile contracts',
                                                     'Verify AST migration on the audited SwiftSyntax line',
+                                                    'Verify selective test package on the audited compiler',
                                                     'Verify pinned '
                                                     'compatibility toolchain'},
  'SwiftSyntax Compatibility (Swift 6.4, 604.0.0)': {'Checkout exact '
@@ -110,6 +113,7 @@ CORE = {'CI Plan': {'Plan exact changed paths'},
                                                     'Test macro and external '
                                                     'compile contracts',
                                                     'Verify AST migration on the audited SwiftSyntax line',
+                                                    'Verify selective test package on the audited compiler',
                                                     'Verify pinned '
                                                     'compatibility toolchain'}}
 SKIPPED = set()

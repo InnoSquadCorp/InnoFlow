@@ -519,8 +519,8 @@ module DocExampleContexts
         function("docCGraphContract", graph) +
         function("docCTotalityContract", totality, context: "let items: [Item] = []")
     when "DocCTiming"
-      witness = File.read(File.join(root, "Tests/InnoFlowTests/EffectInstrumentationWitness.swift"))
-        .sub("@testable import InnoFlowCore", "import InnoFlow")
+      witness = File.read(File.join(root, "Tests/InnoFlowCoreTestSupport/EffectInstrumentationWitness.swift"))
+        .sub("import InnoFlowCore", "import InnoFlow")
       probe = File.read(File.join(root, "Tests/InnoFlowTests/EffectTimingBaselineGate.swift"))
         .split("// MARK: - Probe reducer\n", 2).fetch(1)
       body = blocks.fetch(0).sub(/\Aimport InnoFlow\nimport InnoFlowTesting\n\n/, "")

@@ -1,13 +1,16 @@
-// MARK: - TestStoreCoreTests.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
 import Testing
 import os
 
+@testable import InnoFlowAuthoringTestSupport
 @testable import InnoFlowCore
+@testable import InnoFlowCoreTestSupport
+@testable import InnoFlowSwiftUITestSupport
 @testable import InnoFlowTesting
+
+// MARK: - TestStoreCoreTests.swift
+// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// Copyright © 2025 InnoSquad. All rights reserved.
 
 // MARK: - TestStore Core Tests
 

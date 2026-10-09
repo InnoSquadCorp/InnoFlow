@@ -1,14 +1,17 @@
-// MARK: - StoreInstrumentationTests.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
 import OSLog
 import Testing
 import os
 
+@testable import InnoFlowAuthoringTestSupport
 @testable import InnoFlowCore
+@testable import InnoFlowCoreTestSupport
+@testable import InnoFlowSwiftUITestSupport
 @testable import InnoFlowTesting
+
+// MARK: - StoreInstrumentationTests.swift
+// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// Copyright © 2025 InnoSquad. All rights reserved.
 
 // MARK: - Store Instrumentation Tests
 
@@ -497,10 +500,10 @@ struct StoreInstrumentationTests {
       probe.events.contains("cancel:instrumented-delayed")
         && probe.events.contains(where: {
           $0.contains(
-            "drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):cancellationBoundary"
+            "drop:Optional(InnoFlowCoreTestSupport.InstrumentationFeature.Action.received(\"delayed\")):cancellationBoundary"
           )
             || $0.contains(
-              "drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):inactiveToken"
+              "drop:Optional(InnoFlowCoreTestSupport.InstrumentationFeature.Action.received(\"delayed\")):inactiveToken"
             )
         })
     }
@@ -522,10 +525,10 @@ struct StoreInstrumentationTests {
     #expect(
       probe.events.contains(where: {
         $0.contains(
-          "drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):cancellationBoundary"
+          "drop:Optional(InnoFlowCoreTestSupport.InstrumentationFeature.Action.received(\"delayed\")):cancellationBoundary"
         )
           || $0.contains(
-            "drop:Optional(InnoFlowTests.InstrumentationFeature.Action.received(\"delayed\")):inactiveToken"
+            "drop:Optional(InnoFlowCoreTestSupport.InstrumentationFeature.Action.received(\"delayed\")):inactiveToken"
           )
       })
     )
@@ -575,7 +578,7 @@ struct StoreInstrumentationTests {
     #expect(
       probe.events.contains(where: {
         $0.contains(
-          "drop:Optional(InnoFlowTests.StoreReleaseDropFeature.Action._completed(\"late-value\")):storeReleased"
+          "drop:Optional(InnoFlowCoreTestSupport.StoreReleaseDropFeature.Action._completed(\"late-value\")):storeReleased"
         )
       })
     )

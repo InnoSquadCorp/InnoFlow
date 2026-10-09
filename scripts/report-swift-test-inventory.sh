@@ -12,7 +12,7 @@ root="${1:-$(cd "$script_dir/.." && pwd -P)}"
   exit 64
 }
 package_relative="."
-targets=( InnoFlowTests InnoFlowMacrosTests )
+targets=( InnoFlowAuthoringTestSupport InnoFlowCoreTestSupport InnoFlowCoreTests InnoFlowInspectorTests InnoFlowMacrosTests InnoFlowSwiftUIIntegrationTests InnoFlowSwiftUITestSupport InnoFlowSwiftUITests InnoFlowTestingTestSupport InnoFlowTestingTests InnoFlowTests )
 if (( sample )); then
   package_relative="Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage"
   targets=( InnoFlowSampleAppFeatureTests )

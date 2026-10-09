@@ -3,7 +3,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 fixture="$(mktemp -d)"
 trap 'rm -rf "$fixture"' EXIT
-mkdir -p "$fixture/Tests/InnoFlowTests/Fixtures" "$fixture/Tests/InnoFlowMacrosTests"
+mkdir -p "$fixture/Tests/InnoFlowTests/Fixtures" "$fixture/Tests/InnoFlowAuthoringTestSupport" "$fixture/Tests/InnoFlowCoreTestSupport" "$fixture/Tests/InnoFlowCoreTests" "$fixture/Tests/InnoFlowInspectorTests" "$fixture/Tests/InnoFlowMacrosTests" "$fixture/Tests/InnoFlowSwiftUIIntegrationTests" "$fixture/Tests/InnoFlowSwiftUITestSupport" "$fixture/Tests/InnoFlowSwiftUITests" "$fixture/Tests/InnoFlowTestingTestSupport" "$fixture/Tests/InnoFlowTestingTests"
 printf '// swift-tools-version: 6.3\n' >"$fixture/Package.swift"
 cat >"$fixture/Tests/InnoFlowTests/Runtime.swift" <<'SWIFT'
 import Testing

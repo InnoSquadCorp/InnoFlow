@@ -7,12 +7,12 @@ import tempfile
 
 root = Path(__file__).resolve().parent.parent
 checker = root / 'scripts/check-testing-contracts.py'
-paths = ['Sources/InnoFlowTesting', 'Sources/InnoFlowCore/FlowScope.swift', 'Tests/InnoFlowTests/StoreScopeSelectionTests.swift', 'Tests/InnoFlowTests/StoreEffectRuntimeTests.swift']
+paths = ['Sources/InnoFlowTesting', 'Sources/InnoFlowCore/FlowScope.swift', 'Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift', 'Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift']
 mutations = [
     ('source-column', 'Sources/InnoFlowTesting/TestStore+Public.swift', 'column: UInt = #column', 'column: UInt = 1'),
     ('test-framework-routing', 'Sources/InnoFlowTesting/TestStore+Assertions.swift', 'if Test.current != nil', 'if false'),
     ('scope-construction', 'Sources/InnoFlowCore/FlowScope.swift', 'fileprivate init()', 'public init()'),
-    ('selection-fixed-sleep', 'Tests/InnoFlowTests/StoreScopeSelectionTests.swift', None, '\n// Task.sleep(for: .milliseconds(20))\n'),
+    ('selection-fixed-sleep', 'Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift', None, '\n// Task.sleep(for: .milliseconds(20))\n'),
     ('scenario-threshold', 'Sources/InnoFlowTesting/TestStoreScenario.swift', 'onceSleepersReach count: Int,', 'onceSleepersReach count: Int = 1,'),
 ]
 with tempfile.TemporaryDirectory(prefix='innoflow-testing-contracts-') as directory:

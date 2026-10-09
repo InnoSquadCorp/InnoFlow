@@ -1,3 +1,10 @@
+import Foundation
+import InnoFlow
+import InnoFlowTesting
+import Testing
+
+@testable import InnoFlowCoreTestSupport
+
 // MARK: - EffectTimingBaselineGate.swift
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
@@ -16,11 +23,6 @@
 // non-blocking timing trend. Setting
 // `INNOFLOW_WRITE_EFFECT_BASELINE=<path>` switches the suite into export mode
 // so maintainers can regenerate the committed JSONL fixture deliberately.
-
-import Foundation
-import InnoFlow
-import InnoFlowTesting
-import Testing
 
 @Suite(
   "EffectTimingBaselineGate",

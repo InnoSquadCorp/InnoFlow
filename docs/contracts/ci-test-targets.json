@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "manifestSha256": "f3fb44347b04876e2ea6c3d48d7172d7ba98ba5466c83ba56a6572798f407f37",
+  "sourceTargets": [
+    "InnoFlow",
+    "InnoFlowCore",
+    "InnoFlowInspector",
+    "InnoFlowMacros",
+    "InnoFlowSwiftUI",
+    "InnoFlowTesting"
+  ],
+  "testTargets": [
+    "InnoFlowCoreTests",
+    "InnoFlowInspectorTests",
+    "InnoFlowMacrosTests",
+    "InnoFlowSwiftUIIntegrationTests",
+    "InnoFlowSwiftUITests",
+    "InnoFlowTestingTests",
+    "InnoFlowTests"
+  ],
+  "supportTargets": [
+    "InnoFlowAuthoringTestSupport",
+    "InnoFlowCoreTestSupport",
+    "InnoFlowSwiftUITestSupport",
+    "InnoFlowTestingTestSupport"
+  ],
+  "dependencies": {
+    "InnoFlowCore": [],
+    "InnoFlowMacros": [],
+    "InnoFlow": [
+      "InnoFlowCore",
+      "InnoFlowMacros"
+    ],
+    "InnoFlowSwiftUI": [
+      "InnoFlowCore"
+    ],
+    "InnoFlowInspector": [
+      "InnoFlowCore"
+    ],
+    "InnoFlowTesting": [
+      "InnoFlowCore"
+    ],
+    "InnoFlowCoreTestSupport": [
+      "InnoFlowCore"
+    ],
+    "InnoFlowAuthoringTestSupport": [
+      "InnoFlowCore",
+      "InnoFlow"
+    ],
+    "InnoFlowSwiftUITestSupport": [
+      "InnoFlowCore",
+      "InnoFlow",
+      "InnoFlowSwiftUI"
+    ],
+    "InnoFlowTestingTestSupport": [
+      "InnoFlowCore",
+      "InnoFlowTesting",
+      "InnoFlowCoreTestSupport"
+    ],
+    "InnoFlowCoreTests": [
+      "InnoFlowCore",
+      "InnoFlowCoreTestSupport"
+    ],
+    "InnoFlowTestingTests": [
+      "InnoFlowCore",
+      "InnoFlowCoreTestSupport",
+      "InnoFlowTesting",
+      "InnoFlowTestingTestSupport"
+    ],
+    "InnoFlowSwiftUITests": [
+      "InnoFlowCore",
+      "InnoFlowSwiftUI"
+    ],
+    "InnoFlowSwiftUIIntegrationTests": [
+      "InnoFlow",
+      "InnoFlowAuthoringTestSupport",
+      "InnoFlowCore",
+      "InnoFlowCoreTestSupport",
+      "InnoFlowSwiftUI",
+      "InnoFlowSwiftUITestSupport",
+      "InnoFlowTesting",
+      "InnoFlowTestingTestSupport"
+    ],
+    "InnoFlowInspectorTests": [
+      "InnoFlowCore",
+      "InnoFlowInspector"
+    ],
+    "InnoFlowTests": [
+      "InnoFlow",
+      "InnoFlowAuthoringTestSupport",
+      "InnoFlowCore",
+      "InnoFlowCoreTestSupport",
+      "InnoFlowSwiftUI",
+      "InnoFlowTesting"
+    ],
+    "InnoFlowMacrosTests": [
+      "InnoFlowMacros"
+    ]
+  }
+}

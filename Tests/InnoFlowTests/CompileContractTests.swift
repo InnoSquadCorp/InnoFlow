@@ -1,13 +1,14 @@
-// MARK: - CompileContractTests.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
 import Testing
 import os
 
+@testable import InnoFlowAuthoringTestSupport
 @testable import InnoFlowCore
 @testable import InnoFlowTesting
+
+// MARK: - CompileContractTests.swift
+// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// Copyright © 2025 InnoSquad. All rights reserved.
 
 @Suite(
   "Compile Contract Tests",

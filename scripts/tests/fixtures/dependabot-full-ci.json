@@ -128,11 +128,19 @@
         "conclusion": "success"
       },
       {
+        "name": "Select dependency-complete package tests",
+        "conclusion": "success"
+      },
+      {
         "name": "Verify macro source fallback",
         "conclusion": "success"
       },
       {
         "name": "Run package tests including output lifetime and composition contracts",
+        "conclusion": "success"
+      },
+      {
+        "name": "Require complete package suite for main reuse",
         "conclusion": "success"
       },
       {
@@ -722,6 +730,10 @@
         "conclusion": "success"
       },
       {
+        "name": "Verify selective test package on the audited compiler",
+        "conclusion": "success"
+      },
+      {
         "name": "Report cache observations",
         "conclusion": "success"
       }
@@ -757,6 +769,10 @@
       },
       {
         "name": "Verify AST migration on the audited SwiftSyntax line",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify selective test package on the audited compiler",
         "conclusion": "success"
       },
       {

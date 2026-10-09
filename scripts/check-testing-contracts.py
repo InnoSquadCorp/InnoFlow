@@ -38,10 +38,10 @@ if re.search(r'\b(?:public|package|internal)\s+init\(', scope):
     failures.append('FlowScope construction must remain private to its lexical owner file')
 if 'fileprivate init()' not in scope and 'private init()' not in scope:
     failures.append('FlowScope must explicitly restrict its initializer')
-selection = (root / 'Tests/InnoFlowTests/StoreScopeSelectionTests.swift').read_text()
+selection = (root / 'Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift').read_text()
 if re.search(r'Task\.sleep\(for:\s*\.milliseconds\(20\)\)', selection):
     failures.append('Selection fixtures must await dispatch completion instead of fixed 20ms sleeps')
-runtime = (root / 'Tests/InnoFlowTests/StoreEffectRuntimeTests.swift').read_text()
+runtime = (root / 'Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift').read_text()
 combinator = runtime.split('func storeCombinatorComposition()', 1)[-1].split('\n  @Test', 1)[0]
 if 'Task.sleep' in combinator or 'waitForNowReads' not in combinator or 'waitForSleepRegistrations' not in combinator:
     failures.append('Combinator fixture must synchronize clock reads and sleeper registration')
