@@ -71,7 +71,7 @@ Dir.mktmpdir("innoflow-availability-") do |root|
   end
   source_path = File.join(root, "source.json")
   source_inventory = {"tests" => ids.map do |id|
-    {"target" => "InnoFlowTests", "identifier" => id, "conditionalContexts" => ["#if compiler(>=6.4)"],
+    {"target" => "InnoFlowCoreTests", "identifier" => id, "conditionalContexts" => ["#if compiler(>=6.4)"],
      "availabilityAttributes" => ["@available(macOS 27.0, iOS 27.0, tvOS 27.0, watchOS 27.0, visionOS 27.0, *)"]}
   end + [{"target" => "InnoFlowTests", "identifier" => "EffectTimingBaselineGate/baseline()", "conditionalContexts" => []}]}
   File.write(source_path, JSON.generate(source_inventory))

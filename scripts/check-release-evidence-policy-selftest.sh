@@ -16,7 +16,7 @@ mkdir -p "$fixture_root/$sample_package/Tests"
 cp "$root_dir/$sample_package/Package.swift" "$fixture_root/$sample_package/"
 cp -R "$root_dir/$sample_package/Tests/InnoFlowSampleAppFeatureTests" "$fixture_root/$sample_package/Tests/"
 cp "$root_dir/Package.swift" "$fixture_root/"
-cp -R "$root_dir/Tests/InnoFlowTests" "$root_dir/Tests/InnoFlowMacrosTests" "$fixture_root/Tests/"
+cp -R "$root_dir/Tests/"* "$fixture_root/Tests/"
 cp "$root_dir/Tests/InnoFlowTests/CompileContractTests.swift" "$fixture_root/Tests/InnoFlowTests/"
 cp "$root_dir/scripts/run-focused-platform-runtime-tests.sh" "$fixture_root/scripts/"
 cp "$root_dir/scripts/run-release-preflight.sh" "$root_dir/scripts/run-release-preflight.rb" \
@@ -42,7 +42,7 @@ policy_path = root / "docs/contracts/release-evidence-policy.json"
 full = json.loads(full_path.read_text())
 runtime = json.loads(runtime_path.read_text())
 policy = json.loads(policy_path.read_text())
-relative = "Tests/InnoFlowTests/IdentifiedArrayTests.swift"
+relative = "Tests/InnoFlowCoreTests/IdentifiedArrayTests.swift"
 source = root / relative
 with source.open("a") as stream:
     stream.write("\nextension IdentifiedArrayTests {\n")
@@ -55,7 +55,7 @@ with source.open("a") as stream:
         if condition:
             stream.write("#endif\n")
         identifier = "IdentifiedArrayTests/" + name + "()"
-        full["tests"].append({"target": "InnoFlowTests", "file": relative, "line": 1,
+        full["tests"].append({"target": "InnoFlowCoreTests", "file": relative, "line": 1,
             "identifier": identifier, "displayName": name + "()", "attribute": "@Test",
             "conditionalContexts": condition})
         runtime["expectedTestIdentifiers"].append(identifier)
@@ -114,11 +114,11 @@ PY_MUTATION
   fi
 done
 cp "$root_dir/docs/contracts/"{release-evidence-policy,runtime-test-inventory,swift-test-inventory}.json "$fixture_root/docs/contracts/"
-cp "$root_dir/Tests/InnoFlowTests/IdentifiedArrayTests.swift" "$fixture_root/Tests/InnoFlowTests/"
+cp "$root_dir/Tests/InnoFlowCoreTests/IdentifiedArrayTests.swift" "$fixture_root/Tests/InnoFlowCoreTests/"
 
 # The identity/cancellation regressions must remain in every platform run.
 for suite in CollectionLifetimeConsistencyTests IdentifiedArrayTests ManualTestClockTests RuntimeConsistencyTests TestStoreDispatchConsistencyTests TestingLocationConsistencyTests PhaseExplorationConsistencyTests OwnedSynchronousEffectConsistencyTests; do
-  ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.lines.reject { |line| line.include?("-only-testing:InnoFlowTests/#{suite}") }.join)' \
+  ruby -rjson -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.lines.reject { |line| line.include?("-only-testing:#{JSON.parse(File.read(File.join(File.dirname(path), "../docs/contracts/runtime-test-inventory.json"))).fetch("suiteTargets").fetch(suite)}/#{suite}") }.join)' \
     "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$suite"
   if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
     echo "Runtime suite omission passed: $suite" >&2
@@ -140,7 +140,7 @@ done
 
 # Extra or duplicate selections must not drift independently of the inventory.
 for selection in UnreviewedTests IdentifiedArrayTests; do
-  ruby -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.sub("  test\n  -only-testing", "  test\n  -only-testing:InnoFlowTests/#{suite}\n  -only-testing"))' \
+  ruby -rjson -e 'path, suite = ARGV; source = File.read(path); File.write(path, source.sub("  test\n  -only-testing", "  test\n  -only-testing:InnoFlowTests/#{suite}\n  -only-testing"))' \
     "$fixture_root/scripts/run-focused-platform-runtime-tests.sh" "$selection"
   if ruby "$script_dir/check-release-evidence-policy.rb" "$fixture_root" >/dev/null 2>&1; then
     echo "Unreviewed or duplicate runtime selection passed: $selection" >&2
@@ -195,6 +195,14 @@ expect_mutation_failure swift63-incorrect-run-count \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="swift-6.3-toolchain" }; c["expectedTestRunCount"]=2; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure swift64-incorrect-run-count \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="swift-6.4-toolchain" }; c["expectedTestRunCount"]=1; File.write(p,JSON.generate(j)+"\n")'
+for sanitizer in tsan-focused asan-focused; do
+  export SANITIZER_MUTATION_ID="$sanitizer"
+  expect_mutation_failure "$sanitizer-incomplete-runs" \
+    'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")==ENV.fetch("SANITIZER_MUTATION_ID") }; c["expectedTestRunCount"]=1; File.write(p,JSON.generate(j)+"\n")'
+  expect_mutation_failure "$sanitizer-missing-test" \
+    'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")==ENV.fetch("SANITIZER_MUTATION_ID") }; c["minimumTestCount"]=52; c["maximumTestCount"]=52; File.write(p,JSON.generate(j)+"\n")'
+done
+unset SANITIZER_MUTATION_ID
 expect_mutation_failure sdk-direct-build \
   'p=ARGV.fetch(0); j=JSON.parse(File.read(p)); c=j.fetch("checks").find { |x| x.fetch("id")=="sdk-macos" }; c.fetch("commandContract")["executable"]="xcodebuild"; File.write(p,JSON.generate(j)+"\n")'
 expect_mutation_failure sdk-unstructured-result \

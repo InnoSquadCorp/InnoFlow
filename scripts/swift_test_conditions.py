@@ -32,7 +32,7 @@ def source_capabilities(inventory):
         identifier = test["identifier"]
         attributes = test.get("availabilityAttributes", [])
         if identifier in DID_SET_TESTS:
-            if (test["target"] != "InnoFlowTests" or test["conditionalContexts"] != COMPILER_CONDITION or
+            if (test["target"] != "InnoFlowCoreTests" or test["conditionalContexts"] != COMPILER_CONDITION or
                     attributes != [DID_SET_AVAILABILITY]):
                 raise ValueError("didSet capability must preserve compiler and function availability: " + identifier)
             capabilities[identifier] = DID_SET_CAPABILITY

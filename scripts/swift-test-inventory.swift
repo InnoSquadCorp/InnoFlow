@@ -65,7 +65,13 @@ let root = CommandLine.arguments[1]
 var all: [[String: Any]] = []
 let targets =
   CommandLine.arguments.count > 2
-  ? Array(CommandLine.arguments.dropFirst(2)) : ["InnoFlowTests", "InnoFlowMacrosTests"]
+  ? Array(CommandLine.arguments.dropFirst(2))
+  : [
+    "InnoFlowAuthoringTestSupport", "InnoFlowCoreTestSupport", "InnoFlowCoreTests",
+    "InnoFlowInspectorTests", "InnoFlowMacrosTests", "InnoFlowSwiftUIIntegrationTests",
+    "InnoFlowSwiftUITestSupport", "InnoFlowSwiftUITests", "InnoFlowTestingTestSupport",
+    "InnoFlowTestingTests", "InnoFlowTests",
+  ]
 for target in targets {
   let path = root + "/Tests/" + target
   guard let enumerator = FileManager.default.enumerator(atPath: path) else {

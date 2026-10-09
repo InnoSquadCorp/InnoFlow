@@ -19,7 +19,7 @@ IfCaseLet uses its declaration source coordinates for the lifetime path, so rebu
 
 Parent and child Output types must match. Use mapOutput for typed lifting or promoteOutput for a Never-output child. There is no Core-to-Testing dependency. Production Store and TestStore share the same registry, owner tokens, preparation and admission rules.
 
-The registry stores active slots only. Retired tokens remain referenced only by outstanding events/operations and are reclaimed with them. Tests cover 1,000 open/close cycles, same-action output, late uncooperative action, ID replacement, nested/sibling isolation, and unchanged IfLet behavior. See `Tests/InnoFlowTests/OptionalChildLifetimeConsistencyTests.swift` for executable examples. Linux mirror validation does not certify Apple lock or SwiftUI integration.
+The registry stores active slots only. Retired tokens remain referenced only by outstanding events/operations and are reclaimed with them. Tests cover 1,000 open/close cycles, same-action output, late uncooperative action, ID replacement, nested/sibling isolation, and unchanged IfLet behavior. See `Tests/InnoFlowTestingTests/OptionalChildLifetimeConsistencyTests.swift` for executable examples. Linux mirror validation does not certify Apple lock or SwiftUI integration.
 
 State key paths at optionalChild and its Scope/IfLet/collection composition
 boundaries must be Sendable. Direct literals retain compiler inference; a hoisted

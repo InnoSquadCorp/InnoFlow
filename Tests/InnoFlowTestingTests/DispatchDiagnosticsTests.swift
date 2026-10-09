@@ -4,6 +4,8 @@ import InnoFlowTesting
 import Testing
 import os
 
+@testable import InnoFlowCoreTestSupport
+
 @Suite("Dispatch diagnostics")
 @MainActor
 struct DispatchDiagnosticsTests {

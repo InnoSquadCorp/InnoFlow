@@ -115,18 +115,70 @@ let package = Package(
     ),
 
     // MARK: - Tests
+    // Support modules are regular targets: Xcode 26.6 rejects dependencies
+    // on test targets. They remain private to tests, outside all products.
+    .target(
+      name: "InnoFlowCoreTestSupport",
+      dependencies: ["InnoFlowCore"],
+      path: "Tests/InnoFlowCoreTestSupport",
+      swiftSettings: swift6PackageContract
+    ),
+    .target(
+      name: "InnoFlowAuthoringTestSupport",
+      dependencies: ["InnoFlowCore", "InnoFlow"],
+      path: "Tests/InnoFlowAuthoringTestSupport",
+      swiftSettings: swift6PackageContract
+    ),
+    .target(
+      name: "InnoFlowSwiftUITestSupport",
+      dependencies: ["InnoFlowCore", "InnoFlow", "InnoFlowSwiftUI"],
+      path: "Tests/InnoFlowSwiftUITestSupport",
+      swiftSettings: swift6PackageContract
+    ),
+    .target(
+      name: "InnoFlowTestingTestSupport",
+      dependencies: ["InnoFlowCore", "InnoFlowTesting", "InnoFlowCoreTestSupport"],
+      path: "Tests/InnoFlowTestingTestSupport",
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowCoreTests",
+      dependencies: ["InnoFlowCore", "InnoFlowCoreTestSupport"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowTestingTests",
+      dependencies: [
+        "InnoFlowCore", "InnoFlowCoreTestSupport", "InnoFlowTesting", "InnoFlowTestingTestSupport",
+      ],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowSwiftUITests",
+      dependencies: ["InnoFlowCore", "InnoFlowSwiftUI"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowSwiftUIIntegrationTests",
+      dependencies: [
+        "InnoFlow", "InnoFlowAuthoringTestSupport", "InnoFlowCore", "InnoFlowCoreTestSupport",
+        "InnoFlowSwiftUI", "InnoFlowSwiftUITestSupport", "InnoFlowTesting",
+        "InnoFlowTestingTestSupport",
+      ],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowInspectorTests",
+      dependencies: ["InnoFlowCore", "InnoFlowInspector"],
+      swiftSettings: swift6PackageContract
+    ),
     .testTarget(
       name: "InnoFlowTests",
       dependencies: [
-        "InnoFlowCore",
-        "InnoFlow",
-        "InnoFlowSwiftUI",
-        "InnoFlowTesting",
-        "InnoFlowInspector",
+        "InnoFlow", "InnoFlowAuthoringTestSupport", "InnoFlowCore", "InnoFlowCoreTestSupport",
+        "InnoFlowSwiftUI", "InnoFlowTesting",
       ],
-      resources: [
-        .copy("Fixtures")
-      ],
+      resources: [.copy("Fixtures")],
       swiftSettings: swift6PackageContract
     ),
     .testTarget(

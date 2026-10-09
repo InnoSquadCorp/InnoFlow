@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
 done
 if [[ -n "$discovery_output" ]]; then
   printf '%s\n' "${original_arguments[@]}" >"$FOCUSED_RUNTIME_DISCOVERY_LOG"
-  if [[ "$(printf '%s\n' "${original_arguments[@]}" | grep -c '^\-only-testing:' || true)" != 1 ]] ||
+  if [[ "$(printf '%s\n' "${original_arguments[@]}" | grep -c '^\-only-testing:' || true)" != 6 ]] ||
       ! printf '%s\n' "${original_arguments[@]}" | grep -Fx -- '-only-testing:InnoFlowTests' >/dev/null; then
     echo "Discovery attempted host-only InnoFlowMacrosTests.xctest without the runtime target restriction" >&2
     exit 65
@@ -73,7 +73,7 @@ elif mode == "unreviewed-consistency":
 with open(sys.argv[1], "w", encoding="utf-8") as stream:
     json.dump({"errors": [], "values": [{
         "disabledTests": [],
-        "enabledTests": [{"identifier": "InnoFlowTests/" + identifier}
+        "enabledTests": [{"identifier": inventory["suiteTargets"].get(identifier.split("/", 1)[0], "InnoFlowTests") + "/" + identifier}
                          for identifier in identifiers],
     }]}, stream)
 PY
@@ -240,7 +240,7 @@ grep -Fx -- '-workspace' "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null
 grep -Fx -- "$TMP_ROOT/package/.swiftpm/xcode/package.xcworkspace" \
   "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null
 for suite in $(/usr/bin/python3 -c 'import json, sys; print(" ".join(json.load(open(sys.argv[1]))["suites"]))' "$FOCUSED_RUNTIME_INVENTORY"); do
-  grep -Fx -- "-only-testing:InnoFlowTests/$suite" "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null
+  grep -Fx -- "-only-testing:$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["suiteTargets"][sys.argv[2]])' "$FOCUSED_RUNTIME_INVENTORY" "$suite")/$suite" "$FOCUSED_RUNTIME_COMMAND_LOG" >/dev/null
 done
 
 for mode in partial missing renamed duplicate zero unreviewed-consistency \

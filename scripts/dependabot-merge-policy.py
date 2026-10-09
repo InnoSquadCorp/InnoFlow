@@ -52,7 +52,9 @@ CORE = {'CI Plan': ['Plan exact changed paths'],
                                   'and Output tests'],
  'Package Tests (Release)': ['Show Xcode version',
                              'Run release configuration checks'],
- 'Package Tests (Core)': ['Show Xcode version',
+ 'Package Tests (Core)': ['Select dependency-complete package tests',
+                          'Require complete package suite for main reuse',
+                          'Show Xcode version',
                           'Verify macro source fallback',
                           'Run package tests including output lifetime and '
                           'composition contracts'],
@@ -104,7 +106,8 @@ CORE = {'CI Plan': ['Plan exact changed paths'],
                                                     'audited SwiftSyntax',
                                                     'Test macro and external '
                                                     'compile contracts',
-                                                    'Verify AST migration on the audited SwiftSyntax line'],
+                                                    'Verify AST migration on the audited SwiftSyntax line',
+                                                    'Verify selective test package on the audited compiler'],
  'SwiftSyntax Compatibility (Swift 6.4, 604.0.0)': ['Checkout exact '
                                                     'compatibility candidate',
                                                     'Verify pinned '
@@ -113,7 +116,8 @@ CORE = {'CI Plan': ['Plan exact changed paths'],
                                                     'audited SwiftSyntax',
                                                     'Test macro and external '
                                                     'compile contracts',
-                                                    'Verify AST migration on the audited SwiftSyntax line']}
+                                                    'Verify AST migration on the audited SwiftSyntax line',
+                                                    'Verify selective test package on the audited compiler']}
 FULL_SKIPPED = set()
 ALLOWED_STEP_SKIP = {('CI Plan', 'Verify actual post-merge main origin'),
  ('Documentation / Build Documentation', 'Upload Documentation Artifact'),

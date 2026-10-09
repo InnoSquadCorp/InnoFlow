@@ -3,6 +3,8 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
+@testable import InnoFlowCoreTestSupport
+
 @Suite("Effect run admission")
 @MainActor
 struct EffectRunSchedulerTests {

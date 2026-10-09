@@ -22,10 +22,11 @@ SwiftUI/Testing/Inspector 변경은 해당 제품을 선택한다. 여러 변경
 rename 양쪽 경로는 CI Plan에 이미 포함된다. scheme이 없거나 discovery가 실패하면
 기존 InnoFlow-Package build를 실행한다. 실제 build 실패는 fallback으로 숨기지 않는다.
 
-이 선택은 SDK build scheme 선택이다. 기존 InnoFlowTests는 InnoFlow, Core,
-SwiftUI, Testing, Inspector를 함께 의존하므로 테스트는 여전히 전체 target을
-컴파일하고 실행한다. --filter로 실제 제품별 선택 컴파일이 되었다고 주장하지 않는다.
-Xcode의 실제 선택 graph와 실행시간 감소는 hosted 실행 전에는 확인된 결과가 아니다.
+1단계 당시 선택 범위는 SDK build scheme이었다. 당시 InnoFlowTests는 InnoFlow,
+Core, SwiftUI, Testing, Inspector를 함께 의존하므로 테스트 전체 target을 컴파일하고
+실행했다. --filter로 실제 제품별 선택 컴파일이 되었다고 주장하지 않는다.
+1단계 최초 작성 당시 실제 선택 graph와 실행시간은 미검증이었다. 후속 Mac graph
+검증과 private package 측정은 아래 2단계 문서에 기록하며 hosted/전체 CI 성능과 구분한다.
 
 metadata 이벤트는 validation과 별도 concurrency group에서 기존 증거를 기다린다.
 metadata끼리는 cancel=false/queue=max를 유지한다. 기존 metadata provenance
@@ -46,30 +47,14 @@ merge 이후 의도적 rerun은 보존한다. 재개방, SHA/identity 불일치,
 않으므로 마지막 조회와 취소 사이의 경쟁 가능성은 남는다. 정상 CI concurrency의
 superseded validation 취소는 유지한다.
 
-## 2단계: fixture 및 테스트 target 분리 (이번 변경으로 완료되지 않음)
+## 2단계: fixture 및 테스트 target 분리
 
-1. InnoFlowTests의 파일별 imports와 공유 declaration 사용을 조사한다. 단순 import
-   분류만으로 target을 나누지 않는다. TestFixtures.swift 자체가 authoring macro,
-   SwiftUI, Testing을 함께 import하고 TestSupport.swift도 Testing에 의존한다.
-2. 먼저 StoreSwiftUIBindingTests처럼 자체 feature fixture만 사용하는 테스트를
-   분리할 수 있다. Preview 테스트는 ManualTestClock, InstrumentationProbe,
-   waitUntil/waitUntilAsync 의존을 함께 분리해야 한다. Scope/Presentation 테스트의
-   integration 경계는 유지한다.
-3. 각 새 test target은 실제 사용하는 최소 products만 의존하도록 선언한다.
-   cross-product 통합 target을 별도로 유지하고, Core 또는 공유 fixture 변경은
-   reverse dependency closure에 따라 전체 관련 target을 선택한다.
-4. root `swift test --filter`는 충분하지 않다. 선택하지 않은 test target/product가
-   build graph에서 제외되는 별도 CI package/명시적 test-product 경로를 구현하고
-   실제 SwiftPM build graph/컴파일 로그로 확인해야 한다. 지원되지 않거나 미분류면
-   full fallback한다. 새 Package.swift 경로가 배포 package graph를 바꾸지 않게 한다.
-5. target/경로 변경에 따른 swift-test inventory, coverage inventory, 선언별 test ID,
-   runtime filter를 실제 parser/toolchain으로 갱신·대조한다. 기존 테스트를 누락하거나
-   minimum count를 낮춰 통과시키지 않는다. 이 작업은 릴리스 검증 contract에 영향을
-   주므로 별도 diff와 검토가 필요하다.
-6. hosted Swift6.3/6.4에서 Debug/Release 전체 suite 및 분리 suite의 test inventory
-   동등성을 검증하고, SwiftUI-only/Testing-only/Core/mixed 변경 각각의 선택·역의존
-   graph를 확인한다. 타깃이 제외됐다는 실제 compile evidence가 있어야 선택 테스트
-   컴파일 완료로 보고한다. release gates는 기존 전체 범위를 유지한다.
+별도 후속 변경에서 기존 단일 InnoFlowTests를 Core/Testing/SwiftUI/Inspector 및
+통합·authoring 계약 target으로 분리했다. test support는 실제 의존성에 따라 나누고
+제품 배포 graph에서는 제외한다. 단일 Inspector/SwiftUI/Testing 소스 PR은 역의존
+계약 전체를 포함하는 private package에서 실행한다. Core·공유·mixed 변경과
+main/release는 full fallback을 유지한다. 실제 구조, 선택 graph, 선언 동등성 및
+검증 환경은 [선택 테스트 target 문서](CI_SELECTIVE_TEST_TARGETS.md)를 참고한다.
 
 ## 검증
 
@@ -78,8 +63,8 @@ superseded validation 취소는 유지한다.
 cleanup은 bounded wait, 정확한 PR/workflow/branch 범위, API 경합 및 부정 응답을
 검사한다. CI efficiency mutation tests와 actionlint도 실행한다.
 
-이 Linux VM에는 Swift/Xcode가 없어 실제 Apple SDK build나 테스트는 수행하지
-않았다. PR의 hosted CI가 그 검증을 담당한다. 로컬 mock 성공을 실제 빌드 성공이나
+1단계 최초 작성 환경인 Linux VM에는 Swift/Xcode가 없어 Apple SDK build나 테스트를
+수행하지 않았다. 이후 Mac 및 hosted 결과는 각 변경의 검증 보고에 기록한다. 로컬 mock 성공을 실제 빌드 성공이나
 성능 향상 실측으로 보고하지 않는다.
 
 Workflow linter 임시 실행 파일은 checkout 밖의 시스템 임시 폴더에 둔다.

@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import InnoFlowCore
+@testable import InnoFlowCoreTestSupport
 
 @Suite("FlowScope lifetime")
 @MainActor

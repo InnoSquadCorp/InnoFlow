@@ -144,6 +144,11 @@ fi
 # so newly added consistency suites cannot silently escape inventory review.
 # Full macro coverage remains in both host toolchain gates and full-principle.
 discovery_command+=(
+  -only-testing:InnoFlowCoreTests
+  -only-testing:InnoFlowInspectorTests
+  -only-testing:InnoFlowSwiftUIIntegrationTests
+  -only-testing:InnoFlowSwiftUITests
+  -only-testing:InnoFlowTestingTests
   -only-testing:InnoFlowTests
   -scheme InnoFlow-Package
   -destination "$destination"
@@ -158,43 +163,43 @@ command+=(
   CODE_SIGNING_REQUIRED=NO
   ONLY_ACTIVE_ARCH=YES
   test
-  -only-testing:InnoFlowTests/CollectionLifetimeConsistencyTests
-  -only-testing:InnoFlowTests/CollectionMultiScopeReconciliationTests
-  -only-testing:InnoFlowTests/CollectionReconciliationBoundaryTests
+  -only-testing:InnoFlowTestingTests/CollectionLifetimeConsistencyTests
+  -only-testing:InnoFlowTestingTests/CollectionMultiScopeReconciliationTests
+  -only-testing:InnoFlowTestingTests/CollectionReconciliationBoundaryTests
   -only-testing:InnoFlowTests/CollectionScopeCacheTests
-  -only-testing:InnoFlowTests/CompletionRelayConsistencyTests
-  -only-testing:InnoFlowTests/DiagnosticsRingConsistencyTests
-  -only-testing:InnoFlowTests/DispatchDiagnosticsTests
-  -only-testing:InnoFlowTests/DispatchIdentityConsistencyTests
-  -only-testing:InnoFlowTests/EffectIsolationConsistencyTests
-  -only-testing:InnoFlowTests/EffectRunSchedulerTests
-  -only-testing:InnoFlowTests/ExplorerFailureBoundaryConsistencyTests
-  -only-testing:InnoFlowTests/ExplorerFirstDiagnosticConsistencyTests
-  -only-testing:InnoFlowTests/ExplorerSafetyConsistencyTests
-  -only-testing:InnoFlowTests/FlowScopeTests
-  -only-testing:InnoFlowTests/IdentifiedArrayTests
-  -only-testing:InnoFlowTests/InspectorGraphConsistencyTests
+  -only-testing:InnoFlowCoreTests/CompletionRelayConsistencyTests
+  -only-testing:InnoFlowCoreTests/DiagnosticsRingConsistencyTests
+  -only-testing:InnoFlowTestingTests/DispatchDiagnosticsTests
+  -only-testing:InnoFlowTestingTests/DispatchIdentityConsistencyTests
+  -only-testing:InnoFlowTestingTests/EffectIsolationConsistencyTests
+  -only-testing:InnoFlowTestingTests/EffectRunSchedulerTests
+  -only-testing:InnoFlowTestingTests/ExplorerFailureBoundaryConsistencyTests
+  -only-testing:InnoFlowTestingTests/ExplorerFirstDiagnosticConsistencyTests
+  -only-testing:InnoFlowTestingTests/ExplorerSafetyConsistencyTests
+  -only-testing:InnoFlowCoreTests/FlowScopeTests
+  -only-testing:InnoFlowCoreTests/IdentifiedArrayTests
+  -only-testing:InnoFlowInspectorTests/InspectorGraphConsistencyTests
   -only-testing:InnoFlowTests/MacroIdentifierConsistencyTests
   -only-testing:InnoFlowTests/MacroMigrationConsistencyTests
-  -only-testing:InnoFlowTests/ManualTestClockTests
-  -only-testing:InnoFlowTests/ObservationConsistencyTests
-  -only-testing:InnoFlowTests/OnChangeHostConsistencyTests
-  -only-testing:InnoFlowTests/OptionalChildLifetimeConsistencyTests
+  -only-testing:InnoFlowTestingTests/ManualTestClockTests
+  -only-testing:InnoFlowCoreTests/ObservationConsistencyTests
+  -only-testing:InnoFlowTestingTests/OnChangeHostConsistencyTests
+  -only-testing:InnoFlowTestingTests/OptionalChildLifetimeConsistencyTests
   -only-testing:InnoFlowTests/OutputCasePathTests
-  -only-testing:InnoFlowTests/OwnedSynchronousEffectConsistencyTests
-  -only-testing:InnoFlowTests/PerformanceSemanticsConsistencyTests
-  -only-testing:InnoFlowTests/PhaseExplorationConsistencyTests
-  -only-testing:InnoFlowTests/ProjectionRegistrationBoundaryTests
-  -only-testing:InnoFlowTests/RunLaneSnapshotConsistencyTests
-  -only-testing:InnoFlowTests/RuntimeConsistencyTests
-  -only-testing:InnoFlowTests/SchedulerAdmissionConsistencyTests
+  -only-testing:InnoFlowTestingTests/OwnedSynchronousEffectConsistencyTests
+  -only-testing:InnoFlowCoreTests/PerformanceSemanticsConsistencyTests
+  -only-testing:InnoFlowTestingTests/PhaseExplorationConsistencyTests
+  -only-testing:InnoFlowCoreTests/ProjectionRegistrationBoundaryTests
+  -only-testing:InnoFlowCoreTests/RunLaneSnapshotConsistencyTests
+  -only-testing:InnoFlowTestingTests/RuntimeConsistencyTests
+  -only-testing:InnoFlowTestingTests/SchedulerAdmissionConsistencyTests
   -only-testing:InnoFlowTests/SingleScopeCacheTests
-  -only-testing:InnoFlowTests/SnapshotBoundaryConsistencyTests
-  -only-testing:InnoFlowTests/StoreScopeSelectionTests
-  -only-testing:InnoFlowTests/TestEffectLedgerConsistencyTests
-  -only-testing:InnoFlowTests/TestStoreDispatchConsistencyTests
-  -only-testing:InnoFlowTests/TestingLocationConsistencyTests
-  -only-testing:InnoFlowTests/ViewDispatchLifetimeConsistencyTests
+  -only-testing:InnoFlowCoreTests/SnapshotBoundaryConsistencyTests
+  -only-testing:InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests
+  -only-testing:InnoFlowTestingTests/TestEffectLedgerConsistencyTests
+  -only-testing:InnoFlowTestingTests/TestStoreDispatchConsistencyTests
+  -only-testing:InnoFlowTestingTests/TestingLocationConsistencyTests
+  -only-testing:InnoFlowCoreTests/ViewDispatchLifetimeConsistencyTests
 )
 if [[ -n "$derived_data" ]]; then
   command+=( -derivedDataPath "$derived_data" )

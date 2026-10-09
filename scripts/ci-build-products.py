@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Select SDK build products; shared/unknown changes retain the full package build.
 
-This does not narrow the unified InnoFlowTests target or claim test isolation.
+Test target selection is verified separately by ci-test-targets.py.
 """
 import argparse
 import hashlib
@@ -12,7 +12,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_SHA256 = "e1583cfa064f7cdd981705e17e5881b99cb96028d1fe977ea45fb2e40b75e8d6"
+MANIFEST_SHA256 = "f3fb44347b04876e2ea6c3d48d7172d7ba98ba5466c83ba56a6572798f407f37"
 DEPENDENCIES = {
     "InnoFlowCore": set(),
     "InnoFlowMacros": set(),
@@ -81,7 +81,7 @@ def run(plan, platform, root=ROOT, runner=subprocess.run):
             # Scheme discovery is advisory; the full real build still must pass.
             products = FULL[:]
     print(json.dumps({"platform": platform, "schemes": products,
-                      "tests": "full unified target retained"}), flush=True)
+                      "tests": "full SDK product contract retained"}), flush=True)
     for product in products:
         runner(["xcodebuild", "-scheme", product, "-destination", "generic/platform=" + platform,
                 "CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO", "build"],

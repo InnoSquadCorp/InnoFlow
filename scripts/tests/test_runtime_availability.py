@@ -102,7 +102,7 @@ class RuntimeAvailabilityTests(unittest.TestCase):
                 self.assertTrue(RUNTIME.validate(self.inventory, counts, changed, self.compiler, runtime)[0])
 
     def test_capability_is_source_pinned_and_cannot_be_partial_or_widened(self):
-        source = {"tests": [{"target": "InnoFlowTests", "identifier": identifier,
+        source = {"tests": [{"target": "InnoFlowCoreTests", "identifier": identifier,
             "conditionalContexts": ["#if compiler(>=6.4)"], "availabilityAttributes": [DID_SET_AVAILABILITY]}
             for identifier in DID_SET_TESTS]}
         self.assertEqual(source_capabilities(source), self.inventory["requiredCapabilitiesByIdentifier"])
@@ -114,7 +114,7 @@ class RuntimeAvailabilityTests(unittest.TestCase):
             else: changed["tests"][0]["conditionalContexts"] = []
             with self.subTest(mode=mode), self.assertRaises(ValueError): source_capabilities(changed)
         omitted = copy.deepcopy(source)
-        omitted["tests"] = [{"target": "InnoFlowTests", "identifier": "SnapshotBoundaryConsistencyTests/common()", "conditionalContexts": []}]
+        omitted["tests"] = [{"target": "InnoFlowCoreTests", "identifier": "SnapshotBoundaryConsistencyTests/common()", "conditionalContexts": []}]
         with self.assertRaises(ValueError): source_capabilities(omitted)
         absent_map = copy.deepcopy(self.inventory)
         del absent_map["requiredCapabilitiesByIdentifier"]

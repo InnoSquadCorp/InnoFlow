@@ -127,7 +127,7 @@ class SelectionTests(unittest.TestCase):
             "Sources/InnoFlowCore/Store.swift", "Sources/InnoFlowMacros/InnoFlowMacro.swift",
             "Sources/InnoFlowSwiftUI/Store+SwiftUIBindings.swift", "Sources/InnoFlowTesting/TestStore.swift",
             "Sources/InnoFlow/InnoFlow.docc/InnoFlow.md", "Sources/README.md",
-            "Tests/InnoFlowTests/ManualTestClockTests.swift", "Tests/README.md",
+            "Tests/InnoFlowTestingTests/ManualTestClockTests.swift", "Tests/README.md",
             "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.swift",
             "Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj/project.pbxproj",
             "Examples/README.md", "Plugins/future/plugin.swift", "Repro/scenario.swift",
