@@ -9,6 +9,10 @@ import re
 import subprocess
 import sys
 
+spec = importlib.util.spec_from_file_location("ci_prose_impact", Path(__file__).with_name("ci_prose_impact.py"))
+prose = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(prose)
+
 JOBS = (
     "policy", "docs-required", "documentation", "coverage", "lint", "tests", "release-tests",
     "api-compatibility", "thread-sanitizer", "sample-tests", "package-builds",
@@ -94,8 +98,10 @@ def path_impact(path):
     if path.startswith(".github/ISSUE_TEMPLATE/") or path in (
             ".github/dependabot.yml", ".github/PULL_REQUEST_TEMPLATE.md", ".github/FUNDING.yml", "LICENSE"):
         return set(), "public operations"
-    if path.endswith(".md") or path.startswith("docs/") and path.endswith((".png", ".jpg", ".svg")):
-        return {"lint", "documentation"}, "documentation"
+    if path.endswith(".md"):
+        return set(JOBS), "documentation (exact prose proof required)"
+    if path.startswith("docs/") and path.endswith((".png", ".jpg", ".svg")):
+        return {"lint", "documentation"}, "documentation asset"
     return set(JOBS), "unknown/shared path (full fallback)"
 
 
@@ -140,7 +146,7 @@ def changed_paths(root, base, head):
     return paths
 
 
-def make_plan(event_name, event, paths):
+def make_plan(event_name, event, paths, prose_proof=None):
     if not isinstance(event, dict) or not isinstance(paths, list):
         raise ValueError("event and changed paths have invalid types")
     lane = "full"
@@ -185,12 +191,22 @@ def make_plan(event_name, event, paths):
     # Empty or unavailable evidence cannot justify skipping a validation gate.
     if lane != "fast" or not paths:
         selected = set(JOBS)
-    return {"schema": 1, "lane": lane, "requested": requested,
+    plan = {"schema": 1, "lane": lane, "requested": requested,
             "jobs": {job: job in selected for job in JOBS}, "changes": changes}
+    if lane == "fast" and prose_proof:
+        prose.validate(prose_proof, paths)
+        pr = event["pull_request"]
+        if prose_proof["base"] != pr["base"]["sha"] or prose_proof["head"] != pr["head"]["sha"]:
+            raise ValueError("prose proof is not for the current PR base/head")
+        selected = with_dependencies({"lint", "documentation"} | set(requested))
+        plan["jobs"] = {job: job in selected for job in JOBS}
+        plan["prose"] = prose_proof
+    return plan
 
 
 def validate_plan(plan):
-    if not isinstance(plan, dict) or set(plan) != {"schema", "lane", "requested", "jobs", "changes"}:
+    fields = {"schema", "lane", "requested", "jobs", "changes"}
+    if not isinstance(plan, dict) or set(plan) not in (fields, fields | {"prose"}):
         raise ValueError("missing or unknown plan fields")
     if type(plan["schema"]) is not int or plan["schema"] != 1 or plan["lane"] not in ("fast", "full", "release-validation"):
         raise ValueError("unsupported plan schema/lane")
@@ -211,6 +227,11 @@ def validate_plan(plan):
     expected = with_dependencies(selected)
     if plan["lane"] != "fast" or not plan["changes"]:
         expected = set(JOBS)
+    if "prose" in plan:
+        if plan["lane"] != "fast":
+            raise ValueError("prose skips apply only to fast PR validation")
+        prose.validate(plan["prose"], [change["path"] for change in plan["changes"]])
+        expected = with_dependencies({"lint", "documentation"} | set(plan["requested"]))
     if plan["jobs"] != {job: job in expected for job in JOBS}:
         raise ValueError("plan does not match required changed-path and dependency selection")
 
@@ -259,6 +280,7 @@ def main():
     plan_cmd.add_argument("--reuse-proof-json", default=os.environ.get("CI_REUSE", "{}"))
     for name in ("evaluate", "evaluate-documentation"):
         evaluate_cmd = sub.add_parser(name)
+        evaluate_cmd.add_argument("--root", type=Path, default=Path("."))
         evaluate_cmd.add_argument("--plan-json", default=os.environ.get("CI_PLAN", ""))
         evaluate_cmd.add_argument("--needs-json", default=os.environ.get("CI_NEEDS", ""))
         evaluate_cmd.add_argument("--reuse-proof-json", default=os.environ.get("CI_REUSE", "{}"))
@@ -268,10 +290,20 @@ def main():
             event = load_json(args.event.read_text())
             event_name = os.environ["GITHUB_EVENT_NAME"]
             paths = []
+            prose_proof = None
             if event_name == "pull_request":
                 pr = event["pull_request"]
                 paths = changed_paths(args.root, pr["base"]["sha"], pr["head"]["sha"])
-            plan = make_plan(event_name, event, paths)
+                try:
+                    prose_proof = prose.prove(args.root, pr["base"]["sha"], pr["head"]["sha"])
+                    if prose_proof:
+                        # Rename-aware plan paths and the conservative proof
+                        # must cover identical evidence before any skip.
+                        prose.validate(prose_proof, paths)
+                except (ValueError, OSError, subprocess.CalledProcessError) as error:
+                    prose_proof = None
+                    print(f"Prose proof unavailable; retain full Markdown requirements: {error}", file=sys.stderr)
+            plan = make_plan(event_name, event, paths, prose_proof)
             validate_plan(plan)
             proof = load_json(args.reuse_proof_json)
             reused = reused_jobs(plan, proof)
@@ -287,7 +319,11 @@ def main():
                         stream.write(job + "=" + str(selected and job not in reused).lower() + "\n")
             print(json.dumps(plan, indent=2))
         elif args.command == "evaluate-documentation":
-            evaluate_documentation(load_json(args.plan_json), load_json(args.needs_json))
+            plan = load_json(args.plan_json)
+            if "prose" in plan:
+                event = load_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+                prose.revalidate(plan["prose"], args.root, os.environ["GITHUB_EVENT_NAME"], event)
+            evaluate_documentation(plan, load_json(args.needs_json))
             print("Build Documentation: planned documentation requirement satisfied.")
         else:
             proof = load_json(args.reuse_proof_json)
@@ -296,7 +332,11 @@ def main():
             if proof:
                 event = load_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
                 reuse.revalidate(proof, event, os.environ)
-            evaluate(load_json(args.plan_json), load_json(args.needs_json), proof)
+            plan = load_json(args.plan_json)
+            if "prose" in plan:
+                event = load_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+                prose.revalidate(plan["prose"], args.root, os.environ["GITHUB_EVENT_NAME"], event)
+            evaluate(plan, load_json(args.needs_json), proof)
             print("CI Required: every logical contract has fresh success or revalidated exact-tree PR evidence; no unexplained skips.")
     except (ValueError, KeyError, TypeError, OSError, subprocess.CalledProcessError) as error:
         print(f"CI policy rejected: {error}", file=sys.stderr)

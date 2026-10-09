@@ -52,7 +52,10 @@ class SelectionTests(unittest.TestCase):
             (root / 'README.md').write_text('docs\n')
             git('add', 'README.md'); git('commit', '-qm', 'head')
             head = git('rev-parse', 'HEAD')
-            before = policy.make_plan('pull_request', pr(), policy.changed_paths(root, integration, head))
+            before_event = pr()
+            before_event['pull_request'].update(base={'sha': integration}, head={'sha': head})
+            before = policy.make_plan('pull_request', before_event, policy.changed_paths(root, integration, head),
+                                      policy.prose.prove(root, integration, head))
             self.assertFalse(before['jobs']['tests'])
             event = pr(action='edited')
             event['pull_request'].update(base={'sha': main}, head={'sha': head})
@@ -83,7 +86,7 @@ class SelectionTests(unittest.TestCase):
     def test_impact_matrix(self):
         docs = {"policy", "docs-required", "lint", "documentation"}
         cases = [
-            (["README.md"], docs), ([".spi.yml"], docs), (["docs/MACRO_OPERATIONS.md"], docs),
+            (["README.md"], set(policy.JOBS)), ([".spi.yml"], docs), (["docs/MACRO_OPERATIONS.md"], set(policy.JOBS)),
             (["Tools/generate-docc.sh"], docs),
             (["docs/contracts/doc-swift-fence-review.tsv"], docs),
             (["scripts/check-doc-copyable-examples.rb"], docs),
@@ -154,7 +157,7 @@ class SelectionTests(unittest.TestCase):
                         policy.evaluate(plan, results(plan))
         # Removing the opt-in label recomputes the current exact change selection.
         removed = policy.make_plan("pull_request", pr(action="unlabeled"), ["README.md"])
-        self.assertFalse(removed["jobs"]["address-sanitizer"])
+        self.assertTrue(all(removed["jobs"].values()))  # No content proof: full fallback.
 
     def test_full_branches_queue_dispatch_and_empty_diff(self):
         for name, event in [
@@ -307,7 +310,7 @@ class RequiredTests(unittest.TestCase):
             mutate(plan)
             with self.assertRaises(ValueError):
                 policy.evaluate(plan, results(plan))
-        docs = policy.make_plan("pull_request", pr(), ["README.md"])
+        docs = policy.make_plan("pull_request", pr(), [".spi.yml"])
         for mutate in [lambda p: p.update(lane="full"), lambda p: p.update(lane="release-validation"),
                        lambda p: p.update(changes=[]), lambda p: p.update(requested=["address-sanitizer"]),
                        lambda p: p["jobs"].update(coverage=True)]:

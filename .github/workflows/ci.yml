@@ -1,5 +1,5 @@
 name: CI
-# Metadata events queue behind validation and recheck its immutable evidence.
+# Metadata events use a separate queue and wait for immutable validation evidence.
 # Stable required check names keep GitHub branch protection actionable.
 run-name: >-
   ${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) && format('CI metadata-only v1 pr:{0} head:{1} base:{2} action:{3} source:{4}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.action, github.workflow_sha) || (github.event_name == 'pull_request' && format('CI validation v2 pr:{0} head:{1} base:{2} source:{3} release:{4} asan:{5} concurrency:{6}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.sha, contains(github.event.pull_request.labels.*.name, 'release-validation'), contains(github.event.pull_request.labels.*.name, 'run-asan'), false) || (inputs.dependabot_merge_pr && format('CI / Dependabot merge #{0}', inputs.dependabot_merge_pr) || format('CI validation / {0} / {1}', github.event_name, github.ref))) }}
@@ -25,7 +25,7 @@ on:
 # long after a newer commit has superseded their evidence. Recovery dispatches
 # cannot cancel a native push when main races forward before dispatch admission.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.dependabot_merge_pr != '' && format('dependabot-{0}', inputs.dependabot_merge_pr) || 'validation' }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.dependabot_merge_pr != '' && format('dependabot-{0}', inputs.dependabot_merge_pr) || ((github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) && 'metadata' || 'validation') }}
   cancel-in-progress: ${{ !(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) }}
   queue: ${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) && 'max' || 'single' }}
 
@@ -124,7 +124,7 @@ jobs:
     if: ${{ always() }}
     needs: [ci-plan, documentation]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 360
     permissions:
       contents: read
       actions: read
@@ -133,6 +133,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Require planned documentation result
         if: ${{ !(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) }}
@@ -144,7 +145,7 @@ jobs:
         if: ${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -B scripts/verify-ci-metadata.py --check 'Build Documentation'
+        run: python3 -B scripts/metadata_wait.py -- python3 -B scripts/verify-ci-metadata.py --check 'Build Documentation'
 
   coverage:
     name: Coverage Gate
@@ -212,7 +213,7 @@ jobs:
     name: Package Tests (Core)
     runs-on: macos-26
     timeout-minutes: 60
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: needs.ci-plan.outputs.tests == 'true'
 
     steps:
@@ -271,7 +272,7 @@ jobs:
     name: Package Tests (Release)
     runs-on: macos-26
     timeout-minutes: 90
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: needs.ci-plan.outputs.release-tests == 'true'
 
     steps:
@@ -309,7 +310,7 @@ jobs:
     name: Public API Compatibility
     runs-on: macos-26
     timeout-minutes: 45
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.api-compatibility
 
     steps:
@@ -351,7 +352,7 @@ jobs:
     name: Package Tests (ThreadSanitizer)
     runs-on: macos-26
     timeout-minutes: 60
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: needs.ci-plan.outputs.thread-sanitizer == 'true'
 
     steps:
@@ -395,7 +396,7 @@ jobs:
     name: Package Tests (Sample)
     runs-on: macos-26
     timeout-minutes: 30
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-tests
 
     steps:
@@ -435,7 +436,7 @@ jobs:
     name: Package Build (${{ matrix.platform }})
     runs-on: macos-26
     timeout-minutes: 30
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: needs.ci-plan.outputs.package-builds == 'true'
     strategy:
       fail-fast: false
@@ -466,14 +467,9 @@ jobs:
         run: python3 -B scripts/ci-cache.py restored --profile package-builds --variant '${{ matrix.platform }}'
 
       - name: Build package scheme for ${{ matrix.platform }}
-        run: |
-          set -eo pipefail
-          xcodebuild \
-            -scheme InnoFlow-Package \
-            -destination "generic/platform=${{ matrix.platform }}" \
-            CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO \
-          build
+        env:
+          CI_PLAN: ${{ needs.ci-plan.outputs.plan }}
+        run: python3 -B scripts/ci-build-products.py --platform '${{ matrix.platform }}'
 
       - name: Report cache observations
         if: always()
@@ -484,7 +480,7 @@ jobs:
     name: Focused Runtime Tests (${{ matrix.platform }})
     runs-on: macos-26
     timeout-minutes: 60
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.focused-runtime-tests
     strategy:
       fail-fast: false
@@ -542,7 +538,7 @@ jobs:
     name: Principle Gates (Static)
     runs-on: macos-26
     timeout-minutes: 90
-    needs: [ci-plan, lint, coverage]
+    needs: ci-plan
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.principle-gates
 
     steps:
@@ -573,7 +569,7 @@ jobs:
     name: Sample Package Build (${{ matrix.platform }})
     runs-on: macos-26
     timeout-minutes: 30
-    needs: [ci-plan, sample-tests]
+    needs: ci-plan
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-package-builds
     strategy:
       fail-fast: false
@@ -625,7 +621,7 @@ jobs:
     name: Canonical Sample Build
     runs-on: macos-26
     timeout-minutes: 30
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-build
 
     steps:
@@ -673,7 +669,7 @@ jobs:
     name: Package Tests (AddressSanitizer)
     runs-on: macos-26
     timeout-minutes: 60
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: needs.ci-plan.outputs.address-sanitizer == 'true'
 
     steps:
@@ -717,7 +713,7 @@ jobs:
     name: Canonical Sample UI Smoke Tests
     runs-on: macos-26
     timeout-minutes: 60
-    needs: [ci-plan, sample-build]
+    needs: ci-plan
     if: fromJSON(needs.ci-plan.outputs.plan).jobs.sample-ui-tests
 
     steps:
@@ -816,7 +812,7 @@ jobs:
 
   swift-syntax-compatibility:
     name: SwiftSyntax Compatibility (Swift ${{ matrix.swift }}, ${{ matrix.syntax }})
-    needs: [ci-plan, lint]
+    needs: ci-plan
     if: needs.ci-plan.outputs.swift-syntax-compatibility == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
@@ -927,7 +923,7 @@ jobs:
       - sample-ui-tests
       - swift-syntax-compatibility
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 360
     permissions:
       contents: read
       actions: read
@@ -936,6 +932,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Require every planned CI result
         if: ${{ !(github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) }}
@@ -949,4 +946,5 @@ jobs:
         if: ${{ (github.event_name == 'pull_request' && (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name && github.event.label.name != 'release-validation' && github.event.label.name != 'run-asan') || (github.event.action == 'edited' && !github.event.changes.base))) }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -B scripts/verify-ci-metadata.py --check 'CI Required'
+          INNO_METADATA_WAIT: ${{ needs.docs-required.result == 'success' && 'enabled' || 'disabled' }}
+        run: python3 -B scripts/metadata_wait.py -- python3 -B scripts/verify-ci-metadata.py --check 'CI Required'

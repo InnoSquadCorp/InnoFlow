@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "repository": "InnoSquadCorp/InnoFlow",
+  "status": "reviewed-cleanup-policy-v1",
+  "merged_pr_pull_request_workflow_allowlist": [
+    ".github/workflows/ci.yml"
+  ],
+  "always_preserved_workflows": [
+    ".github/workflows/cd.yml",
+    ".github/workflows/dependabot-auto-merge.yml",
+    ".github/workflows/dependabot-ready.yml",
+    ".github/workflows/docs-publish.yml",
+    ".github/workflows/release-evidence.yml",
+    ".github/workflows/release-preflight.yml"
+  ],
+  "event_filter": "pull_request only; exact native PR association, never SHA alone",
+  "permission_activation": "read-only inspection; cancellation requires separately approved actions:write"
+}

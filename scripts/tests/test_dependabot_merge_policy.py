@@ -795,7 +795,8 @@ class DependabotPolicyTests(unittest.TestCase):
 
     def test_recovery_concurrency_cannot_cancel_native_main_validation(self):
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
-        self.assertIn("${{ inputs.dependabot_merge_pr != '' && format('dependabot-{0}', inputs.dependabot_merge_pr) || 'validation' }}", ci)
+        self.assertIn("${{ inputs.dependabot_merge_pr != '' && format('dependabot-{0}', inputs.dependabot_merge_pr) ||", ci)
+        self.assertIn("&& 'metadata' || 'validation') }}", ci)
         for path in ['docs.yml', 'coverage.yml']:
             source = (ROOT / '.github/workflows' / path).read_text()
             group = next(line for line in source.splitlines() if line.strip().startswith('group:'))

@@ -39,7 +39,8 @@ check(uploads.one? && uploads.first["if"] == "always()" &&
   uploads.first.dig("with", "if-no-files-found") == "error" &&
   uploads.first.dig("with", "path") == ".build/coverage/", "coverage evidence must be retained even after failure")
 
-[["ci.yml", "coverage", "principle-gates"], ["cd.yml", "release-coverage", "release-evidence"]].each do |file, name, dependent|
+# Independent CI jobs join at CI Required; release evidence still directly consumes coverage.
+[["ci.yml", "coverage", "ci-required"], ["cd.yml", "release-coverage", "release-evidence"]].each do |file, name, dependent|
   jobs = documents.fetch(file).fetch("jobs")
   caller = jobs.fetch(name)
   check(caller["uses"] == "./.github/workflows/coverage.yml", "#{file}: coverage callee changed")
