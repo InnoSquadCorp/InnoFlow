@@ -5,6 +5,8 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import shutil
+from unittest import mock
 import tarfile
 import tempfile
 import unittest
@@ -109,3 +111,34 @@ class WorkflowLintTests(unittest.TestCase):
                 self.assertEqual(len(p.check_queue_compatibility([path])),1)
                 path.write_text(prefix+'env:\n'+suffix)
                 with self.assertRaises(ValueError):p.check_queue_compatibility([path])
+
+
+    def test_active_linter_scratch_cannot_race_repository_consumer_copy(self):
+        """Copy .github while the verified linter still exists in its scratch."""
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode='w:gz') as archive:
+            content = b'#!/bin/sh\nexit 0\n'
+            member = tarfile.TarInfo('actionlint')
+            member.size = len(content)
+            archive.addfile(member, io.BytesIO(content))
+        data = buffer.getvalue()
+        workflows = list((ROOT / '.github/workflows').glob('*.yml'))
+        allowed = p.check_queue_compatibility(workflows)
+        errors = [dict(filepath=path, line=line, column=column,
+                       kind='syntax-check', message=p.QUEUE_DIAGNOSTIC)
+                  for path, line, column in sorted(allowed)]
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / 'consumer-github'
+            def lint(command, **kwargs):
+                executable = Path(command[0]).resolve()
+                self.assertTrue(executable.is_file())
+                self.assertFalse(executable.is_relative_to(ROOT.resolve()))
+                shutil.copytree(ROOT / '.github', destination)
+                self.assertFalse(list(destination.rglob('actionlint')))
+                return subprocess.CompletedProcess(command, 1, json.dumps(errors), '')
+            with mock.patch.object(p.platform, 'system', return_value='Darwin'), \
+                 mock.patch.object(p.platform, 'machine', return_value='arm64'), \
+                 mock.patch.dict(p.ARCHIVES, {('Darwin','arm64'): ('fixture', hashlib.sha256(data).hexdigest())}), \
+                 mock.patch.object(p.urllib.request, 'urlopen', return_value=io.BytesIO(data)), \
+                 mock.patch.object(p.subprocess, 'run', side_effect=lint):
+                p.main()

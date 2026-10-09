@@ -15,7 +15,7 @@ Dir.mktmpdir("innoflow-coverage-workflow") do |root|
     "ignored failure" => ["coverage.yml", ->(doc) { doc["jobs"]["coverage"]["steps"][0]["continue-on-error"] = true }],
     "missing artifact" => ["coverage.yml", ->(doc) { doc["jobs"]["coverage"]["steps"].find { |step| step["name"] == "Preserve coverage evidence" }["with"]["if-no-files-found"] = "warn" }],
     "no namespace" => ["coverage.yml", ->(doc) { doc["concurrency"]["group"] = '${{ github.workflow }}' }],
-    "CI bypass" => ["ci.yml", ->(doc) { doc["jobs"]["principle-gates"]["needs"].delete("coverage") }],
+    "CI bypass" => ["ci.yml", ->(doc) { doc["jobs"]["ci-required"]["needs"].delete("coverage") }],
     "release bypass" => ["cd.yml", ->(doc) { doc["jobs"]["release-evidence"]["needs"].delete("release-coverage") }],
     "conditional caller" => ["ci.yml", ->(doc) { doc["jobs"]["coverage"]["if"] = "false" }],
   }

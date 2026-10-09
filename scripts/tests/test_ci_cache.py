@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -563,7 +564,14 @@ class CLIIntegrationTests(unittest.TestCase):
             (root / ".gitignore").write_text(".build/\nbuild/\n")
             subprocess.run(["git", "init", "-q", str(root)], check=True)
             subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            # macOS /usr/bin/git resolves through xcrun. Keep the fixture's fake
+            # DEVELOPER_DIR for cache identity, but run Git with the host's
+            # original developer selection that already succeeded above.
+            host_developer = os.environ.get("DEVELOPER_DIR")
+            git_environment = ("unset DEVELOPER_DIR" if host_developer is None else
+                               "export DEVELOPER_DIR=" + shlex.quote(host_developer))
             commands = {
+                "git": git_environment + "\nexec " + shlex.quote(shutil.which("git")) + ' "$@"',
                 "swift": "printf '%s\\n' 'Apple Swift version 6.3 (swiftlang-6.3.0.4.1 clang-1700.6.5.2)'",
                 "xcodebuild": "if [ \"$1\" = '-version' ]; then printf '%s\\n' 'Xcode 26.6' 'Build version 17G42'; else printf '%s\\n' 'macOS SDKs:' 'macOS 26.6 -sdk macosx26.6' 'iOS SDKs:' 'iOS 26.6 -sdk iphoneos26.6'; fi",
                 "xcrun": "if [ \"$1\" = '--find' ]; then echo /fixture/Xcode.app/Contents/Developer/usr/bin/swift; elif [ \"$3\" = '--show-sdk-version' ]; then echo 26.6; elif [ \"$3\" = '--show-sdk-build-version' ]; then echo 25G42; elif [ \"$3\" = '--show-sdk-path' ]; then echo /fixture/SDKs/$2.sdk; else exit 1; fi",

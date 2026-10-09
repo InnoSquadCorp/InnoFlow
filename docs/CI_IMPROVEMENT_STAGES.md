@@ -7,8 +7,12 @@ CI Required는 기존 모든 논리적 필수 job 결과를 계속 검사한다.
 테스트 실패나 취소는 최종 성공으로 바뀌지 않는다. Swift 테스트의 `--no-parallel`
 및 기존 deterministic test 실행 옵션은 유지한다. release workflows는 변경하지 않는다.
 
-기존 docs-only 계획은 policy/docs-required/lint/documentation을 선택하고 테스트
-job은 실행하지 않는다. 소스 안의 Markdown, 미분류 파일, 검증 contract, 변경된
+docs-only 계획은 정확한 PR base/head와 Git 본문을 검증한 순수 prose diff에서만
+policy/docs-required/lint/documentation을 선택하고 테스트 job을 생략한다.
+전체 줄 fence로 코드 블록을 동결하여 문자열 안의 ```가 fence를 닫지 못하게 한다.
+frontmatter, HTML, directive 문맥 안의 본문 수정, 변경된 code fence, 모호한 문법,
+release/contract 문서 또는 증거 부재는 전체 검증으로 돌아간다. 두 aggregate는
+같은 PR base/head의 Git 본문 증거를 다시 검증하며 main/release 전체 검증을 유지한다. 소스 안의 Markdown, 미분류 파일, 검증 contract, 변경된
 Package.swift, 비-PR 실행은 full fallback을 유지한다.
 
 `ci-build-products.py`는 검토한 Package.swift digest와 target dependency graph가
@@ -70,3 +74,7 @@ cleanup은 bounded wait, 정확한 PR/workflow/branch 범위, API 경합 및 부
 이 Linux VM에는 Swift/Xcode가 없어 실제 Apple SDK build나 테스트는 수행하지
 않았다. PR의 hosted CI가 그 검증을 담당한다. 로컬 mock 성공을 실제 빌드 성공이나
 성능 향상 실측으로 보고하지 않는다.
+
+Workflow linter 임시 실행 파일은 checkout 밖의 시스템 임시 폴더에 둔다.
+실행 파일이 존재하는 동안 consumer가 `.github`를 copytree하는 회귀 검사를 두어
+소비자 복사와 linter cleanup이 같은 저장소 경로에서 경쟁하지 않음을 확인한다.
