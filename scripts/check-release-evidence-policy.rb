@@ -116,9 +116,9 @@ begin
   full_inventory = JSON.parse(File.read(full_inventory_path))
   abort "[release-evidence-policy] invalid Swift test source inventory" unless
     full_inventory["schemaVersion"] == 1 &&
-    full_inventory["hostTargets"] == %w[InnoFlowTests InnoFlowMacrosTests]
+    full_inventory["hostTargets"] == %w[InnoFlowAuthoringTestSupport InnoFlowCoreTestSupport InnoFlowCoreTests InnoFlowInspectorTests InnoFlowMacrosTests InnoFlowSwiftUIIntegrationTests InnoFlowSwiftUITestSupport InnoFlowSwiftUITests InnoFlowTestingTestSupport InnoFlowTestingTests InnoFlowTests]
   full_sources = full_inventory.fetch("sourceFiles")
-  actual_source_paths = ["Package.swift"] + %w[InnoFlowTests InnoFlowMacrosTests].flat_map do |target|
+  actual_source_paths = ["Package.swift"] + %w[InnoFlowAuthoringTestSupport InnoFlowCoreTestSupport InnoFlowCoreTests InnoFlowInspectorTests InnoFlowMacrosTests InnoFlowSwiftUIIntegrationTests InnoFlowSwiftUITestSupport InnoFlowSwiftUITests InnoFlowTestingTestSupport InnoFlowTestingTests InnoFlowTests].flat_map do |target|
     Dir.glob(File.join(root, "Tests", target, "**", "*.swift")).reject do |path|
       path.delete_prefix(root + "/").split("/").include?("Fixtures")
     end.map { |path| path.delete_prefix(root + "/") }
@@ -156,16 +156,23 @@ begin
 
   full_principle = policy.fetch("checks").find { |entry| entry.fetch("id") == "full-principle" }
   abort "[release-evidence-policy] full-principle run count changed" unless
-    full_principle["expectedTestRunCount"] == 5
+    full_principle["expectedTestRunCount"] == 15
 
-  # Swift 6.3 aggregates the Core and macro suites into one run, while the
-  # Xcode 27 Swift 6.4 runner emits two. These counts were measured from the
-  # complete baseline outputs, not inferred from the number of test targets.
-  { "swift-6.3-toolchain" => 1, "swift-6.4-toolchain" => 2 }.each do |id, expected_runs|
+  # Swift 6.3 aggregates suites into one run. Swift 6.4 emits seven runnable
+  # test-target results after the split; fixture targets contain no tests.
+  # The Swift 6.4 count is verified against the complete local test output.
+  { "swift-6.3-toolchain" => 1, "swift-6.4-toolchain" => 7 }.each do |id, expected_runs|
     toolchain_check = policy.fetch("checks").find { |entry| entry.fetch("id") == id }
     abort "[release-evidence-policy] #{id} is missing" unless toolchain_check
     abort "[release-evidence-policy] #{id} run count changed" unless
       toolchain_check["expectedTestRunCount"] == expected_runs
+  end
+
+  %w[tsan-focused asan-focused].each do |id|
+    sanitizer = policy.fetch("checks").find { |entry| entry.fetch("id") == id }
+    abort "[release-evidence-policy] #{id} must retain exactly 53 tests across three runs" unless
+      sanitizer["minimumTestCount"] == 53 && sanitizer["maximumTestCount"] == 53 &&
+      sanitizer["expectedTestRunCount"] == 3
   end
 
   contract = check.fetch("commandContract")
@@ -252,12 +259,16 @@ begin
   abort "[release-evidence-policy] runtime inventory suite mismatch" unless
     identifiers.map { |identifier| identifier.split("/", 2).first }.uniq.sort == expected_suites
   source_focused_identifiers = full_tests.select do |test|
-    test["target"] == "InnoFlowTests" && expected_suites.include?(test.fetch("identifier").split("/", 2).first)
+    expected_suites.include?(test.fetch("identifier").split("/", 2).first)
   end.map { |test| test.fetch("identifier") }.sort
   abort "[release-evidence-policy] focused inventory differs from complete source declarations" unless
     identifiers == source_focused_identifiers
+  suite_targets = full_tests.select { |test| expected_suites.include?(test.fetch("identifier").split("/", 2).first) }.to_h { |test| [test.fetch("identifier").split("/", 2).first, test.fetch("target")] }
+  abort "[release-evidence-policy] focused suite target ownership changed" unless inventory["suiteTargets"] == suite_targets
+  runner_pairs = File.read(File.join(root, "scripts/run-focused-platform-runtime-tests.sh")).scan(/^\s+-only-testing:([A-Za-z_][A-Za-z0-9_]*)\/([A-Za-z_][A-Za-z0-9_]*)$/)
+  abort "[release-evidence-policy] runtime suite owner mismatch" unless runner_pairs.to_h { |target, suite| [suite, target] } == suite_targets
   source_conditions = full_tests.select do |test|
-    test["target"] == "InnoFlowTests" && identifiers.include?(test["identifier"]) &&
+    identifiers.include?(test["identifier"]) &&
       test["conditionalContexts"] != []
   end.to_h { |test| [test.fetch("identifier"), test.fetch("conditionalContexts")] }
   abort "[release-evidence-policy] focused conditional inventory differs from source declarations" unless
@@ -295,8 +306,9 @@ begin
   runner = File.read(File.join(root, "scripts/run-focused-platform-runtime-tests.sh"))
   discovery_target_selections = runner.scan(/^\s+-only-testing:([A-Za-z_][A-Za-z0-9_]*)$/).flatten
   abort "[release-evidence-policy] runtime discovery must select only the runtime target" unless
-    discovery_target_selections == ["InnoFlowTests"]
-  runner_suites = runner.scan(/^\s+-only-testing:InnoFlowTests\/([A-Za-z_][A-Za-z0-9_]*)$/).flatten
+    discovery_target_selections.sort == inventory.fetch("discoveryTargets") &&
+    inventory.fetch("discoveryTargets") == full_inventory.fetch("hostTargets").reject { |target| target.end_with?("TestSupport") || target == "InnoFlowMacrosTests" }
+  runner_suites = runner.scan(/^\s+-only-testing:[A-Za-z_][A-Za-z0-9_]*\/([A-Za-z_][A-Za-z0-9_]*)$/).flatten
   abort "[release-evidence-policy] runtime runner suite selection differs from the reviewed inventory" unless
     runner_suites.sort == expected_suites
 

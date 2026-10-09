@@ -4,6 +4,8 @@ import Observation
 import Testing
 import os
 
+@testable import InnoFlowCoreTestSupport
+
 private struct SynchronousChild: Reducer {
   var gate: SynchronousEffectGate? = nil
   var cancellationObserved: OSAllocatedUnfairLock<Bool>? = nil

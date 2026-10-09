@@ -1,14 +1,17 @@
-// MARK: - StoreScopeSelectionTests.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
 import InnoFlowSwiftUI
 import Testing
 import os
 
+@testable import InnoFlowAuthoringTestSupport
 @testable import InnoFlowCore
+@testable import InnoFlowCoreTestSupport
+@testable import InnoFlowSwiftUITestSupport
 @testable import InnoFlowTesting
+
+// MARK: - StoreScopeSelectionTests.swift
+// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// Copyright © 2025 InnoSquad. All rights reserved.
 
 // MARK: - Store Scope and Selection Tests
 

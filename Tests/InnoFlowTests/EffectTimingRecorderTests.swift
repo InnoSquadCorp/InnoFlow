@@ -1,3 +1,10 @@
+import Foundation
+import InnoFlow
+import InnoFlowTesting
+import Testing
+
+@testable import InnoFlowCoreTestSupport
+
 // MARK: - EffectTimingRecorderTests.swift
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
@@ -5,11 +12,6 @@
 // Unit tests for `EffectTimingRecorder` — the test-only JSONL recorder that
 // captures `StoreInstrumentation` events so release-mode scheduling
 // regressions can be detected by a baseline comparison.
-
-import Foundation
-import InnoFlow
-import InnoFlowTesting
-import Testing
 
 // MARK: - Fixture
 

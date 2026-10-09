@@ -1,10 +1,11 @@
+import Testing
+
+@testable import InnoFlowAuthoringTestSupport
+@testable import InnoFlowCore
+
 // MARK: - CollectionScopeCacheTests.swift
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
-
-import Testing
-
-@testable import InnoFlowCore
 
 @Suite("Collection Scope Cache Tests", .serialized)
 @MainActor

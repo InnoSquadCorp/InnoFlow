@@ -70,6 +70,25 @@ class FocusedRuntimeTests(unittest.TestCase):
         self.assertEqual(RUNTIME.validate_discovery(self.inventory, self.discovery)[0], [])
         self.assertEqual(RUNTIME.validate(self.inventory, self.summary, self.tests), ([], 2))
 
+    def test_split_target_ownership_and_future_consistency_discovery_are_exact(self):
+        self.inventory["suiteTargets"] = {"FixtureConsistencyTests": "InnoFlowCoreTests",
+                                         "OtherTests": "InnoFlowTestingTests"}
+        self.inventory["discoveryTargets"] = ["InnoFlowCoreTests", "InnoFlowSwiftUITests", "InnoFlowTestingTests"]
+        for entry in self.discovery["values"][0]["enabledTests"]:
+            _, suite, test = entry["identifier"].split("/", 2)
+            entry["identifier"] = self.inventory["suiteTargets"][suite] + "/" + suite + "/" + test
+        self.assertEqual(RUNTIME.validate_discovery(self.inventory, self.discovery)[0], [])
+        changed = copy.deepcopy(self.discovery)
+        changed["values"][0]["enabledTests"][0]["identifier"] = "InnoFlowTestingTests/FixtureConsistencyTests/parameterized(value:)"
+        self.assertTrue(RUNTIME.validate_discovery(self.inventory, changed)[0])
+        changed = copy.deepcopy(self.discovery)
+        changed["values"][0]["enabledTests"].append({"identifier": "InnoFlowSwiftUITests/NewConsistencyTests/test()"})
+        self.assertIn("unreviewed-consistency-suite=NewConsistencyTests",
+                      RUNTIME.validate_discovery(self.inventory, changed)[0])
+        for ownership in (None, {}, {"FixtureConsistencyTests": "InnoFlowMacrosTests"}):
+            with self.subTest(ownership=ownership):
+                self.assertTrue(RUNTIME.validate_inventory({**self.inventory, "suiteTargets": ownership}))
+
     def test_omitted_empty_disabled_list_keeps_existing_discovery_compatibility(self):
         del self.discovery["values"][0]["disabledTests"]
         self.assertEqual(RUNTIME.validate_discovery(self.inventory, self.discovery)[0], [])

@@ -1,13 +1,14 @@
-// MARK: - TestStoreEffectAlgebraTests.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
 import Testing
 import os
 
 @testable import InnoFlowCore
+@testable import InnoFlowCoreTestSupport
 @testable import InnoFlowTesting
+
+// MARK: - TestStoreEffectAlgebraTests.swift
+// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// Copyright © 2025 InnoSquad. All rights reserved.
 
 // MARK: - TestStore Effect Algebra Tests
 

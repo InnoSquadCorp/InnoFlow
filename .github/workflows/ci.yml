@@ -171,6 +171,7 @@ jobs:
       - name: Verify CI-only release evidence contracts
         run: |
           set -euo pipefail
+          python3 -B scripts/ci-test-targets.py verify
           scripts/check-release-evidence-workflow-selftest.sh
           scripts/write-github-evidence-provenance-selftest.sh
           scripts/run-release-preflight-selftest.sh
@@ -239,6 +240,12 @@ jobs:
           DEPENDENCY_CACHE_HIT: ${{ steps.dependency-cache.outputs.cache-hit }}
         run: python3 -B scripts/ci-cache.py restored --profile tests
 
+      - name: Select dependency-complete package tests
+        id: test-selection
+        env:
+          CI_PLAN: ${{ needs.ci-plan.outputs.plan }}
+        run: python3 -B scripts/ci-test-targets.py select
+
       - name: Verify macro source fallback
         run: |
           set -eo pipefail
@@ -250,6 +257,8 @@ jobs:
             -Xswiftc -warnings-as-errors
 
       - name: Run package tests including output lifetime and composition contracts
+        env:
+          CI_PLAN: ${{ needs.ci-plan.outputs.plan }}
         run: |
           set -eo pipefail
           # Randomized effect suites can otherwise starve unrelated
@@ -257,11 +266,21 @@ jobs:
           # Keep the full suite: captured-output cancellation, Never promotion,
           # and non-equatable output matching are required release contracts.
           # Include cancellation between emission, reduction, and observation.
-          swift test \
-            --package-path "$GITHUB_WORKSPACE" \
-            --jobs 1 \
-            --no-parallel \
-            -Xswiftc -warnings-as-errors
+          if [[ '${{ steps.test-selection.outputs.mode }}' == 'full' ]]; then
+            swift test \
+              --package-path "$GITHUB_WORKSPACE" \
+              --jobs 1 \
+              --no-parallel \
+              -Xswiftc -warnings-as-errors
+          else
+            python3 -B scripts/ci-test-targets.py run
+          fi
+
+      - name: Require complete package suite for main reuse
+        if: steps.test-selection.outputs.mode == 'full'
+        env:
+          CI_PLAN: ${{ needs.ci-plan.outputs.plan }}
+        run: python3 -B scripts/ci-test-targets.py assert-full
 
       - name: Report cache observations
         if: always()
@@ -893,6 +912,15 @@ jobs:
         env:
           INNOFLOW_MIGRATE_SWIFT_SYNTAX_VERSION: ${{ matrix.syntax }}
         run: '"$GITHUB_WORKSPACE/Tools/innoflow-migrate/scripts/check.sh"'
+
+      - name: Verify selective test package on the audited compiler
+        run: |
+          set -euo pipefail
+          selected="$RUNNER_TEMP/innoflow-inspector-${{ matrix.swift }}"
+          python3 -B scripts/ci-test-targets.py prepare \
+            --targets InnoFlowInspectorTests --destination "$selected"
+          swift test --package-path "$selected" --jobs 1 --no-parallel \
+            -Xswiftc -warnings-as-errors
 
       - name: Report cache observations
         if: always()

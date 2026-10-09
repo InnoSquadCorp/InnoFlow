@@ -1,12 +1,13 @@
-// MARK: - StoreInstrumentationMetricsTests.swift
-// InnoFlow - A Hybrid Architecture Framework for SwiftUI
-// Copyright © 2025 InnoSquad. All rights reserved.
-
 import Foundation
 import Testing
 import os
 
 @testable import InnoFlowCore
+@testable import InnoFlowCoreTestSupport
+
+// MARK: - StoreInstrumentationMetricsTests.swift
+// InnoFlow - A Hybrid Architecture Framework for SwiftUI
+// Copyright © 2025 InnoSquad. All rights reserved.
 
 private struct MetricsTestError: Error, Equatable {}
 

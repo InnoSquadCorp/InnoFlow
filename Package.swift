@@ -116,17 +116,63 @@ let package = Package(
 
     // MARK: - Tests
     .testTarget(
+      name: "InnoFlowCoreTestSupport",
+      dependencies: ["InnoFlowCore"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowAuthoringTestSupport",
+      dependencies: ["InnoFlowCore", "InnoFlow"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowSwiftUITestSupport",
+      dependencies: ["InnoFlowCore", "InnoFlow", "InnoFlowSwiftUI"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowTestingTestSupport",
+      dependencies: ["InnoFlowCore", "InnoFlowTesting", "InnoFlowCoreTestSupport"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowCoreTests",
+      dependencies: ["InnoFlowCore", "InnoFlowCoreTestSupport"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowTestingTests",
+      dependencies: [
+        "InnoFlowCore", "InnoFlowCoreTestSupport", "InnoFlowTesting", "InnoFlowTestingTestSupport",
+      ],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowSwiftUITests",
+      dependencies: ["InnoFlowCore", "InnoFlowSwiftUI"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowSwiftUIIntegrationTests",
+      dependencies: [
+        "InnoFlow", "InnoFlowAuthoringTestSupport", "InnoFlowCore", "InnoFlowCoreTestSupport",
+        "InnoFlowSwiftUI", "InnoFlowSwiftUITestSupport", "InnoFlowTesting",
+        "InnoFlowTestingTestSupport",
+      ],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
+      name: "InnoFlowInspectorTests",
+      dependencies: ["InnoFlowCore", "InnoFlowInspector"],
+      swiftSettings: swift6PackageContract
+    ),
+    .testTarget(
       name: "InnoFlowTests",
       dependencies: [
-        "InnoFlowCore",
-        "InnoFlow",
-        "InnoFlowSwiftUI",
-        "InnoFlowTesting",
-        "InnoFlowInspector",
+        "InnoFlow", "InnoFlowAuthoringTestSupport", "InnoFlowCore", "InnoFlowCoreTestSupport",
+        "InnoFlowSwiftUI", "InnoFlowTesting",
       ],
-      resources: [
-        .copy("Fixtures")
-      ],
+      resources: [.copy("Fixtures")],
       swiftSettings: swift6PackageContract
     ),
     .testTarget(

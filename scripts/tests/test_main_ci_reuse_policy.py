@@ -260,6 +260,34 @@ class AdmissionTests(unittest.TestCase):
         next(step for step in job["steps"] if step["name"] == "Test macro and external compile contracts")["conclusion"] = "skipped"
         with self.assertRaises(p.Rejected): proven(t)
 
+    def test_selective_or_unproved_package_tests_cannot_replace_main_full_suite(self):
+        for mode in ("missing", "skipped", "failure"):
+            t = Transcript()
+            job = next(job for job in t.jobs if job["name"] == "Package Tests (Core)")
+            step = next(step for step in job["steps"]
+                        if step["name"] == "Require complete package suite for main reuse")
+            if mode == "missing":
+                job["steps"].remove(step)
+            else:
+                step["conclusion"] = mode
+            with self.subTest(mode=mode), self.assertRaises(p.Rejected):
+                proven(t)
+
+    def test_each_compiler_requires_successful_selective_package_validation(self):
+        for name in ("SwiftSyntax Compatibility (Swift 6.3, 603.0.0)",
+                     "SwiftSyntax Compatibility (Swift 6.4, 604.0.0)"):
+            for mode in ("missing", "skipped", "failure"):
+                t = Transcript()
+                job = next(job for job in t.jobs if job["name"] == name)
+                step = next(step for step in job["steps"]
+                            if step["name"] == "Verify selective test package on the audited compiler")
+                if mode == "missing":
+                    job["steps"].remove(step)
+                else:
+                    step["conclusion"] = mode
+                with self.subTest(job=name, mode=mode), self.assertRaises(p.Rejected):
+                    proven(t)
+
     def test_old_or_post_merge_verification_is_not_reused(self):
         t = Transcript()
         t.pr["merged_at"] = (t.now - timedelta(hours=2)).isoformat()

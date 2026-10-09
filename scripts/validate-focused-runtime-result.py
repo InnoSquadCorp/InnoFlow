@@ -39,6 +39,20 @@ def validate_inventory(inventory):
                 for item in expected)):
         return ["invalid-inventory-identifiers"]
     errors = []
+    owners = inventory.get("suiteTargets", dict.fromkeys(suites, "InnoFlowTests"))
+    if (not isinstance(owners, dict) or set(owners) != set(suites) or
+            any(not isinstance(target, str) or not re.fullmatch(r"InnoFlow(?:Core|Testing|SwiftUIIntegration|Inspector)?Tests", target)
+                for target in owners.values())):
+        errors.append("invalid-suite-target-ownership")
+    if "invalid-suite-target-ownership" in errors:
+        return errors
+    discovery_targets = inventory.get("discoveryTargets", sorted(set(owners.values())))
+    if (not isinstance(discovery_targets, list) or
+            any(not isinstance(target, str) or not re.fullmatch(r"InnoFlow(?:Core|Testing|SwiftUIIntegration|SwiftUI|Inspector)?Tests", target)
+                for target in discovery_targets) or
+            discovery_targets != sorted(set(discovery_targets)) or
+            not set(owners.values()) <= set(discovery_targets)):
+        errors.append("invalid-discovery-targets")
     if suites != sorted(set(suites)):
         errors.append("duplicate-or-unsorted-suites")
     if expected != sorted(set(expected)):
@@ -152,10 +166,13 @@ def validate_discovery(inventory, discovery, compiler_output=None, observed_runt
         if len(parts) != 3 or not parts[1] or not parts[2]:
             errors.append("malformed-discovered-identifier=" + identifier)
             continue
-        if parts[0] != "InnoFlowTests":
+        owners = inventory.get("suiteTargets", dict.fromkeys(inventory["suites"], "InnoFlowTests"))
+        if parts[0] not in inventory.get("discoveryTargets", set(owners.values())):
             errors.append("unexpected-discovery-target=" + parts[0])
             continue
         suite, test = parts[1:]
+        if suite in owners and owners[suite] != parts[0]:
+            errors.append("wrong-suite-target=" + identifier)
         if entry in disabled and suite + "/" + test not in unavailable:
             errors.append("unexpected-disabled-test=" + identifier)
         # The reviewed consistency contracts must never silently fall outside
