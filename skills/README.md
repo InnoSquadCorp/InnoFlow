@@ -62,3 +62,11 @@ mapping, typed outputs, scoped composition, manual time, dispatch cancellation,
 and lexical ownership. UI helpers compile; no device UI lifecycle is exercised.
 This focused external consumer is allowed under the repository's CI-only release
 policy, but is not release-preflight or framework-wide acceptance evidence.
+
+## Consumer command diagnostics
+
+The validator parses dependency-graph JSON from stdout only. SwiftPM warnings
+are retained in `graph.stderr.log`,
+linked by each command's `stderr_log` evidence field. Malformed or empty stdout
+and nonzero command exits still fail validation. Other commands retain combined
+text logs, including Swift Testing summaries written to stderr.

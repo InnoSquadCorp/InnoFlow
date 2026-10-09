@@ -2,6 +2,7 @@
 """Validate an isolated exact-release consumer and record reproducible evidence."""
 
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -15,9 +16,9 @@ import sys
 import tempfile
 
 
-def run_bounded_command(argv, output, timeout_seconds):
+def run_bounded_command(argv, output, timeout_seconds, error_output=subprocess.STDOUT):
     """Bound a command and reap it; kill its process group on timeout."""
-    with subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT, start_new_session=True) as process:
+    with subprocess.Popen(argv, stdout=output, stderr=error_output, start_new_session=True) as process:
         try:
             return process.wait(timeout=timeout_seconds), False
         except subprocess.TimeoutExpired:
@@ -57,12 +58,17 @@ def main():
         if not condition:
             raise RuntimeError(message)
 
-    def command(label, argv):
+    def command(label, argv, structured_output=False):
         log = run / (label + ".log")
         entry = {"argv": [str(a) for a in argv], "log": str(log), "timeout_seconds": args.command_timeout}
         evidence["commands"].append(entry)
-        with log.open("w") as output:
-            return_code, timed_out = run_bounded_command(entry["argv"], output, args.command_timeout)
+        with log.open("w") as output, ExitStack() as stack:
+            error_output = subprocess.STDOUT
+            if structured_output:
+                error_log = run / (label + ".stderr.log")
+                entry["stderr_log"] = str(error_log)
+                error_output = stack.enter_context(error_log.open("w"))
+            return_code, timed_out = run_bounded_command(entry["argv"], output, args.command_timeout, error_output)
             if timed_out:
                 output.write(f"\n[consumer-validation] Command timed out after {args.command_timeout}s; process group killed.\n")
         entry["exit_code"] = return_code
@@ -108,7 +114,7 @@ def main():
         options = ["--package-path", package, "--scratch-path", scratch]
         command("resolve", ["swift", "package", *options, "resolve"])
         check(pins(package / "Package.resolved") == original_pins, "Resolution changed the fixture's exact pins")
-        graph = json.loads(command("graph", ["swift", "package", *options, "show-dependencies", "--format", "json"]))
+        graph = json.loads(command("graph", ["swift", "package", *options, "show-dependencies", "--format", "json"], structured_output=True))
         nodes = {n["identity"]: n for n in flatten(graph)}
         # SwiftPM can omit SwiftSyntax from show-dependencies when using a prebuilt.
         # Verify its resolved checkout through workspace state instead of ignoring it.
