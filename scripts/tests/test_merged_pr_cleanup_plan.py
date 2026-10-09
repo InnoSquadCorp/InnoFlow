@@ -6,10 +6,10 @@ spec=importlib.util.spec_from_file_location('cleanup_plan',Path(__file__).resolv
 class MergedPRCleanupTests(unittest.TestCase):
  def setUp(self):
   self.repo='Org/Repo';self.rid=10;self.sha='a'*40;self.workflow='.github/workflows/ci.yml'
-  pr={'number':42,'state':'closed','merged':True,'head':{'sha':self.sha},'base':{'repo':{'id':self.rid}}}
-  self.event={'action':'closed','number':42,'repository':{'full_name':self.repo,'id':self.rid},'pull_request':pr}
-  self.run={'id':123,'run_attempt':2,'repository':self.event['repository'],'event':'pull_request','status':'in_progress','conclusion':None,'head_sha':self.sha,'path':self.workflow,'pull_requests':[copy.deepcopy(pr)]}
- def select(self,run=None):return p.select(self.event,[run or self.run],self.repo,self.rid,{self.workflow})
+  pr={'number':42,'state':'closed','merged':True,'head':{'sha':self.sha,'ref':'feature/scoped-ci'},'base':{'repo':{'id':self.rid}}}
+  self.event={'action':'closed','number':42,'repository':{'full_name':self.repo,'id':self.rid,'default_branch':'main'},'pull_request':pr}
+  self.run={'id':123,'run_attempt':2,'repository':self.event['repository'],'event':'pull_request','status':'in_progress','conclusion':None,'head_sha':self.sha,'path':self.workflow,'workflow_id':9,'head_branch':'feature/scoped-ci','pull_requests':[copy.deepcopy(pr)]}
+ def select(self,run=None):return p.select(self.event,[run or self.run],self.repo,self.rid,{self.workflow},{self.workflow:9})
  def test_merged_pending_validation_is_dry_run_candidate(self):
   for status in p.PENDING:
    self.run['status']=status;result=self.select();self.assertEqual(len(result['candidates']),1);self.assertTrue(result['dry_run']);self.assertFalse(result['writes_performed'])
@@ -31,7 +31,7 @@ class MergedPRCleanupTests(unittest.TestCase):
    run=copy.deepcopy(self.run);run[field]=value;self.assertEqual(self.select(run)['candidates'],[])
  def test_release_publish_and_stateful_allowlist_rejected(self):
   for path in ['release.yml','docs-publish.yml','deploy.yml','perf-history.yml','dependabot-auto-merge.yml']:
-   with self.assertRaises(ValueError):p.select(self.event,[self.run],self.repo,self.rid,{'.github/workflows/'+path})
+   with self.assertRaises(ValueError):p.select(self.event,[self.run],self.repo,self.rid,{'.github/workflows/'+path},{self.workflow:9})
  def test_completed_and_cancelled_preserved(self):
   for conclusion in ['success','failure','cancelled','skipped']:
    self.run.update(status='completed',conclusion=conclusion);self.assertEqual(self.select()['candidates'],[])
@@ -39,7 +39,7 @@ class MergedPRCleanupTests(unittest.TestCase):
   run=copy.deepcopy(self.run);run['pull_requests'][0]['head']['sha']='c'*40;self.assertEqual(self.select(run)['candidates'],[])
   run=copy.deepcopy(self.run);del run['run_attempt'];self.assertEqual(self.select(run)['candidates'],[])
  def test_duplicate_inventory_rejects(self):
-  with self.assertRaises(ValueError):p.select(self.event,[self.run,self.run],self.repo,self.rid,{self.workflow})
+  with self.assertRaises(ValueError):p.select(self.event,[self.run,self.run],self.repo,self.rid,{self.workflow},{self.workflow:9})
  def test_repo_workflow_proposal_is_narrow_and_resolves(self):
   import json
   scripts=Path(__file__).resolve().parents[1];root=scripts.parent
@@ -52,4 +52,9 @@ class MergedPRCleanupTests(unittest.TestCase):
  def test_no_foreign_base_or_webhook_authorization(self):
   self.event['pull_request']['base']['repo']['id']=99
   with self.assertRaises(ValueError):self.select()
+ def test_waiting_and_unbound_workflow_identity_preserved(self):
+  self.assertEqual(p.PENDING,{'queued','in_progress'})
+  for status in ['waiting','pending','requested']:
+   self.run['status']=status;self.assertEqual(self.select()['candidates'],[])
+  with self.assertRaises(ValueError):p.select(self.event,[self.run],self.repo,self.rid,{self.workflow},{})
 if __name__=='__main__':unittest.main()
