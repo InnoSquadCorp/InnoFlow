@@ -79,11 +79,22 @@ def closure(tests, value):
 def verify(root=ROOT):
     value = graph(root)
     model = json.loads(subprocess.check_output(["swift", "package", "--package-path", str(root), "dump-package"], text=True))
+    inventory = json.loads((root / "docs/contracts/swift-test-inventory.json").read_text())
+    verify_manifest(value, model, inventory)
+    print(json.dumps({"verifiedTargets": value["dependencies"], "testDeclarations": len(inventory["tests"])}))
+
+
+def verify_manifest(value, model, inventory):
     actual = {}
     test_targets = []
+    support_targets = []
     for target in model["targets"]:
         if target["type"] == "test":
             test_targets.append(target["name"])
+        if target["name"] in value["supportTargets"]:
+            if target["type"] != "regular" or target.get("path") != "Tests/" + target["name"]:
+                raise ValueError("shared fixtures must be regular targets under Tests")
+            support_targets.append(target["name"])
         dependencies = []
         for dependency in target["dependencies"]:
             if "byName" in dependency:
@@ -95,14 +106,27 @@ def verify(root=ROOT):
         actual[target["name"]] = sorted(dependencies)
     if actual != {name: sorted(deps) for name, deps in value["dependencies"].items()}:
         raise ValueError("test selection graph differs from actual SwiftPM manifest")
-    if sorted(test_targets) != sorted(value["testTargets"] + value["supportTargets"]):
+    if (sorted(test_targets) != sorted(value["testTargets"]) or
+            sorted(support_targets) != sorted(value["supportTargets"])):
         raise ValueError("unreviewed test/support target")
-    inventory = json.loads((root / "docs/contracts/swift-test-inventory.json").read_text())
-    if inventory["hostTargets"] != sorted(test_targets):
+    # Xcode 26.6 cannot resolve a target that depends on another test target.
+    if any(set(deps) & set(test_targets) for deps in actual.values()):
+        raise ValueError("targets must not depend on test targets")
+    if inventory["hostTargets"] != sorted(test_targets + support_targets):
         raise ValueError("declaration inventory does not cover every test/support target")
     if any(test["target"] in value["supportTargets"] for test in inventory["tests"]):
         raise ValueError("shared fixture targets must not contain test declarations")
-    print(json.dumps({"verifiedTargets": actual, "testDeclarations": len(inventory["tests"])}))
+    if {product["name"] for product in model["products"]} != set(value["sourceTargets"]) - {"InnoFlowMacros"}:
+        raise ValueError("unreviewed shipping product")
+    for product in model["products"]:
+        names = set(product["targets"])
+        while True:
+            expanded = names | {dep for name in names for dep in actual[name]}
+            if expanded == names:
+                break
+            names = expanded
+        if names & set(test_targets + support_targets):
+            raise ValueError("shipping products must not include tests or fixtures")
 
 
 def prepare(tests, destination, root=ROOT):

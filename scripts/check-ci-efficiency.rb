@@ -108,6 +108,21 @@ check(jobs.fetch("principle-gates").fetch("steps").any? { |step|
     !step.key?("if") && !step.key?("continue-on-error")
 }, "CI independent consumers cannot be conditional or ignore failures")
 compatibility_steps = jobs.fetch("swift-syntax-compatibility").fetch("steps")
+selective_run = <<~'BASH'
+  set -euo pipefail
+  python3 -B scripts/ci-test-targets.py verify
+  # Regular fixture modules must also compile without product testability.
+  swift build --configuration release --jobs 1 -Xswiftc -warnings-as-errors
+  selected="$RUNNER_TEMP/innoflow-inspector-${{ matrix.swift }}"
+  python3 -B scripts/ci-test-targets.py prepare \
+    --targets InnoFlowInspectorTests --destination "$selected"
+  swift test --package-path "$selected" --jobs 1 --no-parallel \
+    -Xswiftc -warnings-as-errors
+BASH
+selective_steps = compatibility_steps.select { |step| step["name"] == "Verify selective test package on the audited compiler" }
+check(selective_steps.length == 1 && selective_steps.first["run"] == selective_run &&
+  !selective_steps.first.key?("if") && !selective_steps.first.key?("continue-on-error"),
+  "Compatibility must verify the actual graph, plain Release build and fresh selective tests unconditionally")
 check(compatibility_steps.any? { |step|
   step["run"] == '"$GITHUB_WORKSPACE/Tools/innoflow-migrate/scripts/check.sh"' &&
     step["env"] == {"INNOFLOW_MIGRATE_SWIFT_SYNTAX_VERSION" => '${{ matrix.syntax }}'} &&

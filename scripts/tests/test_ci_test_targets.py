@@ -1,5 +1,7 @@
 """Selection must preserve reverse dependencies and reject incomplete evidence."""
 import importlib.util
+import copy
+import json
 import tempfile
 from pathlib import Path
 import unittest
@@ -19,6 +21,56 @@ def plan(paths, lane="fast"):
 
 
 class TestTargetsTests(unittest.TestCase):
+    def manifest_fixture(self):
+        value = targets.graph()
+        model = {"targets": [], "products": []}
+        for name, deps in value["dependencies"].items():
+            target = {"name": name, "type": "test" if name in value["testTargets"] else "regular",
+                      "dependencies": [{"byName": [dep, None]} for dep in deps]}
+            if name in value["supportTargets"]:
+                target["path"] = "Tests/" + name
+            model["targets"].append(target)
+        model["products"] = [{"name": name, "targets": [name]}
+                             for name in value["sourceTargets"] if name != "InnoFlowMacros"]
+        inventory = json.loads((ROOT / "docs/contracts/swift-test-inventory.json").read_text())
+        return value, model, inventory
+
+    def test_manifest_support_modules_are_not_test_dependencies_or_shipping_products(self):
+        value, model, inventory = self.manifest_fixture()
+        targets.verify_manifest(value, model, inventory)
+        support = value["supportTargets"][0]
+        for kind in ("test", "executable"):
+            invalid = copy.deepcopy(model)
+            next(item for item in invalid["targets"] if item["name"] == support)["type"] = kind
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                targets.verify_manifest(value, invalid, inventory)
+        invalid = copy.deepcopy(model)
+        next(item for item in invalid["targets"] if item["name"] == support)["path"] = "Sources/" + support
+        with self.assertRaises(ValueError):
+            targets.verify_manifest(value, invalid, inventory)
+        invalid = copy.deepcopy(model)
+        invalid["products"][0]["targets"].append(support)
+        with self.assertRaises(ValueError):
+            targets.verify_manifest(value, invalid, inventory)
+
+    def test_manifest_rejects_test_target_dependencies_and_incomplete_inventory(self):
+        value, model, inventory = self.manifest_fixture()
+        invalid_value, invalid_model = copy.deepcopy(value), copy.deepcopy(model)
+        name, dependency = "InnoFlowCoreTestSupport", "InnoFlowCoreTests"
+        invalid_value["dependencies"][name].append(dependency)
+        next(item for item in invalid_model["targets"] if item["name"] == name)["dependencies"].append(
+            {"byName": [dependency, None]})
+        with self.assertRaisesRegex(ValueError, "depend on test targets"):
+            targets.verify_manifest(invalid_value, invalid_model, inventory)
+        invalid_inventory = copy.deepcopy(inventory)
+        invalid_inventory["hostTargets"].remove(name)
+        with self.assertRaises(ValueError):
+            targets.verify_manifest(value, model, invalid_inventory)
+        invalid_inventory = copy.deepcopy(inventory)
+        invalid_inventory["tests"][0]["target"] = name
+        with self.assertRaises(ValueError):
+            targets.verify_manifest(value, model, invalid_inventory)
+
     def test_inspector_excludes_unrelated_test_targets_and_products(self):
         chosen = targets.selection(plan(["Sources/InnoFlowInspector/Graph.swift"]))
         self.assertEqual(chosen["testTargets"], ["InnoFlowInspectorTests"])

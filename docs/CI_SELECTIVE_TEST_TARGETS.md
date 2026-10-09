@@ -4,7 +4,12 @@
 
 제품 코드는 변경하지 않는다. 기존 테스트의 선언과 공유 fixture를 실제 의존성에 따라
 옮기고, 배포 product에 포함되지 않는 네 개의 test support target으로 나눈다.
-`@testable import`가 필요한 fixture는 일반 library target 대신 test target에 둔다.
+Xcode 26.6은 test target을 다른 target의 의존성으로 허용하지 않는다. 지원 모듈은
+`Tests/...` 경로를 명시한 일반 target이며 실행 test target은 7개다. 제품은 지원 모듈을
+의존하지 않는다. 지원 모듈은 Core의 기존 public/package API를 일반 import로 사용하고,
+지원 모듈 간 helper만 package 접근으로 공유한다. 따라서 기존 일반 Release build가
+제품의 testability를 요구하지 않는다. 실행 test target의 `@testable import`와
+Debug/Release 및 Xcode runtime 호환성은 실제 테스트와 고정 toolchain CI에서 검증한다.
 
 | 실행 target | Swift 6.4 선언 수 | 범위 |
 |---|---:|---|
@@ -67,7 +72,7 @@ SwiftSyntax inventory는 실행 target 7개와 support target 4개를 모두 검
 
 Swift 6.4의 실제 전체 Debug 실행은 7개 결과를 출력한다. full-principle의 예상
 구성은 Debug 7 + Release 7 + isolated timing 1이다. 기존 Swift 6.3의 단일 실행기
-계약은 유지하며 분리 후 실제 Swift 6.3 전체 검증은 hosted preflight에서 수행해야 한다.
+계약은 유지하며 분리 후 실제 Swift 6.3 전체 실행은 정확한 head의 고정 hosted CI에서 확인한다.
 기존 SwiftSyntax compatibility matrix에는 Inspector private package를 생성·실행하는
 검증을 추가하여 full PR에서도 manifest 도구와 선택 경로를 두 고정 컴파일러로 확인한다.
 이 단계는 Inspector 3개와 AST 도구의 검증이며 Swift 6.3 전체 991개 runtime 검증을
@@ -89,14 +94,29 @@ hosted runner 대기시간 감소를 로컬 private test package 결과로 추�
 
 ## 검증 결과
 
+초기 draft head `48048ceec94f6af281eba00b0784b33afcc2d142`에서
 전체 Debug·Release 및 세 선택 패키지 실행, 실제 discovery 집합 동등성, 20 SDK graph build,
 동일 53개 TSAN/ASAN, 전체 coverage(95개 파일, 87.15%)와 기존 negative control을 확인했다.
 독립 리뷰가 선언·fixture·원본 로그·graph 및 fallback/reuse 증거를 대조했다.
 최종 Python 397개 회귀(이 Mac에서 Linux 전용 1개 skip), CI efficiency/release 정책과
 negative control, 실제 manifest graph, swift-format 및 pinned actionlint 15개 workflow를 통과했다.
 
+지원 모듈의 일반 target/import 보정 후 전체 Debug·Release를 다시 실행해 각각 994개
+선언(실제 991개 통과, OS 27 전용 3개 skip)과 XCTest 2개를 확인했다. 기존 일반
+Release build도 testability 강제 없이 통과했다. private Inspector 3개 실행,
+SwiftUI·Testing의 실제 compile/discovery 및 전체 996/선택 3·392·762개의 정확한
+집합 일치를 확인했다. Python 401개 회귀(Linux 전용 1개 skip), 문서 예제의 외부 target
+42개와 정확한 Swift fence 113개, 정책·inventory·format 및 기존 pinned actionlint도
+통과했다. 고정 Xcode 26.6/27.0 CI 결과와 OS 27 release qualification은 로컬 결과와
+구분한다. compatibility 단계의 graph 검사 삭제, 일반 Release build 삭제·testability 강제,
+조건부 skip 및 단계 삭제를 거부하는 negative control 5개도 추가했다.
+
 
 ## 동일 조건 build/discovery 측정
+
+아래 측정은 초기 draft head `48048ceec94f6af281eba00b0784b33afcc2d142`의
+구조를 대상으로 했다. 이후 고정 Xcode 호환성을 위한 support target/import 수정 후의
+실행 시간으로 재사용하지 않는다.
 
 Mac/Xcode/Swift/SDK 및 `--jobs 1 -Xswiftc -warnings-as-errors` 조건을 고정하고 직렬 실행했다.
 fresh local scratch와 기존 global SwiftPM dependency/prebuilt cache를 사용했다.

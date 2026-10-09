@@ -1,8 +1,7 @@
 // Test-only shared declarations. Production products do not depend on this target.
 import Foundation
+import InnoFlowCore
 import os
-
-@testable import InnoFlowCore
 
 struct CounterFeature: Reducer {
   struct State: Equatable, Sendable, DefaultInitializable {

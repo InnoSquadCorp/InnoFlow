@@ -3,9 +3,8 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
+import InnoFlowCore
 import os
-
-@testable import InnoFlowCore
 
 struct EffectInstrumentationWitnessSnapshot: Sendable {
   let runStartedCount: UInt64

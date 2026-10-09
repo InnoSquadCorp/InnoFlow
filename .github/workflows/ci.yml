@@ -916,6 +916,9 @@ jobs:
       - name: Verify selective test package on the audited compiler
         run: |
           set -euo pipefail
+          python3 -B scripts/ci-test-targets.py verify
+          # Regular fixture modules must also compile without product testability.
+          swift build --configuration release --jobs 1 -Xswiftc -warnings-as-errors
           selected="$RUNNER_TEMP/innoflow-inspector-${{ matrix.swift }}"
           python3 -B scripts/ci-test-targets.py prepare \
             --targets InnoFlowInspectorTests --destination "$selected"

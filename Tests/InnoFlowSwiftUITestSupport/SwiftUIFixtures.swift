@@ -1,9 +1,8 @@
 // Test-only shared declarations. Production products do not depend on this target.
 import Foundation
 import InnoFlow
+import InnoFlowCore
 import InnoFlowSwiftUI
-
-@testable import InnoFlowCore
 
 @InnoFlow
 struct ScopedBindableChildFeature {

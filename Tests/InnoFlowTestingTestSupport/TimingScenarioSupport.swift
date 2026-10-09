@@ -1,10 +1,9 @@
 // Test-only shared declarations. Production products do not depend on this target.
 import Foundation
+import InnoFlowCore
+import InnoFlowCoreTestSupport
 import InnoFlowTesting
 import Testing
-
-@testable import InnoFlowCore
-@testable import InnoFlowCoreTestSupport
 
 enum TimingScenarioStep: Sendable {
   case trigger(Int)

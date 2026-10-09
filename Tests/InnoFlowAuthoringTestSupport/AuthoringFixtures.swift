@@ -1,8 +1,7 @@
 // Test-only shared declarations. Production products do not depend on this target.
 import Foundation
 import InnoFlow
-
-@testable import InnoFlowCore
+import InnoFlowCore
 
 struct GenericExtensionNamespace<Value: Equatable & Sendable> {}
 

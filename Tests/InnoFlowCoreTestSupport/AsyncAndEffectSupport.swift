@@ -1,7 +1,6 @@
 // Test-only shared declarations. Production products do not depend on this target.
 import Foundation
-
-@testable import InnoFlowCore
+package import InnoFlowCore
 
 func effectOperationSignature<Action: Sendable, Output: Sendable>(
   _ effect: ReducerEffect<Action, Output>
@@ -99,7 +98,7 @@ func flattenConcatenateChildren<Action: Sendable, Output: Sendable>(
   }
 }
 
-func settleTimingScenarioWork() async {
+package func settleTimingScenarioWork() async {
   // `Store.send` schedules non-`.send` effects onto a separate Task. For the
   // randomized debounce/throttle property tests, some in-window updates only
   // mutate internal pending state and do not immediately change user-visible
@@ -113,7 +112,7 @@ func settleTimingScenarioWork() async {
 }
 
 @MainActor
-func waitForEmissionCount<R: Reducer>(
+package func waitForEmissionCount<R: Reducer>(
   _ store: Store<R>,
   emitted: KeyPath<R.State, [Int]>,
   minimumCount: Int,
@@ -211,19 +210,19 @@ var isPerformanceBenchmarkEnabled: Bool {
   ProcessInfo.processInfo.environment["INNOFLOW_PERF_BENCHMARKS"] == "1"
 }
 
-struct SeededGenerator {
+package struct SeededGenerator {
   private var state: UInt64
 
-  init(seed: UInt64) {
+  package init(seed: UInt64) {
     self.state = seed == 0 ? 0x1234_5678_9ABC_DEF0 : seed
   }
 
-  mutating func next() -> UInt64 {
+  package mutating func next() -> UInt64 {
     state = 2_862_933_555_777_941_757 &* state &+ 3_037_000_493
     return state
   }
 
-  mutating func nextInt(upperBound: Int) -> Int {
+  package mutating func nextInt(upperBound: Int) -> Int {
     precondition(upperBound > 0)
     return Int(next() % UInt64(upperBound))
   }

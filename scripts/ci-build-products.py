@@ -12,7 +12,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_SHA256 = "a6a803ad1a2b7c4ae6e3b16ca021a7732b705bdf3251f1f27639e3284526ed2e"
+MANIFEST_SHA256 = "f3fb44347b04876e2ea6c3d48d7172d7ba98ba5466c83ba56a6572798f407f37"
 DEPENDENCIES = {
     "InnoFlowCore": set(),
     "InnoFlowMacros": set(),
