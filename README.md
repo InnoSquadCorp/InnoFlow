@@ -14,8 +14,8 @@ Keep state and actions explicit; a simple `@InnoFlow` body declares
 policies for a counter, form, or ordinary request.
 
 Follow the counter and deterministic test below, then add concepts only when
-that feature needs them. This documentation describes the 6.0.2 candidate;
-5.1.1 remains the stable baseline until publication is verified.
+that feature needs them. This documentation describes the published
+[6.0.2 stable release](https://github.com/InnoSquadCorp/InnoFlow/releases/tag/6.0.2).
 
 ## Installation
 
@@ -1170,9 +1170,9 @@ Phase totality treats optional backticks as the same logical identifier. Action 
 
 ## InnoFlow 6.0.2
 
-This source revision documents the 6.0.2 release candidate and target API.
-Version 5.1.1 was the published stable baseline at candidate freeze; verify
-the live 6.0.2 tag and GitHub Release status before treating it as published.
+InnoFlow 6.0.2 was published on 2026-10-08 at tag commit
+`1176de1e4783b638c03a9334f43cc49378957148`. This development branch records
+6.0.2 as the stable API baseline; the immutable tag retains its candidate-freeze metadata.
 
 The framework now treats the following as source-of-truth principles:
 

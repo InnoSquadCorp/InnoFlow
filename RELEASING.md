@@ -41,18 +41,21 @@ This document defines the minimum release quality bar for InnoFlow.
 > selection and lifetime changes are tracked in the [implementation log](docs/IMPLEMENTATION_PROGRESS_6_0_2026_09_23.md).
 > Focused tests do not replace the final candidate-bound platform matrix.
 
-> Local implementation boundary: the Release Gate now has a
-> `publish_release=false` default and requires an explicit true dispatch to
-> enter the GitHub Release job. This code has not yet been published or proven
-> against the final remote candidate; do not treat the local workflow check as
-> publication approval.
+> Publication boundary: the Release Gate has a `publish_release=false` default
+> and requires an explicit true dispatch to enter the GitHub Release job.
+> The 6.0.2 validation and publication succeeded in run 37826649872. Future
+> releases still require their own exact-SHA evidence and publication approval.
 > A public `6.0.0` Git tag itself exposes the version to SPM consumers and
 > requires authorization separate from evidence review or GitHub Release publication.
 
-Current stable public release: `5.1.1` (at 6.0.0 candidate freeze; tagged and
-published on GitHub Releases, 2026-08-26)
+Current stable public release: `6.0.2` (published on GitHub Releases, 2026-10-08)
 
-Release target: `6.0.2` (verify live tag/Release status on GitHub)
+Release target: `6.0.2` (published; tag commit `1176de1e4783b638c03a9334f43cc49378957148`)
+
+[Release Gate run 37826649872](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37826649872)
+completed the exact-SHA validation, evidence and publication gates. The
+post-publication development branch promotes the stable API baseline to 6.0.2.
+The historical candidate procedure below does not alter the immutable release tag.
 
 The 6.0.2 development source carries the staged contract; record the actual
 candidate branch and immutable commit when freezing each release attempt.
@@ -162,9 +165,10 @@ the tag exists would make the API baseline gate require a nonexistent tag and
 invalidate the candidate snapshot. The mandatory CI migration consumer
 instead builds both the exact `5.1.1` baseline and 6.0.2 candidate, while the
 reviewed four-product API inventory must classify the major breakage. After
-GitHub Release publication, update `STABLE_VERSION` and the current-stable
-wording on the development branch in a separate commit. Then the 6.0.2 API
-baseline is mandatory; deletion or loss of that published tag fails closed.
+GitHub Release publication, the development branch updates `STABLE_VERSION`
+and the current-stable wording in this separate post-publication change.
+The 6.0.2 API baseline is now mandatory; deletion or loss of that published tag
+fails closed.
 The immutable 6.0.2 tag retains its historically accurate candidate-freeze
 metadata. Override `INNOFLOW_API_BASELINE` only when intentionally opening a
 new major development line.

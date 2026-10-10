@@ -2,8 +2,10 @@
 
 ## 6.0.2 Release
 
-Candidate prepared on **2026-10-07**. This patch fixes test-fixture environment
-isolation; it does not change framework runtime code or public APIs.
+Published on **2026-10-08** from tag commit
+`1176de1e4783b638c03a9334f43cc49378957148` (candidate prepared 2026-10-07).
+This patch fixes test-fixture environment isolation; it does not change
+framework runtime code or public APIs.
 
 - Synthetic tag/date/API-baseline fixtures no longer inherit the workflow's real
   tag or enforcement overrides. Explicit wrong-tag, missing-tag, moved-SHA,
@@ -16,8 +18,10 @@ isolation; it does not change framework runtime code or public APIs.
 
 The immutable 6.0.0 and 6.0.1 tags are retained. 6.0.1's main CI and preflight
 passed, but its tag Release Gate exposed this fixture bug, so its GitHub Release
-was not published. 6.0.2 needs new evidence and is not published by this source
-update. The last published stable marker remains 5.1.1 until publication succeeds.
+was not published. The 6.0.2 exact-SHA validation, evidence and publication
+succeeded in [Release Gate run 37826649872](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37826649872).
+The development branch now records `STABLE_VERSION=6.0.2`; the immutable release
+tag keeps its historical 5.1.1 candidate-freeze marker.
 
 ## 6.0.1 Release
 
