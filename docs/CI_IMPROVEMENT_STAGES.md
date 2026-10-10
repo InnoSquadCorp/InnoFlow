@@ -36,9 +36,16 @@ metadata끼리는 cancel=false/queue=max를 유지한다. 기존 metadata proven
 완료된 검증 실패, 권한 오류는 즉시 실패한다. docs-required가 실패하면 후속
 CI Required는 추가 대기 없이 한 번 검증하고 실패한다.
 
-merged-pr-cleanup은 현재 read-only 후보 조회다. 정상 CI concurrency가 superseded
-validation을 취소하는 동작은 유지하지만, merged PR 자동 취소는 별도 actions:write
-승인 및 활성화 전까지 작동하지 않는다. release/main/manual 실행은 대상이 아니다.
+merged-pr-cleanup은 신뢰할 수 있는 default branch의 전용 job에만 actions:write를
+부여하고 --apply/CLEANUP_ENABLE_WRITES=enabled로 활성화한다. 이 workflow 변경이
+merge된 뒤 발생하는 merged PR closed 이벤트부터 적용되며 저장소 설정 변경은 없다.
+ci.yml의 queued/in_progress pull_request 실행 중 authoritative merged head, head branch,
+native PR 연결과 API workflow ID가 모두 일치한 후보만 취소 직전에 다시 확인한다.
+이전 head, main/default/release branch, manual 실행, 다른 PR/workflow, 완료된 실행과
+merge 이후 의도적 rerun은 보존한다. 재개방, SHA/identity 불일치, API 오류 및 불완전한
+조회에서는 취소하지 않는다. CLI 기본값은 dry-run이며 GitHub GET/POST는 원자적이지
+않으므로 마지막 조회와 취소 사이의 경쟁 가능성은 남는다. 정상 CI concurrency의
+superseded validation 취소는 유지한다.
 
 ## 2단계: fixture 및 테스트 target 분리
 

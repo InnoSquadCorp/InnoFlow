@@ -13,6 +13,6 @@
     ".github/workflows/release-evidence.yml",
     ".github/workflows/release-preflight.yml"
   ],
-  "event_filter": "pull_request only; exact native PR association, never SHA alone",
-  "permission_activation": "read-only inspection; cancellation requires separately approved actions:write"
+  "event_filter": "queued/in_progress pull_request only; exact merged head, branch, native PR association and authoritative CI workflow ID",
+  "permission_activation": "dedicated trusted default-branch job actions:write; --apply plus CLEANUP_ENABLE_WRITES=enabled; active only after this workflow is merged"
 }

@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      actions: read
+      actions: write
       pull-requests: read
     steps:
       - name: Checkout immutable trusted cleanup source
@@ -36,10 +36,10 @@ jobs:
             /scripts/merged_pr_cleanup.py
             /scripts/merged_pr_cleanup_plan.py
             /scripts/ci-cleanup-workflows.json
-      - name: Inspect exact merged PR validation
+      - name: Cancel exact merged PR validation
         env:
           GH_TOKEN: ${{ github.token }}
           CLEANUP_SOURCE_SHA: ${{ github.workflow_sha }}
-          # Cancellation stays disabled until its additional permission is approved.
-          CLEANUP_ENABLE_WRITES: ''
-        run: python3 -B scripts/merged_pr_cleanup.py --event "$GITHUB_EVENT_PATH"
+          # This dedicated trusted job is the only cleanup writer.
+          CLEANUP_ENABLE_WRITES: 'enabled'
+        run: python3 -B scripts/merged_pr_cleanup.py --event "$GITHUB_EVENT_PATH" --apply
