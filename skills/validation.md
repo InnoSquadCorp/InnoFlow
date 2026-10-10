@@ -1,4 +1,27 @@
-# InnoFlow skill validation — 2026-10-07
+# InnoFlow skill validation
+
+## Published 6.0.2 — 2026-10-10
+
+The exact remote 6.0.2 fixture at
+`1176de1e4783b638c03a9334f43cc49378957148` passed 11 tests in one suite on this
+Apple host (Xcode 27.1 / Swift 6.4, arm64), with strict concurrency and warnings
+as errors. The verifier checked remote tag identity, exact manifest/lock,
+active graph/workspace, SwiftSyntax 604.0.0, checkout SHAs and cleanliness.
+[Fresh evidence](validation/consumer-evidence-6.0.2.json) records toolchains,
+fixture hashes, all commands, log locations, graph and test results. Raw logs
+remain in the recorded external scratch directory and are not bundled here.
+
+This validates the skill fixture, not every 6.0.x patch or the user's app.
+SwiftUI helpers compile; device UI lifecycle, Inspector, scheduler admission,
+optional-child lifetime, combined frameworks and the full release matrix remain
+outside this fixture. The tag and GitHub Release publication were verified
+separately. SwiftPM and AI-skill installation are separate operations.
+
+## Historical 6.0.0 validation — 2026-10-07
+
+The original record and its evidence below apply only to that earlier tag.
+They have not been relabeled as 6.0.2 evidence.
+
 
 The skill supports stable `>=6.0.0, <6.1.0`. This record validates the exact
 **6.0.0** tag at `188c2732d26350cf01afadade3dac89a2b73b68f`, separately from

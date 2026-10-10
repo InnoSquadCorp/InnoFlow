@@ -1,6 +1,6 @@
 # Effects, output, and ownership
 
-These are the tagged 6.0.0 contracts. For another stable 6.0.x patch, inspect relevant fixes and test the affected consumer.
+These are the tagged 6.0.2 contracts. For another stable 6.0.x patch, inspect relevant fixes and test the affected consumer.
 
 ## Effects and errors
 
@@ -35,4 +35,4 @@ Use `.run(id:policy:onAdmission:operation:)` when dispatches contend for a Store
 
 `StoreDiagnostics(capacity:)` is opt-in, bounded, and payload-free. Keep sensitive domain data out of diagnostic labels or custom logging. Inspector and scheduler admission are not exercised by the small fixture; consult their exact tagged contracts and add task-specific tests.
 
-Sources: [EffectTask and perform](https://github.com/InnoSquadCorp/InnoFlow/blob/188c2732d26350cf01afadade3dac89a2b73b68f/Sources/InnoFlowCore/EffectTask.swift), [FlowTask](https://github.com/InnoSquadCorp/InnoFlow/blob/188c2732d26350cf01afadade3dac89a2b73b68f/Sources/InnoFlowCore/FlowTask.swift), [FlowScope](https://github.com/InnoSquadCorp/InnoFlow/blob/188c2732d26350cf01afadade3dac89a2b73b68f/Sources/InnoFlowCore/FlowScope.swift), [orchestration ADR](https://github.com/InnoSquadCorp/InnoFlow/blob/188c2732d26350cf01afadade3dac89a2b73b68f/docs/adr/ADR-effect-admission-and-flow-lifetime.md), [instrumentation cookbook](https://github.com/InnoSquadCorp/InnoFlow/blob/188c2732d26350cf01afadade3dac89a2b73b68f/docs/INSTRUMENTATION_COOKBOOK.md).
+Sources: [EffectTask and perform](https://github.com/InnoSquadCorp/InnoFlow/blob/1176de1e4783b638c03a9334f43cc49378957148/Sources/InnoFlowCore/EffectTask.swift), [FlowTask](https://github.com/InnoSquadCorp/InnoFlow/blob/1176de1e4783b638c03a9334f43cc49378957148/Sources/InnoFlowCore/FlowTask.swift), [FlowScope](https://github.com/InnoSquadCorp/InnoFlow/blob/1176de1e4783b638c03a9334f43cc49378957148/Sources/InnoFlowCore/FlowScope.swift), [orchestration ADR](https://github.com/InnoSquadCorp/InnoFlow/blob/1176de1e4783b638c03a9334f43cc49378957148/docs/adr/ADR-effect-admission-and-flow-lifetime.md), [instrumentation cookbook](https://github.com/InnoSquadCorp/InnoFlow/blob/1176de1e4783b638c03a9334f43cc49378957148/docs/INSTRUMENTATION_COOKBOOK.md).

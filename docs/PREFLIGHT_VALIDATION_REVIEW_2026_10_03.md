@@ -1,5 +1,10 @@
 # W0/W9 Preflight 로컬 검증 개선
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 2026-10-03. 이 문서는 검증 도구 수정과 소스 기대 목록을 기록한다.
 수정 후보의 Apple 실행 결과 또는 릴리스 승인서는 아니다.
 

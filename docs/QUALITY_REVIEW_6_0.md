@@ -1,5 +1,10 @@
 # 6.0.0 Runtime Quality Follow-up
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 Current decision, 2026-09-09: R25/R27/R28 are reopened after new reproduced
 counterexamples. R26 requires implementation and regression-test hardening;
 R30/R31 remain incomplete. Earlier PASS records below are historical evidence,

@@ -1,5 +1,10 @@
 # InnoFlow 6.0.0 — 남은 배포 차단 조건 해소 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 > **2026-09-18 범위 / 2026-09-23 계획 개정:** 사용자 지시로 물별 전용 검증은 필수 목록에서 제외됐다. R40/AC-R040·R41/AC-R041은 범위 제외이며 PASS가 아니다. 아래 물별 조사·수행 절차는 역사적 기록이다. 활성 계획은 [배포 전 R68 → R69 → R59~R67](PRE_RELEASE_EXECUTION_PLAN_6_0.md)이며 [R52~R58](FRAMEWORK_ONLY_REMEDIATION_PLAN_6_0.md)의 구현 이력과 재개 조건을 계승한다. 물별 없는 정책·workflow 전환은 R52에서 반영됐고 R43/R44의 실제 producer·최종 증거 조건은 계속 열려 있다.
 
 > 2026-09-17 후속 검토: 결과 파서·기대 테스트 정책·consumer checkout·ASan·필수 CI의 추가 결함은 [검증·배포 경로 수정 계획](VALIDATION_REMEDIATION_PLAN_6_0.md)의 R46~R51에서 다룬다. 아래 과거 실행 기록은 보존하며, R39/R43의 해당 부분은 재개한다. R46~R51의 로컬 수정·회귀는 완료됐지만 원격 PR CI·required check 적용과 기존 배포 미완료 조건은 남아 있다.
@@ -21,9 +26,9 @@
 | --- | --- |
 | 기존 후보가 보존됨 | aggregate `559c4c28a2252547f6c5be60a11bc01dd201be1a30a5fad21a514921fbc01535`를 현재 입력으로 재계산해 일치 확인. 이 계획 추가 전 후보이며 이후 후보로 재표기하지 않음 |
 | 두 저장소는 미커밋 변경을 포함 | InnoFlow HEAD `00a73ed2d2cb94114b0be5c9fbd59c187a4b67c7`, Mulbyul HEAD `092ff9514695ceae5cfd490388e017fac331e30a`. dirty 자체는 제품 결함이 아니며 원본 정리를 해결책으로 삼지 않음 |
-| 전체 자동 게이트 통과 이력 존재 | [전체 로그](../.build/release-evidence-r38/principle-final-candidate.log)에 Debug/Release 각각 runtime 711 + macro 68 및 전체 principle PASS. [품질 기록](QUALITY_REVIEW_6_0.md)의 SDK·8 runtime·sanitizer 결과는 해당 후보의 과거 실행 증거 |
-| 물별 iPhone 대표 audit 실패 | [iPhone 원본 보존 위치](../../Projects/Mulbyul/.build/device-check-20260910/iphone-fresh-tuist/)의 summary는 1개 테스트 실패, test tree에는 contrast 실패 메시지 4개. 4개 테스트 실패 또는 고유 제품 결함 4개라고 해석하지 않음 |
-| 물별 iPad 대표 audit 통과 | [iPad 원본 보존 위치](../../Projects/Mulbyul/.build/device-check-20260910/ipad-fresh-tuist/)는 동일 대표 메서드 1/1 PASS. 전체 24조합 및 VoiceOver 완료 증거는 아님 |
+| 전체 자동 게이트 통과 이력 존재 | 전체 로그 (unavailable historical artifact: `../.build/release-evidence-r38/principle-final-candidate.log`)에 Debug/Release 각각 runtime 711 + macro 68 및 전체 principle PASS. [품질 기록](QUALITY_REVIEW_6_0.md)의 SDK·8 runtime·sanitizer 결과는 해당 후보의 과거 실행 증거 |
+| 물별 iPhone 대표 audit 실패 | iPhone 원본 보존 위치 (unavailable historical artifact: `../../Projects/Mulbyul/.build/device-check-20260910/iphone-fresh-tuist/`)의 summary는 1개 테스트 실패, test tree에는 contrast 실패 메시지 4개. 4개 테스트 실패 또는 고유 제품 결함 4개라고 해석하지 않음 |
+| 물별 iPad 대표 audit 통과 | iPad 원본 보존 위치 (unavailable historical artifact: `../../Projects/Mulbyul/.build/device-check-20260910/ipad-fresh-tuist/`)는 동일 대표 메서드 1/1 PASS. 전체 24조합 및 VoiceOver 완료 증거는 아님 |
 | 정확한 Swift 6.3 실행 증거 없음 | 현재 선택된 Xcode는 27.0 (`27A5252f`), Swift 6.4. 표준 설치 경로 조회에서는 `/Applications/Xcode.app`만 확인. 다른 호스트·비표준 경로의 환경은 미확인 |
 | 실제 manifest·producer가 없음 | `.build/release-evidence-r38/manifest.tsv` 및 `.github/workflows/release-evidence.yml` 부재 확인. verifier와 fixture 테스트만으로 R37/R38 구현 완료라고 부를 수 없음 |
 | CD 실행 순서 결함 | [cd.yml](../.github/workflows/cd.yml)의 `release-evidence`가 checkout 전에 `scripts/verify-release-prerequisites.sh`를 호출. 새 runner에는 스크립트가 아직 없음 |
@@ -65,7 +70,7 @@
 
 ## 4. R40 — iPhone contrast 원인 해결 후 24조합 검증
 
-대상: Mulbyul [AccessibilityAuditUITests.swift](../../Projects/Mulbyul/Apple/App/UITests/Sources/AccessibilityAuditUITests.swift), [접근성 runner](../../Projects/Mulbyul/Apple/Scripts/run_ios_accessibility_audits.sh), [결과 validator](../../Projects/Mulbyul/Apple/Scripts/validate_accessibility_audit_result.rb). 제품 수정 후보는 [Records 공통 UI](../../Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsScene+Components.swift), [iOS Records 화면](../../Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/iOS/TrainingRecordsCurrentExperienceScene.swift)과 실제 원인에 해당하는 DesignSystem token이다.
+대상: Mulbyul AccessibilityAuditUITests.swift (unavailable historical artifact: `../../Projects/Mulbyul/Apple/App/UITests/Sources/AccessibilityAuditUITests.swift`), 접근성 runner (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Scripts/run_ios_accessibility_audits.sh`), 결과 validator (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Scripts/validate_accessibility_audit_result.rb`). 제품 수정 후보는 Records 공통 UI (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsScene+Components.swift`), iOS Records 화면 (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/iOS/TrainingRecordsCurrentExperienceScene.swift`)과 실제 원인에 해당하는 DesignSystem token이다.
 
 1. 기존 failed xcresult의 audit 첨부·화면·접근성 트리를 읽고 records-root/overall-summary의 4개 메시지를 화면 요소와 연결한다. 같은 구성의 iPhone/iPad, 실제 OS build, 한 요소씩 줄인 최소 화면을 대조해 제품 문제인지 시스템 audit 문제인지 판정한다. nil-element라는 사실만으로 false positive라고 결론 내리지 않는다.
 2. 제품 문제이면 원인 색상/배경/중복 AX 노드/레이아웃을 좁혀 수정한다. 타겟을 접근성 트리에서 숨기거나 audit 범위를 줄이지 않는다. 공통 색상 token을 바꿔야 하면 그 token의 다른 사용 화면에 대한 회귀도 포함한다. 이전에 되돌린 색상 실험을 근거 없이 다시 적용하지 않는다.
@@ -77,7 +82,7 @@
 
 ## 5. R41 — 실제 기능·복구·데스크톱·VoiceOver 마무리
 
-대상: Mulbyul [TrainingRecords 테스트](../../Projects/Mulbyul/Apple/Features/TrainingRecords/Tests/), [Navigation UI tests](../../Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift), [macOS UI tests](../../Projects/Mulbyul/Apple/App/MacUITests/Sources/TrainingRecordsMacUITests.swift), [프로젝트 정의](../../Projects/Mulbyul/Apple/App/Project.swift), [QA](../../Projects/Mulbyul/Apple/docs/TRAINING_RECORDS_QA.md).
+대상: Mulbyul TrainingRecords 테스트 (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Features/TrainingRecords/Tests/`), Navigation UI tests (unavailable historical artifact: `../../Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift`), macOS UI tests (unavailable historical artifact: `../../Projects/Mulbyul/Apple/App/MacUITests/Sources/TrainingRecordsMacUITests.swift`), 프로젝트 정의 (unavailable historical artifact: `../../Projects/Mulbyul/Apple/App/Project.swift`), QA (unavailable historical artifact: `../../Projects/Mulbyul/Apple/docs/TRAINING_RECORDS_QA.md`).
 
 1. iOS/macOS의 실제 feature/owner suite를 실행한다. 이후 iPhone/iPad/Mac에서 실패→재시도, 저장/삭제→재조회, 이탈/복귀·늦은 응답, 편집 중 취소/선택 변경을 실제 production owner 경로로 검증한다. 없는 UI 시나리오는 먼저 추가하고 발견된 원인 코드만 수정한다.
 2. iPhone compact 상세/탭바/시트, iPad regular↔compact·선택/미저장 draft·키보드와 저장, Mac 목록 키보드 이동·저장·포커스 복귀·창 크기 변경을 확인한다. 저장 실패·중복 입력·취소 후 로딩 상태도 확인한다. 기능 회복과 단순 화면 전환을 같은 결과로 세지 않는다.

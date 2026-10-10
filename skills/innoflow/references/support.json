@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "checked_on": "2026-10-07",
+  "checked_on": "2026-10-10",
   "library": "InnoFlow",
   "supported_release_line": "6.0.x",
   "supported_range": ">=6.0.0 <6.1.0",
   "include_prereleases": false,
   "repository": "https://github.com/InnoSquadCorp/InnoFlow.git",
-  "version": "6.0.0",
-  "revision": "188c2732d26350cf01afadade3dac89a2b73b68f",
-  "tag_url": "https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.0",
-  "github_release_status": "not_found_at_check",
+  "version": "6.0.2",
+  "revision": "1176de1e4783b638c03a9334f43cc49378957148",
+  "tag_url": "https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2",
+  "github_release_status": "published_2026-10-08",
   "swift_tools_version": "6.3",
   "swift_syntax_requirement": ">=603.0.0 <605.0.0",
   "declared_platform_minimums": {
@@ -22,8 +22,8 @@
   "resolved_dependencies": {
     "innoflow": {
       "repository": "https://github.com/InnoSquadCorp/InnoFlow.git",
-      "version": "6.0.0",
-      "revision": "188c2732d26350cf01afadade3dac89a2b73b68f"
+      "version": "6.0.2",
+      "revision": "1176de1e4783b638c03a9334f43cc49378957148"
     },
     "swift-syntax": {
       "repository": "https://github.com/swiftlang/swift-syntax.git",
@@ -31,5 +31,5 @@
       "revision": "050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf"
     }
   },
-  "scope": "Stable 6.0.x guidance; version/revision and resolved_dependencies name the exact tagged 6.0.0 fixture baseline. A tag is confirmed separately from a GitHub Release page. Other patches and application graphs need their own verification. SwiftUI device lifecycle, Inspector, scheduler admission, optional-child lifetime and migration execution are outside this small fixture."
+  "scope": "Stable 6.0.x guidance; version/revision and resolved_dependencies name the exact tagged 6.0.2 fixture baseline. The tag and GitHub Release publication were both verified. Other patches and application graphs need their own verification. SwiftUI device lifecycle, Inspector, scheduler admission, optional-child lifetime and migration execution are outside this small fixture."
 }

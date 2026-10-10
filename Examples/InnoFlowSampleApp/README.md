@@ -1,6 +1,9 @@
 # InnoFlowSampleApp
 
-Canonical reference app for `InnoFlow`.
+Canonical reference app for `InnoFlow`, using the repository root through the
+`../../../` local package path. Swift 6.3 or newer and Swift 6 language mode are
+required. For the released API use the [6.0.2 source](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2);
+this checkout may contain later development tooling and test changes.
 
 This sample replaces the previous split examples and demonstrates the recommended patterns in one
 app shell:

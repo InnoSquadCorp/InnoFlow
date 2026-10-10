@@ -3,7 +3,9 @@
 Reviewed on 2026-09-17 against InnoRouter commit
 `5edd743b66772c724391f1224a674a3c8fb537a2`. InnoRouter remains unchanged.
 The implementation borrows its validation contracts, with InnoFlow-specific
-modules and candidate evidence. This is not evidence that InnoFlow has shipped.
+modules and candidate evidence. That comparison is historical provenance.
+InnoFlow 6.0.2 was published on 2026-10-08; this guide describes the current
+development validation workflow, not a new release receipt.
 
 ## Comparison and scope
 
@@ -12,13 +14,13 @@ modules and candidate evidence. This is not evidence that InnoFlow has shipped.
 | Validated LCOV, numerical floor, component visibility | Added `run-coverage.sh`, exporter, validator, required-module policy and adversarial controls. All production modules stay visible in one report; no SwiftUI/macro source exclusions were copied. |
 | Reusable coverage gate required by release | Both CI and CD call `coverage.yml`; missing, failed, cancelled or skipped release coverage blocks publication. |
 | Separate reusable-workflow concurrency namespaces | Enforced by `check-coverage-workflow.rb`, including duplicate namespace negative controls. |
-| Validation of the gate scripts themselves | Full local principle gates invoke the existing evidence/workflow selftests plus coverage controls. CI runs the build-free `--static` contract and Debug/Release runtime checks in independent jobs. |
+| Validation of the gate scripts themselves | CI runs `--static`, gate negative controls and independent consumers. The static mode includes API comparison builds and sample/document typechecks; it omits the full Debug/Release/sample runtime suites, which have separate jobs. |
 | Independent macro-first consumer | Already covered by InnoFlow's external package compile contracts and Catalyst consumer; do not introduce a second fixture with weaker coverage. |
 | TSan/ASan and platform runtime | Existing InnoFlow workflows and evidence policy remain authoritative. Coverage does not replace these gates. |
 | DocC and release metadata | Existing DocC pinning, documentation parity, tag policy and release-evidence checks remain in place. |
-| Per-product API snapshots and symbol budgets | Not copied. InnoFlow has four products and an unpublished breaking 6.0 surface. Its current compatibility gate is staged until the 6.0 tag exists; an independently reviewed 6.0 API inventory is still useful future work. |
-| Compile every annotated documentation code block | Not copied. InnoFlow validates sample/consumer contracts, but does not yet classify and compile every documentation snippet. That needs its own document inventory and explicit partial-example policy. |
-| Published 5.x-to-6.x migration consumer comparison | Not copied. The API breakage inventory and current macro compile tests are not the same as an exact published-version behavior comparison. |
+| Per-product API snapshots and symbol budgets | InnoFlow has five public products. The compatibility checker compares all five against `STABLE_VERSION` and fails when the published tag is missing. The versioned [6.0 inventory](API_BREAKAGE_6_0.md) classifies the historical major change; no general symbol-budget policy is claimed. |
+| Compile every annotated documentation code block | Every Swift fence is digest-bound in the [review ledger](contracts/doc-swift-fence-review.tsv): current examples compile in complete or explicit contextual fixtures, installation fragments become manifests, and historical snippets remain non-copyable. Named example tests must execute. Syntax parsing alone is insufficient. |
+| Published 5.x-to-6.x migration consumer comparison | `check-migration-consumer.sh` builds the exact annotated 5.1.1 baseline and current checkout, checks behavior/tests and effect-extension contracts. This is separate from the ongoing stable API comparison. |
 
 ## Local execution
 
@@ -33,7 +35,10 @@ scripts/principle-gates.sh --static
 scripts/principle-gates-selftest.sh
 ```
 
-The full `scripts/principle-gates.sh` runs its own negative controls before the
+Static mode is not build-free: SwiftPM's API diagnosis compiles the current and
+baseline products, and the sample guidance check typechecks SDK examples.
+Both API jobs fetch full Git history so published baseline tags are available;
+missing tags remain errors. The full `scripts/principle-gates.sh` runs its own negative controls before the
 existing Debug/Release/sample runtime checks. Coverage is a separate explicit
 command and required CI/release job to avoid silently doubling the cost of
 every local principle-gate invocation.
@@ -61,24 +66,25 @@ lines remain visible, even when unreachable from the host unit tests.
 
 ## CI and release behavior
 
-`CI / principle-gates` requires the reusable coverage job. Stale CI runs for
-the same pull request or branch are cancelled, ordinary label changes do not
-restart the full matrix, and the `run-asan` label is handled by the dedicated
-AddressSanitizer workflow. Once selected, AddressSanitizer follows subsequent
-PR commits and reopen events; unrelated labels neither start nor cancel it.
-Dependabot groups each ecosystem's updates so one
-weekly batch does not create several identical macOS matrices.
+`CI Plan` selects jobs from the exact event's changed paths and approved reuse
+proofs. Independent validation jobs depend only on that plan, including coverage
+and principle gates. Code events cancel superseded validation; ordinary label
+and non-base PR edits verify prior exact-head evidence in a separate metadata
+queue. `release-validation` and `run-asan` affect the validation plan.
+ASan is owned by the planned main CI job and follows later PR revisions;
+the standalone ASan workflow is manual-only. Dependabot groups minor/patch
+updates by ecosystem. See [the automation policy](automation-policy.md).
 
 `CI Required` is the stable branch-protection surface. It runs after every
-mandatory CI job and fails when any required result is failed, cancelled,
-skipped, or missing. Pull requests may skip only the full-CI push-only ASan
-job; a PR selected with `run-asan` is verified by the dedicated workflow and
-must be checked against the latest PR revision before merge.
+planned CI job and fails when a selected result is failed, cancelled, skipped,
+missing, duplicate or unknown. Unselected jobs must be skipped. Documentation
+has its own stable `Build Documentation` aggregate. Inspect the exact head's
+plan and results; a skipped job alone cannot be called a pass.
 
 Debug tests, Release configuration tests, platform builds, focused runtime
-tests and the canonical sample build begin after lint instead of waiting for a
-second full principle-gate execution. The CI principle job runs only static
-contracts; `check-release-configuration.sh` retains the optimized build, full
+tests and the canonical sample build begin independently after CI Plan.
+The CI principle job runs static contracts, negative controls and independent
+consumers; `check-release-configuration.sh` retains the optimized build, full
 Release test suite and isolated timing baseline. The unqualified
 `principle-gates.sh` command remains a complete sequential suite executed in
 the CI release preflight, not a required local task.
@@ -187,6 +193,6 @@ tests with coverage; both suites passed. The two test bundles jointly reported
 The 85% aggregate floor is therefore retained from InnoRouter without copying
 its native-UI exclusions. The lower SwiftUI result is visible follow-up work;
 an aggregate pass is not a claim that every module exceeds 85%. This initial
-measurement validates the current library source, not Swift 6.3 compatibility
+measurement validates only the recorded source, not Swift 6.3 compatibility
 or remote CI. Each subsequent runner invocation retains its own candidate
 snapshots and results instead of reusing these numbers as release evidence.

@@ -142,7 +142,7 @@ elif [[ "$stable_version" != "$version" ]] && ! version_is_older "$stable_versio
   exit 1
 fi
 
-for readme in README.md README.kr.md README.jp.md README.cn.md; do
+for readme in README.md README.ko.md README.es.md README.de.md README.zh-Hans.md README.ja.md README.ru.md; do
   require_pattern \
     "$readme" \
     "from: \"${escaped_version}\"" \
@@ -184,24 +184,10 @@ require_pattern \
   "always-refresh fallback" \
   "SelectedStore closure fallback contract"
 
-require_pattern \
-  README.md \
-  "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
-  "English SelectedStore selection guidance"
-
-require_pattern \
-  README.kr.md \
-  "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
-  "Korean SelectedStore selection guidance"
-
-require_pattern \
-  README.jp.md \
-  "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
-  "Japanese SelectedStore selection guidance"
-
-require_pattern \
-  README.cn.md \
-  "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
-  "Chinese SelectedStore selection guidance"
+for readme in README.md README.ko.md README.es.md README.de.md README.zh-Hans.md README.ja.md README.ru.md; do
+  require_pattern "$readme" \
+    "select\\(dependingOn:\\).*select\\(dependingOnAll:\\).*always-refresh fallback" \
+    "SelectedStore selection guidance"
+done
 
 echo "[check-release-sync] OK: release surface matches ${version}"

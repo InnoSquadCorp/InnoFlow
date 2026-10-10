@@ -1,12 +1,17 @@
 # InnoFlow 6.0.0 — 배포 증거·매크로 호환성·소비자 품질 수정 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 - 문서 상태: **Draft (미승인)**, 작성일 2026-09-09. 현재 판정: **R25/R27/R28 재개, R26 구현·회귀 보완 필요, R30/R31 미완료**. R29의 과거 집중 검증은 보존한다.
 - 최신 수정 계획: [네 번째 후속 계획 — IF6-R32~R38](REMEDIATION_FOURTH_FOLLOWUP_PLAN_6_0.md). 아래 12절은 당시 실행 이력이며 새 반례 발견 후의 전체 합격 판정이 아니다.
 - 결정권자: 프로젝트 소유자. 구현 담당: 후속 실행 담당자. 리뷰 담당자·승인일: 미기록.
 - 목적: 직전 재검토에서 확인한 결함 5건과 검증 공백 2묶음을 수정하고, 약속한 6.0.0 계약을 실제 소비자·지원 환경에서 입증한다. 새 제품 기능을 추가하는 계획이 아니다.
 - 요구사항: [기존 구현 계획](IMPLEMENTATION_PLAN_6_0.md)의 FR-001~007/NFR-001~005, [첫 후속 계획](REMEDIATION_FOLLOWUP_PLAN_6_0.md)의 FR-008을 유지한다. 새 작업은 **IF6-R25~R31**, 새 완료 조건은 **AC-R025~031**이다.
 - 이력: [두 번째 후속 계획](REMEDIATION_SECOND_FOLLOWUP_PLAN_6_0.md)의 과거 실행 기록을 보존한다. 다만 현재 R20/R24는 새 반례로 다시 열고, R21/R23은 부분 충족으로 취급한다. 이 문서는 과거의 통과 이력을 현재의 전체 합격으로 승계하지 않는다.
-- 감사 근거: [2026-09-09 재검토 보고서](../.build/review-20260909-EQbFF6/REVIEW.md). 아래 F1~F5/G1~G2는 이 보고서의 번호이며 이전 보고서의 동일 번호와 구분한다. `.build` 증거는 로컬 보존본이므로 구현 때 최소 fixture를 정식 테스트에 편입한다.
+- 감사 근거: 2026-09-09 재검토 보고서 (unavailable historical artifact: `../.build/review-20260909-EQbFF6/REVIEW.md`). 아래 F1~F5/G1~G2는 이 보고서의 번호이며 이전 보고서의 동일 번호와 구분한다. `.build` 증거는 로컬 보존본이므로 구현 때 최소 fixture를 정식 테스트에 편입한다.
 
 ## 1. 기준 상태와 범위
 
@@ -127,7 +132,7 @@
 
 ## 8. R29 — 취소된 queued action의 dispatch 진단 연결
 
-변경 대상: [Store.swift](../Sources/InnoFlowCore/Store.swift), [DispatchContext.swift](../Sources/InnoFlowCore/DispatchContext.swift), [StoreDiagnostics.swift](../Sources/InnoFlowCore/StoreDiagnostics.swift), [FlowTaskCancellationBoundaryTests](../Tests/InnoFlowTests/FlowTaskCancellationBoundaryTests.swift), [DispatchDiagnosticsTests](../Tests/InnoFlowTests/DispatchDiagnosticsTests.swift). 원인 수정은 queue drop context 전달을 우선하며 진단 구조 전체를 재설계하지 않는다.
+변경 대상: [Store.swift](../Sources/InnoFlowCore/Store.swift), [DispatchContext.swift](../Sources/InnoFlowCore/DispatchContext.swift), [StoreDiagnostics.swift](../Sources/InnoFlowCore/StoreDiagnostics.swift), [FlowTaskCancellationBoundaryTests](../Tests/InnoFlowTestingTests/FlowTaskCancellationBoundaryTests.swift), [DispatchDiagnosticsTests](../Tests/InnoFlowTestingTests/DispatchDiagnosticsTests.swift). 원인 수정은 queue drop context 전달을 우선하며 진단 구조 전체를 재설계하지 않는다.
 
 1. public Store에서 emission 직후 취소·queue drain 순서를 명시적 readiness/release signal로 재현한다. 고정 sleep이나 private 상태 강제 주입을 주된 증거로 쓰지 않는다.
 2. `.cancellationBoundary`로 버릴 때 queued action의 tracker를 context에 전달하여 원래 dispatch와 연결한다. 이미 반영된 state rollback이나 추가 cancellation을 넣지 않는다.
@@ -140,10 +145,10 @@
 
 변경 대상:
 
-- 물별 [AccessibilityAuditUITests.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/AccessibilityAuditUITests.swift), [TrainingRecordsNavigationUITests.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift), [audit 실행 스크립트](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Scripts/run_ios_accessibility_audits.sh).
-- [TrainingRecords feature](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsFeature.swift), [load owner](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsLoadLifecycle.swift), 관련 iOS/shared/macOS 화면. 제품 수정은 실제 재현된 실패의 원인 파일에 한정한다.
-- 물별 [QA 문서](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/docs/TRAINING_RECORDS_QA.md), InnoFlow [QUALITY_REVIEW_6_0.md](QUALITY_REVIEW_6_0.md), R25 정책/receipt producer.
-- 신규 후보: 물별 `Apple/Scripts/summarize_training_records_audits.sh` 및 작은 sanitized xcresult JSON fixture, 필요한 macOS UI-test target/시나리오. target 정의가 필요하면 [App/Project.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/Project.swift) 등 정식 정의를 수정한다.
+- 물별 AccessibilityAuditUITests.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/AccessibilityAuditUITests.swift`), TrainingRecordsNavigationUITests.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift`), audit 실행 스크립트 (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Scripts/run_ios_accessibility_audits.sh`).
+- TrainingRecords feature (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsFeature.swift`), load owner (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsLoadLifecycle.swift`), 관련 iOS/shared/macOS 화면. 제품 수정은 실제 재현된 실패의 원인 파일에 한정한다.
+- 물별 QA 문서 (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/docs/TRAINING_RECORDS_QA.md`), InnoFlow [QUALITY_REVIEW_6_0.md](QUALITY_REVIEW_6_0.md), R25 정책/receipt producer.
+- 신규 후보: 물별 `Apple/Scripts/summarize_training_records_audits.sh` 및 작은 sanitized xcresult JSON fixture, 필요한 macOS UI-test target/시나리오. target 정의가 필요하면 App/Project.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/Project.swift`) 등 정식 정의를 수정한다.
 
 ### R30-A — UI 수정 전에 집계 기준 고정
 

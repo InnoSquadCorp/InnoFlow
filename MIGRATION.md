@@ -2,6 +2,12 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
+The published stable release is **6.0.2**. The entries below describe changes in
+their respective tags; 6.0.0 and 6.0.1 tags do not have published GitHub releases.
+The current development skill fixture now validates exact 6.0.2. Its
+[fresh consumer evidence](skills/validation.md) is separate from the historical
+6.0.0 receipt retained in the 6.0.1 and 6.0.2 tags.
+
 ## 6.0.2
 
 No runtime or public API migration from the existing 6.0.1 tag is required.
@@ -15,8 +21,8 @@ library-owned skill's exact 6.0.0 consumer baseline. For 5.1.1 upgrades, use the
 No runtime or public API migration from the existing 6.0.0 tag is required.
 This patch adds library-owned AI guidance and corrects release metadata and
 preflight date validation. The skill's exact consumer receipt remains bound to
-6.0.0; 6.0.1 publication and consumer validation must be established separately.
-For upgrades from the last published stable 5.1.1, follow the 6.0 migration below.
+6.0.0 and does not establish 6.0.1 publication or consumer validation.
+For upgrades from the last published 5.x stable 5.1.1, follow the 6.0 migration below.
 
 ## 6.0.0
 

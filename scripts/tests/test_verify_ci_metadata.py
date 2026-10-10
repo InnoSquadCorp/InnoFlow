@@ -16,7 +16,7 @@ REPO = gate.CONFIG['repository']
 class Transcript:
     def __init__(self):
         self.pr = dict(number=45, state='open', labels=[], head=dict(sha=HEAD),
-                       base=dict(sha=BASE, repo=dict(full_name=REPO)))
+                       base=dict(ref='main', sha=BASE, repo=dict(full_name=REPO)), merge_commit_sha=SOURCE)
         self.event = dict(action='edited', pull_request=copy.deepcopy(self.pr), changes={})
         self.env = dict(GITHUB_REPOSITORY=REPO, GITHUB_EVENT_NAME='pull_request', GITHUB_REF='refs/pull/45/merge',
                         GITHUB_RUN_ID='20', GITHUB_RUN_ATTEMPT='1', GITHUB_SHA=SOURCE)
@@ -27,6 +27,8 @@ class Transcript:
         self.own = {**self.run, 'id':20, 'run_number':20, 'status':'in_progress', 'conclusion':None,
                     'display_title':gate.METADATA_PREFIX+'current'}
         self.merge = dict(sha=SOURCE, parents=[dict(sha=BASE),dict(sha=HEAD)])
+        self.base_ref = dict(ref='refs/heads/main', object=dict(type='commit', sha=BASE))
+        self.base_reads, self.base_race = 0, None
         self.runs = [self.run,self.own]
         self.jobs,self.checks = [],{}
         for i,name in enumerate(gate.CONFIG['checks']):
@@ -41,6 +43,11 @@ class Transcript:
         self.run_race,self.pr_race,self.list_race=None,None,None
 
     def get(self,path):
+        if path == f'repos/{REPO}/git/ref/heads/main':
+            self.base_reads+=1
+            result=copy.deepcopy(self.base_ref)
+            if self.base_reads==2 and self.base_race:self.base_race(result)
+            return result
         if path.endswith('pulls/45'):
             self.reads+=1
             result=copy.deepcopy(self.pr)
@@ -78,6 +85,55 @@ class MetadataGateTests(unittest.TestCase):
         self.assertEqual(proof,dict(run=10,attempt=1,head=HEAD,base=BASE,source=SOURCE,check='CI Required'))
         for name in gate.CONFIG['checks']:
             t=Transcript();self.assertEqual(gate.prove(t,t.event,t.env,name)['check'],name)
+
+    def test_recorded_base_can_lag_live_tip_with_exact_native_validation(self):
+        # PR #63 kept its original base SHA after main advanced, while both
+        # native validation and the metadata event used the new merge commit.
+        for name in gate.CONFIG['checks']:
+            t=Transcript()
+            live_base='d'*40
+            t.base_ref['object']['sha']=live_base
+            t.merge['parents'][0]['sha']=live_base
+            proof=gate.prove(t,t.event,t.env,name)
+            self.assertEqual(proof['base'],BASE)
+            self.assertEqual(proof['source'],SOURCE)
+            self.assertEqual(proof['check'],name)
+            self.assertEqual(t.base_reads,2)
+
+    def test_live_base_does_not_admit_wrong_or_incomplete_merge_parents(self):
+        for parents in [[],[BASE],[HEAD,BASE],['d'*40,HEAD],[BASE,'d'*40],[BASE,HEAD,'d'*40]]:
+            t=Transcript();t.merge['parents']=[dict(sha=sha) for sha in parents]
+            with self.subTest(parents=parents),self.assertRaises(ValueError):t.prove()
+        # Matching the recorded base is insufficient after the live tip moved.
+        t=Transcript();t.base_ref['object']['sha']='d'*40
+        with self.assertRaises(ValueError):t.prove()
+
+    def test_live_base_does_not_reuse_validation_of_an_older_merge_source(self):
+        t=Transcript()
+        t.base_ref['object']['sha']='d'*40
+        t.merge['parents'][0]['sha']='d'*40
+        t.run['display_title']=t.run['display_title'].replace(SOURCE,'e'*40)
+        with self.assertRaisesRegex(ValueError,'different head, base, workflow or label set'):t.prove()
+
+    def test_base_ref_and_native_merge_identity_are_required(self):
+        mutations=[lambda t:t.pr['base'].update(ref='develop'),
+                   lambda t:t.pr.update(merge_commit_sha='d'*40),
+                   lambda t:t.pr.update(merge_commit_sha=None),
+                   lambda t:t.base_ref.update(ref='refs/heads/develop'),
+                   lambda t:t.base_ref['object'].update(type='tag'),
+                   lambda t:t.base_ref['object'].update(sha='invalid')]
+        for mutate in mutations:
+            t=Transcript();mutate(t)
+            with self.subTest(mutate=mutate),self.assertRaises(ValueError):t.prove()
+
+    def test_live_base_retarget_and_native_merge_races_reject(self):
+        mutations=[lambda t:setattr(t,'base_race',lambda r:r['object'].update(sha='d'*40)),
+                   lambda t:setattr(t,'pr_race',lambda p:p['base'].update(ref='develop')),
+                   lambda t:setattr(t,'pr_race',lambda p:p['base']['repo'].update(full_name='foreign/repo')),
+                   lambda t:setattr(t,'pr_race',lambda p:p.update(merge_commit_sha='d'*40))]
+        for mutate in mutations:
+            t=Transcript();mutate(t)
+            with self.subTest(mutate=mutate),self.assertRaises(ValueError):t.prove()
 
     def test_failed_pending_cancelled_or_missing_validation_cannot_turn_green(self):
         for state,result in [('completed','failure'),('completed','cancelled'),('in_progress',None),('queued',None),('completed','skipped')]:

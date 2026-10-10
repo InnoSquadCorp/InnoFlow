@@ -93,12 +93,18 @@ policy_runs = policy.fetch("steps").filter_map { |step| step["run"] }.join("\n")
   check(policy_runs.lines.map(&:strip).include?(command), "policy must run #{command}")
 end
 
+%w[api-compatibility principle-gates].each do |name|
+  baseline_checkout = jobs.fetch(name).fetch("steps").find { |step| step["uses"].to_s.start_with?("actions/checkout@") }
+  check(baseline_checkout && baseline_checkout.dig("with", "fetch-depth") == 0 &&
+    baseline_checkout.dig("with", "persist-credentials") == false,
+    "#{name}: API baseline checks require full tag history without persisted credentials")
+end
 api_runs = jobs.fetch("api-compatibility").fetch("steps").filter_map { |step| step["run"] }
 check(api_runs.include?('"$GITHUB_WORKSPACE/scripts/check-migration-consumer.sh"'),
   "CI must run the exact 5.1.1 to 6.0 external migration consumer")
 principle_runs = jobs.fetch("principle-gates").fetch("steps").filter_map { |step| step["run"] }
 check(principle_runs.any? { |run| run.include?("principle-gates.sh\" --static") },
-  "CI principle gates must use the build-free static mode")
+  "CI principle gates must use static mode without repeating the full runtime suites")
 check(principle_runs.include?('"$GITHUB_WORKSPACE/scripts/principle-gates-selftest.sh"'),
   "CI must retain gate negative controls")
 check(principle_runs.include?('"$GITHUB_WORKSPACE/scripts/check-independent-consumers.sh"'),

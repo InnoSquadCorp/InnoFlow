@@ -56,6 +56,6 @@ review. Do not treat this URL as immutable candidate evidence.
 
 Do not add builder overrides that pretend an unavailable Swift/Xcode version
 passed. SPI build availability is separate from the hosted release evidence
-policy: missing support does not waive any of InnoFlow's 32 preflight checks.
+policy: missing support does not waive any of InnoFlow's 28 required preflight checks.
 See [RELEASING.md](../RELEASING.md), [MACRO_OPERATIONS.md](MACRO_OPERATIONS.md),
 and the [OSS policy](OSS_POLICY.md).

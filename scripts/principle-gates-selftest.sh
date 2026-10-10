@@ -65,7 +65,7 @@ EOF
 ## InnoFlow 3.0 direction
 EOF
 
-  cat >"$root/docs/README.kr.md" <<'EOF'
+  cat >"$root/docs/README.ko.md" <<'EOF'
 ## InnoFlow 3.0 direction
 EOF
 
@@ -120,7 +120,7 @@ write_doc_parity_contract() {
       "pattern": "^## InnoFlow 3.0 direction$",
       "files": [
         "docs/README.md",
-        "docs/README.kr.md"
+        "docs/README.ko.md"
       ]
     }
   ],
@@ -131,7 +131,7 @@ write_doc_parity_contract() {
       "expectedSourceHeaderCount": 1,
       "translations": [
         {
-          "file": "docs/README.kr.md",
+          "file": "docs/README.ko.md",
           "expectedHeaderCount": 1
         }
       ]
@@ -476,9 +476,28 @@ run_api_compatibility_mode_tests() (
   git -C "$tmp_root" init -q
 
   printf '5.1.1\n' >"$tmp_root/STABLE_VERSION"
-  assert_success "$tmp_root/scripts/check-api-compatibility.sh"
+  assert_failure "$tmp_root/scripts/check-api-compatibility.sh"
+  assert_success env INNOFLOW_API_BASELINE=6.0.0 "$tmp_root/scripts/check-api-compatibility.sh"
 
   printf '6.0.0\n' >"$tmp_root/STABLE_VERSION"
+  assert_failure "$tmp_root/scripts/check-api-compatibility.sh"
+
+  # Current default must follow STABLE_VERSION, not an old hard-coded 6.0.0.
+  git -C "$tmp_root" -c user.name=Selftest -c user.email=selftest@invalid.example \
+    commit --allow-empty -qm fixture
+  git -C "$tmp_root" tag 6.0.0
+  git -C "$tmp_root" tag 6.0.2
+  mkdir "$tmp_root/bin"
+  cat >"$tmp_root/bin/swift" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$INNOFLOW_SELFTEST_API_COMMAND"
+EOF
+  chmod +x "$tmp_root/bin/swift"
+  printf '6.0.2\n' >"$tmp_root/STABLE_VERSION"
+  assert_success env PATH="$tmp_root/bin:$PATH" \
+    INNOFLOW_SELFTEST_API_COMMAND="$tmp_root/api-command" "$tmp_root/scripts/check-api-compatibility.sh"
+  assert_success grep -Fx 'package diagnose-api-breaking-changes 6.0.2 --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting InnoFlowInspector' "$tmp_root/api-command"
+  git -C "$tmp_root" tag -d 6.0.2 >/dev/null
   assert_failure "$tmp_root/scripts/check-api-compatibility.sh"
 
   printf 'invalid\n' >"$tmp_root/STABLE_VERSION"
@@ -501,7 +520,7 @@ run_release_sync_lifecycle_tests() (
   cp "$SCRIPT_DIR/check-release-sync.sh" "$SCRIPT_DIR/release-tag-policy.sh" \
     "$SCRIPT_DIR/check-release-date.rb" "$tmp_root/scripts/"
   cp "$ROOT_DIR/STABLE_VERSION" "$ROOT_DIR/RELEASING.md" "$ROOT_DIR/README.md" \
-    "$ROOT_DIR/README.kr.md" "$ROOT_DIR/README.jp.md" "$ROOT_DIR/README.cn.md" \
+    "$ROOT_DIR"/README.*.md \
     "$ROOT_DIR/RELEASE_NOTES.md" "$ROOT_DIR/CHANGELOG.md" "$ROOT_DIR/MIGRATION.md" \
     "$ROOT_DIR/ARCHITECTURE_CONTRACT.md" "$tmp_root/"
   # The source docs supply the candidate version; publication state belongs to

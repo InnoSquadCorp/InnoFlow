@@ -6,7 +6,7 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-READMES = ("README.md", "README.kr.md", "README.jp.md", "README.cn.md")
+READMES = ('README.md', 'README.ko.md', 'README.es.md', 'README.de.md', 'README.zh-Hans.md', 'README.ja.md', 'README.ru.md')
 
 
 def verify_install_contracts(root):

@@ -1,5 +1,10 @@
 # InnoFlow 6.0.0 — 재검토 7건 수정 실행 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 > 2026-09-06 후속 검토: 아래 실행 결과는 당시의 증거 기록이다. 추가 반례로
 > R03의 취소 경계와 R06/R07의 일부 조건부·가용성 계약이 미충족임을 확인했다.
 > 현재 남은 작업과 완료 판정은 [후속 수정 계획](REMEDIATION_FOLLOWUP_PLAN_6_0.md)의
@@ -8,7 +13,7 @@
 - 문서 상태: **Executed, owner review pending**, 2026-09-06. `Reviewed`/`Approved`로 자동 승격하지 않았다.
 - 요청: 재검토에서 발견한 F1~F7의 실제 코드 작업을 순서대로 수행하고 로컬 후보를 검증한다.
 - 결정권자: 프로젝트 소유자. 구현 담당: 후속 실행을 맡은 Codex. 검토자/최종 승인자와 승인일: 미기록.
-- 관계: [기존 1~7단계 계획](/Users/changwooson/Developer/InnoSquad/InnoFlow/docs/IMPLEMENTATION_PLAN_6_0.md)의 FR/AC를 폐기하거나 재번호화하지 않는 보완 계획이다. 기존 완료 기록을 새 반례까지 통과한 증거로 사용하지 않는다.
+- 관계: [기존 1~7단계 계획](IMPLEMENTATION_PLAN_6_0.md)의 FR/AC를 폐기하거나 재번호화하지 않는 보완 계획이다. 기존 완료 기록을 새 반례까지 통과한 증거로 사용하지 않는다.
 - 실행 순서: **준비 → R01 → R02 → R03 → R04 → R05 → R06 → R07 → 통합 검증 → 완료 판정**. 2026-09-06에 이 순서로 로컬 실행을 완료했다.
 
 ## 1. 목표·범위·확인된 기준선
@@ -20,7 +25,7 @@
 - InnoFlow 브랜치 `release/6.0.0-local`, HEAD `00a73ed2d2cb94114b0be5c9fbd59c187a4b67c7`.
 - 이 HEAD에 미커밋 구현이 더해진 후보를 대상으로 한다. 계획 작성 전 tracked diff SHA-256은 `2c9a6b66bf648b0d6c49391034fdd605a149eba4f88670dc5dc8e844a9418656`으로 직전 검토와 동일했다.
 - 직전 검토에서 관련 테스트 93개는 통과했으나 F1~F7 반례가 남았다. 반례를 정식 회귀 테스트로 옮긴 뒤 수정 후보에서 다시 검증했다.
-- [검토 보고서](/tmp/innoflow-review-20260906.Kx33EF/REVIEW.md)에 재현 소스와 Debug/Release 로그가 있다. 임시 경로이므로 후속 구현에서 재현을 정식 테스트로 옮겨 보존한다.
+- 검토 보고서 (unavailable historical artifact: `/tmp/innoflow-review-20260906.Kx33EF/REVIEW.md`)에 재현 소스와 Debug/Release 로그가 있다. 임시 경로이므로 후속 구현에서 재현을 정식 테스트로 옮겨 보존한다.
 - 현 manifest는 Swift tools 6.3, iOS 18/macOS 15/tvOS 18/watchOS 11/visionOS 2 이상이다. 점검 환경은 Xcode 27/Swift 6.4였다. 툴체인 실행 결과와 선언된 최소 지원 계약을 구분한다.
 - 물별의 실제 `TrainingRecordsFeature`는 요청 시 loading을 켜고, busy 거절은 상태를 유지하며, PhaseMap은 onAppear를 loading 전이로 취급한다. 따라서 bool만 고치면 충분하지 않다.
 
@@ -85,9 +90,9 @@ F 번호는 검토 보고서의 발견 항목, FR/NFR은 기존 계획의 요구
 
 변경 대상:
 
-- [TrainingRecordsFeature.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsFeature.swift)
-- [TrainingRecordsFeatureTests.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/Tests/TrainingRecordsFeatureTests.swift)
-- [TrainingRecordsNavigationUITests.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift)
+- TrainingRecordsFeature.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsFeature.swift`)
+- TrainingRecordsFeatureTests.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/Tests/TrainingRecordsFeatureTests.swift`)
+- TrainingRecordsNavigationUITests.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift`)
 
 1. 요청 Action 수신과 실제 admission 수락을 구분한다. `.onAppear`만으로 loading/phase를 먼저 켜지 않고 **수락된 조회**가 loading을 소유하도록 한다.
 2. 필요한 내부 요청 ID를 admission/완료/실패에 함께 전달하고 오래된 결과가 새 소유자를 덮지 않게 한다. 거절된 요청의 ID를 현재 실행 소유자로 교체하지 않는다.

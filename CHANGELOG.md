@@ -17,12 +17,14 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ### Release status
 
-Candidate prepared on 2026-10-07; GitHub Release publication is not yet established.
-The existing 6.0.0 and 6.0.1 tags are preserved. The 6.0.1 tag at
-`70fb831b2481ee9fe4b92d3087cc467baeaded80` passed main CI and all 28 required
-preflight checks, but its tag-triggered Release Gate rejected a selftest fixture
-that inherited the real tag. Those results do not certify this new 6.0.2 SHA.
-`STABLE_VERSION` remains 5.1.1 until successful publication.
+Published on 2026-10-08 from tag commit
+`1176de1e4783b638c03a9334f43cc49378957148` (candidate prepared 2026-10-07).
+The exact-SHA validation, evidence and publication succeeded in
+[Release Gate run 37826649872](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37826649872).
+The existing 6.0.0 and 6.0.1 tags are preserved; their earlier candidate evidence
+is not reused as 6.0.2 evidence. The development branch records
+`STABLE_VERSION=6.0.2`; the immutable 6.0.2 tag retains its historical 5.1.1
+candidate-freeze marker.
 
 ## [6.0.1] - 2026-10-07
 

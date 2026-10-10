@@ -1,5 +1,10 @@
 # Diagnostics 문자열 경계 후보 D
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](../DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 > **2026-10-04 기능 통합 상태:** 이 문서는 보존된 성능 trial의 역사적
 > 소스·가설·검증 기록이다. S/I2/D2 최적화는 채택하지 않았으며 기능 후보의
 > 전체 `Sources/`는 e15dfac8e0c97edb4706ac35595f22fc2cff5c1d와 동일하다.

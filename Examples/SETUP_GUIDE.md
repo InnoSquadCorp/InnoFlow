@@ -1,5 +1,9 @@
 # Sample App Setup Guide
 
+Requires Swift 6.3 or newer (Swift 6 language mode), with Xcode/SDK support for
+the destination. The sample consumes this checkout through a local path; it does
+not prove a remotely installed release. See [version boundaries](../docs/DOCUMENTATION.md).
+
 ## Run the Canonical Sample
 
 1. Open:
@@ -46,7 +50,7 @@ Check [`Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Package.swift`](./In
 
 The canonical sample uses one local path dependency:
 
-- `../../../../InnoFlow`
+- `../../../` (from `InnoFlowSampleAppPackage` to this checkout's root)
 
 ### CLI verification
 
@@ -58,5 +62,5 @@ swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --
 
 1. The workspace opens successfully
 2. `InnoFlowSampleAppFeature` resolves as a package product
-3. The demo hub shows `Basics`, `Orchestration`, `Phase-Driven FSM`, and `App-Boundary Navigation`
+3. The demo hub shows the ten demos listed in [the sample README](InnoFlowSampleApp/README.md)
 4. Package tests pass

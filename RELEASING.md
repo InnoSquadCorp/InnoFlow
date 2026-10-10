@@ -25,7 +25,7 @@ This document defines the minimum release quality bar for InnoFlow.
 
 > Scope revision, 2026-09-18: the owner has removed Mulbyul-specific validation
 > from InnoFlow's release checklist. Mulbyul feature/UI/accessibility/VoiceOver
-> checks are out of scope, not passed or waived failures. The active pre-release
+> checks are out of scope, not passed or waived failures. The historical pre-release
 > plan is the [pre-release execution plan](docs/PRE_RELEASE_EXECUTION_PLAN_6_0.md), continuing the
 > implementation history and reopened checks in [R52–R58](docs/FRAMEWORK_ONLY_REMEDIATION_PLAN_6_0.md).
 > The JSON policy and release workflows now use a single InnoFlow candidate;
@@ -36,35 +36,44 @@ This document defines the minimum release quality bar for InnoFlow.
 > Plan revision, 2026-09-23: the [comprehensive review](docs/COMPREHENSIVE_REVIEW_6_0_2026_09_23.md)
 > adds selector correctness (R68) and a parent-lifetime contract decision (R69)
 > before R59–R67; artifact integrity (F6) and sample guidance (F7) extend R62/R64.
-> These are Draft remediation tasks, not completed fixes or publishing approval.
+> These dated plans record the remediation scope at that time; they are not
+> current completion reports or publishing approval.
 > The owner subsequently delegated D1/D2 implementation decisions; the local
 > selection and lifetime changes are tracked in the [implementation log](docs/IMPLEMENTATION_PROGRESS_6_0_2026_09_23.md).
 > Focused tests do not replace the final candidate-bound platform matrix.
 
-> Local implementation boundary: the Release Gate now has a
-> `publish_release=false` default and requires an explicit true dispatch to
-> enter the GitHub Release job. This code has not yet been published or proven
-> against the final remote candidate; do not treat the local workflow check as
-> publication approval.
+> Publication boundary: the Release Gate has a `publish_release=false` default
+> and requires an explicit true dispatch to enter the GitHub Release job.
+> The 6.0.2 validation and publication succeeded in run 37826649872. Future
+> releases still require their own exact-SHA evidence and publication approval.
 > A public `6.0.0` Git tag itself exposes the version to SPM consumers and
 > requires authorization separate from evidence review or GitHub Release publication.
 
-Current stable public release: `5.1.1` (at 6.0.0 candidate freeze; tagged and
-published on GitHub Releases, 2026-08-26)
+Current stable public release: `6.0.2` (published on GitHub Releases, 2026-10-08)
 
-Release target: `6.0.2` (verify live tag/Release status on GitHub)
+Release target: `6.0.2` (published; tag commit `1176de1e4783b638c03a9334f43cc49378957148`)
 
-The 6.0.2 development source carries the staged contract; record the actual
-candidate branch and immutable commit when freezing each release attempt.
-Installation snippets and non-tag release metadata are aligned with that
-candidate. A frozen tagged source snapshot keeps the prior published-stable
-marker; tag creation and GitHub Release publication remain separate gates.
+[Release Gate run 37826649872](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37826649872)
+completed the exact-SHA validation, evidence and publication gates. The
+post-publication development branch promotes the stable API baseline to 6.0.2.
+The historical candidate procedure below does not alter the immutable release tag.
+
+## Current and historical release state
+
+6.0.2 is published. Do not create its tag again or rerun publication as routine
+maintenance. For the next release, record a new target version, candidate branch
+and immutable SHA, then align installation snippets and release metadata with
+that target. Retain the currently published stable marker until publication.
+Tag creation and GitHub Release publication remain separate gates.
+
+The next two paragraphs record the earlier 6.0 release attempts. Their dates,
+SHAs and failures are historical evidence, not pending instructions.
 
 The 6.0.2 candidate is dated 2026-10-07. The existing 6.0.0 tag at
 `188c2732d26350cf01afadade3dac89a2b73b68f` is preserved; its `Unreleased`
 CHANGELOG entry failed the tagged date gate and no GitHub Release was published
-at this check. Its prior evidence is not 6.0.2 evidence. Run a new full required
-CI preflight on the final merged 6.0.2 SHA before creating its new tag.
+at that check. Its prior evidence was not reused for 6.0.2. The later 6.0.2
+preflight, tag gate and publication completed at the SHA recorded above.
 
 The existing 6.0.1 tag at `70fb831b2481ee9fe4b92d3087cc467baeaded80`
 is also preserved. Its main CI and 28-check preflight succeeded, but its
@@ -112,8 +121,11 @@ tag, run and confirm the following in CI (not a local release matrix):
    sample package and `InnoFlowSampleAppFeature` scheme. Required CI preflight
    `sample-sdk-tvos`, `sample-sdk-watchos`, and `sample-sdk-visionos` receipts
    cover the sample destinations beyond its macOS tests and iOS app build.
-7. Public API comparison against the previous stable tag:
-   `swift package diagnose-api-breaking-changes 5.1.1 --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting`.
+7. Public API comparison against the current published stable baseline:
+   `swift package diagnose-api-breaking-changes "$(cat STABLE_VERSION)" --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting InnoFlowInspector`.
+   CI uses `scripts/check-api-compatibility.sh`, which reads the same stable
+   marker by default. The historical 5.1.1→6.0 major migration comparison
+   remains separate from the ongoing five-product compatibility check.
    A minor or patch release must have no unexplained breakage. A major release
    may return a nonzero result only when every public migration is documented.
    The 6.0.0 classification is recorded in
@@ -122,33 +134,19 @@ tag, run and confirm the following in CI (not a local release matrix):
 9. DocC generation: `Tools/generate-docc.sh` (`swift-docc-plugin` 1.5.0 at revision `647c708be89f834fa6a6d4945442793a77ddf5b6`, `swift-docc-symbolkit` 1.0.0 at revision `b45d1f2ed151d057b54504d653e0da5552844e34`, and `swift-syntax` 604.0.0 at revision `050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf`, resolved only from `Tools/docc-package.resolved`)
 10. Release sync: `scripts/check-release-sync.sh`
 11. Doc parity: `scripts/check-doc-parity.sh`
-    Run `scripts/check-doc-swift-syntax.rb` as a separate syntax-only check for
-    every Swift fence. Its 16 pinned contextual/historical exceptions are not
-    typecheck approvals; runnable and partial examples still need their
-    versioned compilation/harness review before the 6.0 candidate is approved.
-    `scripts/check-doc-copyable-examples.rb` compiles 101 distinct exact
-    current README/DocC/contributor/dependency/composition/selection/phase,
-    cross-framework, timing, instrumentation, and migration fences in
-    24 external compile targets and 14 runtime test targets (106 fence uses),
-    with warnings as errors. Contextual fixtures supply app-owned models and
-    dependencies, not replacements for InnoFlow behavior.
-    All 31 named tests must execute and pass, not merely compile. It uses the
-    release candidate's `Package.resolved` without automatic version updates.
-    It also parses four localized installation manifests assembled from eight
-    exact dependency/target-list fragments. The sample guidance gate checks
-    all six of its Swift fences: four exact typechecks (three SwiftUI examples
-    on iOS 18.5/26.0 and the complete Sendable example), a contextual SwiftData
-    typecheck on both iOS targets, and two executed Swift Testing examples in
-    a contextual fixture. Together these checks cover all 129 inventory rows:
-    101 external examples, eight installation fragments, six sample-guide
-    fences, and 14 explicitly historical/non-copyable fragments. The ledger
-    classifies 35 runnable, 80 contextual/partial, and 14 historical fences.
-    `scripts/report-doc-fence-review.rb --require-complete` compares the
-    candidate's entire Swift-fence inventory with a digest-pinned review ledger
-    and refuses unresolved contextual harnesses. It must pass before R64 and
-    final-candidate approval; a syntax pass or partial ledger is not approval.
-    It is a required local receipt and runs before external compilation, so
-    new, stale, substituted, or unbound examples fail closed.
+    Run `scripts/check-doc-swift-syntax.rb` for syntax and
+    `scripts/report-doc-fence-review.rb --require-complete` for the complete,
+    digest-bound fence inventory. Syntax parsing does not prove type correctness.
+    `scripts/check-doc-copyable-examples.rb` compiles exact reviewed fences with
+    warnings as errors, supplies explicitly documented app-model contexts,
+    executes the named runtime tests, and parses installation manifests for all
+    seven README languages. Its output reports the actual target/fence/test
+    counts; do not reuse candidate-era counts after changing the inventory.
+    Byte-identical localized code is bound to the same compiled example by the
+    README parity check. Historical snippets remain marked non-copyable.
+    The separate sample guidance gate covers its SwiftUI, SwiftData and testing
+    contexts. Keep all entries in `docs/contracts/doc-swift-fence-review.tsv`
+    bound to executable checkers; unreviewed, missing or changed fences fail.
 12. Full principle gates: `scripts/principle-gates.sh`
 13. Instrumented coverage and required-module inventory: `scripts/run-coverage.sh`.
     The shared CI/release workflow enforces the repository-owned
@@ -156,18 +154,22 @@ tag, run and confirm the following in CI (not a local release matrix):
     report and module summary, and fails if the candidate changes during the run.
     See [gate mapping and limits](docs/CI_GATES.md) for the InnoRouter adoption.
 
-`STABLE_VERSION` records the public stable version at the source revision. Keep
-it at `5.1.1` in the frozen 6.0.2 candidate and exact tag: promoting it before
-the tag exists would make the API baseline gate require a nonexistent tag and
-invalidate the candidate snapshot. The mandatory CI migration consumer
-instead builds both the exact `5.1.1` baseline and 6.0.2 candidate, while the
-reviewed four-product API inventory must classify the major breakage. After
-GitHub Release publication, update `STABLE_VERSION` and the current-stable
-wording on the development branch in a separate commit. Then the 6.0.2 API
-baseline is mandatory; deletion or loss of that published tag fails closed.
-The immutable 6.0.2 tag retains its historically accurate candidate-freeze
-metadata. Override `INNOFLOW_API_BASELINE` only when intentionally opening a
-new major development line.
+`STABLE_VERSION` records the public stable release at the source revision:
+currently `6.0.2`. The ongoing API checker uses that tag across all five public
+products and fails if it is missing. An explicit `INNOFLOW_API_BASELINE` override
+is reserved for an intentional major-line comparison; it does not change the
+stable marker. The 5.1.1→6.0 migration consumer and
+[API breakage classification](docs/API_BREAKAGE_6_0.md) retain their historical
+baseline.
+
+The immutable 6.0.2 candidate/tag retains `STABLE_VERSION=5.1.1`. Promoting it
+before the tag existed would have invalidated that frozen snapshot. Publication
+has since completed; development metadata now records 6.0.2. Do not rewrite the
+release tag or interpret its prior-stable marker as the current release state.
+
+The following exact `6.0.2` commands describe the historical tag gate. For a new
+release, substitute its reviewed numeric version; never rerun them as an
+instruction to recreate the published 6.0.2 tag.
 
 After separate authorization to create the exact candidate tag,
 release-tag enforcement must also pass:
@@ -213,9 +215,10 @@ Before tagging a release (automated release checks execute in CI):
 13. Confirm tag-triggered release gates run [scripts/principle-gates.sh](scripts/principle-gates.sh) with release-tag enforcement enabled.
 14. Confirm the matching `## [<tag>]` section exists in [CHANGELOG.md](CHANGELOG.md); the release workflow publishes that body automatically.
 15. Confirm the macro source-fallback workflow passes and the consumer runbook in [docs/MACRO_OPERATIONS.md](docs/MACRO_OPERATIONS.md) matches the release toolchain.
-16. Keep `STABLE_VERSION=5.1.1` and the dated prior-stable wording in the
-    tag-creating candidate. Require the 5.1.1→6.0 external migration consumer
-    and reviewed API inventory before tagging. Only after GitHub Release is
+16. Keep `STABLE_VERSION` at the currently published release in a new
+    tag-creating candidate. Compare all five products against that stable tag;
+    for a major release, also require its versioned migration consumer and
+    reviewed API breakage inventory before tagging. Only after GitHub Release is
     published, promote the stable marker and current-stable wording on the
     development branch; that post-publication commit must not rewrite the
     immutable tag or reuse pre-tag receipts.

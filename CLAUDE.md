@@ -46,7 +46,12 @@ investigating. Do not wait for repeated user questions to expand coverage.
 Use `docs/COMPREHENSIVE_REVIEW_6_0_2026_09_23.md` as the initial inventory and
 evidence-ledger example, not as reusable proof for a later revision.
 
-## InnoFlow 6.0.0 development rules
+## InnoFlow 6.0.2 and development rules
+
+6.0.2 was published on 2026-10-08. `STABLE_VERSION` records that release;
+new commits are unreleased until separately tagged and published. Use
+[the documentation index](docs/DOCUMENTATION.md) for current guides and
+historical evidence boundaries.
 
 ### CI-only release validation
 

@@ -1,5 +1,10 @@
 # InnoFlow 6.0.0 — 프레임워크 단독 검증 및 추가 결함 수정 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 - 문서 상태: **Draft**. 실행 상태: R52/R57 로컬 구현·검증 완료, R53/R55 재개, R54/R56/R58 부분 완료, 2026-09-18. 9월 23일 종합 검토 이후 최종 활성 순서는 [배포 전 실행 계획 R68 → R69 → R59~R67](PRE_RELEASE_EXECUTION_PLAN_6_0.md)을 따른다. 정확한 Swift 6.3, 후보 결합 receipt/manifest, 원격·공개 단계는 열린 차단 조건이다.
 - 결정권자: 프로젝트 소유자. 물별 검증 제외는 2026-09-18 사용자 지시로 확정했다. 상세 구현 계획의 검토자·승인일은 미기록이다.
 - 기준: `release/6.0.0-local`, HEAD `dbd6cfec40e302fc03ac9f8f35ff810d30d48014`와 기존 미커밋 변경. 사용자 생성물과 다른 저장소의 작업은 보존한다.

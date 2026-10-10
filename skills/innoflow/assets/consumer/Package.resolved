@@ -6,8 +6,8 @@
       "kind": "remoteSourceControl",
       "location": "https://github.com/InnoSquadCorp/InnoFlow.git",
       "state": {
-        "version": "6.0.0",
-        "revision": "188c2732d26350cf01afadade3dac89a2b73b68f"
+        "version": "6.0.2",
+        "revision": "1176de1e4783b638c03a9334f43cc49378957148"
       }
     },
     {

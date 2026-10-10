@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import sys
+from urllib.parse import quote
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 CONFIG = {'repository': 'InnoSquadCorp/InnoFlow', 'workflow': '.github/workflows/ci.yml', 'labels': ['release-validation', 'run-asan'], 'checks': ['CI Required', 'Build Documentation']}
@@ -77,6 +78,16 @@ def binding(pr):
     return (pr['number'], pr['head']['sha'], pr['base']['sha'], flags(pr))
 
 
+def base_tip(api, route, ref):
+    require(isinstance(ref, str) and bool(ref), 'missing base branch ref')
+    data = api.get(route + 'git/ref/heads/' + quote(ref, safe=''))
+    obj = data.get('object', {})
+    require(data.get('ref') == 'refs/heads/' + ref and obj.get('type') == 'commit' and
+            isinstance(obj.get('sha'), str) and re.fullmatch('[0-9a-f]{40}', obj['sha']),
+            'invalid live base branch identity')
+    return obj['sha']
+
+
 def belongs_to_other_pr(run, number):
     # PR associations are native API data. Missing/malformed/ambiguous evidence
     # stays eligible so an unknown or manual failure cannot disappear.
@@ -105,6 +116,12 @@ def prove(api, event, env, check_name='CI Required'):
     current = api.get(route + f'pulls/{number}')
     require(current.get('state') == 'open' and binding(current) == binding(pr), 'PR changed before validation')
     require(current['base']['repo']['full_name'] == repo, 'foreign base repository')
+    base_ref = pr['base'].get('ref')
+    require(current['base'].get('ref') == base_ref, 'PR base branch changed before validation')
+    # GitHub may retain the PR's recorded base SHA after the target branch
+    # advances. Keep that immutable event/title binding, but prove the actual
+    # merge against the live target tip, never an arbitrary first parent.
+    live_base = base_tip(api, route, base_ref)
     own_id = int(env['GITHUB_RUN_ID'])
     own = api.get(route + f'actions/runs/{own_id}')
     source = env['GITHUB_SHA']
@@ -113,8 +130,9 @@ def prove(api, event, env, check_name='CI Required'):
             'current run is not bound to the PR')
     require(own.get('run_attempt') == int(env['GITHUB_RUN_ATTEMPT']), 'current attempt changed')
     workflow = own['workflow_id']
+    require(current.get('merge_commit_sha') == source, 'checkout is not the current native PR merge')
     merge = api.get(route + 'git/commits/' + source)
-    require(merge.get('sha') == source and [p['sha'] for p in merge.get('parents', [])] == [base, head],
+    require(merge.get('sha') == source and [p['sha'] for p in merge.get('parents', [])] == [live_base, head],
             'checkout does not combine the current base and head')
     runs = api.pages(route + f'actions/workflows/{workflow}/runs?head_sha={head}', 'workflow_runs')
     validations = [r for r in runs if r.get('id') != own_id and
@@ -177,6 +195,9 @@ def prove(api, event, env, check_name='CI Required'):
             'newer real validation appeared')
     final_pr = api.get(route + f'pulls/{number}')
     require(final_pr.get('state') == 'open' and binding(final_pr) == binding(pr), 'PR changed during proof')
+    require(final_pr['base'].get('ref') == base_ref and final_pr['base']['repo']['full_name'] == repo and
+            final_pr.get('merge_commit_sha') == source, 'PR merge or base branch changed during proof')
+    require(base_tip(api, route, base_ref) == live_base, 'live base branch changed during proof')
     return dict(run=run['id'], attempt=attempt, head=head, base=base, source=source, check=check_name)
 
 

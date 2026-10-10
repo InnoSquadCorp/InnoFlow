@@ -1,5 +1,10 @@
 # InnoFlow 6.0.0 — 검증 신뢰성·매크로 호환성 추가 수정 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 - 문서 상태: **Draft**, 2026-09-10. 실행 상태: **로컬 hardening 구현·검증 진행 / 배포 gate 미충족**.
 - 이 문서의 Swift 블록은 당시 검토 반례를 설명하는 부분 소스이며, 6.0.0 앱에 그대로 복사할 수 있는 예제가 아니다. 현재 사용법은 README와 MIGRATION.md를 따른다.
 - 잔여 작업 계획: [배포 차단 조건 해소 — IF6-R39~R45](RELEASE_BLOCKER_PLAN_6_0.md), 2026-09-11. R33의 명령 실행 계약을 재개하고 R34/R37/R38의 미완료 작업을 구체화한다. 아래 실행 이력은 보존하되 최신 완료 판정은 잔여 계획을 따른다.

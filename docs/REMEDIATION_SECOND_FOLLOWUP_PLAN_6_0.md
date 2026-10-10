@@ -1,9 +1,14 @@
 # InnoFlow 6.0.0 — 취소·진단·매크로 계약 후속 수정 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 - 문서 상태: **Draft**, 작성일 2026-09-07, 실행 기록 갱신 2026-09-08.
 - 구현 상태: **R16~R22 구현·집중 검증 통과, R23 실패·열림, R24 부분 통과**. 전체 로컬 검증 상태: **미완료**.
 - 결정권자: 프로젝트 소유자. 구현 담당: 후속 실행 담당자. 리뷰 담당자·승인일: 미기록.
-- 근거: [2026-09-07 재검토 보고서](/tmp/innoflow-followup-review-20260907.RQym7k/REVIEW.md)의 F1~F7 및 G1~G2. 이 문서의 발견 번호는 해당 보고서에 한정한다.
+- 근거: 2026-09-07 재검토 보고서 (unavailable historical artifact: `/tmp/innoflow-followup-review-20260907.RQym7k/REVIEW.md`)의 F1~F7 및 G1~G2. 이 문서의 발견 번호는 해당 보고서에 한정한다.
 - 관계: [기존 구현 계획](IMPLEMENTATION_PLAN_6_0.md)의 FR-001~007/NFR-001~005와 [첫 후속 계획](REMEDIATION_FOLLOWUP_PLAN_6_0.md)의 FR-008을 유지한다. 이전 IF6-R01~R15는 재번호 부여하지 않으며 새 작업은 **IF6-R16~R24**다.
 - 현재 판정: 기존 통과 이력은 보존하지만, 새 반례와 미실행 필수 검증이 있으므로 이전의 “로컬 구현 및 검증 완료”를 현재 상태로 사용하지 않는다.
 
@@ -17,7 +22,7 @@
 - InnoFlow 기준은 `release/6.0.0-local`, HEAD `00a73ed2d2cb94114b0be5c9fbd59c187a4b67c7`와 미커밋 변경이다. 물별 기준은 `main`, HEAD `092ff9514695ceae5cfd490388e017fac331e30a`와 미커밋 변경이다.
 - 직전 검토의 237개 파일 manifest는 SHA-256 `69ebfde89345b4f21df0f9c16e66ebb34d3a1c38c578981542837ffeafb152d5`이며 당시 현재 파일과 불일치가 없었다. 구현 시작 때 다시 확인한다. 이 해시는 저장소 전체나 배포 SHA가 아니다.
 - 계획 작성 시작 시 Git 상태 항목은 InnoFlow 154개, 물별 24개다. 기존 작업을 보존한다.
-- [Package.swift](/Users/changwooson/Developer/InnoSquad/InnoFlow/Package.swift)는 Swift tools 6.3, iOS 18/macOS 15/tvOS 18/watchOS 11/visionOS 2를 선언한다. [물별 Package.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Package.swift)는 로컬 InnoFlow 경로를 사용한다.
+- [Package.swift](../Package.swift)는 Swift tools 6.3, iOS 18/macOS 15/tvOS 18/watchOS 11/visionOS 2를 선언한다. 물별 Package.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Package.swift`)는 로컬 InnoFlow 경로를 사용한다.
 - 직전 검토 환경은 Swift 6.4/Xcode 27이다. 설치 runtime 목록에는 iOS/tvOS 18.5, watchOS 11.5, visionOS 2.5 및 각각 27.0이 있었다. 목록 존재와 실행 가능성·합격은 다르다. 정확한 Swift 6.3 실행 증거는 없다.
 - 이번 계획 작성에서는 테스트·UI를 재실행하지 않았다. 위 실행 결과는 링크된 직전 검토의 기록이다.
 
@@ -65,9 +70,9 @@
 변경 대상:
 
 - 신규 후보: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsLoadLifecycle.swift`
-- [TrainingRecordsFeature.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsFeature.swift)
-- [iOS scene](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/iOS/TrainingRecordsCurrentExperienceScene.swift), [shared scene](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsScene.swift)
-- [feature tests](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/Tests/TrainingRecordsFeatureTests.swift), 신규 owner tests, [navigation UI tests](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift)
+- TrainingRecordsFeature.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsFeature.swift`)
+- iOS scene (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/iOS/TrainingRecordsCurrentExperienceScene.swift`), shared scene (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsScene.swift`)
+- feature tests (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/Features/TrainingRecords/Tests/TrainingRecordsFeatureTests.swift`), 신규 owner tests, navigation UI tests (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift`)
 
 설계안은 **앱 내부 MainActor owner + await 가능한 소유 요청 핸들**이다. 기존 raw FlowTask와 domain rollback을 결합하는 프레임워크 변경안은 제외한다. 단순 onDisappear 정리만으로 유지하는 안은 caller/직접 핸들 취소를 커버하지 못한다.
 
@@ -97,10 +102,10 @@
 
 변경 대상:
 
-- [EffectRunScheduler.swift](/Users/changwooson/Developer/InnoSquad/InnoFlow/Sources/InnoFlowCore/EffectRunScheduler.swift)
-- [Store+EffectDriver.swift](/Users/changwooson/Developer/InnoSquad/InnoFlow/Sources/InnoFlowCore/Store+EffectDriver.swift), [StoreDiagnostics.swift](/Users/changwooson/Developer/InnoSquad/InnoFlow/Sources/InnoFlowCore/StoreDiagnostics.swift)
-- [TestStore scheduler adapter](/Users/changwooson/Developer/InnoSquad/InnoFlow/Sources/InnoFlowTesting/TestStore+EffectRunScheduler.swift)
-- [DispatchDiagnosticsTests.swift](/Users/changwooson/Developer/InnoSquad/InnoFlow/Tests/InnoFlowTests/DispatchDiagnosticsTests.swift), [EffectRunSchedulerTests.swift](/Users/changwooson/Developer/InnoSquad/InnoFlow/Tests/InnoFlowTests/EffectRunSchedulerTests.swift)
+- [EffectRunScheduler.swift](../Sources/InnoFlowCore/EffectRunScheduler.swift)
+- [Store+EffectDriver.swift](../Sources/InnoFlowCore/Store+EffectDriver.swift), [StoreDiagnostics.swift](../Sources/InnoFlowCore/StoreDiagnostics.swift)
+- [TestStore scheduler adapter](../Sources/InnoFlowTesting/TestStore+EffectRunScheduler.swift)
+- [DispatchDiagnosticsTests.swift](../Tests/InnoFlowTestingTests/DispatchDiagnosticsTests.swift), [EffectRunSchedulerTests.swift](../Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift)
 
 1. pending 진입/시작/취소/교체/종료 callback에 같은 scheduled token을 연결한다. 물리 run token과 dispatch ID는 대체 식별자로 사용하지 않는다.
 2. diagnostics는 live queued token 집합 또는 동등한 멱등 상태를 기준으로 count를 산출한다. 단순 dispatch 정수 증감은 같은 dispatch의 여러 lane을 구분하지 못하므로 유지하지 않는다.
@@ -112,7 +117,7 @@
 
 ## 7. R19 — 복합 조건의 의미 보존
 
-변경 대상은 [Output 합성기](/Users/changwooson/Developer/InnoSquad/InnoFlow/Sources/InnoFlowMacros/InnoFlowMacro+OutputPathSynthesis.swift), 신규 작은 조건 표현 helper, [macro tests](/Users/changwooson/Developer/InnoSquad/InnoFlow/Tests/InnoFlowMacrosTests/InnoFlowMacrosTests.swift), [compile contracts](/Users/changwooson/Developer/InnoSquad/InnoFlow/Tests/InnoFlowTests/CompileContractTests.swift)와 신규 fixture다.
+변경 대상은 [Output 합성기](../Sources/InnoFlowMacros/InnoFlowMacro+OutputPathSynthesis.swift), 신규 작은 조건 표현 helper, [macro tests](../Tests/InnoFlowMacrosTests/InnoFlowMacrosTests.swift), [compile contracts](../Tests/InnoFlowTests/CompileContractTests.swift)와 신규 fixture다.
 
 1. SwiftSyntax의 조건 expression tree에서 괄호, prefix not, and/or의 범위를 구분한다. 문자열 맨 앞 `!`를 잘라 전체 식의 부정으로 바꾸지 않는다.
 2. 원래 조건 source를 보존하고 필요한 경우 `!(원래 전체 식)`처럼 명시적인 괄호로 여집합을 만든다. 단순 문자열 조작안 대신 작은 내부 조건 표현을 사용하되 범용 SAT solver나 새 외부 의존성은 도입하지 않는다.
@@ -123,7 +128,7 @@
 
 ## 8. R20 — 배타 조건과 실제 충돌 진단
 
-R19의 조건 helper를 재사용한다. 추가 검증 대상은 [OutputCasePathTests.swift](/Users/changwooson/Developer/InnoSquad/InnoFlow/Tests/InnoFlowTests/OutputCasePathTests.swift)와 macro/compile contracts다.
+R19의 조건 helper를 재사용한다. 추가 검증 대상은 [OutputCasePathTests.swift](../Tests/InnoFlowTests/OutputCasePathTests.swift)와 macro/compile contracts다.
 
 1. 의미 없는 바깥 괄호를 syntax 기준으로 정규화한다. `P`/`(P)`/`!P`/`!(P)`의 명백한 관계와 상호 배타적 `os(...)` atom을 구분한다. 복합 `os(...) || ...` 전체를 단일 플랫폼 atom으로 오인하지 않는다.
 2. 겹침을 확정하지 못했다는 이유만으로 비활성 선언에 무조건 macro 오류를 내지 않는다. 원래 조건 아래 선언을 생성하거나 조건부 진단을 구성해 실제 활성 충돌을 compiler가 거절하게 한다. 구체적인 생성 형태는 작은 compile fixture에서 먼저 확인한다.
@@ -157,9 +162,9 @@ R19의 조건 표현과 R21의 availability 구조를 재사용한다. 변경 �
 
 변경 대상:
 
-- [AccessibilityAuditUITests.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/AccessibilityAuditUITests.swift), 신규 대상 전용 audit fixture/테스트
-- [TrainingRecordsNavigationUITests.swift](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift)
-- [TrainingRecords QA 문서](/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/docs/TRAINING_RECORDS_QA.md)
+- AccessibilityAuditUITests.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/AccessibilityAuditUITests.swift`), 신규 대상 전용 audit fixture/테스트
+- TrainingRecordsNavigationUITests.swift (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/App/UITests/Sources/TrainingRecordsNavigationUITests.swift`)
+- TrainingRecords QA 문서 (unavailable historical artifact: `/Users/changwooson/Developer/InnoSquad/Projects/Mulbyul/Apple/docs/TRAINING_RECORDS_QA.md`)
 - 실제 실패를 재현한 경우에만 관련 TrainingRecords 화면/semantic text 사용부
 
 1. root `100%`, row `01:30`, row `4/4`, detail summary `4/4`, set status `성공`과 More/편집 Save를 안정된 식별자로 추적한다. 각 항목의 실제 포함 화면과 검사 결과를 별도로 기록한다.
@@ -174,7 +179,7 @@ R19의 조건 표현과 R21의 availability 구조를 재사용한다. 변경 �
 
 ## 12. R24 — 동일 후보의 통합 검증과 완료 판정
 
-변경 후보: [CI](/Users/changwooson/Developer/InnoSquad/InnoFlow/.github/workflows/ci.yml), [CD](/Users/changwooson/Developer/InnoSquad/InnoFlow/.github/workflows/cd.yml), [principle gate](/Users/changwooson/Developer/InnoSquad/InnoFlow/scripts/principle-gates.sh)와 [구현부](/Users/changwooson/Developer/InnoSquad/InnoFlow/scripts/principle-gates-lib.sh), 해당 self-test, MACRO_OPERATIONS/QUALITY_REVIEW/실행 정책 ADR/기존 계획의 후속 실행 기록. 배포 동작 자체는 실행하지 않는다.
+변경 후보: [CI](../.github/workflows/ci.yml), [CD](../.github/workflows/cd.yml), [principle gate](../scripts/principle-gates.sh)와 [구현부](../scripts/principle-gates-lib.sh), 해당 self-test, MACRO_OPERATIONS/QUALITY_REVIEW/실행 정책 ADR/기존 계획의 후속 실행 기록. 배포 동작 자체는 실행하지 않는다.
 
 ### 검증 행렬
 

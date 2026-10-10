@@ -10,6 +10,9 @@ require_relative "release-evidence-output-parser"
 require_relative "doc-example-contexts"
 
 root = File.realpath(File.expand_path("..", __dir__))
+parity, error, status = Open3.capture3("python3", File.join(__dir__, "check-readme-parity.py"), "--root", root)
+abort "[doc-copyable] README parity failed: #{error}" unless status.success?
+print parity
 review, error, status = Open3.capture3("ruby", File.join(__dir__, "report-doc-fence-review.rb"), "--require-complete")
 abort "[doc-copyable] Complete fence review failed: #{error}" unless status.success?
 print review
@@ -19,14 +22,14 @@ examples = {
     ["Sources/InnoFlow/InnoFlow.docc/GettingStarted.md", "60b1f62c30490f0db8c4ffa08b3f78309fe311fcc007f24a591a585527589d51"],
   ],
   "ReadmeDependencyInjection" => [
-    ["README.md", "d6799f402603bfa90bfa249d399e7821517b7e91a74929bd28d2d98321e8242f"],
+    ["docs/USER_GUIDE.md", "d6799f402603bfa90bfa249d399e7821517b7e91a74929bd28d2d98321e8242f"],
   ],
   "ReadmeSelection" => [
-    ["README.md", "b0cfdb0069f6c60d4717e805bcb93f7a476600dfc4376d1769fee7c40d942c84"],
-    ["README.md", "e0007ef8f348acf754f9cd91b8c9af135c63f5d037dc5b628d91347a73aa0bc9"],
-    ["README.md", "2d69a1029cbb91f30cf0cb4a82a5f5e2e5389db7c9c5f2536aca3720cc08d1ac"],
-    ["README.md", "035488092619f0f3049835027c4ecb7ca7c7ea3453de98f6332e58bef7e12fe9"],
-    ["README.md", "370136f1aefef6b5e0b64b3b299b4321f71203bd251f56c39999d1b8713486f2"],
+    ["docs/USER_GUIDE.md", "b0cfdb0069f6c60d4717e805bcb93f7a476600dfc4376d1769fee7c40d942c84"],
+    ["docs/USER_GUIDE.md", "e0007ef8f348acf754f9cd91b8c9af135c63f5d037dc5b628d91347a73aa0bc9"],
+    ["docs/USER_GUIDE.md", "2d69a1029cbb91f30cf0cb4a82a5f5e2e5389db7c9c5f2536aca3720cc08d1ac"],
+    ["docs/USER_GUIDE.md", "035488092619f0f3049835027c4ecb7ca7c7ea3453de98f6332e58bef7e12fe9"],
+    ["docs/USER_GUIDE.md", "370136f1aefef6b5e0b64b3b299b4321f71203bd251f56c39999d1b8713486f2"],
   ],
   "ContributorPhaseGuide" => [
     ["CLAUDE.md", "58f2e554319fa7393e3b198acdaf683eceec867e63e1459a8ae4e7c96c7465e8"],
@@ -36,7 +39,7 @@ examples = {
   "ContributorChildGuide" => [
     ["CLAUDE.md", "d7e82607cc8c67a3a69b56ae2b0beb22dd10fe905453cb113a72a63b7a92770a"],
     ["CLAUDE.md", "5178b34e63e5e8611103968258bc740110e15c68dd74c723b21b917ee1bb812d"],
-    ["README.md", "5178b34e63e5e8611103968258bc740110e15c68dd74c723b21b917ee1bb812d"],
+    ["docs/USER_GUIDE.md", "5178b34e63e5e8611103968258bc740110e15c68dd74c723b21b917ee1bb812d"],
   ],
   "PhaseGuideFeature" => [
     ["PHASE_DRIVEN_MODELING.md", "5a1c5fa991819e6afab1e975945498539caf63634d0f610a9219374d1023b85c"],
@@ -48,31 +51,47 @@ examples = {
     ["Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md", "37aef6225e84c59299e8d44290b6ae2c47befee5ddf9457bb0681ddf7fc83552"],
   ],
   "ReadmePhaseRuntime" => [
-    ["README.md", "74e84070d7dfd0ec5d6d803dd3772ffa8a4d2f31f5401076ae779c125e9b68ff"],
-    ["README.md", "acea7240e0b3338ae01cda5dab43c23a7dee2b6d022b3b505c401ca1e8774a89"],
-    ["README.md", "c795fc8a9041a817a625f2ad33058e6f945c609572d365b26eca7d0214ed0abb"],
-    ["README.md", "23712f236ffc46a089f04ffa283acbc29231c8c2551b261148d18ae0895185f0"],
-    ["README.md", "e45bac53a844f228fe18fd5bb015d13a2f1b724e5b7e3c17c1efa2ffeb6624db"],
+    ["docs/USER_GUIDE.md", "74e84070d7dfd0ec5d6d803dd3772ffa8a4d2f31f5401076ae779c125e9b68ff"],
+    ["docs/USER_GUIDE.md", "acea7240e0b3338ae01cda5dab43c23a7dee2b6d022b3b505c401ca1e8774a89"],
+    ["docs/USER_GUIDE.md", "c795fc8a9041a817a625f2ad33058e6f945c609572d365b26eca7d0214ed0abb"],
+    ["docs/USER_GUIDE.md", "23712f236ffc46a089f04ffa283acbc29231c8c2551b261148d18ae0895185f0"],
+    ["docs/USER_GUIDE.md", "e45bac53a844f228fe18fd5bb015d13a2f1b724e5b7e3c17c1efa2ffeb6624db"],
   ],
   "DocCPhaseRuntime" => [
     ["Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md", "37aef6225e84c59299e8d44290b6ae2c47befee5ddf9457bb0681ddf7fc83552"],
     ["Sources/InnoFlow/InnoFlow.docc/PhaseDrivenModeling.md", "78535a0d5fb4b143dcb0e9318bebcb848f9fb2b9fbd7d09f8c5e15b896968919"],
   ],
   "ReadmeEnglish" => [
-    ["README.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
-    ["README.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
+    ["docs/USER_GUIDE.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
+    ["docs/USER_GUIDE.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
   ],
   "ReadmeKorean" => [
-    ["README.kr.md", "dc7f9a836da4c857e0443ab46b240a9d9ff6ca904f4e7b98a48636044ea12759"],
-    ["README.kr.md", "dedbc2f5bfb98fee0406b0224e27c798c6e5b1116cef5a250bc76c1f0a41f706"],
+    ["README.ko.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
+    ["README.ko.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
   ],
-  "ReadmeJapanese" => [
-    ["README.jp.md", "dc7f9a836da4c857e0443ab46b240a9d9ff6ca904f4e7b98a48636044ea12759"],
-    ["README.jp.md", "dedbc2f5bfb98fee0406b0224e27c798c6e5b1116cef5a250bc76c1f0a41f706"],
+  "ReadmeSpanish" => [
+    ["README.es.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
+    ["README.es.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
+  ],
+  "ReadmeGerman" => [
+    ["README.de.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
+    ["README.de.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
   ],
   "ReadmeChinese" => [
-    ["README.cn.md", "dc7f9a836da4c857e0443ab46b240a9d9ff6ca904f4e7b98a48636044ea12759"],
-    ["README.cn.md", "dedbc2f5bfb98fee0406b0224e27c798c6e5b1116cef5a250bc76c1f0a41f706"],
+    ["README.zh-Hans.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
+    ["README.zh-Hans.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
+  ],
+  "ReadmeJapanese" => [
+    ["README.ja.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
+    ["README.ja.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
+  ],
+  "ReadmeRussian" => [
+    ["README.ru.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
+    ["README.ru.md", "bad2b5cb67df16db6252b825451065a2c0a6d1786ab4cdcef15ad6cffcd09475"],
+  ],
+  "ReadmeCounterTest" => [
+    ["README.md", "a14d2c9dce587f7877a2a9b58820ffe2f45314e2ae4f35fe1a6a2ff7a5ac2399"],
+    ["README.md", "a8b440ae89ea7cffdd3d24547742294a209880a85b726ff1a0cb1a162d3cd027"],
   ],
   "CrossFrameworkChatTransport" => [
     ["docs/CROSS_FRAMEWORK.md", "65a189bf009dbde02b91ceaef847743fa92d5cda04a1f1468e37b45985317a69"],
@@ -82,7 +101,7 @@ examples = {
     ["docs/INSTRUMENTATION_COOKBOOK.md", "897cd0e48ff3a5a817ad5e385a8157d46eac4198f030cabc1e4f8a5c72f1643a"],
   ],
   "ReadmeInstrumentation" => [
-    ["README.md", "1e75c7303c1b9b1da14e1f77d2be5e9c7ae9b53a744ab0047945713c9b9b78bd"],
+    ["docs/USER_GUIDE.md", "1e75c7303c1b9b1da14e1f77d2be5e9c7ae9b53a744ab0047945713c9b9b78bd"],
   ],
   "CookbookRunFailure" => [
     ["docs/INSTRUMENTATION_COOKBOOK.md", "70e1be4cffb7d70770b0514bde4e860a1a412a8909da9fef2fa62d47650b2aa4"],
@@ -112,8 +131,8 @@ def swift_blocks(root, relative)
   blocks
 end
 
-selected = examples.values.flatten(1).map(&:first).uniq.to_h { |relative| [relative, swift_blocks(root, relative)] }
-runtime_examples = (%w[ReadmePhaseRuntime DocCPhaseRuntime ContributorPhaseGuide ContributorChildGuide PhaseGuideFeature] +
+selected = (examples.values.flatten(1).map(&:first) + %w[docs/USER_GUIDE.md README.md README.ko.md README.es.md README.de.md README.zh-Hans.md README.ja.md README.ru.md]).uniq.to_h { |relative| [relative, swift_blocks(root, relative)] }
+runtime_examples = (%w[ReadmeCounterTest ReadmePhaseRuntime DocCPhaseRuntime ContributorPhaseGuide ContributorChildGuide PhaseGuideFeature] +
   DocExampleContexts::TEST_NAMES.keys).freeze
 fixture = ENV["INNOFLOW_DOC_FIXTURE"] || Dir.mktmpdir("innoflow-doc-copyable-")
 marker = File.join(fixture, ".innoflow-doc-fixture")
@@ -369,20 +388,7 @@ begin
           func log(_ message: String) {}
         }
       SWIFT
-    elsif %w[ReadmeKorean ReadmeJapanese ReadmeChinese].include?(name)
-      feature, stepper = sources
-      sources = [feature, <<~SWIFT]
-        import InnoFlowSwiftUI
-        import SwiftUI
 
-        struct LocalizedExampleView: View {
-          @State private var store = Store(reducer: CounterFeature())
-
-          var body: some View {
-        #{stepper.lines.map { |line| "    #{line}" }.join.rstrip}
-          }
-        }
-      SWIFT
     end
     sources = DocExampleContexts.source(root, name, sources) if DocExampleContexts::EXAMPLES.key?(name)
     source_directory = File.join(fixture, runtime_examples.include?(name) ? "Tests" : "Sources", name)
@@ -417,7 +423,7 @@ begin
   print output
   warn error unless error.empty?
   abort "[doc-copyable] External phase example tests failed" unless status.success?
-  expected_test_names = ["loadFlow()", "validatesItemsPhaseTransitions()", "loadingFlow()", "scopedChildFlow()", "scopedReadmeChildFlow()", "phaseGuideTestSideValidation()", "phaseGuideContractValidation()", "readmePhaseGraphValidation()", "readmePhaseTotalityValidation()"] +
+  expected_test_names = ["readmeCounter()", "loadFlow()", "validatesItemsPhaseTransitions()", "loadingFlow()", "scopedChildFlow()", "scopedReadmeChildFlow()", "phaseGuideTestSideValidation()", "phaseGuideContractValidation()", "readmePhaseGraphValidation()", "readmePhaseTotalityValidation()"] +
     DocExampleContexts::TEST_NAMES.values.flatten
   test_result = ReleaseEvidenceOutputParser.parse({
     # SwiftPM may group test targets into one run (Xcode 26) or emit separate
@@ -429,17 +435,17 @@ begin
   abort "[doc-copyable] Phase test evidence invalid: #{test_result.fetch("failures").join(", ")}" unless
     test_result.fetch("failures").empty?
 
-  install_files = %w[README.md README.kr.md README.jp.md README.cn.md]
+  install_files = %w[docs/USER_GUIDE.md README.md README.ko.md README.es.md README.de.md README.zh-Hans.md README.ja.md README.ru.md]
   install_files.each do |relative|
     fragments = {
       dependency: "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
-      targets: "56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85",
+      targets: "59e63b72f151296d6324852f77d759567b8dbabeefd73d738a577fe0518ff204",
     }.transform_values do |digest|
       matches = selected.fetch(relative).select { |sha, _source| sha == digest }
       abort "[doc-copyable] Missing or ambiguous install fence: #{relative} #{digest}" unless matches.one?
       matches.first.last
     end
-    install_dir = File.join(fixture, "InstallManifest", relative.delete_suffix(".md"))
+    install_dir = File.join(fixture, "InstallManifest", relative.delete_suffix(".md").tr("/", "-"))
     FileUtils.mkdir_p(install_dir)
     manifest = <<~SWIFT
       // swift-tools-version: 6.3
@@ -464,7 +470,7 @@ begin
     abort "[doc-copyable] #{relative} install version drifted" unless output.include?("6.0.2")
   end
   puts "[doc-copyable] Compiled #{examples.length} external targets from #{examples.values.flatten(1).uniq.length} distinct exact Swift fences (#{examples.values.sum(&:length)} uses)"
-  puts "[doc-copyable] Parsed four localized installation manifests from eight exact Swift fences"
+  puts "[doc-copyable] Parsed #{install_files.length} installation manifests from #{install_files.length * 2} exact Swift fences"
 ensure
   if ENV["INNOFLOW_KEEP_DOC_FIXTURE"] == "1" || ENV["INNOFLOW_DOC_FIXTURE"]
     warn "[doc-copyable] Preserved fixture: #{fixture}"

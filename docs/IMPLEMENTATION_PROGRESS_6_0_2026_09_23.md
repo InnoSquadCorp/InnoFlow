@@ -1,5 +1,10 @@
 # InnoFlow 6.0.0 local implementation progress — 2026-09-23
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 This is an execution log for [PRE_RELEASE_EXECUTION_PLAN_6_0.md](PRE_RELEASE_EXECUTION_PLAN_6_0.md),
 not a release-readiness claim. Baseline: `release/6.0.0-local` at
 `dbd6cfec40e302fc03ac9f8f35ff810d30d48014`. The working tree already

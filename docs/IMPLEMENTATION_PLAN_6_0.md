@@ -1,5 +1,10 @@
 # InnoFlow 6.0.0 — 1~7단계 코드 작업 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 > 2026-09-23 계획 개정: 물별 검증 제외(9월 18일)는 유지한다. [종합 검토](COMPREHENSIVE_REVIEW_6_0_2026_09_23.md)를 반영한 현재 순서는 [배포 전 실행 계획](PRE_RELEASE_EXECUTION_PLAN_6_0.md)의 **R68 → R69 → R59~R67**이다. 신규 FR-009/010은 해당 계획의 Draft 요구사항이며 기존 FR-008(물별)은 범위 제외 상태로 보존한다. [R52~R58](FRAMEWORK_ONLY_REMEDIATION_PLAN_6_0.md)의 구현 이력과 미충족 조건도 계승한다. 아래 과거 완료 표시는 새 후보의 완료를 뜻하지 않는다.
 
 - 상태: **1~7 implementation complete · local RC verification complete** · 작성 기준: 2026-09-05 로컬 소스
@@ -29,7 +34,7 @@
 | dispatch별 FlowTask와 captured output이 있다. | [FlowTask.swift](../Sources/InnoFlowCore/FlowTask.swift), [CLAUDE.md](../CLAUDE.md) | scope와 진단은 기존 dispatch 수명에 연결한다. |
 | output의 exact/predicate/CasePath 테스트가 이미 있다. | [TestStore+Output.swift](../Sources/InnoFlowTesting/TestStore+Output.swift) | 새 매칭 엔진 대신 scoped 전달과 매크로 작성을 보완한다. |
 | ScopedTestStore는 ChildOutput 형식이나 원본 child reducer를 보유하지 않는다. | [ScopedTestStore.swift](../Sources/InnoFlowTesting/ScopedTestStore.swift) | 원본 child output을 자동 복원한다고 약속하지 않는다. |
-| 물별은 persistence revision/FIFO와 busy guard를 직접 관리한다. | [Settings queue](../../Projects/Mulbyul/Apple/Features/Settings/Logics/SettingsPreferencesPersistenceQueue.swift), [Settings reducer](../../Projects/Mulbyul/Apple/Features/Settings/Logics/SettingsFeatureReducer+Preferences.swift), [TrainingRecords](../../Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsFeature.swift), [Routine editor](../../Projects/Mulbyul/Apple/Features/Training/UIs/Shared/TrainingRoutineEditorFeature.swift) | 공통 실행 제어와 앱의 저장 순서·롤백 정책을 분리해서 파일럿한다. |
+| 물별은 persistence revision/FIFO와 busy guard를 직접 관리한다. | Settings queue (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Features/Settings/Logics/SettingsPreferencesPersistenceQueue.swift`), Settings reducer (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Features/Settings/Logics/SettingsFeatureReducer+Preferences.swift`), TrainingRecords (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Features/TrainingRecords/UIs/Shared/TrainingRecordsFeature.swift`), Routine editor (unavailable historical artifact: `../../Projects/Mulbyul/Apple/Features/Training/UIs/Shared/TrainingRoutineEditorFeature.swift`) | 공통 실행 제어와 앱의 저장 순서·롤백 정책을 분리해서 파일럿한다. |
 | 현재 패키지는 Swift tools 6.3, iOS 18/macOS 15/tvOS 18/watchOS 11/visionOS 2 이상이다. | [Package.swift](../Package.swift) | 5개 Apple SDK를 필수 검증하고 Core의 SwiftUI·매크로 독립성을 유지한다. |
 
 이 계획은 구현과 검증 결과에 맞춰 갱신했다. 현재 체크아웃에는 기존 tracked/untracked 변경이 많으므로 로컬 후보는 baseline HEAD가 아니라 아래 품질 문서에 기록한 working-tree snapshot과 검증 증거의 조합으로 식별한다.
