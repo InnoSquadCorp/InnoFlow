@@ -2,7 +2,7 @@
 
 This record distinguishes compatibility with published **5.1.1**
 (`00a73ed2d2cb94114b0be5c9fbd59c187a4b67c7`) from names introduced only in
-the unreleased 6.0 development branch. Compiler fixtures accompany each change;
+the prepublication 6.0 development branch (now shipped in 6.0.2). Compiler fixtures accompany each change;
 this document alone is not API validation or a release receipt.
 
 ## One testing dispatch handle
@@ -10,7 +10,7 @@ this document alone is not API validation or a release receipt.
 `TestStoreDispatch` is the canonical return type of root, scoped and phase-helper
 testing sends. Its name describes verification of one dispatch, including its
 descendants and unverified actions/outputs. The proposed `TestFlowTask` spelling
-was never part of 5.1.1 and will not ship as a second public alias. Draft users
+was never part of 5.1.1 and did not ship as a second public alias. Draft users
 replace that type spelling with `TestStoreDispatch`; ownership and finish behavior
 do not change. Statement sends remain discardable. A function value returning
 `Void` requires an explicit adapter, as documented in the stable migration guide.
@@ -58,5 +58,6 @@ Positive consumers compile canonical spellings and preserved 5.1.1 location
 calls. Negative controls reject removed draft names/labels and draft-only legacy
 location forms for the intended diagnostic. Source-derived API/test inventories,
 documentation examples and migration checks are updated in the same branch.
-The staged post-6.0 API digester becomes a strict baseline only after the real
-6.0.0 tag exists; the absence of that tag is not a compatibility PASS.
+The ongoing API digester is now strict against the published stable tag read
+from `STABLE_VERSION` (currently 6.0.2), across all five public products. A missing
+baseline tag is a failure, not a compatibility PASS.

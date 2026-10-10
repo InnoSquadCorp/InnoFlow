@@ -1,5 +1,10 @@
 # CI 개선 단계와 검증 범위
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 ## 1단계: 독립 job 병렬 실행과 제품 SDK build 선택
 
 CI Plan 이후 서로의 artifact를 소비하지 않는 native jobs를 병렬 실행한다.

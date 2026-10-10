@@ -13,7 +13,7 @@ It never changes or invokes `compare.py`, the separate 30-pair adoption tool.
 The new `Benchmark Trend (non-blocking)` workflow supports manual dispatch and
 ordinary, path-filtered pull requests. It uses `macos-26`, pinned existing
 checkout/upload actions, read-only repository permission, and no persisted
-checkout credentials. It does not change the 32-check Release Preflight.
+checkout credentials. It does not change the 28-check Release Preflight.
 
 There are exactly **seven measured pairs per scenario**, after two paired
 warmups. A is InnoFlow and B is TCA. Order alternates AB/BA within each scenario;

@@ -6,7 +6,9 @@
 
 ### InnoFlowSampleApp
 
-The canonical app demonstrates the full recommended story in one place:
+The canonical app uses this checkout's local package and requires Swift 6.3 or
+newer. It contains ten demos listed in [the complete sample guide](InnoFlowSampleApp/README.md).
+Start with these four:
 
 - `Basics`: `@InnoFlow`, `Store`, `@BindableField`, queue-based follow-up actions
 - `Orchestration`: parent-child orchestration, cancellation fan-out, long-running progress pipeline

@@ -1,46 +1,6 @@
 {
   "requiredPatterns": [
     {
-      "file": "README.md",
-      "label": "docs/DEPENDENCY_PATTERNS.md",
-      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
-    },
-    {
-      "file": "README.md",
-      "label": "docs/CROSS_FRAMEWORK.md",
-      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
-    },
-    {
-      "file": "README.kr.md",
-      "label": "docs/DEPENDENCY_PATTERNS.md",
-      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
-    },
-    {
-      "file": "README.kr.md",
-      "label": "docs/CROSS_FRAMEWORK.md",
-      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
-    },
-    {
-      "file": "README.jp.md",
-      "label": "docs/DEPENDENCY_PATTERNS.md",
-      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
-    },
-    {
-      "file": "README.jp.md",
-      "label": "docs/CROSS_FRAMEWORK.md",
-      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
-    },
-    {
-      "file": "README.cn.md",
-      "label": "docs/DEPENDENCY_PATTERNS.md",
-      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
-    },
-    {
-      "file": "README.cn.md",
-      "label": "docs/CROSS_FRAMEWORK.md",
-      "pattern": "docs/CROSS_FRAMEWORK\\.md|CROSS_FRAMEWORK\\.md"
-    },
-    {
       "file": "ARCHITECTURE_CONTRACT.md",
       "label": "docs/DEPENDENCY_PATTERNS.md",
       "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
@@ -79,6 +39,76 @@
       "file": "Sources/InnoFlow/InnoFlow.docc/InnoFlow.md",
       "label": "docs/CROSS_FRAMEWORK.md",
       "pattern": "CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.md",
+      "label": "dependency guide",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.md",
+      "label": "ownership guide",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.ko.md",
+      "label": "dependency guide",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.ko.md",
+      "label": "ownership guide",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.es.md",
+      "label": "dependency guide",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.es.md",
+      "label": "ownership guide",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.de.md",
+      "label": "dependency guide",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.de.md",
+      "label": "ownership guide",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.zh-Hans.md",
+      "label": "dependency guide",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.zh-Hans.md",
+      "label": "ownership guide",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.ja.md",
+      "label": "dependency guide",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.ja.md",
+      "label": "ownership guide",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md"
+    },
+    {
+      "file": "README.ru.md",
+      "label": "dependency guide",
+      "pattern": "docs/DEPENDENCY_PATTERNS\\.md"
+    },
+    {
+      "file": "README.ru.md",
+      "label": "ownership guide",
+      "pattern": "docs/CROSS_FRAMEWORK\\.md"
     }
   ],
   "sectionCounts": [
@@ -109,83 +139,159 @@
   ],
   "readmeCorePatterns": [
     {
-      "label": "Cross-framework boundary guide",
+      "label": "cross-framework guide",
       "pattern": "docs/CROSS_FRAMEWORK\\.md",
       "files": [
         "README.md",
-        "README.kr.md",
-        "README.jp.md",
-        "README.cn.md"
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
       ]
     },
     {
-      "label": "Dependency patterns guide",
+      "label": "dependency guide",
       "pattern": "docs/DEPENDENCY_PATTERNS\\.md",
       "files": [
         "README.md",
-        "README.kr.md",
-        "README.jp.md",
-        "README.cn.md"
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
       ]
     },
     {
-      "label": "Canonical bidirectional websocket sample identifier",
-      "pattern": "sample\\.bidirectional-websocket",
-      "files": [
-        "README.md",
-        "README.kr.md",
-        "README.jp.md",
-        "README.cn.md"
-      ]
-    },
-    {
-      "label": "Framework comparison guide",
+      "label": "framework comparison",
       "pattern": "docs/FRAMEWORK_COMPARISON\\.md",
       "files": [
         "README.md",
-        "README.kr.md",
-        "README.jp.md",
-        "README.cn.md"
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
       ]
     },
     {
-      "label": "TCA positioning section",
-      "pattern": "^## Why InnoFlow over TCA\\?$",
-      "files": [
-        "README.md",
-        "README.kr.md",
-        "README.jp.md",
-        "README.cn.md"
-      ]
-    },
-    {
-      "label": "SwiftUI integration product",
+      "label": "SwiftUI product",
       "pattern": "InnoFlowSwiftUI",
       "files": [
         "README.md",
-        "README.kr.md",
-        "README.jp.md",
-        "README.cn.md"
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
       ]
     },
     {
-      "label": "Core runtime product",
+      "label": "core product",
       "pattern": "InnoFlowCore",
       "files": [
         "README.md",
-        "README.kr.md",
-        "README.jp.md",
-        "README.cn.md"
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
       ]
     },
     {
-      "label": "TestStore exhaustivity contract",
+      "label": "Inspector product",
+      "pattern": "InnoFlowInspector",
+      "files": [
+        "README.md",
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
+      ]
+    },
+    {
+      "label": "testing product",
+      "pattern": "InnoFlowTesting",
+      "files": [
+        "README.md",
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
+      ]
+    },
+    {
+      "label": "exhaustivity",
       "pattern": "TestStore\\.exhaustivity",
       "files": [
         "README.md",
-        "README.kr.md",
-        "README.jp.md",
-        "README.cn.md"
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
+      ]
+    },
+    {
+      "label": "dispatch lifetime",
+      "pattern": "FlowTask",
+      "files": [
+        "README.md",
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
+      ]
+    },
+    {
+      "label": "output capture",
+      "pattern": "send\\(_?:capturingOutputs:\\)",
+      "files": [
+        "README.md",
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
+      ]
+    },
+    {
+      "label": "manual clock",
+      "pattern": "ManualTestClock",
+      "files": [
+        "README.md",
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
+      ]
+    },
+    {
+      "label": "macro recovery",
+      "pattern": "docs/MACRO_OPERATIONS.md",
+      "files": [
+        "README.md",
+        "README.ko.md",
+        "README.es.md",
+        "README.de.md",
+        "README.zh-Hans.md",
+        "README.ja.md",
+        "README.ru.md"
       ]
     }
   ],
@@ -193,25 +299,52 @@
     {
       "source": "README.md",
       "headerLevel": "## ",
-      "expectedSourceHeaderCount": 19,
+      "expectedSourceHeaderCount": 10,
       "translations": [
         {
-          "file": "README.kr.md",
-          "expectedHeaderCount": 14
+          "file": "README.ko.md",
+          "expectedHeaderCount": 10
         },
         {
-          "file": "README.jp.md",
-          "expectedHeaderCount": 14
+          "file": "README.es.md",
+          "expectedHeaderCount": 10
         },
         {
-          "file": "README.cn.md",
-          "expectedHeaderCount": 14
+          "file": "README.de.md",
+          "expectedHeaderCount": 10
+        },
+        {
+          "file": "README.zh-Hans.md",
+          "expectedHeaderCount": 10
+        },
+        {
+          "file": "README.ja.md",
+          "expectedHeaderCount": 10
+        },
+        {
+          "file": "README.ru.md",
+          "expectedHeaderCount": 10
         }
       ],
-      "rationale": "Baseline captured 2026-04-29 while the localized READMEs catch up to README.md. The check fails when README.md gains or loses an H2 without a matching expectedSourceHeaderCount bump, or when a translation drifts from its baseline. Update the baselines together with the translation work; the goal is parity, but the check guards against silent drift in the meantime."
+      "rationale": "Seven equivalent current entry READMEs. Code, link targets, version, section roles and critical identifiers are also checked by check-readme-parity.py; header counts alone do not establish semantic translation quality."
     }
   ],
   "sampleIdentifiers": [
+    {
+      "file": "Examples/InnoFlowSampleApp/README.md",
+      "values": [
+        "sample.basics",
+        "sample.orchestration",
+        "sample.phase-driven-fsm",
+        "sample.router-composition",
+        "sample.authentication-flow",
+        "sample.list-detail-pagination",
+        "sample.offline-first",
+        "sample.realtime-stream",
+        "sample.form-validation",
+        "sample.bidirectional-websocket"
+      ]
+    },
     {
       "file": "README.md",
       "values": [
@@ -228,7 +361,7 @@
       ]
     },
     {
-      "file": "README.kr.md",
+      "file": "README.ko.md",
       "values": [
         "sample.basics",
         "sample.orchestration",
@@ -243,7 +376,7 @@
       ]
     },
     {
-      "file": "README.jp.md",
+      "file": "README.es.md",
       "values": [
         "sample.basics",
         "sample.orchestration",
@@ -258,7 +391,7 @@
       ]
     },
     {
-      "file": "README.cn.md",
+      "file": "README.de.md",
       "values": [
         "sample.basics",
         "sample.orchestration",
@@ -273,7 +406,37 @@
       ]
     },
     {
-      "file": "Examples/InnoFlowSampleApp/README.md",
+      "file": "README.zh-Hans.md",
+      "values": [
+        "sample.basics",
+        "sample.orchestration",
+        "sample.phase-driven-fsm",
+        "sample.router-composition",
+        "sample.authentication-flow",
+        "sample.list-detail-pagination",
+        "sample.offline-first",
+        "sample.realtime-stream",
+        "sample.form-validation",
+        "sample.bidirectional-websocket"
+      ]
+    },
+    {
+      "file": "README.ja.md",
+      "values": [
+        "sample.basics",
+        "sample.orchestration",
+        "sample.phase-driven-fsm",
+        "sample.router-composition",
+        "sample.authentication-flow",
+        "sample.list-detail-pagination",
+        "sample.offline-first",
+        "sample.realtime-stream",
+        "sample.form-validation",
+        "sample.bidirectional-websocket"
+      ]
+    },
+    {
+      "file": "README.ru.md",
       "values": [
         "sample.basics",
         "sample.orchestration",
@@ -287,5 +450,15 @@
         "sample.bidirectional-websocket"
       ]
     }
-  ]
+  ],
+  "readmeLanguages": [
+    "README.md",
+    "README.ko.md",
+    "README.es.md",
+    "README.de.md",
+    "README.zh-Hans.md",
+    "README.ja.md",
+    "README.ru.md"
+  ],
+  "checkedOn": "2026-10-10"
 }

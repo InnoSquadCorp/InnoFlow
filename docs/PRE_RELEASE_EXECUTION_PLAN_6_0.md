@@ -1,5 +1,10 @@
 # InnoFlow 6.0.0 — 최종 배포 전 실행 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 > 2026-10-06 필수 runtime 정책 변경: 소유자 승인에 따라 iOS 18.5 / tvOS 18.5 /
 > watchOS 11.5 / visionOS 2.5 네 검증은 선택 사항이며, 필수 gate에서 제외하고
 > 자동 advisory 실행도 추가하지 않는다. 아래 과거 계획의 32개 필수 검증·8개

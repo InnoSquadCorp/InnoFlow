@@ -428,6 +428,13 @@ MARKDOWN_DOC_PATHS=()
 configure_principle_gate_paths() {
   DOC_AND_SAMPLE_PATHS=(
     "README.md"
+    "docs/USER_GUIDE.md"
+    "README.ko.md"
+    "README.es.md"
+    "README.de.md"
+    "README.zh-Hans.md"
+    "README.ja.md"
+    "README.ru.md"
     "CLAUDE.md"
     "AGENTS.md"
     "ARCHITECTURE_CONTRACT.md"
@@ -441,9 +448,12 @@ configure_principle_gate_paths() {
 
   MARKDOWN_DOC_PATHS=(
     "README.md"
-    "README.kr.md"
-    "README.jp.md"
-    "README.cn.md"
+    "README.ko.md"
+    "README.es.md"
+    "README.de.md"
+    "README.zh-Hans.md"
+    "README.ja.md"
+    "README.ru.md"
     "ARCHITECTURE_CONTRACT.md"
     "CHANGELOG.md"
     "RELEASE_NOTES.md"
@@ -845,6 +855,8 @@ run_doc_contract_checks() {
     exit 1
   fi
 
+  python3 "$SCRIPT_DIR/check-doc-links.py" --root "$ROOT_DIR"
+
   echo "[principle-gates] Checking ADR document format"
   local adr_dir="docs/adr"
   if [[ ! -d "$adr_dir" ]]; then
@@ -927,7 +939,7 @@ run_doc_contract_checks() {
     exit 1
   fi
   local lifecycle_doc
-  for lifecycle_doc in README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc/InnoFlow.md; do
+  for lifecycle_doc in docs/USER_GUIDE.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc/InnoFlow.md; do
     validate_selected_store_dynamic_member_doc "$lifecycle_doc" || exit 1
   done
   search_lines "dependingOn:" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
@@ -1091,7 +1103,7 @@ run_macro_operations_checks() {
   done
 
   local readme_file
-  for readme_file in README.md README.kr.md README.jp.md README.cn.md; do
+  for readme_file in README.md README.ko.md README.es.md README.de.md README.zh-Hans.md README.ja.md README.ru.md; do
     if ! grep -F 'docs/MACRO_OPERATIONS.md' "$readme_file" >/dev/null; then
       echo "[principle-gates] Failed: $readme_file must link to $operations_doc"
       exit 1

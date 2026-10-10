@@ -687,7 +687,7 @@ The supported v2 direction is direct composition at the app/coordinator boundary
 
 ### Migration Planning
 
-See [API_DESIGN_EVALUATION.md](API_DESIGN_EVALUATION.md) for full migration and evaluation details.
+See API_DESIGN_EVALUATION.md (unavailable historical artifact: `API_DESIGN_EVALUATION.md`) for full migration and evaluation details.
 
 1. Weighted comparison against external frameworks (TCA, ReactorKit, ReSwift, SwiftRex)
 2. v1 scorecard and API gap analysis

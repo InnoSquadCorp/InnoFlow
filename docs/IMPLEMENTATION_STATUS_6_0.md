@@ -1,5 +1,10 @@
 # InnoFlow 6.0 candidate verification status
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 ## 2026-10-04 Ready PR checkpoint
 
 [Ready PR #53](https://github.com/InnoSquadCorp/InnoFlow/pull/53) is published.

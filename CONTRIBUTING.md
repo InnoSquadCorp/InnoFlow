@@ -16,7 +16,7 @@ Read these files first:
 
 Those files define the current framework contract.
 
-The 6.0 development line requires Swift 6.3 or newer. Run validation with a
+The published 6.0.2 release and current development checkout require Swift 6.3 or newer. Run validation with a
 toolchain that satisfies that minimum before committing changes.
 
 ## Non-negotiable rules
@@ -90,4 +90,4 @@ Community-health and repository-operation changes must pass
 
 ## Validation prerequisites
 
-Repository validation requires Ruby 2.7 or newer on PATH. macOS system Ruby 2.6 is not sufficient. `scripts/principle-gates.sh` checks this before loading validation scripts; use a maintained Ruby installation rather than changing the system interpreter. Tagged releases require a real YYYY-MM-DD CHANGELOG date; development candidates retain Unreleased until release approval.
+Repository validation requires Ruby 2.7 or newer on PATH. macOS system Ruby 2.6 is not sufficient. `scripts/principle-gates.sh` checks this before loading validation scripts; use a maintained Ruby installation rather than changing the system interpreter. Tagged releases require a real YYYY-MM-DD CHANGELOG date. Set the approved candidate date before the CI preflight; it does not itself approve a tag or publication. Published 6.0.2 is dated 2026-10-08 in development metadata; immutable tag metadata retains its original candidate date.

@@ -1,5 +1,10 @@
 # InnoFlow 6.0 implementation ledger
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 This is the historical local-only implementation record from 2026-10-03.
 Publication was subsequently authorized for Ready PR #53; current verification
 boundaries are recorded in [IMPLEMENTATION_STATUS_6_0.md](IMPLEMENTATION_STATUS_6_0.md).

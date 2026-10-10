@@ -1,12 +1,17 @@
 # InnoFlow 6.0.0 — 추가 반례 6건과 소비자 품질 보완 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 > 2026-09-07 후속 검토 정정: 아래의 “로컬 구현 및 검증 완료”는 당시 실행 기록으로 보존한다. 이후 새 결함 6건과 기존 미해결 1건, 검증 공백 2건이 확인돼 현재 판정은 **추가 수정·재검증 필요**다. [두 번째 후속 계획](REMEDIATION_SECOND_FOLLOWUP_PLAN_6_0.md)의 IF6-R16~R24로 이어 가며, 해당 계획은 Draft·미착수다.
 
 - 문서 상태: **Draft**, 2026-09-06. 구현 상태: **로컬 구현 및 검증 완료** (2026-09-07).
 - 요청: 재검토에서 재현한 추가 수정 사항의 실제 코드 작업 계획 수립.
 - 결정권자: 프로젝트 소유자. 구현 담당: 후속 실행 담당자. 검토자·최종 승인일: 미기록.
 - 관계: [기존 수정 계획](REMEDIATION_PLAN_6_0.md)의 R01~R07과 [구현 계획](IMPLEMENTATION_PLAN_6_0.md)의 FR/NFR을 유지한다. 후속 작업 ID는 **IF6-R08~R15**로 이어 간다.
-- 근거: [수정 후 재검토 보고서](/tmp/innoflow-reaudit-20260906.O45hhU/REVIEW.md). 이 문서의 F1~F6은 해당 보고서의 번호이며 첫 검토의 F 번호와 다르다.
+- 근거: 수정 후 재검토 보고서 (unavailable historical artifact: `/tmp/innoflow-reaudit-20260906.O45hhU/REVIEW.md`). 이 문서의 F1~F6은 해당 보고서의 번호이며 첫 검토의 F 번호와 다르다.
 - 실행 순서: **준비 → R08 → R09 → R10 → R11 → R12 → R13 → R14 → R15**. 아래 실행 기록은 로컬 후보의 결과이며 리뷰 승인·커밋·푸시·태그·공개 배포를 뜻하지 않는다.
 
 ## 1. 목표와 범위

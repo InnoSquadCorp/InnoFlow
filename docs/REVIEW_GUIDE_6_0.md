@@ -88,6 +88,6 @@ requirements and remain unadopted. The subsequent source hypotheses and their
 unresolved large-State copy goal are described in
 `plans/CORE-COMPONENT-FOLLOWUP-2026-10-04.md`. No threshold is relaxed here.
 
-Apple API/runtime, SwiftUI/sample UI and the main-only 32-check Release Preflight
+Apple API/runtime, SwiftUI/sample UI and the main-only 28-check Release Preflight
 are separate evidence. A Ready pull request, source inventory or Linux result
 does not establish their completion. Merge, tag and release are separate actions.

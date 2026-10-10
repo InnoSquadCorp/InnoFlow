@@ -1,10 +1,11 @@
 # InnoFlow agent skill
 
 The canonical [InnoFlow skill](innoflow/SKILL.md) lives in this library repository.
-It supports stable **6.0.x** (`>=6.0.0, <6.1.0`) with an exact **6.0.0** tagged
-consumer baseline at `188c2732d26350cf01afadade3dac89a2b73b68f`. Support for a
-patch series is not a claim that all patches were tested. The tag exists;
-no matching GitHub Release page was found on 2026-10-07.
+It supports stable **6.0.x** (`>=6.0.0, <6.1.0`) with an exact **6.0.2** published
+consumer baseline at `1176de1e4783b638c03a9334f43cc49378957148`. Support for a
+patch series is not a claim that all patches were tested. The tag and matching
+GitHub Release (published 2026-10-08) were verified on 2026-10-10.
+The earlier 6.0.0 validation remains a separately dated historical record.
 
 ## Ownership and distribution
 
@@ -54,7 +55,8 @@ scratch directory. It never replaces the application's graph or installs an AI
 plugin. Each external command has a 3,600-second timeout; use
 `--command-timeout 7200` for a deliberately longer cold build. A timeout kills
 that command's process group, reaps the direct child, and records failed JSON
-evidence with the timeout, exit code and retained log. It never counts as a pass.
+evidence with the timeout, exit code and retained logs. Structured-command
+failure and timeout errors name both stdout and stderr log paths. It never counts as a pass.
 See [validation.md](validation.md) for results and boundaries.
 
 The fixture covers macro authoring, binding, phases, failure/retry, active error

@@ -45,7 +45,7 @@ copyable_pairs = copyable_source.scan(/\["([^"\n]+\.md)", "([0-9a-f]{64})"\]/)
 copyable_pairs += DocExampleContexts::EXAMPLES.values.flatten(1)
 copyable_install_digests = %w[
   663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84
-  56ee87a943747a398098b6f083eb5546084044d59a740f703b6052e2b4586d85
+  59e63b72f151296d6324852f77d759567b8dbabeefd73d738a577fe0518ff204
 ]
 review.each do |row|
   file = row.fetch("file")
@@ -58,8 +58,15 @@ review.each do |row|
       copyable_pairs.include?([file, digest])
   when "doc-copyable-install-manifest"
     abort "[doc-fence-review] Unbound install evidence: #{file} #{digest}" unless
-      %w[README.md README.kr.md README.jp.md README.cn.md].include?(file) &&
+      %w[docs/USER_GUIDE.md README.md README.ko.md README.es.md README.de.md README.zh-Hans.md README.ja.md README.ru.md].include?(file) &&
         copyable_install_digests.include?(digest) && copyable_source.include?(digest)
+  when "readme-parity-compiled"
+    # The parity checker requires byte-identical Swift fences in all languages.
+    canonical = inventory_by_key[["README.md", digest]]
+    abort "[doc-fence-review] Unbound README parity: #{file} #{digest}" unless
+      %w[README.md README.ko.md README.es.md README.de.md README.zh-Hans.md README.ja.md README.ru.md].include?(file) && canonical &&
+      copyable_pairs.any? { |source_file, sha| sha == digest &&
+        ["README.md", "docs/USER_GUIDE.md"].include?(source_file) }
   when "sample-concurrency-snippet"
     abort "[doc-fence-review] Invalid sample evidence: #{file}" unless
       file == "Examples/InnoFlowSampleApp/CLAUDE.md" && DocExampleContexts::SAMPLE_FENCES.include?(digest)

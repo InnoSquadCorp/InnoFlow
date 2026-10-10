@@ -1,5 +1,10 @@
 # 기능·CI 전용 통합 경계
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](../DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 2026-10-04. 기능·CI 변경을 미채택 성능 trial과 분리한다. 이 문서는
 소스 범위와 검증 계약이며 Apple 실행 또는 릴리스 준비 완료 증거가 아니다.
 

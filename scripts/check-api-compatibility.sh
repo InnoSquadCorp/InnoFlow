@@ -3,13 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-BASELINE_VERSION="${INNOFLOW_API_BASELINE:-6.0.0}"
 STABLE_VERSION_FILE="${INNOFLOW_STABLE_VERSION_FILE:-$ROOT_DIR/STABLE_VERSION}"
-
-if [[ ! "$BASELINE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-  echo "[api-compatibility] Invalid numeric SemVer baseline: $BASELINE_VERSION" >&2
-  exit 2
-fi
 
 if [[ ! -f "$STABLE_VERSION_FILE" ]]; then
   echo "[api-compatibility] Stable-version metadata is unavailable: $STABLE_VERSION_FILE" >&2
@@ -24,6 +18,13 @@ fi
 STABLE_VERSION="$(sed -n '1p' "$STABLE_VERSION_FILE")"
 if [[ ! "$STABLE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   echo "[api-compatibility] Invalid numeric SemVer in STABLE_VERSION: $STABLE_VERSION" >&2
+  exit 2
+fi
+
+BASELINE_VERSION="${INNOFLOW_API_BASELINE:-$STABLE_VERSION}"
+
+if [[ ! "$BASELINE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  echo "[api-compatibility] Invalid numeric SemVer baseline: $BASELINE_VERSION" >&2
   exit 2
 fi
 

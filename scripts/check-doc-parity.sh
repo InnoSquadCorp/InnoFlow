@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# Verifies that localized READMEs (kr/jp/cn) keep their H2 header counts in
-# sync with the baselines recorded in docs/contracts/doc-parity.json. The
-# baselines acknowledge the current localization gap; the script exists so
-# that future drift — adding an H2 to README.md without bumping the baseline
-# and translating, or losing an H2 from a translation — is caught in CI
-# instead of slipping through.
+# Verify seven-language structure and executable-example parity in addition
+# to the contract's section counts. Semantic prose remains a human review task.
 set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
@@ -83,5 +79,7 @@ done <<< "$parity_rows"
 if [[ "$failed" -ne 0 ]]; then
   exit 1
 fi
+
+python3 "$ROOT_DIR/scripts/check-readme-parity.py" --root "$ROOT_DIR"
 
 echo "[check-doc-parity] OK: localized header counts match recorded baselines"

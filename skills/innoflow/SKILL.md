@@ -5,14 +5,14 @@ description: Implement, test, diagnose, or migrate Swift state management with I
 
 # InnoFlow
 
-Help the consumer use its resolved InnoFlow API. Support covers stable **6.0.x** (`>=6.0.0, <6.1.0`); the exact tagged example and validation baseline are **6.0.0**. Supporting the patch series does not mean every patch was tested. This skill is self-contained and requires no other InnoSquad skill or MCP server.
+Help the consumer use its resolved InnoFlow API. Support covers stable **6.0.x** (`>=6.0.0, <6.1.0`); the exact tagged example and validation baseline are **6.0.2**. Supporting the patch series does not mean every patch was tested. This skill is self-contained and requires no other InnoSquad skill or MCP server.
 
 ## Establish the version
 
 Read the consumer's manifest, applicable `Package.resolved`, actual checkout or local override, targets, deployment floors, and Swift/Xcode version before editing. A declared range alone is not the resolved version.
 
 - For stable 6.0.x, use [support.json](references/support.json) and the relevant references below. For a later patch, inspect that tag's release notes, manifest, and relevant fixes, then test the actual consumer. Keep its resolved patch; do not downgrade to match this fixture.
-- For new adoption, check the latest published stable 6.0.x tag and project compatibility. The exact 6.0.0 fixture is a reproducible baseline, not an adoption requirement. A Git tag and a GitHub Release page are separate evidence.
+- For new adoption, check the latest published stable 6.0.x tag and project compatibility. The exact 6.0.2 fixture is a reproducible baseline, not an adoption requirement. A Git tag and a GitHub Release page are separate evidence.
 - For 5.x, 6.1 or later, prereleases, or unreleased `main`, inspect the actual version's source before borrowing examples. Do not silently upgrade, downgrade, or substitute a path dependency.
 - If resolution or source inspection is unavailable, state the uncertainty. A bundled fixture pass does not validate the user's app.
 
@@ -47,6 +47,6 @@ For this skill's own exact-baseline fixture, run Python 3 and Swift on an Apple 
 python3 scripts/validate_consumer.py --scratch-path /tmp/innoflow-skill-validation
 ```
 
-Run from the skill directory or use the script's absolute path. The helper copies the fixture outside the skill, resolves its remote pins, verifies the actual dependency graph and clean checkout SHAs, and records logs/JSON evidence. It tests 6.0.0, not every supported patch, and does not change the user's dependency graph. Cold-cache runs download dependencies.
+Run from the skill directory or use the script's absolute path. The helper copies the fixture outside the skill, resolves its remote pins, verifies the actual dependency graph and clean checkout SHAs, and records logs/JSON evidence. It tests 6.0.2, not every supported patch, and does not change the user's dependency graph. Cold-cache runs download dependencies.
 
 State the resolved version, changed behavior, checks actually run, and remaining boundaries. Keep compiled examples, runtime tests, device behavior, AI selection, and release readiness separate. This consumer check is not the library's CI-only release matrix.

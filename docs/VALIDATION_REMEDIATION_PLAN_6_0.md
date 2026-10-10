@@ -1,5 +1,10 @@
 # InnoFlow 6.0.0 — 검증·배포 경로 결함 수정 계획
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 > 2026-09-18 후속 결정: [프레임워크 단독 수정 계획](FRAMEWORK_ONLY_REMEDIATION_PLAN_6_0.md)의 R52~R58이 현재 활성 계획이다. 물별 검증은 사용자 지시로 제외하고 R48의 물별 checkout 검증 의무는 R52에서 제거한다. 아래 수행 이력은 보존하지만 R46/R47/R50은 추가 반례를 해결하기 전 완료로 판정하지 않는다. 물별 UI/VoiceOver 등의 기존 유지 문구는 이 결정으로 대체한다.
 
 - 상태: **추가 반례에 따라 R46/R47/R50 재개, 물별 검증 범위 제외**, 2026-09-18. 이전 로컬 회귀 이력은 보존한다.

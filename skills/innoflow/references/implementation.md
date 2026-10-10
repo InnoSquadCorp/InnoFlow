@@ -1,6 +1,6 @@
 # Authoring a 6.0.x feature
 
-These patterns use the tagged 6.0.0 baseline. Keep an existing consumer's stable 6.0.x patch and check its relevant changes before adapting the example.
+These patterns use the tagged 6.0.2 baseline. Keep an existing consumer's stable 6.0.x patch and check its relevant changes before adapting the example.
 
 ## Package and product boundaries
 
@@ -29,4 +29,4 @@ Runtime scoped stores and selections are projections of the parent. Do not creat
 
 `OptionalChildLifetime` / `.optionalChild` opt into state-owned effect cancellation. Use a fresh explicit instance ID on reopening, avoid duplicate child composition, and read the exact ownership contract before adopting it. Existing `IfLet` alone does not imply that new ownership contract.
 
-Exact 6.0.0 sources: [authoring and composition](https://github.com/InnoSquadCorp/InnoFlow/blob/188c2732d26350cf01afadade3dac89a2b73b68f/CLAUDE.md), [dependency patterns](https://github.com/InnoSquadCorp/InnoFlow/blob/188c2732d26350cf01afadade3dac89a2b73b68f/docs/DEPENDENCY_PATTERNS.md), [optional-child lifetime](https://github.com/InnoSquadCorp/InnoFlow/blob/188c2732d26350cf01afadade3dac89a2b73b68f/docs/OPTIONAL_CHILD_LIFETIME.md). Advanced collection/optional ownership and selection behavior are outside this skill fixture's runtime coverage.
+Exact 6.0.2 sources: [authoring and composition](https://github.com/InnoSquadCorp/InnoFlow/blob/1176de1e4783b638c03a9334f43cc49378957148/CLAUDE.md), [dependency patterns](https://github.com/InnoSquadCorp/InnoFlow/blob/1176de1e4783b638c03a9334f43cc49378957148/docs/DEPENDENCY_PATTERNS.md), [optional-child lifetime](https://github.com/InnoSquadCorp/InnoFlow/blob/1176de1e4783b638c03a9334f43cc49378957148/docs/OPTIONAL_CHILD_LIFETIME.md). Advanced collection/optional ownership and selection behavior are outside this skill fixture's runtime coverage.

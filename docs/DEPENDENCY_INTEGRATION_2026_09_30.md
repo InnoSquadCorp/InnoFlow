@@ -1,5 +1,10 @@
 # Dependency integration, 2026-09-30
 
+> Historical snapshot: claims, dates, SHAs, counts and pending steps below apply
+> only to the recorded revision. Published 6.0.2 and current release rules are
+> described in the [documentation index](DOCUMENTATION.md). This record is not
+> current publication status or evidence that a later revision passed.
+
 This integrates the changes proposed by [PR 42](https://github.com/InnoSquadCorp/InnoFlow/pull/42)
 and [PR 40](https://github.com/InnoSquadCorp/InnoFlow/pull/40) into PR 48. It does
 not merge or close either source PR, publish a release or change live settings.
