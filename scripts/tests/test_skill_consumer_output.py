@@ -83,10 +83,14 @@ class ConsumerOutputTests(unittest.TestCase):
                     self.fail(f"Unexpected tool invocation: {argv}")
                 program = ("import sys; sys.stdout.write(" + repr(stdout) + "); "
                            "sys.stderr.write(" + repr(stderr) + "); sys.exit(" + str(exit_code) + ")")
+                if case == "timeout" and "show-dependencies" in argv:
+                    program = ("import sys,time; sys.stdout.write(" + repr(stdout) + "); "
+                               "sys.stderr.write(" + repr(stderr) + "); "
+                               "sys.stdout.flush(); sys.stderr.flush(); time.sleep(60)")
                 return real_popen([sys.executable, "-c", program], *args, **kwargs)
 
             output = io.StringIO()
-            with patch.object(sys, "argv", [str(script), "--scratch-path", str(scratch)]), \
+            with patch.object(sys, "argv", [str(script), "--scratch-path", str(scratch), "--command-timeout", "2"]), \
                     patch.object(sys, "platform", "darwin"), \
                     patch.dict(os.environ, {"INNONETWORK_LOCAL_PATH": ""}), \
                     patch.object(subprocess, "Popen", side_effect=popen), redirect_stdout(output):
@@ -134,9 +138,25 @@ class ConsumerOutputTests(unittest.TestCase):
                 self.assertEqual((result, evidence["status"]), (1, "failed"))
                 self.assertEqual(entry["exit_code"], 23)
                 self.assertIn("failed (23)", evidence["error"])
+                self.assertIn(entry["log"], evidence["error"])
+                self.assertIn(entry["stderr_log"], evidence["error"])
                 self.assertNotIn("swift-test", logs)
                 self.assertEqual(json.loads(graph)["identity"], "consumer")
                 self.assertEqual(diagnostics, WARNING)
+
+    def test_structured_timeout_reports_both_logs(self):
+        for script in SCRIPTS:
+            with self.subTest(skill=script.parents[1].name):
+                result, evidence, logs, entry, graph, diagnostics = self.validate(script, "timeout")
+                self.assertEqual((result, evidence["status"]), (1, "failed"))
+                self.assertTrue(entry["timed_out"])
+                self.assertNotEqual(entry["exit_code"], 0)
+                self.assertIn("timed out after 2s", evidence["error"])
+                self.assertIn(entry["log"], evidence["error"])
+                self.assertIn(entry["stderr_log"], evidence["error"])
+                self.assertIn("process group killed", graph)
+                self.assertEqual(diagnostics, WARNING)
+                self.assertNotIn("swift-test", logs)
 
 
 if __name__ == "__main__":

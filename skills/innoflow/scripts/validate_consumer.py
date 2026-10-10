@@ -73,8 +73,9 @@ def main():
                 output.write(f"\n[consumer-validation] Command timed out after {args.command_timeout}s; process group killed.\n")
         entry["exit_code"] = return_code
         entry["timed_out"] = timed_out
-        check(not timed_out, f"{label} timed out after {args.command_timeout}s; see {log}")
-        check(return_code == 0, f"{label} failed ({return_code}); see {log}")
+        logs = f"stdout: {log}; stderr: {entry['stderr_log']}" if structured_output else str(log)
+        check(not timed_out, f"{label} timed out after {args.command_timeout}s; see {logs}")
+        check(return_code == 0, f"{label} failed ({return_code}); see {logs}")
         return log.read_text(errors="replace").strip()
 
     def flatten(node):
