@@ -120,6 +120,9 @@ struct ContextClockFeature: Reducer {
 }
 
 actor CancellationCheckProbe {
+  nonisolated let didStart = AsyncTestSignal()
+  nonisolated let didPass = AsyncTestSignal()
+  nonisolated let didCancel = AsyncTestSignal()
   private(set) var started = 0
   private(set) var ready = 0
   private(set) var passed = 0
@@ -127,6 +130,7 @@ actor CancellationCheckProbe {
 
   func markStarted() {
     started += 1
+    didStart.signal()
   }
 
   func markReady() {
@@ -135,10 +139,12 @@ actor CancellationCheckProbe {
 
   func markPassed() {
     passed += 1
+    didPass.signal()
   }
 
   func markCancelled() {
     cancelled += 1
+    didCancel.signal()
   }
 }
 

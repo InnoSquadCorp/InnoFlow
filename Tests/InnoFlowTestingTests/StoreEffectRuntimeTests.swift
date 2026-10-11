@@ -2430,7 +2430,7 @@ struct StoreEffectRuntimeTests {
   }
 
   @Test("EffectContext.checkCancellation throws after store release")
-  func effectContextCheckCancellationThrowsAfterStoreRelease() async {
+  func effectContextCheckCancellationThrowsAfterStoreRelease() async throws {
     let clock = ManualTestClock()
     let probe = CancellationCheckProbe()
     var store: Store<CancellationCheckFeature>? = Store(
@@ -2438,31 +2438,40 @@ struct StoreEffectRuntimeTests {
       initialState: .init(),
       clock: .manual(clock)
     )
+    weak var weakStore: Store<CancellationCheckFeature>?
+    weakStore = store
+    let finished = AsyncTestSignal()
+    let dispatch = try #require(store?.send(.start))
+    dispatch.observeCompletion { finished.signal() }
+    defer { dispatch.cancel() }
 
-    store?.send(.start)
-    for _ in 0..<10 {
-      await Task.yield()
-    }
-
-    await clock.advance(by: .milliseconds(10))
-
-    for _ in 0..<30 {
-      if await probe.passed == 1 {
-        break
+    // `send` does not await the run body. Establish its real suspension point
+    // before moving manual time, then require a successful cancellation check
+    // while the Store is still alive. Fixed yield counts could release the
+    // Store before the operation was admitted, or before its sleep registered.
+    try #require(await probe.didStart.wait())
+    try #require(
+      await waitUntilAsync(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+        await clock.sleeperCount == 1
       }
-      await Task.yield()
-    }
+    )
+    await clock.advance(by: .milliseconds(10))
+    try #require(await probe.didPass.wait())
+    #expect(await probe.started == 1)
+    #expect(await probe.ready == 1)
+    #expect(await probe.passed == 1)
+    #expect(await probe.cancelled == 0)
+    #expect(!dispatch.isFinished)
 
     store = nil
-
-    for _ in 0..<30 {
-      if await probe.cancelled == 1 {
-        break
-      }
-      await Task.yield()
-    }
-
+    #expect(weakStore == nil)
+    // Observe the cancellation handler and terminal dispatch separately: a
+    // callback may have run before all runtime bookkeeping has finished.
+    try #require(await probe.didCancel.wait())
+    try #require(await finished.wait())
     #expect(await probe.cancelled == 1)
+    #expect(dispatch.isFinished)
+    #expect(await clock.sleeperCount == 0)
   }
 
   @Test("Store startRun honors cancellation boundaries before user operation")

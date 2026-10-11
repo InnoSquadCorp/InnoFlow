@@ -6,7 +6,6 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   private enum UIWait {
     static let launch: TimeInterval = 15
     static let acknowledgement: TimeInterval = 3
-    static let scrollSettle: TimeInterval = 1
     static let transition: TimeInterval = 8
   }
 
@@ -131,29 +130,38 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     in app: XCUIApplication,
     maxSwipes: Int = 6
   ) -> Bool {
-    if waitForCondition(
-      hittable(element, describedAs: "element \(element)"),
-      timeout: UIWait.scrollSettle
-    ) {
+    if isVisiblyHittable(element, in: app) {
       return true
     }
 
-    // The hub groups rows by learning level, while catalog iteration and a
-    // returning navigation path can ask for an earlier row. Search both
-    // directions instead of repeatedly scrolling away from the target.
-    for swipeUp in [true, false] {
+    // Catalog declaration order differs from the hub's learning-level groups,
+    // and navigation back can preserve a lower scroll position. Start toward
+    // the target's frame; retain a bounded reverse search for unrealized rows.
+    let swipeUpFirst = UIScrollGeometry.swipeUpFirst(
+      target: element.exists ? element.frame : .null,
+      viewport: app.frame
+    )
+    for swipeUp in [swipeUpFirst, !swipeUpFirst] {
       for _ in 0..<maxSwipes {
         if swipeUp { app.swipeUp() } else { app.swipeDown() }
-        if waitForCondition(
-          hittable(element, describedAs: "element \(element)"),
-          timeout: UIWait.scrollSettle
-        ) {
+        // XCTest gestures already wait for idle. Do not wrap isHittable in a
+        // short XCTWaiter: its timeout can interrupt nested AX requests and
+        // turn an ordinary offscreen row into an invalid-activation-point error.
+        if isVisiblyHittable(element, in: app) {
           return true
         }
       }
     }
 
     return false
+  }
+
+  @MainActor
+  private func isVisiblyHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+    guard element.exists else { return false }
+    return UIScrollGeometry.isHittable(frame: element.frame, viewport: app.frame) {
+      element.isHittable
+    }
   }
 
   @MainActor
@@ -415,6 +423,83 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   }
 
   @MainActor
+  func testDemoHubShowsCanonicalSamplesInReverseOrder() throws {
+    let app = launchApp { app in
+      exists(
+        app.navigationBars["InnoFlow Samples"],
+        describedAs: "the sample hub navigation bar"
+      )
+    }
+
+    // Exercise the same complete catalog from the bottom, including rows
+    // whose declaration order differs from their displayed learning level.
+    for demo in SampleDemo.catalog.reversed() {
+      XCTAssertTrue(
+        scrollToHittable(app.buttons[demo.accessibilityIdentifier], in: app),
+        "Expected hub button \(demo.accessibilityIdentifier) in reverse traversal"
+      )
+    }
+  }
+
+  @MainActor
+  func testDemoHubScrollsAfterNavigationBackAndModalDismissal() throws {
+    let app = launchApp { app in
+      exists(
+        app.navigationBars["InnoFlow Samples"],
+        describedAs: "the sample hub navigation bar"
+      )
+    }
+    let hub = app.navigationBars["InnoFlow Samples"]
+
+    openDemoFromHub(
+      SampleDemo.phaseDrivenFSM.metadata.accessibilityIdentifier,
+      in: app,
+      destinationAnchor: app.switches["phase.fail-next-load"]
+    )
+    returnToHub(in: app)
+
+    // The level-two modal row is above the level-three phase row.
+    openDemoFromHub(
+      SampleDemo.routerComposition.metadata.accessibilityIdentifier,
+      in: app,
+      destinationAnchor: app.buttons["router.sign-in"]
+    )
+    tapButton(
+      "sample.dismiss-modal",
+      in: app,
+      until: exists(hub, describedAs: "the hub after modal dismissal")
+    )
+
+    // Go farther back up the catalog after dismissal, then down again after
+    // popping a regular destination. Do not relaunch or reset scroll state.
+    openDemoFromHub(
+      SampleDemo.basics.metadata.accessibilityIdentifier,
+      in: app,
+      destinationAnchor: app.navigationBars["Basics"]
+    )
+    returnToHub(in: app)
+    openDemoFromHub(
+      SampleDemo.phaseDrivenFSM.metadata.accessibilityIdentifier,
+      in: app,
+      destinationAnchor: app.switches["phase.fail-next-load"]
+    )
+  }
+
+  @MainActor
+  private func returnToHub(in app: XCUIApplication) {
+    let back = app.navigationBars.buttons["InnoFlow Samples"]
+    XCTAssertTrue(scrollToHittable(back, in: app))
+    back.tap()
+    XCTAssertTrue(
+      waitForCondition(
+        exists(
+          app.navigationBars["InnoFlow Samples"], describedAs: "the hub after navigating back"),
+        timeout: UIWait.transition
+      )
+    )
+  }
+
+  @MainActor
   func testDemoHubHeaderScrollsOutOfViewOnPhone() throws {
     guard UIDevice.current.userInterfaceIdiom == .phone else {
       throw XCTSkip("The iPad catalog may fit without scrolling")
@@ -427,12 +512,15 @@ final class InnoFlowSampleAppUITests: XCTestCase {
       )
     }
     let header = app.staticTexts["Canonical Reference App"]
-    XCTAssertTrue(header.isHittable)
+    XCTAssertTrue(isVisiblyHittable(header, in: app))
 
     app.swipeUp()
     app.swipeUp()
 
-    XCTAssertFalse(header.isHittable, "The introductory card must scroll with the catalog")
+    XCTAssertFalse(
+      isVisiblyHittable(header, in: app),
+      "The introductory card must scroll with the catalog"
+    )
   }
 
   @MainActor
