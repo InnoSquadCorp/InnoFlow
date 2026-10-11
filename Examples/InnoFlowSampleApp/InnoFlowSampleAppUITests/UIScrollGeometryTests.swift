@@ -9,7 +9,7 @@ final class UIScrollGeometryTests: XCTestCase {
       .null,
       .infinite,
       .zero,
-      CGRect(x: .nan, y: 0, width: 100, height: 40),
+      CGRect(x: CGFloat.nan, y: 0, width: 100, height: 40),
       CGRect(x: 20, y: -120, width: 380, height: 100),
       CGRect(x: 20, y: 912, width: 380, height: 100),
       CGRect(x: 420, y: 100, width: 100, height: 40),
