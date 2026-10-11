@@ -83,7 +83,7 @@
     "Tests/InnoFlowTestingTests/ReducerOnChangeTests.swift": "63da600078c67e6fd266dd3507a9dba5758bb3b76f387202b4092ae37159d8d7",
     "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift": "0284121a4d4082e90beb9ff3024fe9fefd985cd043ce7a4a31e136b0eed45f15",
     "Tests/InnoFlowTestingTests/SchedulerAdmissionConsistencyTests.swift": "edd836e02c275ccb7868890b94200d9efe3d1f88e46c52aa4de4c73ed55f9126",
-    "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift": "21fde640bade6ba91324b3d6c5665d93e42784d3e992e57976ebb579692366ea",
+    "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift": "369a0c2c4ff4deef744bab4c9a7bd73bd98e4db3c35923881de8e37741e33515",
     "Tests/InnoFlowTestingTests/TestEffectLedgerConsistencyTests.swift": "a251bd41275ed8d0cdf4568fca5e79aec83b074282dcff34a0e28a3de82bbe2d",
     "Tests/InnoFlowTestingTests/TestStoreDispatchConsistencyTests.swift": "83befd375232d7401874f06fdaf5a1b39bd8c62803fe290214aff6d79a8665df",
     "Tests/InnoFlowTestingTests/TestStoreEffectAlgebraTests.swift": "417aed5a1e6a0a13d565a6bf1f6d7ddc655d173feb88466726ba41ccc1e284ee",
@@ -5835,7 +5835,7 @@
       "displayName": "EffectRuntime cancelAll preserves registered runs above its sequence boundary",
       "file": "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift",
       "identifier": "StoreEffectRuntimeTests/effectRuntimeCancelAllPreservesNewerRegisteredRuns()",
-      "line": 2580,
+      "line": 2581,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5844,7 +5844,7 @@
       "displayName": "EffectRuntime cancellation preserves registered runs above its sequence boundary",
       "file": "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift",
       "identifier": "StoreEffectRuntimeTests/effectRuntimeCancellationPreservesNewerRegisteredRuns()",
-      "line": 2531,
+      "line": 2532,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5853,7 +5853,7 @@
       "displayName": "EffectRuntime counts a cancelled token finish only once",
       "file": "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift",
       "identifier": "StoreEffectRuntimeTests/effectRuntimeCancelledTokenFinishIsIdempotent()",
-      "line": 2506,
+      "line": 2507,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6051,7 +6051,7 @@
       "displayName": "Store cancelled run effects do not start after public cancellation",
       "file": "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift",
       "identifier": "StoreEffectRuntimeTests/storeCancelledRunEffectsDoNotStartAfterPublicCancellation()",
-      "line": 2628,
+      "line": 2629,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6312,7 +6312,7 @@
       "displayName": "Store startRun honors cancellation boundaries before user operation",
       "file": "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift",
       "identifier": "StoreEffectRuntimeTests/storeStartRunHonorsCancellationBoundariesBeforeUserOperation()",
-      "line": 2476,
+      "line": 2477,
       "target": "InnoFlowTestingTests"
     },
     {

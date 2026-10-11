@@ -2438,7 +2438,8 @@ struct StoreEffectRuntimeTests {
       initialState: .init(),
       clock: .manual(clock)
     )
-    weak var weakStore = store
+    weak var weakStore: Store<CancellationCheckFeature>?
+    weakStore = store
     let finished = AsyncTestSignal()
     let dispatch = try #require(store?.send(.start))
     dispatch.observeCompletion { finished.signal() }
