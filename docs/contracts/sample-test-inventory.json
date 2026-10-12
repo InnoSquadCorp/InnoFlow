@@ -9,6 +9,8 @@
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/AdvancedTestingTests.swift": "aa833b10958eb419c5ad3dcaa47f36d007da1eebe43190f294eafdd7383453b1",
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift": "47d464bcbefb915e1cc229c7134dc4549200b1f12bb568e1c9bf565195d9665c",
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/OptionalChildLifetimeExampleTests.swift": "6bdbe060dca150229a2e7d6c5d0b5c664fa4b31656e24c0ce564e131ec318aac",
+    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometry.swift": "21faa87f62a5179516f5215d68b11487b9c499bcc0154d67f242ba08027efe3d",
+    "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift": "d676bd80bff65d3fc2d2bfbc87cd12e2fcf49291ce117546e0e4e6c7c3e6e684",
     "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/ViewOwnedTaskExampleTests.swift": "3739964dff06d02932cefc04d1486e17a1987ba1b3671a17ed5f5213857e446d"
   },
   "tests": [
@@ -433,6 +435,96 @@
       "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/InnoFlowSampleAppFeatureTests.swift",
       "identifier": "InnoFlowSampleAppFeatureTests/routerLoginLogoutCancelsInFlightSubmit()",
       "line": 250,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testFullyVisibleHubRowStillRequiresActualHittability()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testFullyVisibleHubRowStillRequiresActualHittability()",
+      "line": 144,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testHubRowUnderNavigationBarDoesNotRequestEvenSuccessfulHittability()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testHubRowUnderNavigationBarDoesNotRequestEvenSuccessfulHittability()",
+      "line": 104,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testHubRowsClippedAtAnyViewportEdgeDoNotRequestHittability()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testHubRowsClippedAtAnyViewportEdgeDoNotRequestHittability()",
+      "line": 122,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testHubViewportIntersectsListAndAppBelowCurrentNavigationBar()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testHubViewportIntersectsListAndAppBelowCurrentNavigationBar()",
+      "line": 80,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testInvalidViewportDoesNotRequestHittability()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testInvalidViewportDoesNotRequestHittability()",
+      "line": 45,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testMissingOrInvalidHubGeometryFailsClosed()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testMissingOrInvalidHubGeometryFailsClosed()",
+      "line": 167,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testOffscreenAndInvalidFramesDoNotRequestHittability()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testOffscreenAndInvalidFramesDoNotRequestHittability()",
+      "line": 8,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testPartiallyClippedRouterRowSearchesBackTowardEarlierCatalogRows()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testPartiallyClippedRouterRowSearchesBackTowardEarlierCatalogRows()",
+      "line": 60,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testSearchDirectionFollowsTargetAfterReturningFromNavigation()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testSearchDirectionFollowsTargetAfterReturningFromNavigation()",
+      "line": 71,
+      "target": "InnoFlowSampleAppFeatureTests"
+    },
+    {
+      "attribute": "@Test",
+      "conditionalContexts": [],
+      "displayName": "testVisibleGeometryStillRequiresSuccessfulHittability()",
+      "file": "Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage/Tests/InnoFlowSampleAppFeatureTests/UIScrollGeometryTests.swift",
+      "identifier": "UIScrollGeometryTests/testVisibleGeometryStillRequiresSuccessfulHittability()",
+      "line": 31,
       "target": "InnoFlowSampleAppFeatureTests"
     },
     {
