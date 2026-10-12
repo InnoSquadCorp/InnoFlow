@@ -76,4 +76,128 @@ final class UIScrollGeometryTests: XCTestCase {
     XCTAssertTrue(UIScrollGeometry.swipeUpFirst(target: laterRow, viewport: viewport))
     XCTAssertTrue(UIScrollGeometry.swipeUpFirst(target: .null, viewport: viewport))
   }
+
+  func testHubViewportIntersectsListAndAppBelowCurrentNavigationBar() {
+    let container = CGRect(x: 10, y: -20, width: 400, height: 1_000)
+    let navigationBar = CGRect(x: 0, y: 62, width: 420, height: 60)
+    XCTAssertEqual(
+      UIScrollGeometry.viewportBelowNavigationBar(
+        container: container, app: viewport, navigationBar: navigationBar),
+      CGRect(x: 10, y: 122, width: 400, height: 790)
+    )
+
+    // A large-title or changed layout must use the newly measured bar, not a
+    // fixed screen inset or the frame from before navigation/scrolling.
+    XCTAssertEqual(
+      UIScrollGeometry.viewportBelowNavigationBar(
+        container: container,
+        app: viewport,
+        navigationBar: CGRect(x: 0, y: 62, width: 420, height: 100)),
+      CGRect(x: 10, y: 162, width: 400, height: 750)
+    )
+    XCTAssertEqual(
+      UIScrollGeometry.viewportBelowNavigationBar(
+        container: CGRect(x: 20, y: 200, width: 380, height: 500),
+        app: viewport,
+        navigationBar: navigationBar),
+      CGRect(x: 20, y: 200, width: 380, height: 500)
+    )
+  }
+
+  func testHubRowUnderNavigationBarDoesNotRequestEvenSuccessfulHittability() {
+    // Main run 38185706400 reported AX hittable and tapped (21, 122) twice,
+    // although nearly this entire row was above the content viewport.
+    let router = CGRect(x: 20, y: 20.67, width: 380, height: 102.33)
+    let contentViewport = CGRect(x: 0, y: 122, width: 420, height: 790)
+    var didRequestHitTest = false
+    XCTAssertFalse(
+      UIScrollGeometry.isHittable(
+        frame: router, viewport: contentViewport, requiresFullVisibility: true
+      ) {
+        didRequestHitTest = true
+        return true
+      }
+    )
+    XCTAssertFalse(didRequestHitTest)
+    XCTAssertFalse(UIScrollGeometry.swipeUpFirst(target: router, viewport: contentViewport))
+  }
+
+  func testHubRowsClippedAtAnyViewportEdgeDoNotRequestHittability() {
+    let contentViewport = CGRect(x: 10, y: 122, width: 400, height: 750)
+    let clippedRows = [
+      CGRect(x: 20, y: 121, width: 380, height: 100),
+      CGRect(x: 20, y: 773, width: 380, height: 100),
+      CGRect(x: 9, y: 200, width: 380, height: 100),
+      CGRect(x: 31, y: 200, width: 380, height: 100),
+    ]
+    for row in clippedRows {
+      var didRequestHitTest = false
+      XCTAssertFalse(
+        UIScrollGeometry.isHittable(
+          frame: row, viewport: contentViewport, requiresFullVisibility: true
+        ) {
+          didRequestHitTest = true
+          return true
+        }
+      )
+      XCTAssertFalse(didRequestHitTest)
+    }
+  }
+
+  func testFullyVisibleHubRowStillRequiresActualHittability() {
+    let contentViewport = CGRect(x: 10, y: 122, width: 400, height: 750)
+    let rows = [contentViewport, CGRect(x: 20, y: 200, width: 380, height: 100)]
+    for row in rows {
+      for actualHittability in [false, true] {
+        var didRequestHitTest = false
+        XCTAssertEqual(
+          UIScrollGeometry.isHittable(
+            frame: row, viewport: contentViewport, requiresFullVisibility: true
+          ) {
+            didRequestHitTest = true
+            return actualHittability
+          },
+          actualHittability
+        )
+        XCTAssertTrue(didRequestHitTest)
+      }
+    }
+    XCTAssertTrue(
+      UIScrollGeometry.isHittable(
+        frame: CGRect(x: 20, y: 100, width: 380, height: 100), viewport: contentViewport
+      ) { true },
+      "Non-hub controls retain their existing partial-visibility hit-test behavior"
+    )
+  }
+
+  func testMissingOrInvalidHubGeometryFailsClosed() {
+    let invalidFrames: [CGRect] = [
+      .null, .infinite, .zero, CGRect(x: CGFloat.nan, y: 0, width: 420, height: 60),
+    ]
+    let bar = CGRect(x: 0, y: 62, width: 420, height: 60)
+    for invalid in invalidFrames {
+      XCTAssertTrue(
+        UIScrollGeometry.viewportBelowNavigationBar(
+          container: invalid, app: viewport, navigationBar: bar
+        ).isNull)
+      XCTAssertTrue(
+        UIScrollGeometry.viewportBelowNavigationBar(
+          container: viewport, app: invalid, navigationBar: bar
+        ).isNull)
+      XCTAssertTrue(
+        UIScrollGeometry.viewportBelowNavigationBar(
+          container: viewport, app: viewport, navigationBar: invalid
+        ).isNull)
+    }
+    XCTAssertTrue(
+      UIScrollGeometry.viewportBelowNavigationBar(
+        container: CGRect(x: 0, y: 1_000, width: 420, height: 100),
+        app: viewport, navigationBar: bar
+      ).isNull)
+    XCTAssertTrue(
+      UIScrollGeometry.viewportBelowNavigationBar(
+        container: viewport, app: viewport,
+        navigationBar: CGRect(x: 0, y: 62, width: 420, height: 850)
+      ).isNull)
+  }
 }
