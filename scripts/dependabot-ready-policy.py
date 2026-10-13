@@ -25,6 +25,14 @@ def policy_module():
     return policy
 
 
+def this_policy():
+    class Policy:
+        pass
+    policy = Policy()
+    policy.__dict__.update(globals())
+    return policy
+
+
 def event_binding(api, p, run, pr, number, head):
     # The fixed trusted workflow formats these GitHub event fields, never the
     # PR title/body. A matching branch/SHA alone cannot establish PR identity.
@@ -94,6 +102,9 @@ def job_record(api, p, run, attempt=None, require_steps=True):
     p.require(len(jobs) == 1 and jobs[0].get("name") == p.READY, "native reporter must have exactly one fixed-name job")
     job = jobs[0]
     p.require(type(job.get("id")) is int and job["id"] > 0, "invalid native job ID")
+    for key, value in (("run_id", run["id"]), ("run_attempt", attempt), ("head_sha", run["head_sha"])):
+        if key in job:
+            p.require(job[key] == value, "native reporter job run/attempt/head mismatch")
     url = job.get("check_run_url", "")
     prefix = f"https://api.github.com/repos/{p.REPOSITORY}/check-runs/"
     p.require(url.startswith(prefix) and url[len(prefix):].isdigit(), "native job lacks check association")
@@ -103,13 +114,26 @@ def job_record(api, p, run, attempt=None, require_steps=True):
               check.get("check_suite", {}).get("id") == run["check_suite_id"] and
               check.get("details_url") == f"https://github.com/{p.REPOSITORY}/actions/runs/{run['id']}/job/{job['id']}",
               "native reporter check has wrong job/app/head/suite provenance")
-    steps = job.get("steps") or []
+    p.require(isinstance(job.get("steps"), list), "native reporter steps are missing or malformed")
+    steps = job["steps"]
     source_steps = [s for s in steps if str(s.get("name", "")).startswith(SOURCE_STEP)]
     binding = BINDING.fullmatch(run.get("display_title", ""))
     if binding:
         expected = SOURCE_STEP + binding[5] + " for " + run["display_title"].rsplit(" source:", 1)[0]
-        p.require(len(source_steps) == 1 and source_steps[0]["name"] == expected,
-                  "native event/job source binding mismatch")
+        if (not require_steps and job.get("steps") == [] and attempt == run["run_attempt"] and
+                run.get("conclusion") is None and
+                run.get("status") in {"queued", "pending", "waiting", "requested", "in_progress"} and
+                job.get("status") == check.get("status") == "queued" and
+                job.get("conclusion") is None and check.get("conclusion") is None):
+            # Job/check creation can precede step metadata. Only the exact
+            # receipt-authorized activation may cross this queued transition.
+            # Its predecessor is terminal and takes the normal strict path.
+            number = int(binding[1])
+            pr = current_pr(api, p, number, run["head_sha"])
+            p.arm_policy().authenticated_receipt(api, p, this_policy(), number, pr, run)
+        else:
+            p.require(len(source_steps) == 1 and source_steps[0]["name"] == expected,
+                      "native event/job source binding mismatch")
     if not require_steps:
         return job, check, None
     p.require(len(source_steps) == 1 and p.SHA.fullmatch(source_steps[0]["name"][len(SOURCE_STEP):].split(" ", 1)[0]) and
@@ -133,7 +157,7 @@ def source_compatible(api, p, source):
     main = source_ancestor(api, p, source)
     # Re-running preserves the old workflow definition and privileges. Do not
     # rerun an obsolete definition while checking out newer policy code.
-    for path in (REPORTER_PATH, p.COORDINATOR_PATH, "scripts/dependabot-ready-policy.py", "scripts/dependabot-merge-policy.py", "scripts/ci-metadata-policy.py"):
+    for path in (REPORTER_PATH, p.COORDINATOR_PATH, "scripts/dependabot-ready-policy.py", "scripts/dependabot-merge-policy.py", "scripts/dependabot-arm-policy.py", "scripts/ci-metadata-policy.py"):
         old = api.get(p.route(f"contents/{path}?ref={source}"))
         current = api.get(p.route(f"contents/{path}?ref={main}"))
         p.require(isinstance(old.get("sha"), str) and p.SHA.fullmatch(old["sha"]) and old["sha"] == current.get("sha"),
@@ -172,7 +196,10 @@ def desired(api, p, number, enabled):
     try:
         first, second = p.proof(api, number), p.proof(api, number)
         p.same(first, second)
-        return True, "Full exact-head/base/CI proof currently eligible."
+        arm = p.arm_policy()
+        arm.authenticated_receipt(api, p, this_policy(), number,
+                                  second["pr"], expected_proof=second)
+        return True, "Current native request and post-enable receipt match full exact-head/base/CI proof."
     except p.Rejected as error:
         return False, "Blocked: " + str(error)
 
@@ -224,6 +251,12 @@ def verified_check_ids(api, p, number, head):
             jobs = api.pages(p.route(f"actions/runs/{run['id']}/attempts/{attempt}/jobs"), "jobs")
             if not jobs:
                 older = (run["run_number"], run["id"]) != newest or attempt < run["run_attempt"]
+                if not older and run.get("status") in {"queued", "pending", "waiting", "requested"}:
+                    # Only the exact next activation of a completed receipt may
+                    # lack a newly materialized job. No check IDs are exempted.
+                    pr = current_pr(api, p, number, head)
+                    p.arm_policy().authenticated_receipt(api, p, this_policy(), number, pr, run)
+                    continue
                 previous = run if attempt == run["run_attempt"] else api.get(p.route(f"actions/runs/{run['id']}/attempts/{attempt}"))
                 p.require(older and previous.get("id") == run["id"] and previous.get("head_sha") == head and
                           previous.get("workflow_id") == run["workflow_id"] and previous.get("event") == "pull_request_target" and
@@ -330,12 +363,14 @@ def refresh(api, p, target, enabled):
     p.require(timedelta(0) <= age < timedelta(days=30) and run["run_attempt"] < 50,
               "native reporter rerun age/attempt limit reached; fresh PR lifecycle event required")
     reject_prior_claim(api, p, target, run)
-    # The writer has no contents/pull-request write permission. Protective bot
-    # cancellation belongs to the existing privileged coordinator before this
-    # writer is admitted by workflow needs.
-    p.require(not p.bot(current_pr(api, p, target["pr"], target["head"])) or
-              not api.get(p.route(f"pulls/{target['pr']}" )).get("auto_merge"),
-              "armed bot must be protectively cancelled before Ready refresh")
+    # The writer cannot enable/cancel. Armed refresh is narrowly limited to
+    # this run's completed post-enable receipt, for failure -> next activation.
+    pr = current_pr(api, p, target["pr"], target["head"])
+    if p.bot(pr) and pr.get("auto_merge"):
+        first, second = p.proof(api, target["pr"]), p.proof(api, target["pr"])
+        p.same(first, second)
+        p.arm_policy().authenticated_receipt(api, p, this_policy(), target["pr"], second["pr"],
+                                             expected_proof=second, writer_run=int(os.environ["GITHUB_RUN_ID"]))
     p.require(refresh_plan(api, p, target["pr"], enabled) == target, "reporter/eligibility changed before refresh")
     try:
         api.mutate("POST", p.route(f"actions/jobs/{target['job']}/rerun"), {})
@@ -346,7 +381,8 @@ def refresh(api, p, target, enabled):
     for index in range(4):
         live = api.get(p.route(f"actions/runs/{target['run']}"))
         if live.get("run_attempt", 0) > target["attempt"]:
-            p.require(live.get("id") == target["run"] and live.get("display_title") == run.get("display_title"),
+            p.require(live.get("run_attempt") == target["attempt"] + 1 and
+                      live.get("id") == target["run"] and live.get("display_title") == run.get("display_title"),
                       "rerun reporter identity/binding changed")
             validate_run(api, p, live, {"id": run["workflow_id"]}, api.get(p.route("")),
                          current_pr(api, p, target["pr"], target["head"]), target["pr"], target["head"])

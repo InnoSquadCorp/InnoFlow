@@ -52,7 +52,7 @@ class WorkflowLintTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'dependabot-auto-merge.yml'
             path.write_text(original)
-            p.check_queue_compatibility([ROOT / '.github/workflows/ci.yml', path])
+            p.check_queue_compatibility([ROOT / '.github/workflows/ci.yml', ROOT / '.github/workflows/dependabot-ready.yml', path])
             for changed in (
                     original.replace('      queue: max', '      queue: invalid', 1),
                     original.replace('      queue: max\n', '', 1),
@@ -61,7 +61,7 @@ class WorkflowLintTests(unittest.TestCase):
                     original + '\n  unreviewed:\n    concurrency:\n      "queue": max\n'):
                 path.write_text(changed)
                 with self.assertRaises(ValueError):
-                    p.check_queue_compatibility([ROOT / '.github/workflows/ci.yml', path])
+                    p.check_queue_compatibility([ROOT / '.github/workflows/ci.yml', ROOT / '.github/workflows/dependabot-ready.yml', path])
 
     def test_diagnostics_exempt_only_exact_reviewed_queue_locations(self):
         paths = list((ROOT / '.github/workflows').glob('*.yml'))
@@ -89,7 +89,7 @@ class WorkflowLintTests(unittest.TestCase):
             for source in (ROOT / '.github/workflows').glob('*.yml'):
                 path=Path(directory)/source.name;path.write_text(source.read_text());copies.append(path)
             p.check_queue_compatibility(copies)
-            name, line=next((key[0],line) for key,line in p.QUEUE_LOCATIONS.items() if key[1] is None)
+            name, line=next((key[0],line) for key,line in p.QUEUE_LOCATIONS.items() if key == ('ci.yml', None))
             candidate=next(x for x in copies if x.name==name);original=candidate.read_text()
             for changed in [original.replace(line,line.replace("'max'", "'single'")),
                             original.replace(line+'\n',''),
@@ -97,6 +97,17 @@ class WorkflowLintTests(unittest.TestCase):
                             original.replace(line,'    '+line)]:
                 candidate.write_text(changed)
                 with self.assertRaises(ValueError):p.check_queue_compatibility(copies)
+
+    def test_native_queue_exception_rejects_value_or_location_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'dependabot-ready.yml'
+            original = (ROOT / '.github/workflows/dependabot-ready.yml').read_text()
+            others = [p for p in (ROOT / '.github/workflows').glob('*.yml') if p.name != path.name]
+            for changed in [original.replace('  queue: max', '  queue: single'),
+                            original.replace('  queue: max\n', ''),
+                            original.replace('  queue: max', '    queue: max')]:
+                path.write_text(changed)
+                with self.assertRaises(ValueError): p.check_queue_compatibility(others + [path])
 
     def test_column_one_yaml_comment_preserves_queue_job_context(self):
         from unittest.mock import patch

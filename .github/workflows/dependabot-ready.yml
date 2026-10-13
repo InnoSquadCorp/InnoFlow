@@ -10,10 +10,12 @@ permissions:
   contents: read
 
 # GitHub owns this native fixed-name check. No API creates/patches a verdict.
-# Superseded reporters cancel instead of publishing a late old-head success.
+# Serialize verdicts, enable/cancel and refresh; no participant waits for a
+# different participant to complete while holding this lock.
 concurrency:
-  group: dependabot-native-ready-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: dependabot-ready-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   ready:

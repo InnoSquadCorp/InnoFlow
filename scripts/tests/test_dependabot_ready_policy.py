@@ -178,9 +178,9 @@ class NativeReadyTests(unittest.TestCase):
         self.api.native_job['steps'][1]['name'] += ' unbound suffix'
         with self.assertRaises(p.Rejected): n.require_success(self.api, p, NUMBER, HEAD)
 
-    def test_reporter_only_succeeds_for_real_readonly_eligibility(self):
+    def test_reporter_requires_receipt_for_bots_and_remains_readonly_for_manual_prs(self):
         self.running()
-        self.assertTrue(self.snapshot()[0])
+        self.assertFalse(self.snapshot()[0])  # Full CI alone cannot release the native barrier.
         self.assertFalse(self.api.mutations)
         self.api.run['conclusion'] = 'failure'
         self.assertFalse(self.snapshot()[0])
@@ -205,6 +205,7 @@ class NativeReadyTests(unittest.TestCase):
         self.assertNotIn('continue-on-error', source)
 
     def test_running_snapshot_does_not_require_future_step_metadata(self):
+        self.api.pr['user'] = dict(login='human', id=1, type='User')
         self.running()
         self.api.native_job['steps'] = self.api.native_job['steps'][:2]
         self.assertTrue(self.snapshot()[0])
@@ -307,6 +308,8 @@ class NativeReadyTests(unittest.TestCase):
         self.assertFalse(self.api.mutations)
 
     def test_running_and_unchanged_verdicts_never_spend_reruns(self):
+        self.assertIsNotNone(n.refresh_plan(self.api, p, NUMBER, True))  # Green/unarmed must fail before arming.
+        self.verdict(False)
         self.assertIsNone(n.refresh_plan(self.api, p, NUMBER, True))
         self.running()
         self.assertIsNone(n.refresh_plan(self.api, p, NUMBER, True))
@@ -425,7 +428,7 @@ class NativeReadyTests(unittest.TestCase):
         self.api.pr['user'] = dict(p.BOT)
         self.api.pr['auto_merge'] = dict(enabled_by=dict(p.BOT))
         with mock.patch.object(n, 'refresh_plan', return_value=target):
-            with self.assertRaisesRegex(p.Rejected, 'cancelled before'): n.refresh(self.api, p, target, True)
+            with self.assertRaises(p.Rejected): n.refresh(self.api, p, target, True)
         self.assertFalse(self.api.mutations)
 
     def test_snapshot_ref_workflow_event_job_source_and_run_guards(self):
@@ -473,17 +476,17 @@ class NativeReadyTests(unittest.TestCase):
                 api.assert_not_called()
             self.assertFalse(self.api.mutations)
 
-    def test_coordinator_refuses_missing_or_changed_native_verdict_and_cancels(self):
-        self.verdict(False)
+    def test_coordinator_refuses_unreceipted_success_or_changed_failure_and_cancels(self):
         self.api.pr['auto_merge'] = dict(enabled_by=dict(p.BOT))
         self.assertIn('blocked', p.coordinate(self.api, NUMBER, True))
         self.assertIsNone(self.api.pr['auto_merge'])
         self.assertFalse(any(m[0] in {'POST','PATCH'} for m in self.api.mutations))
         self.api = Transcript()
-        service = p.ready_policy()
-        binding = (NATIVE_RUN, 1, 9000)
-        with mock.patch.object(p, 'ready_policy', return_value=service), \
-                mock.patch.object(service, 'require_success', side_effect=[binding, binding, (NATIVE_RUN, 2, 9002)]):
+        self.verdict(False)
+        arm = p.arm_policy()
+        binding = (NATIVE_RUN, 1, 9001, 9000)
+        with mock.patch.object(p, 'arm_policy', return_value=arm), \
+                mock.patch.object(arm, 'failure_barrier', side_effect=[binding, (NATIVE_RUN, 2, 9003, 9002)]):
             self.assertIn('blocked', p.coordinate(self.api, NUMBER, True))
         self.assertIsNone(self.api.pr['auto_merge'])
         self.assertEqual(sum('enablePullRequestAutoMerge' in str(m[1]) for m in self.api.mutations), 0)

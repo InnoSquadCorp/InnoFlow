@@ -211,9 +211,12 @@ class MetadataProofTests(unittest.TestCase):
                     self.assertIn('blocked:', blocked)
                     self.assertFalse(b.base.pr.get('auto_merge'))
                     b.run.update(status='completed', conclusion='success')
-                    # A still-green reporter produces no refresh/completion
-                    # event to rescue a discarded metadata wake-up.
-                    self.assertIsNone(ready.n.refresh_plan(b, bot.p, bot.NUMBER, True))
+                    # A legacy green/unarmed verdict now requires invalidation,
+                    # never enable while already green. Metadata remains a wake-up.
+                    self.assertIsNotNone(ready.n.refresh_plan(b, bot.p, bot.NUMBER, True))
+                    for item in (b.base.native_run, b.base.native_job, b.base.native_check):
+                        item.update(status='completed', conclusion='failure')
+                    b.base.native_job['steps'][-1]['conclusion'] = 'failure'
                     notification = dict(id=META, run_attempt=1)
                     self.assertIn('armed', bot.p.coordinate(b, bot.NUMBER, True, notification))
                     self.assertIn('armed', bot.p.coordinate(b, bot.NUMBER, True, notification))
@@ -256,6 +259,9 @@ class MetadataProofTests(unittest.TestCase):
     def test_metadata_rerun_requires_the_current_attempt_and_rechecks_real_ci(self):
         b = MetadataAPI(bot.Transcript(), bot.NUMBER, bot.HEAD, bot.BASE, bot.MERGE)
         b.rerun()
+        for item in (b.base.native_run, b.base.native_job, b.base.native_check):
+            item.update(status='completed', conclusion='failure')
+        b.base.native_job['steps'][-1]['conclusion'] = 'failure'
         with mock.patch.dict(bot.os.environ, bot.TRUSTED, clear=True):
             self.assertIn('obsolete', bot.p.coordinate(b, bot.NUMBER, True, dict(id=META, run_attempt=1)))
             self.assertFalse(b.base.mutations)
