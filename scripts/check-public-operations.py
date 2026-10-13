@@ -100,16 +100,22 @@ def workflow_boundaries(root):
         if name in {'ready-refresh', 'bot-ready', 'post-merge'}:
             require('      cancel-in-progress: false' in job and '      queue: max' in job,
                     name + ': serialized writers must retain pending work')
-        trusted_ref = 'ref: ${{ github.workflow_sha }}' if name == 'inspect' else 'ref: refs/heads/main'
+        trusted_ref = 'ref: refs/heads/main' if name in {'post-merge-plan', 'post-merge'} else 'ref: ${{ github.workflow_sha }}'
         require(job.count(trusted_ref) == 1 and job.count('persist-credentials: false') == 1 and job.count('sparse-checkout: scripts') == 1, name + ': trusted checkout contract missing')
         if name == 'inspect':
             require('name: Resolve authoritative API targets from ${{ github.workflow_sha }}' in job,
                     'inspector must expose immutable native source attribution')
         require("github.ref == 'refs/heads/main'" in job and "github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'" in job, name + ': trusted execution guard missing')
-    for unsafe in ['pull_request.head', 'secrets.', 'download-artifact', 'cache@', 'gh pr merge', 'pip install', 'npm install', 'continue-on-error']:
+    require("needs: [inspect, bot-ready]" in jobs['ready-plan'] and "always()" in jobs['ready-plan'],
+            'refresh plan must follow completed bot reconciliation')
+    require("id: gate" in jobs['bot-ready'] and "name: ${{ steps.gate.outputs.arm_receipt || 'No native arm receipt' }}" in jobs['bot-ready'] and
+            "if: steps.gate.outputs.arm_receipt != ''" in jobs['bot-ready'], 'post-enable receipt publication missing')
+    for unsafe in ['pull_request.head' , 'secrets.', 'download-artifact', 'cache@', 'gh pr merge', 'pip install', 'npm install', 'continue-on-error']:
         require(unsafe not in source, 'unsafe privileged coordinator input: ' + unsafe)
     reporter = (root / '.github/workflows/dependabot-ready.yml').read_text()
-    require('pull_request_target:\n    branches: [main]' in reporter and 'run-name:' in reporter and 'Ready v1 pr:' in reporter,
+    require('group: dependabot-ready-${{ github.event.pull_request.number }}' in reporter and
+            '  cancel-in-progress: false\n  queue: max' in reporter, 'native reporter must share serialized PR queue')
+    require('pull_request_target:\n    branches: [main]'  in reporter and 'run-name:' in reporter and 'Ready v1 pr:' in reporter,
             'native reporter requires trusted event binding')
     require('ref: ${{ github.workflow_sha }}' in reporter and 'persist-credentials: false' in reporter and
             'sparse-checkout: scripts' in reporter, 'native reporter must checkout immutable trusted source')

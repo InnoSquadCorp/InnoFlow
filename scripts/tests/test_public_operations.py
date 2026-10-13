@@ -153,8 +153,14 @@ class PublicOperationsTests(unittest.TestCase):
         path = '.github/workflows/dependabot-auto-merge.yml'
         self.reject(path, lambda t: t.replace('actions: read', 'actions: write', 1))
         self.reject(path, lambda t: t.replace('persist-credentials: false', 'persist-credentials: true', 1))
-        self.reject(path, lambda t: t.replace('ref: refs/heads/main', 'ref: ${{ github.event.pull_request.head.sha }}', 1))
+        self.reject(path, lambda t: t.replace('ref: ${{ github.workflow_sha }}', 'ref: ${{ github.event.pull_request.head.sha }}', 1))
         self.reject(path, lambda t: t.replace("github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'", 'true', 1))
+        self.reject(path, lambda t: t.replace('needs: [inspect, bot-ready]', 'needs: inspect', 1))
+        self.reject(path, lambda t: t.replace("if: steps.gate.outputs.arm_receipt != ''", 'if: always()', 1))
+        reporter = '.github/workflows/dependabot-ready.yml'
+        self.reject(reporter, lambda t: t.replace('  cancel-in-progress: false', '  cancel-in-progress: true'))
+        self.reject(reporter, lambda t: t.replace('group: dependabot-ready-', 'group: different-'))
+        self.reject(reporter, lambda t: t.replace('checks: read', 'checks: write'))
         self.reject('.github/workflows/ci.yml', lambda t: t.replace('contents: read', 'contents: write', 1))
         self.reject('.github/workflows/dependabot-review-notice.yml', lambda t: t.replace('permissions: {}', 'permissions: write-all'))
 
