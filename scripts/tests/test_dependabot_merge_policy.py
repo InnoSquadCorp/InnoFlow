@@ -20,7 +20,8 @@ READY_RUN = 950
 NATIVE_RUN = 960
 TRUSTED = dict(GITHUB_REPOSITORY=p.REPOSITORY, GITHUB_REF="refs/heads/main",
                GITHUB_WORKFLOW_REF=p.REPOSITORY + "/.github/workflows/dependabot-auto-merge.yml@refs/heads/main",
-               GITHUB_EVENT_NAME="pull_request_target", GITHUB_RUN_ID=str(READY_RUN), GITHUB_RUN_ATTEMPT="1")
+               GITHUB_EVENT_NAME="pull_request_target", GITHUB_RUN_ID=str(READY_RUN), GITHUB_RUN_ATTEMPT="1",
+               GITHUB_JOB="bot-ready", GITHUB_WORKFLOW_SHA=BASE)
 INVENTORY = json.loads((Path(__file__).parent / 'fixtures/dependabot-full-ci.json').read_text())['jobs']
 
 
@@ -139,6 +140,13 @@ class Transcript:
             if 'disablePullRequestAutoMerge' in query: self.pr['auto_merge'] = None
             else: self.pr['auto_merge'] = dict(enabled_by=dict(p.BOT))
             return {}
+        if 'autoMergeRequest' in query:
+            actor = dict(__typename='Bot', login='github-actions', databaseId=41898282)
+            stamp = '2026-10-13T00:00:00Z'
+            request = dict(enabledAt=stamp, mergeMethod='SQUASH', enabledBy=actor) if self.pr.get('auto_merge') else None
+            return dict(repository=dict(databaseId=self.repo['id'], nameWithOwner=p.REPOSITORY,
+                pullRequest=dict(id='PR_node', headRefOid=self.graph_head, autoMergeRequest=request,
+                    timelineItems=dict(nodes=[dict(__typename='AutoSquashEnabledEvent', id='event1', createdAt=stamp, actor=actor)]))))
         return dict(repository=dict(pullRequest=dict(id='PR_node', headRefOid=self.graph_head,
                     reviewDecision=self.review_decision, reviewThreads=dict(nodes=copy.deepcopy(self.threads),
                     pageInfo=dict(hasNextPage=False, endCursor=None)))))
@@ -195,7 +203,7 @@ class DependabotPolicyTests(unittest.TestCase):
                    lambda a: a.rules.clear(), lambda a: a.ruleset.update(enforcement='evaluate'),
                    lambda a: a.ruleset.update(bypass_actors=[dict(actor_id=p.APP, actor_type='Integration')]),
                    lambda a: a.ruleset.update(current_user_can_bypass='always'),
-                   lambda a: a.rules[0]['parameters'].update(strict_required_status_checks_policy=False),
+                   lambda a: a.rules[0]['parameters'].update(strict_required_status_checks_policy=None),
                    lambda a: a.rules[0]['parameters']['required_status_checks'].pop(),
                    lambda a: a.rules[0]['parameters']['required_status_checks'][0].update(integration_id=None)]
         for change in changes:
@@ -269,7 +277,8 @@ class DependabotPolicyTests(unittest.TestCase):
         self.api.review_list.append(dict(id=3, user=dict(id=3), state='DISMISSED'))
         p.proof(self.api, NUMBER)
         self.reject(lambda a: a.threads.append(dict(isResolved=False)))
-        self.reject(lambda a: a.pr.update(requested_reviewers=[dict(id=3)]))
+        self.api.pr.update(requested_reviewers=[dict(id=3)])
+        p.proof(self.api, NUMBER)  # Optional requests alone do not veto verified bots.
         self.reject(lambda a: a.__setattr__('graph_head', 'd' * 40))
         self.reject(lambda a: a.__setattr__('review_decision', 'REVIEW_REQUIRED'))
 
@@ -300,7 +309,13 @@ class DependabotPolicyTests(unittest.TestCase):
         self.assertFalse(any(m[0] == 'graphql' for m in self.api.mutations))
         self.assertFalse(any(m[0] in {'POST', 'PATCH'} for m in self.api.mutations))
 
+    def failure_barrier(self):
+        for item in (self.api.native_run, self.api.native_job, self.api.native_check):
+            item.update(status='completed', conclusion='failure')
+        self.api.native_job['steps'][-1]['conclusion'] = 'failure'
+
     def test_success_enables_native_expected_head_and_reuses_gate(self):
+        self.failure_barrier()
         self.assertIn('armed', p.coordinate(self.api, NUMBER, True))
         native = [m for m in self.api.mutations if m[0] == 'graphql']
         self.assertEqual(len(native), 1)
@@ -312,6 +327,7 @@ class DependabotPolicyTests(unittest.TestCase):
         self.assertEqual(len([m for m in self.api.mutations if m[0] == 'graphql']), 1)
 
     def test_head_base_or_attempt_race_prevents_enable(self):
+        self.failure_barrier()
         for field in ['head', 'base', 'attempt']:
             proof = p.proof(self.api, NUMBER)
             changed = dict(proof, **{field: 'd' * 40 if field != 'attempt' else 2})
@@ -319,17 +335,17 @@ class DependabotPolicyTests(unittest.TestCase):
                 self.assertIn('blocked', p.coordinate(self.api, NUMBER, True))
             self.assertFalse(any(m[0] == 'graphql' for m in self.api.mutations))
 
-    def test_third_proof_failure_precedes_native_enable(self):
-        proof = p.proof(self.api, NUMBER)
-        with mock.patch.object(p, 'proof', side_effect=[proof, proof, p.Rejected('review raced')]):
-            self.assertIn('blocked', p.coordinate(self.api, NUMBER, True))
+    def test_post_enable_proof_failure_cancels_without_receipt(self):
+        self.failure_barrier()
+        evidence = p.proof(self.api, NUMBER)
+        receipts = []
+        with mock.patch.object(p, 'proof', side_effect=[evidence, evidence, p.Rejected('review raced')]):
+            self.assertIn('blocked', p.coordinate(self.api, NUMBER, True, receipt_sink=receipts.append))
         self.assertIsNone(self.api.pr['auto_merge'])
-        self.assertFalse(self.api.mutations)
-        self.api.pr['auto_merge'] = dict(enabled_by=dict(p.BOT))
-        with mock.patch.object(p, 'proof', side_effect=[proof, proof, p.Rejected('review raced')]):
-            self.assertIn('blocked', p.coordinate(self.api, NUMBER, True))
-        self.assertIsNone(self.api.pr['auto_merge'])
-        self.assertIn('disablePullRequestAutoMerge', self.api.mutations[-1][1])
+        self.assertEqual(len(self.api.mutations), 2)
+        self.assertIn('enablePullRequestAutoMerge', self.api.mutations[0][1])
+        self.assertIn('disablePullRequestAutoMerge', self.api.mutations[1][1])
+        self.assertEqual(receipts, [])
 
     def test_base_edit_cancels_only_verified_bot_auto_request(self):
         self.api.pr['base']['ref'] = 'develop'
@@ -339,6 +355,7 @@ class DependabotPolicyTests(unittest.TestCase):
         self.assertFalse(any(m[0] in {'POST', 'PATCH'} for m in self.api.mutations))
 
     def test_permission_denial_does_not_retry_enable_or_direct_merge(self):
+        self.failure_barrier()
         self.api.graph_fail = True
         self.assertIn('blocked', p.coordinate(self.api, NUMBER, True))
         self.assertEqual(len([m for m in self.api.mutations if m[0] == 'graphql']), 1)
@@ -384,6 +401,7 @@ class DependabotPolicyTests(unittest.TestCase):
         return job, check
 
     def test_exact_coordinator_transport_has_no_self_cycle(self):
+        self.failure_barrier()
         self.transport('inspect', 'completed', 'success')
         self.transport(f'bot-ready ({NUMBER})')
         self.transport('ready-plan', 'completed', 'skipped')
@@ -391,9 +409,10 @@ class DependabotPolicyTests(unittest.TestCase):
         self.transport('post-merge-plan', 'queued')
         self.transport('post-merge', 'queued')
         self.assertIn('armed', p.coordinate(self.api, NUMBER, True))
-        self.assertEqual(self.api.native_check['conclusion'], 'success')
+        self.assertEqual(self.api.native_check['conclusion'], 'failure')
 
     def test_actual_unexpanded_refresh_name_is_only_a_bound_empty_pr_target_skip(self):
+        self.failure_barrier()
         source = (ROOT / '.github/workflows/dependabot-auto-merge.yml').read_text()
         expression = source.split('  ready-refresh:\n', 1)[1].split('    name: ${{ ', 1)[1].split(' }}', 1)[0]
         self.assertEqual(expression, p.SKIPPED_REFRESH_NAME)
@@ -661,8 +680,8 @@ class DependabotPolicyTests(unittest.TestCase):
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
         docc = (ROOT / '.github/workflows/docs.yml').read_text()
         docs = (ROOT / '.github/workflows/docs-publish.yml').read_text()
-        self.assertEqual(coordinator.count('ref: refs/heads/main'), 5)
-        self.assertEqual(coordinator.count('ref: ${{ github.workflow_sha }}'), 1)
+        self.assertEqual(coordinator.count('ref: refs/heads/main'), 2)
+        self.assertEqual(coordinator.count('ref: ${{ github.workflow_sha }}'), 4)
         inspect = coordinator.split('  inspect:\n', 1)[1].split('  ready-plan:\n', 1)[0]
         self.assertIn('ref: ${{ github.workflow_sha }}', inspect)
         self.assertIn('name: ' + p.COORDINATOR_SOURCE_STEP + '${{ github.workflow_sha }}', inspect)

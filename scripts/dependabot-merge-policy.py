@@ -224,9 +224,31 @@ def basic(pr, repo, require_open=True):
         require(pr.get("mergeable") is True, "conflict or unknown mergeability")
 
 
+def native_merge_settings(api, repo):
+    fields = ("allow_auto_merge", "allow_squash_merge")
+    for field in fields:
+        if field in repo:
+            require(type(repo[field]) is bool, "malformed native merge setting")
+            require(repo[field] is True, "native auto-merge/squash feature disabled")
+    if all(field in repo for field in fields):
+        return
+    # Read-only job tokens may omit these REST fields. Missing is unknown;
+    # an explicit false or malformed REST value must never fall back.
+    data = api.graphql('''query {
+      repository(owner:"InnoSquadCorp",name:"InnoFlow") {
+        databaseId nameWithOwner autoMergeAllowed squashMergeAllowed
+      }
+    }''', {})
+    observed = data.get("repository") if isinstance(data, dict) else None
+    require(isinstance(observed, dict) and type(observed.get("databaseId")) is int and
+            observed["databaseId"] == repo.get("id") and observed.get("nameWithOwner") == REPOSITORY,
+            "unverified repository merge settings")
+    require(observed.get("autoMergeAllowed") is True and observed.get("squashMergeAllowed") is True,
+            "native auto-merge/squash feature disabled or unknown")
+
+
 def native_rules(api, repo):
-    require(repo.get("allow_auto_merge") is True and repo.get("allow_squash_merge") is True,
-            "native auto-merge/squash feature disabled")
+    native_merge_settings(api, repo)
     rules = api.pages(route("rules/branches/main"))
     status = [r for r in rules if r.get("type") == "required_status_checks"]
     review = [r for r in rules if r.get("type") == "pull_request"]
@@ -258,7 +280,11 @@ def native_rules(api, repo):
     for rule in status:
         verify_source(rule)
         parameters = rule.get("parameters", {})
-        require(parameters.get("strict_required_status_checks_policy") is True, "loose native CI policy")
+        # Preserve the repository's explicit strictness choice. The current
+        # main/test-merge/CI proof is still mandatory; non-strict native rules
+        # cannot atomically lock base advancement after the final proof read.
+        require(type(parameters.get("strict_required_status_checks_policy")) is bool,
+                "missing or malformed native CI strictness")
         for check in parameters.get("required_status_checks", []):
             require(check.get("integration_id") == APP, "required check has wrong app or any source")
             contexts.add(check.get("context"))
@@ -315,7 +341,10 @@ def proof(api, number, notification=None):
     require([p["sha"] for p in parents] == [main, head], "test-merge parents do not match base/head")
     graph = reviews(api, number)
     require(graph["headRefOid"] == head, "head raced during reviews")
-    require(not pr.get("requested_reviewers") and not pr.get("requested_teams"), "review request pending")
+    # basic() has verified the exact same-repository Dependabot identity.
+    # Optional reviewer/team requests remain notifications, untouched here.
+    # Actual pending/changes-requested reviews, unresolved threads and native
+    # required approvals remain enforced and head-bound by reviews() above.
     workflow = api.get(route("actions/workflows/ci.yml"))
     require(workflow.get("path") == CI_PATH and workflow.get("state") == "active", "wrong/inactive CI workflow")
     runs = api.pages(route(f"actions/workflows/ci.yml/runs?event=pull_request&head_sha={head}"), "workflow_runs")
@@ -450,6 +479,13 @@ def ready_policy():
     return module
 
 
+def arm_policy():
+    spec = importlib.util.spec_from_file_location("native_arm_policy", Path(__file__).with_name("dependabot-arm-policy.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def this_policy():
     # importlib-loaded test modules need not be registered in sys.modules.
     class Policy:
@@ -516,7 +552,7 @@ def coordinator_job_check(job, run, attempt, head, checks):
     return check_id
 
 
-def coordinate(api, number, enabled=False, notification=None):
+def coordinate(api, number, enabled=False, notification=None, receipt_sink=None):
     trusted_context(os.environ)
     pr = api.get(route(f"pulls/{number}"))
     require(pr.get("base", {}).get("repo", {}).get("full_name") == REPOSITORY, "foreign target")
@@ -548,32 +584,49 @@ def coordinate(api, number, enabled=False, notification=None):
             elif not runs or max(runs, key=lambda r: (r["run_number"], r["id"]))["id"] != notification["id"]:
                 return "obsolete notification; no mutation"
         require(enabled is True, "standby: new auto-merge approvals disabled")
+        readiness, arm, policy = ready_policy(), arm_policy(), this_policy()
+        arm.writer_source(api, policy, readiness)  # Verify immutable writer before any enable.
         first = proof(api, number, notification)
         require(first["head"] == head, "head changed before native enable")
-        readiness = ready_policy()
-        binding = readiness.require_success(api, this_policy(), number, head)
+        native = readiness.latest(api, policy, number, head)
+        # Existing activations can be maintained, but never newly armed while
+        # Ready is success/pending: it could merge before post-enable proof.
+        if native.get("status") != "completed" or native.get("conclusion") == "success":
+            require(first["pr"].get("auto_merge") is not None,
+                    "waiting for controlled native failure before new enable")
+            arm.authenticated_receipt(api, policy, readiness, number, first["pr"], native, first)
+            second = proof(api, number, notification)
+            same(first, second)
+            arm.authenticated_receipt(api, policy, readiness, number, second["pr"], expected_proof=second)
+            return "native auto-merge armed; authorized native activation pending or complete"
+        binding = arm.failure_barrier(api, policy, readiness, number, head)
         second = proof(api, number, notification)
         same(first, second)
-        require(readiness.require_success(api, this_policy(), number, head) == binding, "native Ready changed before arming")
-        # Native Ready is already green. All authoritative proof reads must
-        # precede enable: GitHub can merge as soon as that request is accepted.
-        third = proof(api, number, notification)
-        same(second, third)
-        require(readiness.require_success(api, this_policy(), number, head) == binding, "native Ready changed at final arming guard")
-        if not third["pr"].get("auto_merge"):
+        require(arm.failure_barrier(api, policy, readiness, number, head) == binding,
+                "native failure barrier changed before arming")
+        if not second["pr"].get("auto_merge"):
             query = '''mutation($id:ID!,$head:GitObjectID!) {
               enablePullRequestAutoMerge(input:{pullRequestId:$id,expectedHeadOid:$head,mergeMethod:SQUASH}) {
                 pullRequest { id headRefOid autoMergeRequest { enabledAt } }
               }
             }'''
             try:
-                api.graphql(query, {"id": third["node"], "head": head})
+                api.graphql(query, {"id": second["node"], "head": head})
             except Exception:
                 # Unknown mutation outcome: read once, never blind retry/fallback.
                 observed = api.get(route(f"pulls/{number}"))
                 require(observed.get("head", {}).get("sha") == head and observed.get("auto_merge") is not None,
                         "native enable outcome not confirmed")
-        return "native auto-merge armed; server owns actual merge"
+        # The required native failure still blocks server-side merging here.
+        third = proof(api, number, notification)
+        same(second, third)
+        require(third["pr"].get("auto_merge") is not None, "native request disappeared after enable")
+        require(arm.failure_barrier(api, policy, readiness, number, head) == binding,
+                "native failure barrier changed after enable")
+        receipt = arm.receipt_name(api, policy, readiness, number, third, binding)
+        if receipt_sink is not None:
+            receipt_sink(receipt)
+        return "native auto-merge armed; post-enable receipt awaits readonly Ready activation"
     except Exception as error:
         reason = "blocked: " + str(error)
         try:
@@ -752,7 +805,11 @@ def main():
             print("Current metadata targets:", sorted(set(numbers)))
         else:
             require(args.pr in numbers, "PR does not match notification")
-            print(coordinate(api, args.pr, enabled, notification))
+            def emit_receipt(receipt):
+                require(arm_policy().RECEIPT.fullmatch(receipt) is not None, "invalid arm receipt output")
+                with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+                    output.write("arm_receipt=" + receipt + "\n")
+            print(coordinate(api, args.pr, enabled, notification, receipt_sink=emit_receipt))
     except (Rejected, KeyError, TypeError, OSError, urllib.error.URLError) as error:
         print("Dependabot policy rejected: " + str(error), file=sys.stderr)
         return 1

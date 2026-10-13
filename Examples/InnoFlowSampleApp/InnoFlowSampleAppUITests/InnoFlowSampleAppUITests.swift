@@ -68,6 +68,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
       in: app,
       until: exists(destinationAnchor, describedAs: "destination for \(identifier)"),
       retryWhile: hittable(hubButton, describedAs: "hub button \(identifier)"),
+      requiresFullyVisibleHubRow: true,
       file: file,
       line: line
     )
@@ -80,11 +81,14 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     until postcondition: UICondition,
     timeout: TimeInterval = UIWait.transition,
     retryWhile retryCondition: UICondition? = nil,
+    requiresFullyVisibleHubRow: Bool = false,
     file: StaticString = #filePath,
     line: UInt = #line
   ) {
     let button = app.buttons[identifier]
-    guard scrollToHittable(button, in: app) else {
+    guard
+      scrollToHittable(button, in: app, requiresFullyVisibleHubRow: requiresFullyVisibleHubRow)
+    else {
       XCTFail(
         "Expected button \(identifier) to become hittable",
         file: file,
@@ -100,7 +104,8 @@ final class InnoFlowSampleAppUITests: XCTestCase {
 
     if let retryCondition,
       conditionIsSatisfied(retryCondition),
-      scrollToHittable(button, in: app, maxSwipes: 1)
+      scrollToHittable(
+        button, in: app, maxSwipes: 1, requiresFullyVisibleHubRow: requiresFullyVisibleHubRow)
     {
       if conditionIsSatisfied(postcondition) {
         return
@@ -128,9 +133,10 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   private func scrollToHittable(
     _ element: XCUIElement,
     in app: XCUIApplication,
-    maxSwipes: Int = 6
+    maxSwipes: Int = 6,
+    requiresFullyVisibleHubRow: Bool = false
   ) -> Bool {
-    if isVisiblyHittable(element, in: app) {
+    if isVisiblyHittable(element, in: app, requiresFullyVisibleHubRow: requiresFullyVisibleHubRow) {
       return true
     }
 
@@ -139,7 +145,7 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     // the target's frame; retain a bounded reverse search for unrealized rows.
     let swipeUpFirst = UIScrollGeometry.swipeUpFirst(
       target: element.exists ? element.frame : .null,
-      viewport: app.frame
+      viewport: requiresFullyVisibleHubRow ? hubContentViewport(in: app) : app.frame
     )
     for swipeUp in [swipeUpFirst, !swipeUpFirst] {
       for _ in 0..<maxSwipes {
@@ -147,7 +153,9 @@ final class InnoFlowSampleAppUITests: XCTestCase {
         // XCTest gestures already wait for idle. Do not wrap isHittable in a
         // short XCTWaiter: its timeout can interrupt nested AX requests and
         // turn an ordinary offscreen row into an invalid-activation-point error.
-        if isVisiblyHittable(element, in: app) {
+        if isVisiblyHittable(
+          element, in: app, requiresFullyVisibleHubRow: requiresFullyVisibleHubRow)
+        {
           return true
         }
       }
@@ -157,11 +165,34 @@ final class InnoFlowSampleAppUITests: XCTestCase {
   }
 
   @MainActor
-  private func isVisiblyHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+  private func isVisiblyHittable(
+    _ element: XCUIElement,
+    in app: XCUIApplication,
+    requiresFullyVisibleHubRow: Bool = false
+  ) -> Bool {
     guard element.exists else { return false }
-    return UIScrollGeometry.isHittable(frame: element.frame, viewport: app.frame) {
+    // AX can report a hub row as hittable while only its edge protrudes below
+    // the navigation bar. Re-read the list and bar after every scroll; only
+    // hub rows need full containment, not Back, Close, or form controls.
+    let viewport = requiresFullyVisibleHubRow ? hubContentViewport(in: app) : app.frame
+    return UIScrollGeometry.isHittable(
+      frame: element.frame, viewport: viewport, requiresFullVisibility: requiresFullyVisibleHubRow
+    ) {
       element.isHittable
     }
+  }
+
+  @MainActor
+  private func hubContentViewport(in app: XCUIApplication) -> CGRect {
+    let navigationBar = app.navigationBars["InnoFlow Samples"]
+    let collection = app.collectionViews.firstMatch
+    let list = collection.exists ? collection : app.tables.firstMatch
+    guard navigationBar.exists, list.exists else { return .null }
+    return UIScrollGeometry.viewportBelowNavigationBar(
+      container: list.frame,
+      app: app.frame,
+      navigationBar: navigationBar.frame
+    )
   }
 
   @MainActor
@@ -416,7 +447,8 @@ final class InnoFlowSampleAppUITests: XCTestCase {
 
     for demo in SampleDemo.catalog {
       XCTAssertTrue(
-        scrollToHittable(app.buttons[demo.accessibilityIdentifier], in: app),
+        scrollToHittable(
+          app.buttons[demo.accessibilityIdentifier], in: app, requiresFullyVisibleHubRow: true),
         "Expected hub button \(demo.accessibilityIdentifier)"
       )
     }
@@ -435,7 +467,8 @@ final class InnoFlowSampleAppUITests: XCTestCase {
     // whose declaration order differs from their displayed learning level.
     for demo in SampleDemo.catalog.reversed() {
       XCTAssertTrue(
-        scrollToHittable(app.buttons[demo.accessibilityIdentifier], in: app),
+        scrollToHittable(
+          app.buttons[demo.accessibilityIdentifier], in: app, requiresFullyVisibleHubRow: true),
         "Expected hub button \(demo.accessibilityIdentifier) in reverse traversal"
       )
     }

@@ -118,12 +118,15 @@ class CoordinatorAdmissionTests(unittest.TestCase):
         source = (ROOT / '.github/workflows/dependabot-auto-merge.yml').read_text()
         expr = condition(source, 'ready-plan')
         for result in ['success', 'failure', 'cancelled', 'skipped']:
-            for event in ['pull_request_target', 'workflow_run', 'push', 'schedule', 'workflow_dispatch']:
-                for targets in ['', '[]', '[45]']:
-                    actual = evaluate(expr, {'needs.inspect.result': result, 'github.event_name': event,
-                                             'needs.inspect.outputs.prs': targets, 'github.repository': 'InnoSquadCorp/InnoFlow',
-                                             'github.ref': 'refs/heads/main', 'github.workflow_ref': 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'})
-                    self.assertEqual(actual, result == 'success' and event != 'pull_request_target' and targets == '[45]')
+            for bot_result in ['success', 'skipped', 'failure', 'cancelled']:
+                for event in ['pull_request_target', 'workflow_run', 'push', 'schedule', 'workflow_dispatch']:
+                    for targets in ['', '[]', '[45]']:
+                        actual = evaluate(expr, {'needs.inspect.result': result, 'needs.bot-ready.result': bot_result,
+                            'github.event_name': event, 'needs.inspect.outputs.prs': targets,
+                            'github.repository': 'InnoSquadCorp/InnoFlow', 'github.ref': 'refs/heads/main',
+                            'github.workflow_ref': 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'})
+                        self.assertEqual(actual, result == 'success' and bot_result in {'success', 'skipped'} and
+                                         event != 'pull_request_target' and targets == '[45]')
         recovery = condition(source, 'post-merge-plan')
         self.assertNotIn('needs.inspect.outputs.prs', recovery)
         for event in ['push', 'schedule', 'workflow_dispatch']:

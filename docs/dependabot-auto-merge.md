@@ -64,9 +64,11 @@ unrecognized no-ops fail closed. The shared metadata verifier is included in the
 Ready reporter's source-compatibility proof. Empty Ready target lists allocate
 no planner, while main/schedule/manual post-merge recovery remains independent.
 
-Requested reviews, unresolved threads, effective changes-requested/pending reviews
-and native review decisions block readiness. A comment does not clear requested
-changes. Review events wake a zero-permission notice; the trusted coordinator
+Optional requested reviewers/teams are notifications for an exactly verified
+same-repository Dependabot PR, not an additional approval requirement. Requests
+and CODEOWNERS stay unchanged; a manual re-request alone is not a pause switch.
+Actual pending/changes-requested reviews, unresolved threads and native required
+approval decisions still block readiness. A comment does not clear requested changes. Review events wake a zero-permission notice; the trusted coordinator
 re-reads APIs. Thread resolution has no dedicated Actions event and is checked on
 the next wake or hourly reconciliation. There is a review-event race between the
 last read and processing a new event; this is not an atomic review lock. Existing
@@ -81,12 +83,21 @@ retained. Reviews from other readers remain sampled metadata checks, not a nativ
 atomic veto. Missing, inactive or unverifiable native PR protections block
 activation; this code never changes repository settings to satisfy the guard.
 
-Native active strict main rules must require **CI Required**, **Build Documentation**
+Native active main rules must require **CI Required**, **Build Documentation**
 and **Dependabot Merge Ready**, each from Actions app `15368`. Visible bypass
 capability is rejected. Every applicable CI/PR ruleset must report this workflow
 token's `current_user_can_bypass=never`. Redacted `bypass_actors` is not an empty
 list; absent runtime no-bypass proof leaves automation in standby. An owner audit
 does not replace that runtime proof or justify an admin credential in the workflow.
+
+The repository's explicitly configured strictness is preserved (`false` and `true`
+are accepted; missing/non-boolean values fail closed). Every proof still requires
+current main, exact test-merge parents and matching full CI. With non-strict rules,
+base movement after the last proof and before native merging is not atomically
+prevented. This limitation needs owner acceptance; the code does not change
+strictness or add a credential to manufacture stronger assurances. Read-only REST
+responses may omit native merge settings; only omitted fields use a repository
+ID/name-bound GraphQL query. Explicit false/malformed settings never fall back.
 
 GitHub owns one unconditional, fixed-name **Dependabot Merge Ready** job in
 `dependabot-ready.yml`; no API creates or patches its verdict. Its read-only
@@ -112,21 +123,42 @@ source or other outcomes remain blocked. Legacy same-head coordinator runs
 without that source marker can require an explicitly approved fresh commit;
 a new metadata event cannot establish missing historical source attribution.
 
-The bot coordinator validates the full proof and latest successful native Ready
-repeatedly before `enablePullRequestAutoMerge(expectedHeadOid)`. Native strict
-checks and resolved-thread rules own actual merge/base freshness. The request can
-merge immediately, so a later metadata read is not presented as a rollback barrier.
-Failed eligibility cancels a verified bot's existing native request before a
-readiness refresh. There is no direct merge or admin bypass fallback.
+The bot coordinator uses a controlled **failed** native Ready as the merge
+barrier. Only that exact failure run/attempt/job/check can authorize a new
+`enablePullRequestAutoMerge(expectedHeadOid, SQUASH)`. It proves current eligibility
+twice before enable and again afterward while the same failure still blocks
+native merging. Only then may the final successful `bot-ready` step publish a
+receipt. A green/unarmed PR is first refreshed to failure; it is never enabled
+while green. Failed eligibility protectively cancels the verified bot request.
+There is no direct merge or admin bypass fallback.
 
-Background events may request only a provenance-verified native reporter job
-rerun when a terminal controlled verdict disagrees with current eligibility.
-The actions-write writer is separate from contents/pull-request writes. Per-PR
-queued serialization and authoritative prior-writer history prevent duplicate
-requests for the same run/attempt; uncertain writes are read back, never blindly
-retried. API/infrastructure failures require operator recovery. A new trusted
-reporter definition needs a fresh PR lifecycle run; an old definition is not
-rerun with different policy code.
+The native receipt binds current head/base/test-merge, full CI run/attempt, PR node,
+immutable trusted source, the exact failed Ready tuple and current native request.
+Request identity includes GitHub Actions' actor, squash method, enabled timestamp
+and the unique latest auto-merge timeline event ID. Thus cancellation/re-enabling,
+even within one timestamp second, cannot reuse an old receipt. The reporter checks
+an exact completed/successful `bot-ready` job and its final step plus the successful
+inspector's source attribution. It does not wait for the entire coordinator run,
+which still contains the refresh job. All Ready/receipt source checkouts are immutable.
+
+`ready-plan` runs after bot reconciliation. Its narrowly privileged actions-write
+writer may rerun only the verified failed reporter job for the immediately next
+attempt, while armed only with the same coordinator run's completed receipt.
+The readonly reporter rechecks that receipt, the native request and current full
+proof before publishing success. A receipt cannot authorize attempt N+2 or a new
+reporter run. Existing armed success/pending is maintained only with its matching
+activation proof, never by issuing a new enable during a pending verdict.
+
+Reporter, coordinator and refresh share one per-PR non-cancelling max queue.
+No job waits for another participant's completion while holding the queue: refresh
+only observes rerun acceptance/attempt advancement. A queued activation with no job
+yet is recognized only by the exact receipt and predecessor; it exempts no check
+IDs and cannot hide an orphan check. Authoritative prior-writer history prevents
+duplicate requests for the same run/attempt. Unknown write outcomes get bounded
+readback, never a blind retry. API/infrastructure failures require operator
+recovery. A new trusted definition requires a fresh PR lifecycle run, not a rerun
+of old workflow code against a new policy. Checks permissions remain read-only;
+no API creates or patches Ready.
 
 Reconciliation lists all open PRs, managing main PRs plus verified bots retargeted
 away from main so those old native requests are still cancelled. Non-main human
@@ -161,8 +193,8 @@ from live activation evidence.
    Existing API-created legacy Ready checks are not reused as native proof; bot
    heads with legacy checks need a fresh head/lifecycle run before admission.
    Confirm no bootstrap cycle before enabling new bot approvals
-3. Preserve all existing main/tag protections, strict CI Required and Build
-   Documentation, review-thread resolution and no bypass. Add only the new
+3. Preserve all existing main/tag protections, the chosen strictness, CI Required
+   and Build Documentation, review-thread resolution and no bypass. Add only the new
    **Dependabot Merge Ready** Actions context to the main rule. Audit inherited
    and classic protections; inaccessible APIs are not evidence of absence
    Verify the active native PR rule and thread-resolution requirement without
