@@ -18,7 +18,7 @@
     "Package.swift": "f3fb44347b04876e2ea6c3d48d7172d7ba98ba5466c83ba56a6572798f407f37",
     "Tests/InnoFlowAuthoringTestSupport/AuthoringFixtures.swift": "cfacb5307d306845a4c326fdb3f23fff9df5113555bad9d7b293db9f5844da14",
     "Tests/InnoFlowCoreTestSupport/AsyncAndEffectSupport.swift": "124134251c9ae5f97454520b14dc78540a4246868fd9f95411768b8ce7a9e820",
-    "Tests/InnoFlowCoreTestSupport/CoreFixtures.swift": "27e76c4cece95b8dfbcf68b07b0e8ead93dcb117f728ddf2e4a65f05f46cccf8",
+    "Tests/InnoFlowCoreTestSupport/CoreFixtures.swift": "52258d9c2a8e323c11f813b69b310c97f9c2bce953eb83c126abd92f8b7a1573",
     "Tests/InnoFlowCoreTestSupport/EffectInstrumentationWitness.swift": "0914d12a12e556e819224395e3c454174ab808d5ce316812549797eefac3f951",
     "Tests/InnoFlowCoreTests/ActionPathIdentityTests.swift": "887ee90df239b5fc1b1684640cfbe0da8ee815a6661c01fe53408a3b3f949811",
     "Tests/InnoFlowCoreTests/CompletionRelayConsistencyTests.swift": "8a5dcbff94e2ec9b86aed848fdb344f16a31dd54bc38afb32eba5fa872658d2d",
@@ -52,7 +52,7 @@
     "Tests/InnoFlowMacrosTests/OutputGenericMigrationMacroTests.swift": "d52650fee9d991575d8806582493fe4fafa7dd7b6a7496f8ce4c5a2fc740a3dd",
     "Tests/InnoFlowMacrosTests/StrictPhaseTotalityMacroTests.swift": "77f5eab3a74e55f0e8a0c8bda67e80e84af44f6214b09a22099954c54b58cb53",
     "Tests/InnoFlowSwiftUIIntegrationTests/EffectTaskTests.swift": "8758aab94a1beffe8dbd1fdbf906ad3a9b2411914b87af74a1d80ddf1cae5aed",
-    "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift": "cfcfc9fea2037444f76417f2db2e3d7c420961b61360a3a3ce95a0f9128f449d",
+    "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift": "d6e66353dd5de366ed4e8c04ab0254252298b2ae8bf901267b2f85dd531425a6",
     "Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift": "c5b7d98a72f603076695077705ae26ab9f7f6412f75c52ee951b80041daf0e9c",
     "Tests/InnoFlowSwiftUIIntegrationTests/StoreSwiftUIPreviewTests.swift": "857ad499ad305a6e60db340b074bd4c8fa7827f9196153d1f4d9fdaef814d6eb",
     "Tests/InnoFlowSwiftUIIntegrationTests/TestStoreCoreTests.swift": "318294838d48d0505de757f80f9740d113bb8c750a84ce5913b27922e8a5478a",
@@ -2388,7 +2388,7 @@
       "displayName": "EffectRuntime metrics snapshot tracks registration, cancellation, and finish counts",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/effectRuntimeMetricsSnapshot()",
-      "line": 607,
+      "line": 623,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2397,7 +2397,7 @@
       "displayName": "Optional performance benchmarks print baselines when enabled",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/optionalPerformanceBenchmarks()",
-      "line": 1019,
+      "line": 1035,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2406,7 +2406,7 @@
       "displayName": "StoreInstrumentation.osLog includeActions evaluates action descriptions",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/osLogIncludeActionsEvaluatesActionDescription()",
-      "line": 445,
+      "line": 453,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2415,7 +2415,7 @@
       "displayName": "StoreInstrumentation.osLog explicitly includes cancellation ID descriptions",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/osLogIncludeCancellationIDsEvaluatesDescription()",
-      "line": 393,
+      "line": 401,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2424,7 +2424,7 @@
       "displayName": "StoreInstrumentation.osLog redaction does not evaluate action descriptions",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/osLogRedactionDoesNotEvaluateActionDescription()",
-      "line": 345,
+      "line": 353,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2433,7 +2433,7 @@
       "displayName": "@InnoFlow(phaseManaged: true) auto-applies static phaseMap inside the synthesized reducer",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/phaseManagedMacroAutoAppliesPhaseMap()",
-      "line": 170,
+      "line": 178,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2442,7 +2442,7 @@
       "displayName": "Projection observer registry honors custom keys inside dependency groups",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverRegistryCustomDependenciesDoNotFallbackToAlwaysRefresh()",
-      "line": 852,
+      "line": 868,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2451,7 +2451,7 @@
       "displayName": "Projection observer registry keeps multi-bucket dedupe and stale pruning semantics",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverRegistryMultiBucketDedupeAndStalePruning()",
-      "line": 949,
+      "line": 965,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2460,7 +2460,7 @@
       "displayName": "Projection observer registry compacts untouched dependency buckets on periodic maintenance",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverRegistryPeriodicCompaction()",
-      "line": 813,
+      "line": 829,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2469,7 +2469,7 @@
       "displayName": "Projection observer registry evaluates a changed single bucket exactly once",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverRegistrySingleBucketEvaluation()",
-      "line": 885,
+      "line": 901,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2478,7 +2478,7 @@
       "displayName": "Projection observer registry preserves registration from a single-bucket callback",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverRegistrySingleBucketReentrantRegistration()",
-      "line": 907,
+      "line": 923,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2487,7 +2487,7 @@
       "displayName": "Projection observer registry compacts untouched dependency buckets after stale threshold",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverRegistryThresholdCompaction()",
-      "line": 985,
+      "line": 1001,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2496,7 +2496,7 @@
       "displayName": "Projection observer stats dedupe multi-field selections when multiple dependencies change in one action",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverStatsDedupeMultiFieldSelections()",
-      "line": 710,
+      "line": 726,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2505,7 +2505,7 @@
       "displayName": "Projection observer stats dedupe six-field selections and fallback selectors still always refresh",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverStatsDedupeSixFieldSelections()",
-      "line": 731,
+      "line": 747,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2514,7 +2514,7 @@
       "displayName": "Projection observer stats track selective refresh for key-path, dependency, and closure selections",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/projectionObserverStatsTrackSelectiveRefresh()",
-      "line": 678,
+      "line": 694,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2523,7 +2523,7 @@
       "displayName": "Scoped observer registry tracks refresh passes without changing semantics",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/scopedObserverRegistryRefreshCount()",
-      "line": 592,
+      "line": 608,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2532,7 +2532,7 @@
       "displayName": "Scoped projection stats track dependency-annotated and fallback selections",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/scopedProjectionObserverStatsSelectiveRefresh()",
-      "line": 782,
+      "line": 798,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2541,7 +2541,7 @@
       "displayName": "StoreInstrumentation.signpost supports redacted and explicit error payload paths",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/signpostErrorPayloadOptionEvaluates()",
-      "line": 408,
+      "line": 416,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2550,7 +2550,7 @@
       "displayName": "StoreInstrumentation.signpost redaction does not evaluate action descriptions",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/signpostRedactionDoesNotEvaluateActionDescription()",
-      "line": 368,
+      "line": 376,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2568,7 +2568,7 @@
       "displayName": "Store instrumentation records cancellation and trailing throttle drop events",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationCancellationAndDrop()",
-      "line": 467,
+      "line": 475,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2577,7 +2577,7 @@
       "displayName": "StoreInstrumentation.combined array overload fans out events to every sink",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationCombinedArrayFansOut()",
-      "line": 313,
+      "line": 321,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2586,7 +2586,7 @@
       "displayName": "StoreInstrumentation.combined fans out events to every sink",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationCombinedFansOut()",
-      "line": 282,
+      "line": 290,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2595,7 +2595,7 @@
       "displayName": "Store instrumentation records immediate emissions before reducer reentry",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationImmediateEmissionPrecedesReducerReentry()",
-      "line": 127,
+      "line": 135,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2604,7 +2604,7 @@
       "displayName": "StoreInstrumentation.osLog preserves runtime behavior",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationOSLogFactory()",
-      "line": 219,
+      "line": 227,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2613,7 +2613,7 @@
       "displayName": "Store instrumentation records run emissions before reducer reentry",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationRunEmissionPrecedesReducerReentry()",
-      "line": 147,
+      "line": 155,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2631,7 +2631,7 @@
       "displayName": "StoreInstrumentation.signpost preserves runtime behavior",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationSignpostFactory()",
-      "line": 195,
+      "line": 203,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2640,7 +2640,7 @@
       "displayName": "StoreInstrumentation.sink captures unified lifecycle events in order",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationSinkCapturesUnifiedEvents()",
-      "line": 243,
+      "line": 251,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {
@@ -2649,7 +2649,7 @@
       "displayName": "Store instrumentation records storeReleased drops from late uncooperative emissions",
       "file": "Tests/InnoFlowSwiftUIIntegrationTests/StoreInstrumentationTests.swift",
       "identifier": "StoreInstrumentationTests/storeInstrumentationStoreReleasedDrop()",
-      "line": 542,
+      "line": 558,
       "target": "InnoFlowSwiftUIIntegrationTests"
     },
     {

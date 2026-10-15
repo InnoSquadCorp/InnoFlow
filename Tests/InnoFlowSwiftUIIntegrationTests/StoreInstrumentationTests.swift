@@ -92,17 +92,22 @@ struct StoreInstrumentationTests {
   }
 
   @Test("Store instrumentation records run lifecycle and emitted actions")
-  func storeInstrumentationRunLifecycle() async {
+  func storeInstrumentationRunLifecycle() async throws {
     let probe = InstrumentationProbe()
+    let delayedEmissionGate = RunStartGate()
+    let started = AsyncTestSignal()
+    let finished = AsyncTestSignal()
     let store = Store(
-      reducer: InstrumentationFeature(),
+      reducer: InstrumentationFeature(delayedEmissionGate: delayedEmissionGate),
       initialState: .init(),
       instrumentation: .init(
         didStartRun: { event in
           probe.record("start:\(event.cancellationID?.description ?? "nil")")
+          started.signal()
         },
         didFinishRun: { event in
           probe.record("finish:\(event.cancellationID?.description ?? "nil")")
+          finished.signal()
         },
         didEmitAction: { event in
           probe.record("emit:\(event.action)")
@@ -111,12 +116,15 @@ struct StoreInstrumentationTests {
     )
 
     store.send(.startDelayed)
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      store.state.log == ["delayed"]
-        && probe.events.contains("start:instrumented-delayed")
-        && probe.events.contains("emit:received(\"delayed\")")
-        && probe.events.contains("finish:instrumented-delayed")
+    let didStart = await started.wait()
+    if !didStart {
+      await delayedEmissionGate.open()
     }
+    try #require(didStart)
+    #expect(store.state.log.isEmpty)
+    #expect(!probe.events.contains("emit:received(\"delayed\")"))
+    await delayedEmissionGate.open()
+    try #require(await finished.wait())
 
     #expect(store.state.log == ["delayed"])
     #expect(probe.events.contains("start:instrumented-delayed"))
@@ -467,9 +475,13 @@ struct StoreInstrumentationTests {
   @Test("Store instrumentation records cancellation and trailing throttle drop events")
   func storeInstrumentationCancellationAndDrop() async throws {
     let probe = InstrumentationProbe()
+    let delayedEmissionGate = RunStartGate()
+    let started = AsyncTestSignal()
+    let finished = AsyncTestSignal()
+    let throttleDropped = AsyncTestSignal()
     let throttleSleepProbe = CancellationAwareSleepProbe()
     let store = Store(
-      reducer: InstrumentationFeature(),
+      reducer: InstrumentationFeature(delayedEmissionGate: delayedEmissionGate),
       initialState: .init(),
       clock: .init(
         now: { ContinuousClock().now },
@@ -478,12 +490,19 @@ struct StoreInstrumentationTests {
       instrumentation: .init(
         didStartRun: { event in
           probe.record("start:\(event.cancellationID?.description ?? "nil")")
+          started.signal()
+        },
+        didFinishRun: { _ in
+          finished.signal()
         },
         didEmitAction: { event in
           probe.record("emit:\(event.action)")
         },
         didDropAction: { event in
           probe.record("drop:\(String(describing: event.action)):\(event.reason)")
+          if case .throttledOrDebouncedCancellation = event.reason {
+            throttleDropped.signal()
+          }
         },
         didCancelEffects: { event in
           probe.record("cancel:\(event.id?.description ?? "all")")
@@ -492,34 +511,31 @@ struct StoreInstrumentationTests {
     )
 
     store.send(.startDelayed)
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      probe.events.contains("start:instrumented-delayed")
+    let didStart = await started.wait()
+    if !didStart {
+      await delayedEmissionGate.open()
     }
+    try #require(didStart)
+    #expect(store.state.log.isEmpty)
+    #expect(!probe.events.contains("emit:received(\"delayed\")"))
     await store.cancelEffects(identifiedBy: "instrumented-delayed")
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      probe.events.contains("cancel:instrumented-delayed")
-        && probe.events.contains(where: {
-          $0.contains(
-            "drop:Optional(InnoFlowCoreTestSupport.InstrumentationFeature.Action.received(\"delayed\")):cancellationBoundary"
-          )
-            || $0.contains(
-              "drop:Optional(InnoFlowCoreTestSupport.InstrumentationFeature.Action.received(\"delayed\")):inactiveToken"
-            )
-        })
-    }
+    // Do not release the uncooperative send until cancellation bookkeeping
+    // completes. Observing a start event does not impose a wall-clock deadline.
+    await delayedEmissionGate.open()
+    try #require(await finished.wait())
 
     store.send(.trailingThrottle(1))
-    try #require(await throttleSleepProbe.started.wait())
+    let throttleDidStart = await throttleSleepProbe.started.wait()
+    if !throttleDidStart {
+      await throttleSleepProbe.release()
+    }
+    try #require(throttleDidStart)
     await store.cancelEffects(identifiedBy: "instrumented-throttle")
     try #require(await throttleSleepProbe.cancelled.wait())
-    await waitUntil(timeout: .seconds(60), pollInterval: .milliseconds(10)) {
-      probe.events.contains("cancel:instrumented-throttle")
-        && probe.events.contains(where: {
-          $0.contains("drop:nil:throttledOrDebouncedCancellation")
-        })
-    }
+    try #require(await throttleDropped.wait())
 
     #expect(store.state.log.isEmpty)
+    #expect(!probe.events.contains("emit:received(\"delayed\")"))
     #expect(probe.events.contains("cancel:instrumented-delayed"))
     #expect(probe.events.contains("cancel:instrumented-throttle"))
     #expect(
