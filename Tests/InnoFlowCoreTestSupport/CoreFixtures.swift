@@ -1151,6 +1151,8 @@ struct ScopedCounterFeature: Reducer {
 }
 
 struct InstrumentationFeature: Reducer {
+  let delayedEmissionGate: RunStartGate
+
   struct State: Equatable, Sendable, DefaultInitializable {
     var log: [String] = []
   }
@@ -1165,8 +1167,9 @@ struct InstrumentationFeature: Reducer {
     switch action {
     case .startDelayed:
       return .run { send in
-        let delayedEmissionInterval: Duration = .milliseconds(50)
-        try? await Task.sleep(for: delayedEmissionInterval)
+        // Intentionally uncooperative: cancellation must be enforced by Send,
+        // after the test explicitly releases this operation.
+        await delayedEmissionGate.wait()
         await send(.received("delayed"))
       }
       .cancellable("instrumented-delayed")
