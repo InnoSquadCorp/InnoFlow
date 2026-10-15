@@ -79,7 +79,7 @@ jobs:
           CI_REUSE: ${{ steps.reuse.outputs.proof }}
         run: python3 -B scripts/ci-policy.py plan --event "$GITHUB_EVENT_PATH" --output .build/ci-plan.json
       - name: Preserve change selection evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-plan-${{ github.sha }}-${{ github.run_attempt }}
           path: .build/ci-plan.json
@@ -540,7 +540,7 @@ jobs:
 
       - name: Preserve failed focused runtime results
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: focused-runtime-${{ matrix.platform }}-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/focused-runtime-${{ matrix.platform }}.xcresult
@@ -571,7 +571,7 @@ jobs:
         run: xcodebuild -version
 
       - name: Select supported Ruby
-        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+        uses: ruby/setup-ruby@e81a8fa391b11a595c1b7ed84177cc0fe02faf83 # v1
         with:
           ruby-version: '3.4.4'
 
@@ -819,7 +819,7 @@ jobs:
 
       - name: Preserve canonical sample UI results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sample-ui-results-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/sample-ui-results.xcresult

@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+      - uses: ruby/setup-ruby@e81a8fa391b11a595c1b7ed84177cc0fe02faf83 # v1
         with:
           ruby-version: '3.4.4'
       - name: Probe exact legacy runtime and one focused inventory
@@ -35,7 +35,7 @@ jobs:
           ruby scripts/runtime-provisioning-probe.rb "${args[@]}"
       - name: Preserve diagnostics even on failure
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: runtime-probe-${{ github.sha }}-${{ matrix.check }}-${{ github.run_attempt }}
           path: |
@@ -59,7 +59,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/catalog"
           { xcodebuild -version; xcrun swift --version; } 2>&1 | tee "$RUNNER_TEMP/catalog/toolchain.txt"
           xcrun simctl list runtimes -j > "$RUNNER_TEMP/catalog/runtimes.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: runtime-probe-${{ github.sha }}-macos15-toolchain-${{ github.run_attempt }}
