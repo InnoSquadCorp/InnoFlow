@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "name": "increment and decrement are serialized",
+      "initial": 0,
+      "actions": ["increment", "increment", "decrement"],
+      "expected": 1
+    },
+    {
+      "name": "reset observes the latest committed state",
+      "initial": 4,
+      "actions": ["increment", "reset", "increment"],
+      "expected": 1
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+# Preserve generated BCV separators and canonical license copies byte-for-byte.
+kotlin/*/api/*.api whitespace=-blank-at-eof
+typescript/packages/*/LICENSE whitespace=-blank-at-eof
+
+# Archived Android test reports retain the device tool's original CRLF bytes.
+docs/verification/*/android-*.xml whitespace=cr-at-eol

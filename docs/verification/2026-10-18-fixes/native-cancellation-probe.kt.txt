@@ -1,0 +1,32 @@
+import com.innosquad.innoflow.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.test.*
+
+@OptIn(ExperimentalCoroutinesApi::class)
+fun main() = runTest {
+    for (mode in listOf("failure", "timeout", "cancel")) {
+        val failures = mutableListOf<Throwable>()
+        val store = FlowStore(0, Reducer<Int, String, Nothing> { state, action ->
+            if (action == "start") transition<Int, String, Nothing>(state).withEffect(Effect.run {
+                when (mode) {
+                    "failure" -> error("domain failure")
+                    "timeout" -> withTimeout(1) { awaitCancellation() }
+                    else -> awaitCancellation()
+                }
+            }) else transition(state + 1)
+        }, backgroundScope, object : FlowInstrumentation<Int, String, Nothing> {
+            override fun dispatchFailed(action: String?, error: Throwable) { failures += error }
+        })
+        try {
+            val task = store.send("start")
+            runCurrent()
+            if (mode == "cancel") task.cancel()
+            val result = runCatching { task.finish() }
+            check(if (mode == "failure") result.exceptionOrNull() is IllegalStateException else result.isSuccess)
+            check(failures.size == if (mode == "failure") 1 else 0)
+            store.send("retry").finish()
+            check(store.states.value == 1)
+            println("PASS K05 mode=$mode taskFailure=${result.exceptionOrNull()?.javaClass?.simpleName} observedFailures=${failures.size} retryState=${store.states.value}")
+        } finally { store.close() }
+    }
+}

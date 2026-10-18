@@ -119,3 +119,13 @@ __pycache__/
 
 # Reproducible external agent-skill consumer.
 !/skills/innoflow/assets/consumer/Package.resolved
+
+# Kotlin / Gradle
+kotlin/**/.gradle/
+kotlin/**/out/
+
+# TypeScript / npm
+typescript/**/node_modules/
+typescript/**/*.tsbuildinfo
+typescript/**/dist/
+typescript/coverage/

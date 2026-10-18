@@ -1,0 +1,5 @@
+public final class com/innosquad/innoflow/compose/FlowStoreComposeKt {
+	public static final fun CollectOutputsWithLifecycle (Lcom/innosquad/innoflow/FlowStore;Landroidx/lifecycle/Lifecycle$State;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)V
+	public static final fun collectStateWithLifecycle (Lcom/innosquad/innoflow/FlowStore;Landroidx/lifecycle/Lifecycle$State;Landroidx/compose/runtime/Composer;II)Landroidx/compose/runtime/State;
+}
+

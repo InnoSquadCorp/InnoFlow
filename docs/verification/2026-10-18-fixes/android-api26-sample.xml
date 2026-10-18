@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="1" failures="0" errors="0" skipped="0" time="2.54" timestamp="2026-10-18T06:53:47" hostname="localhost">
+  <testsuite name="com.innosquad.innoflow.sample.android.RecreationTest" tests="1" failures="0" errors="0" skipped="0" time="1.65" timestamp="2026-10-18T06:53:47" hostname="localhost">
+    <properties>
+      <property name="device" value="Hestia_API_26(AVD) - 8.0.0" />
+      <property name="flavor" value="" />
+      <property name="project" value=":android-sample" />
+    </properties>
+    <testcase name="stateSurvivesRecreationAndBackgroundResume" classname="com.innosquad.innoflow.sample.android.RecreationTest" time="1.65" />
+  </testsuite>
+</testsuites>

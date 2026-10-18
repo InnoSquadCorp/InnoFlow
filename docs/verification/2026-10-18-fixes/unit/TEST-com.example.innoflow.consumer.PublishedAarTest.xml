@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.innoflow.consumer.PublishedAarTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-18T06:52:43.075Z" hostname="woody-Mac.local" time="0.1">
+  <properties/>
+  <testcase name="consumesPublishedTestingAndReducer" classname="com.example.innoflow.consumer.PublishedAarTest" time="0.098"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

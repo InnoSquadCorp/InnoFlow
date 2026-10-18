@@ -1,0 +1,1075 @@
+{
+  "schemaVersion": 1,
+  "validationDate": "2026-10-18",
+  "timezone": "Asia/Seoul",
+  "documentStatus": "Draft",
+  "reviewedBy": [],
+  "approvedBy": null,
+  "decision": "scoped fixes and local verification complete; public release HOLD",
+  "baseline": {
+    "branch": "codex/multiplatform-flow",
+    "head": "0a7e685d3749b3dc28c6d5e56b932c9ad7fc0b11",
+    "originMain": "0a7e685d3749b3dc28c6d5e56b932c9ad7fc0b11",
+    "freshRemoteMainMatches": true,
+    "includesUncommittedImplementation": true,
+    "initialNonIgnoredFiles": 796,
+    "initialDirtyPaths": 138,
+    "startFullManifestSha256": "14d0a6dee7ceb18afad5fa5e2020d4969d8cffd493170c6f54f2bcd8e77be0f0",
+    "candidateInputFiles": 128,
+    "candidateInputManifest": "candidate-inputs.sha256",
+    "candidateInputManifestSha256": "81719a85194d5671373a4888e1e69ff545057c4da09261085785891a37f86c9e"
+  },
+  "counts": {
+    "PASS": 58,
+    "FAIL": 0,
+    "LIMIT": 3,
+    "N/A": 2
+  },
+  "toolchains": {
+    "host": "macOS 27.0.1 arm64",
+    "jdkLauncher": "17.0.20.1",
+    "gradle": "9.7.0",
+    "kotlinPlugin": "2.4.10",
+    "ksp": "2.3.11",
+    "agp": "9.3.1",
+    "coreClassfileMajor": 55,
+    "androidComposeClassfileMajor": 61,
+    "compileSdk": 37,
+    "minSdk": 23,
+    "node": [
+      "20.19.0",
+      "22.23.3"
+    ],
+    "npm": "11.19.0",
+    "typescript": "5.9.3",
+    "rootReact": "19.2.8",
+    "packedConsumerReact": [
+      "18.2.0",
+      "19.2.8"
+    ],
+    "chromium": "156.0.8078.4",
+    "androidLocalApis": [
+      26,
+      34
+    ],
+    "androidHostedApisUnverified": [
+      23,
+      35
+    ]
+  },
+  "freshExecuted": {
+    "finalCompleteLocalGateExitCode": 0,
+    "kotlinModuleSampleUnitTests": 28,
+    "independentJvmAndAarUnitTests": 2,
+    "kotlinUnitFailures": 0,
+    "kotlinUnitErrors": 0,
+    "kotlinUnitSkipped": 0,
+    "kotlinUnitAndConsumerRerunTasks": true,
+    "kotlinAbiModulesForced": 5,
+    "kotlinAbiBaselineChanges": 0,
+    "kspPositiveFeatures": 11,
+    "kspNewPositiveFeatures": 7,
+    "kspRequiredNegativeCases": 5,
+    "kspIndependentPositiveShapes": [
+      "plain",
+      "function",
+      "suspend",
+      "innerManual",
+      "inner"
+    ],
+    "supertypeAliasExpectedDiagnostic": true,
+    "aarWrongGoldenControls": 2,
+    "typescriptTestsPerNode": 28,
+    "typescriptFilesPerNode": 5,
+    "typescriptProbeGroupsPerNode": 7,
+    "reactTestsIncludedIn28": 7,
+    "packedConsumerCombinations": 4,
+    "independentExactBrowserCombinations": 4,
+    "packedGateControlsPerNode": {
+      "normal": 1,
+      "independentValueMutants": 2
+    },
+    "sharedRuntimeScenariosPerRuntime": 6,
+    "androidInstrumentationTestsPerApi": 3,
+    "androidInstrumentationTotal": 6,
+    "restorationSafetyTests": 16,
+    "workflowsLinted": 18,
+    "exactShaEvidenceNegativeCases": 10,
+    "npmKnownVulnerabilities": 0,
+    "mavenRuntimeCoordinates": 38,
+    "mavenAffectedPackages": 0,
+    "queryOnlyKnownVulnerableControlAdvisories": 6,
+    "kotlinNativeFailureTimeoutCancelProbeModes": 3
+  },
+  "fixes": [
+    {
+      "id": "F1",
+      "row": "K01",
+      "severity": "P2",
+      "kind": "product",
+      "status": "corrected-local",
+      "implementation": "Validate bounded capacity before attaching SupervisorJob",
+      "permanentRegression": "kotlin/sample/src/test/kotlin/com/innosquad/innoflow/sample/ReleaseContractsTest.kt",
+      "red": {
+        "log": "red-constructor.log",
+        "exitCode": 1,
+        "observation": "2 tests / 1 failure: invalid constructor preserves neither expected sibling-only children nor join; valid control passes"
+      },
+      "green": {
+        "logs": [
+          "kotlin-unit-fresh.log",
+          "runtime-probes.log"
+        ],
+        "observation": "capacities 0/-1/MIN/MAX preserve parent and sibling; 1/8/1024 close normally; external capacity1/0 children0 parentJoinedtrue"
+      }
+    },
+    {
+      "id": "F2",
+      "row": "G03",
+      "severity": "P2",
+      "kind": "product",
+      "status": "corrected-local",
+      "implementation": "Recursively preserve generic owner/inner boundaries, stopping capture at static nested class",
+      "permanentRegression": "kotlin/ksp-fixtures/cases/positive/GenericOwners.kt",
+      "red": {
+        "log": "red-ksp-owners.log",
+        "exitCode": 1,
+        "observation": "supported top-level features fail only in incorrectly flattened generated code"
+      },
+      "green": {
+        "logs": [
+          "green-ksp-owners.log",
+          "full-local-final.log",
+          "ksp-inner-final.log"
+        ],
+        "observation": "11 positive features plus independent 5 shapes compile; unsupported shapes still diagnose"
+      }
+    },
+    {
+      "id": "F3",
+      "row": "R06",
+      "severity": "P2",
+      "kind": "validation-tool",
+      "status": "corrected-local",
+      "implementation": "Exact SSR output and anchored browser counter text; real-gate mutant selftest",
+      "permanentRegression": "typescript/scripts/check-packed-consumer-selftest.mjs",
+      "red": {
+        "log": "red-packed-oracles.log",
+        "exitCode": 1,
+        "observation": "normal passes; both incorrect SSR-only/live-only variants incorrectly pass old actual gate, causing selftest failure"
+      },
+      "green": {
+        "logs": [
+          "green-packed-oracles-node20.log",
+          "full-local-final.log"
+        ],
+        "observation": "normal succeeds; SSR70 and live80 variants are rejected by distinct exact-value diagnostics on each Node"
+      }
+    },
+    {
+      "id": "A05",
+      "row": "A05",
+      "kind": "validation-tool-portability",
+      "status": "corrected-local",
+      "implementation": "Saved STOPPED activity then native am-kill; guarded unchanged-PID/cmdline same-UID kill fallback; actual PID disappearance and fresh-PID exact-count restoration",
+      "permanentRegression": "scripts/check-android-restoration-selftest.py",
+      "red": {
+        "freshness": "reused historical pre-fix API26 termination failure; not relabeled fresh",
+        "evidence": "../2026-10-18/results.json"
+      },
+      "green": {
+        "logs": [
+          "android-api26-restoration.log",
+          "android-api34-restoration-final.log",
+          "green-restoration-selftest-final.log"
+        ],
+        "observation": "both standard device probes and 16 safety controls pass; no force-stop or unrelated kill"
+      }
+    }
+  ],
+  "androidRestoration": [
+    {
+      "api": 26,
+      "serial": "emulator-5582",
+      "avd": "Hestia_API_26",
+      "before": "4158",
+      "after": "4362",
+      "restoredCount": 2,
+      "method": "same-uid-pid-kill",
+      "activitySavedAndStopped": true,
+      "crashBufferBytes": 0,
+      "anrDialog": false,
+      "result": "android-api26.json",
+      "ui": "android-api26-ui.xml",
+      "screenshot": "android-api26.png",
+      "reports": [
+        "android-api26-compose.xml",
+        "android-api26-sample.xml"
+      ]
+    },
+    {
+      "api": 34,
+      "serial": "emulator-5580",
+      "avd": "Small_Phone_API_34",
+      "before": "7446",
+      "after": "7747",
+      "restoredCount": 2,
+      "method": "am-kill",
+      "activitySavedAndStopped": true,
+      "crashBufferBytes": 0,
+      "anrDialog": false,
+      "result": "android-api34.json",
+      "ui": "android-api34-ui.xml",
+      "screenshot": "android-api34.png",
+      "reports": [
+        "android-api34-compose.xml",
+        "android-api34-sample.xml"
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "row": "A06",
+      "status": "LIMIT",
+      "kind": "environment",
+      "detail": "Hosted API23/35 actual runtime unavailable/unrun locally; API26/34 is not a substitute"
+    },
+    {
+      "row": "C06",
+      "status": "LIMIT",
+      "kind": "hosted-evidence",
+      "detail": "Candidate remains uncommitted/unpushed; no exact-SHA main-push hosted CI for these bytes"
+    },
+    {
+      "row": "C07",
+      "status": "LIMIT",
+      "kind": "publication",
+      "detail": "No registry publication, credential/permission proof, remote-only install or maintainer release approval"
+    },
+    {
+      "row": "X01",
+      "status": "N/A",
+      "detail": "Swift main parity only; runtime/release validation excluded by CI-only policy"
+    },
+    {
+      "row": "X02",
+      "status": "N/A",
+      "detail": "Physical devices, other engines, RN, arbitrary compilers, soak/deep security and other explicit exclusions remain"
+    }
+  ],
+  "optionalProposalsUnchanged": [
+    "O1 native timeout/domain failure examples",
+    "O2 FlowFeature-supertype alias support",
+    "O3 Gradle wrapper refresh"
+  ],
+  "intermediateRuns": [
+    {
+      "log": "android-api34-restoration.log",
+      "status": "intermediate-tool-failure",
+      "detail": "API34 Hist padding/mAppStopped fields caused safe rejection before kill; compatibility/selftest fixed and final probe passed"
+    },
+    {
+      "log": "exact-node22-react18.log",
+      "status": "environment-failure",
+      "detail": "Root npm ci overlapped module import; final rerun succeeded after install completed"
+    },
+    {
+      "log": "jvm-dependency-graph-attempt.log",
+      "status": "exit0-discarded-for-scope",
+      "detail": "Only last dependency task had runtime configuration option; other configurations were too broad. Advisory scan uses separate per-task runtime-only graph."
+    },
+    {
+      "status": "environment-failure-raw-log-not-retained",
+      "detail": "Initial missing ANDROID_HOME SDK failure observed in tool output; corrected rerun overwrote initial log. Passing corrected and final full logs retained."
+    }
+  ],
+  "freshness": {
+    "fresh": "All local final gates, forced unit/consumer/ABI tests, KSP fixtures, four packed/exact browsers, two device instrumentation/probes, advisory lookup and preserved-source comparisons ran on this candidate",
+    "cachedBuilds": "Broad Gradle gate and device assembly can reuse unchanged tasks/cache; not a clean rebuild. Dedicated tests/ABI forced rerun, KSP clean compile; per-Node npm ci and external package installs fresh.",
+    "reused": "Unchanged prior source-review boundary reasoning and pre-fix API26 red are explicitly reused; native failure/timeout/cancel now also has a fresh three-mode probe. Old successful logs are not substituted for current execution."
+  },
+  "sourcePreservation": {
+    "existingInputs": 796,
+    "changedWithinAuthorizedScope": 17,
+    "unchangedBytes": 779,
+    "missing": 0,
+    "changedExistingPaths": [
+      ".github/workflows/ci-multiplatform.yml",
+      ".github/workflows/release-kotlin.yml",
+      ".github/workflows/release-typescript.yml",
+      "docs/MULTIPLATFORM.md",
+      "docs/MULTIPLATFORM_1_0_READINESS.md",
+      "docs/MULTIPLATFORM_VERIFICATION_2026_10_18.md",
+      "docs/RELEASING_MULTIPLATFORM.md",
+      "kotlin/inno-flow-core/src/main/kotlin/com/innosquad/innoflow/FlowStore.kt",
+      "kotlin/inno-flow-ksp/src/main/kotlin/com/innosquad/innoflow/ksp/InnoFlowProcessor.kt",
+      "kotlin/sample/src/test/kotlin/com/innosquad/innoflow/sample/ReleaseContractsTest.kt",
+      "scripts/check-android-restoration.py",
+      "scripts/check-multiplatform-contract.sh",
+      "scripts/test-multiplatform.sh",
+      "typescript/consumer-fixture/smoke.mjs",
+      "typescript/package.json",
+      "typescript/scripts/test-packed-consumer.mjs",
+      "CHANGELOG.md"
+    ],
+    "newProductionPaths": [
+      "kotlin/ksp-fixtures/cases/positive/GenericOwners.kt",
+      "scripts/check-android-restoration-selftest.py",
+      "typescript/scripts/check-packed-consumer-selftest.mjs"
+    ],
+    "newEvidencePaths": "docs/MULTIPLATFORM_FIX_VERIFICATION_2026_10_18.md and docs/verification/2026-10-18-fixes/**",
+    "historicalSidecarsBytePreserved": true,
+    "swiftMainDiffEmpty": true,
+    "unrelatedIgnoreAndClaudeBytePreserved": true,
+    "headUnchanged": true
+  },
+  "publication": {
+    "commit": false,
+    "push": false,
+    "tag": false,
+    "githubRelease": false,
+    "npmPublish": false,
+    "githubPackagesPublish": false,
+    "maintainerApproval": false,
+    "postPushCleanup": "not applicable: no push"
+  },
+  "emulators": {
+    "onlyOwnedSerialsUsed": [
+      "emulator-5580",
+      "emulator-5582"
+    ],
+    "concurrentEmulators": false,
+    "closedAfterUse": true,
+    "noOtherBuildCompilerOrSystemProcessKilled": true
+  },
+  "rawEvidenceRoot": "/tmp/innoflow-fixes-20261018.evgcyvL1",
+  "rawEvidenceHashes": [
+    {
+      "sha256": "bb917e0aed76f3b26d654ed7bb6e4e463a25ddb5c3c19d4c4f5d759299b6bb5d",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/aar-consumer-fresh.log"
+    },
+    {
+      "sha256": "0a2f6895d9162ea72f6261fd8b25625859421deb3e3a4aa5f127533e577ea6ac",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/abi-fresh.log"
+    },
+    {
+      "sha256": "a2c1efb3e5dc3196129222bc14afe3fa301dd22c7593d84c3bad110ac5a7388e",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/action-pins.log"
+    },
+    {
+      "sha256": "2539771ec9dec7be419645f067e41847e41fce165b25e4cf18056a5c282c7aa0",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/actionlint.log"
+    },
+    {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/android-api26-crash.log"
+    },
+    {
+      "sha256": "66ac12c26105854b5da2c0f280423fa810aeb13a57942cf8376b1bbdd8301a7e",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/android-api26-instrumentation.log"
+    },
+    {
+      "sha256": "2146e0b4a4d24faa125ae14728d24c2131f0c598f8d545e1382f838cbb517b77",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/android-api26-restoration.log"
+    },
+    {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/android-api34-crash-final.log"
+    },
+    {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/android-api34-crash.log"
+    },
+    {
+      "sha256": "36a094d5e62e732c8de8c776576c51a5868e6aabe91c234c729c2e1010590819",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/android-api34-instrumentation.log"
+    },
+    {
+      "sha256": "271c36b74c58ab1beb9702acac761eb24980d74f75c94817a869dd10c70f58ab",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/android-api34-restoration-final.log"
+    },
+    {
+      "sha256": "0b7687ee82418ef74ac3088d087457d2c20d8ec1fb720ab5f23b25733d0959f6",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/android-api34-restoration.log"
+    },
+    {
+      "sha256": "23ab6262338f3a26829c7f1e23edad710fc16ac1e29525e2144ae6c0d0189e4b",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/browser-node20-react18.log"
+    },
+    {
+      "sha256": "a5cfc30eb003f7e50a34b971d28d6cc90e99d472551952c59a94d7a82caffe25",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/browser-node20-react19.log"
+    },
+    {
+      "sha256": "2ba017ee7079e1597e248fc0355a0780a185c0da4aa75673c1b73f448ce70051",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/browser-node22-react18.log"
+    },
+    {
+      "sha256": "244a3c2bc46942d54158bb7cac7a62e87d3e82833a5f69e8280886fb48ee1a8c",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/candidate-manifest-check.log"
+    },
+    {
+      "sha256": "7e9f3c27bbfb68603b7d162e79e0909f2e79fca6a7dbac764c95bd3179e0973f",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/ci-evidence-selftest.log"
+    },
+    {
+      "sha256": "4bb12394d3c32357de76abed5fd51398926f31e55ee504a6ec3628ece6628ded",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/contract.log"
+    },
+    {
+      "sha256": "16ed751bd8fde2c2cb33fd3e4344a87369ad96e9d2eb8fbbc957efe1199a75f2",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/emulator-api26.log"
+    },
+    {
+      "sha256": "bd64341b1cd73c862c0dede1640ff2e0ea44c0a3c75606ef7c460f61888006e3",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/emulator-api34.log"
+    },
+    {
+      "sha256": "47dd4a99e4d06b14a0a5fa529921cc4d75f4e6739f1e064f9dc48d22e7e616dd",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/exact-node20-react18-final.log"
+    },
+    {
+      "sha256": "47dd4a99e4d06b14a0a5fa529921cc4d75f4e6739f1e064f9dc48d22e7e616dd",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/exact-node20-react18.log"
+    },
+    {
+      "sha256": "e9aa65a89bd9d9422066c6657740e8a4b2d35117aab7791f45bc9c47c4f320d7",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/exact-node20-react19.log"
+    },
+    {
+      "sha256": "1b60ceb90678478d3b067a876ee598b7f7edfce4a972e1741da9e7e6c75d277f",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/exact-node22-react18-final.log"
+    },
+    {
+      "sha256": "5c423e1f74617aa4a04c250dbebf60e312af277dddbc5571227c00b82b735dfc",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/exact-node22-react18.log"
+    },
+    {
+      "sha256": "279fd56fb51d17fe1011944bda24613a92010eb8649737aabd50349697a9b158",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/exact-node22-react19.log"
+    },
+    {
+      "sha256": "e9ec81b819c814d82095be6649ccc666f41ae6f417b7726c50de79a98995ad60",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/existing-input-preservation.log"
+    },
+    {
+      "sha256": "6732d397f5e365570a0d6c5721ae06ddd189a79f748487000d1fe233b51b0ca1",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/full-local-final.log"
+    },
+    {
+      "sha256": "62db1235fad2bdac5c30060a0ae7880defb2e1d8d302304869be9e9017bca019",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/full-local-node22.log"
+    },
+    {
+      "sha256": "23078c940848cbbc71b4d5622bad805154bc60469196089336e92ad8c28ff482",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/green-kotlin-initial.log"
+    },
+    {
+      "sha256": "d8474e7b0b129680f7698cb4da5060b40e6e608c8c1904845b69388a2eb62d47",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/green-ksp-owners.log"
+    },
+    {
+      "sha256": "4b645247e55e5f188e87bafaacc1c4d929b66ad859f64169a6b1ee8d1981d019",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/green-packed-oracles-node20.log"
+    },
+    {
+      "sha256": "679bcf0a1816682cdc4dced19089d98bd119906dde7d6268961d3c93dc177b4d",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/green-packed-oracles-node22.log"
+    },
+    {
+      "sha256": "087838a0760e688c9b120631fa61ec08de1e90b9ebd6b6d42b3bda571ea12740",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/green-restoration-selftest-final.log"
+    },
+    {
+      "sha256": "de05999f69e4495f3b0a1bce2b8cdd26ef9a3e2ba48537a1ebb8beef2211e0ab",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/green-restoration-selftest.log"
+    },
+    {
+      "sha256": "b944e5d92ba97ac7c6d33ed20dc2334286caa0146f11386968011785c7d6e33c",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/jvm-consumer-fresh.log"
+    },
+    {
+      "sha256": "096b9ef94bd149af653f7bbaf0d1dadd1015658e23044c381cfbd716e599c9d4",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/jvm-dependency-graph-attempt.log"
+    },
+    {
+      "sha256": "e46bba4685be8cbacfc9db5a50b2e0948906281479cf1857ee17bf6ec06638c1",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/jvm-dependency-graph.log"
+    },
+    {
+      "sha256": "79917ef50cc971add0b45d9e46eb06ba52c08f147050a7f05fbbe21534e683e2",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/kotlin-unit-fresh.log"
+    },
+    {
+      "sha256": "0294688156c8028f3218c7dcc6245ebbecb5d7a32391992571bf151779d46a11",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/ksp-alias-final.log"
+    },
+    {
+      "sha256": "627dd2a4d84aa3785a3c34abbaadfcdc5addea5c1fbb581a8a762f43f33a51a4",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/ksp-function-final.log"
+    },
+    {
+      "sha256": "5ba6a7e1e47dfcd83de973fb0b3322311c89dcfe11dd8456a3bd582b88bc62b4",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/ksp-inner-final.log"
+    },
+    {
+      "sha256": "aa004fc3becc99059fab469f3d276199634b5b0b5b5a6fb6cac3fae17c098f6c",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/ksp-inner.log"
+    },
+    {
+      "sha256": "627dd2a4d84aa3785a3c34abbaadfcdc5addea5c1fbb581a8a762f43f33a51a4",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/ksp-innerManual-final.log"
+    },
+    {
+      "sha256": "6f2d31785d6d96e82f75431bf58c44f54433004ca915c7aa3b45dc9d8fa1bdac",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/ksp-plain-final.log"
+    },
+    {
+      "sha256": "d8474e7b0b129680f7698cb4da5060b40e6e608c8c1904845b69388a2eb62d47",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/ksp-suspend-final.log"
+    },
+    {
+      "sha256": "26402913cf904dc04b31a48e0654116d63125f259f2daf1d1451a9362a955959",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/maven-advisories.log"
+    },
+    {
+      "sha256": "ddb877a33405a5b92ddf56ef92c7098ed5736a7563ca6b828a5a43b6864ef9b7",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/node20-install.log"
+    },
+    {
+      "sha256": "e65d0d61c4bc261a6b056bd3001ba2f2b3b7e067236f541af5979dd153bb454c",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/node20-tests.log"
+    },
+    {
+      "sha256": "8d40d727a27c306e33573fd42252042b0381372f4a2b3bac8892a5d374808c59",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/red-constructor.log"
+    },
+    {
+      "sha256": "bd3d296eb3f07c26518d62ca06248986e992596d48a24ec2b4ead7cf815fc4f4",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/red-ksp-owners.log"
+    },
+    {
+      "sha256": "b01fd5818b443172542ac63b362bc1c844697cbd5a2bc2a0936d7e6eed1f6b5e",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/red-packed-oracles.log"
+    },
+    {
+      "sha256": "780cd41e038ee4bee90c218a9171d98a2c06a5a9d4367a167383f0134255e121",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/runtime-probes.log"
+    },
+    {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/swift-main-parity.log"
+    },
+    {
+      "sha256": "e554cee3b2c73062f70c1c532067ba75bd37e8be2cf656074ae5d6eb63035910",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/typescript-probes-node20.log"
+    },
+    {
+      "sha256": "a55c8147f9036df8b281c4e49a3fd7c46650df71c8f6cec1ea34533cadb7b4ec",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/typescript-probes-node22.log"
+    },
+    {
+      "sha256": "cf97c2e87b4ca475a818d7fae78a817d3b1bfb71f01196ca29bccf8583a2aac0",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/workflow-timeouts.log"
+    },
+    {
+      "sha256": "6e7b46898643947d18e762fdf7be8baca9ee26077b5db5ace1b10a35d29df5a9",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/node20-versions.txt"
+    },
+    {
+      "sha256": "352b423a6215a0e9d739cc1d9f7dc78905b6252eea343c1239804f5e3ed8eaff",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/node22-versions.txt"
+    },
+    {
+      "sha256": "58de7ad362ef9c459f9367b99475e177481ed58e2cd78671cceeca714d994c2c",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/compose-bytecode.txt"
+    },
+    {
+      "sha256": "5ea63dc8779e9e941ec3e4783a4589b4e4f4ffb83f6813ee603a1ace688f0103",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/core-bytecode.txt"
+    },
+    {
+      "sha256": "832e3b601c178f1f634000953a2b9bbbf15e94c937a0f0dc04f091f83ef35f19",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/kotlin-unit-counts.txt"
+    },
+    {
+      "sha256": "e0d2fb21eaed621a8ce6b1b0222d75af1f53c6360a539fe4f98e186a4bac3786",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/remote-main.txt"
+    },
+    {
+      "sha256": "92bbd45dbb36b124735ee6ce7ad15eb5584afcfe7a30fa2995250c415cab52e3",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/producer-artifacts.sha256"
+    },
+    {
+      "sha256": "65df2c6c7451b7eb367cb87d49b24ece19bae14f0b942f854574a98c22938a80",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/maven-advisories.json"
+    },
+    {
+      "sha256": "f994d0e7ddd0abf0e19e588b0b83876e2e1fae41f216b4c637dd11e50cf40c25",
+      "path": "/tmp/innoflow-fixes-20261018.evgcyvL1/kotlin-native-fresh.log"
+    }
+  ],
+  "rows": [
+    {
+      "id": "B01",
+      "contract": "기준선/dirty/Swift/기존 입력 보존 (S)",
+      "route": "시작·종료 파일 해시, main diff",
+      "result": "PASS · fresh: Swift/main diff 0, remote SHA 동일, 796개 시작 입력 보존/변경 allowlist 대조",
+      "status": "PASS"
+    },
+    {
+      "id": "B02",
+      "contract": "두 runtime의 portable contract 일치 (N,F,C,R,O)",
+      "route": "counter/runtime 공통 fixture",
+      "result": "PASS · fresh: 두 runtime의 counter + runtime-v1 6개 시나리오",
+      "status": "PASS"
+    },
+    {
+      "id": "B03",
+      "contract": "모든 모듈·공개 API·지원 환경 inventory (S)",
+      "route": "source/export/manifest/ABI/doc 대조",
+      "result": "PASS · fresh+static: 5 Kotlin/3 npm inventory·ABI·exports; 이전 inventory와 변화 경계 대조",
+      "status": "PASS"
+    },
+    {
+      "id": "B04",
+      "contract": "immutable state/비협조 작업/영속화 경계 일치 (F,C,R,L)",
+      "route": "계약 문서·구현·반례 구분",
+      "result": "PASS · fresh+reused static: immutable/논리 취소/명시 영속화 계약 무변경, late-emission·복원 재실행",
+      "status": "PASS"
+    },
+    {
+      "id": "K01",
+      "contract": "constructor 인자 거부가 parent job을 누수하지 않음 (F,L)",
+      "route": "capacity 1 vs 0 독립 Job probe",
+      "result": "PASS · fresh: red 1실패/정상 대조 통과 → regression 통과; Maven children 0 / parentJoined true",
+      "status": "PASS"
+    },
+    {
+      "id": "K02",
+      "contract": "최신 state 기준 FIFO·다중 producer 직렬화 (N,Q)",
+      "route": "JVM regression/8 producers",
+      "result": "PASS · fresh: unit 최신 상태·8 producers/4,000 actions",
+      "status": "PASS"
+    },
+    {
+      "id": "K03",
+      "contract": "root+descendant effect/action 완료 소유권 (N,Q)",
+      "route": "sample/독립 effect mapping probe",
+      "result": "PASS · fresh: unit + runtime-probes.log K03/K11",
+      "status": "PASS"
+    },
+    {
+      "id": "K04",
+      "contract": "reducer 실패가 다른 root를 오염시키지 않음 (F,R)",
+      "route": "실패/후속 성공 dispatch",
+      "result": "PASS · fresh: reducer failure/후속 독립 성공 unit",
+      "status": "PASS"
+    },
+    {
+      "id": "K05",
+      "contract": "effect 실패/취소 의미와 독립 재시도 (F,C,R,O)",
+      "route": "exception/cancel/timeout 대조",
+      "result": "PASS · fresh: effect failure/retry/cancel units + native failure/timeout/cancel·retry 3-mode probe",
+      "status": "PASS"
+    },
+    {
+      "id": "K06",
+      "contract": "root 취소·close·시작 전/late emission 차단 (C,Q)",
+      "route": "queued/active/uncooperative regression",
+      "result": "PASS · fresh: cancelled admission/owner close/late emission units",
+      "status": "PASS"
+    },
+    {
+      "id": "K07",
+      "contract": "ID latest/all matching 취소, 다른 ID 독립 (C,Q)",
+      "route": "ID regression + mapped ID probe",
+      "result": "PASS · fresh: ID all/latest units + runtime-probes.log K07",
+      "status": "PASS"
+    },
+    {
+      "id": "K08",
+      "contract": "bounded admission/backpressure/회복 (L,Q,R)",
+      "route": "overflow/10,000 actions/stress",
+      "result": "PASS · fresh: bounded overflow/10,000 effect sends/burst·metrics units",
+      "status": "PASS"
+    },
+    {
+      "id": "K09",
+      "contract": "output live order/no replay/drop 관측/close 종료 (N,L,O,C)",
+      "route": "collector regression + probe",
+      "result": "PASS · fresh: live order/drop/close units + runtime-probes.log K09 nullable/no replay",
+      "status": "PASS"
+    },
+    {
+      "id": "K10",
+      "contract": "instrumentation 오류 격리/metric/페이로드 경계 (F,O,S)",
+      "route": "throw observer/queue stats + static",
+      "result": "PASS · fresh+static: observer 오류 격리·queue metrics units; payload 책임은 기존 계약",
+      "status": "PASS"
+    },
+    {
+      "id": "K11",
+      "contract": "combine/scope/transition/map 조합 순서·필터 (N,F,C)",
+      "route": "독립 실제 runtime composition probe",
+      "result": "PASS · fresh: runtime-probes.log K03/K11 순서·filter·zero reducers",
+      "status": "PASS"
+    },
+    {
+      "id": "K12",
+      "contract": "task await/cancel idempotency/owner 취소 (C,Q)",
+      "route": "다중 waiter/취소 waiter/owner probe",
+      "result": "PASS · fresh: runtime-probes.log K12 다중 waiter/반복 cancel/finish + owner unit",
+      "status": "PASS"
+    },
+    {
+      "id": "K13",
+      "contract": "TestStore action/output/state/finish 및 실패 탐지 (N,F)",
+      "route": "sample + 독립 negative assertions",
+      "result": "PASS · fresh: TestStore unit + runtime-probes.log K13 세 negative assertions",
+      "status": "PASS"
+    },
+    {
+      "id": "G01",
+      "contract": "public/internal/object/default/escaped factory compile (N)",
+      "route": "독립 published KSP fixture",
+      "result": "PASS · fresh: published processor positive 11 features; public/internal/default/escaped",
+      "status": "PASS"
+    },
+    {
+      "id": "G02",
+      "contract": "private/nested/generic/abstract/indirect 진단 (F,S)",
+      "route": "5개 expected-failure fixture",
+      "result": "PASS · fresh: private/generic/nested/indirect/abstract 5 expected diagnostics",
+      "status": "PASS"
+    },
+    {
+      "id": "G03",
+      "contract": "지원 feature의 state/action/output 타입 rendering (N,F)",
+      "route": "plain/function/suspend/generic-inner compile",
+      "result": "PASS · fresh: 새 7 fixtures + plain/function/suspend/innerManual/inner 외부 compile 모두 성공",
+      "status": "PASS"
+    },
+    {
+      "id": "G04",
+      "contract": "compiler-plugin-free fallback 및 alias 경계 (N,F)",
+      "route": "explicit FlowStore 대조/진단",
+      "result": "PASS · fresh: innerManual 성공; FlowFeature-supertype alias는 정확한 expected diagnostic",
+      "status": "PASS"
+    },
+    {
+      "id": "A01",
+      "contract": "ViewModel clear가 소유 Store만 닫음 (C,Q)",
+      "route": "Android module unit",
+      "result": "PASS · fresh: ViewModel ownership unit 강제 실행",
+      "status": "PASS"
+    },
+    {
+      "id": "A02",
+      "contract": "Compose lifecycle state/output 최신 handler (N,C,O)",
+      "route": "2개 instrumentation/API별 증거",
+      "result": "PASS · fresh: Compose 2 tests × API26/34, 0 failures/skips",
+      "status": "PASS"
+    },
+    {
+      "id": "A03",
+      "contract": "recreation/background-resume 상태 유지 (N,R)",
+      "route": "sample instrumentation",
+      "result": "PASS · fresh: recreation/background-resume 1 test × API26/34",
+      "status": "PASS"
+    },
+    {
+      "id": "A04",
+      "contract": "API 34 실제 process kill 뒤 PID/visible state 복원 (R)",
+      "route": "serial별 restoration probe",
+      "result": "PASS · fresh: 정식 probe PID 7446→7747 / Count 2 / am-kill / screenshot·XML·JSON",
+      "status": "PASS"
+    },
+    {
+      "id": "A05",
+      "contract": "API 26 process 복원 증거/ANR 구분 (R,F)",
+      "route": "available AVD/환경 확인 후 isolated probe",
+      "result": "PASS · fresh: 정식 probe PID 4158→4362 / Count 2 / same-uid-pid-kill; safety 16 controls",
+      "status": "PASS"
+    },
+    {
+      "id": "A06",
+      "contract": "minSdk API 23/current-line 35 runtime (N,R,C)",
+      "route": "hosted matrix와 로컬 환경 가용성",
+      "result": "LIMIT · fresh environment + static: 설치된 phone AVD는 API26/34; API23/35 hosted 미실행",
+      "status": "LIMIT"
+    },
+    {
+      "id": "A07",
+      "contract": "debug/release 앱·lint·SavedState 단위 검증 (N,F)",
+      "route": "Gradle build/test/lint",
+      "result": "PASS · fresh: debug/release APK·lint·SavedState unit; unit --rerun-tasks",
+      "status": "PASS"
+    },
+    {
+      "id": "T01",
+      "contract": "positive finite integer capacity 검증 (F,L)",
+      "route": "기존 invalid-capacity regression",
+      "result": "PASS · fresh: capacity finite positive safe integer unit / Node20·22",
+      "status": "PASS"
+    },
+    {
+      "id": "T02",
+      "contract": "FIFO/reentrant send, 비재귀 drain (N,Q,L)",
+      "route": "20,000 chain/2,000 burst",
+      "result": "PASS · fresh: FIFO/reentrant 20,000 chain/2,000 burst units / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "T03",
+      "contract": "root+descendant 완료와 mapping 소유권 (N,Q)",
+      "route": "existing + 독립 composition",
+      "result": "PASS · fresh: descendant unit + independent T03/T10 / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "T04",
+      "contract": "reducer/effect 실패 격리와 재시도 (F,R)",
+      "route": "실패/후속 성공 regression",
+      "result": "PASS · fresh: failure/retry units + independent sibling abort / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "T05",
+      "contract": "prestart/root/close 취소 및 late emission 차단 (C,Q)",
+      "route": "regression + waiter probe",
+      "result": "PASS · fresh: prestart/root/close/late emission units + T05/T11 / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "T06",
+      "contract": "ID latest/all matching 및 다른 ID 독립 (C,Q)",
+      "route": "regression + mapped ID probe",
+      "result": "PASS · fresh: latest/all matching units + mapped ID/signal probe / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "T07",
+      "contract": "bounded overflow·회복/queue compaction (L,R)",
+      "route": "overflow/large burst/metrics",
+      "result": "PASS · fresh: overflow/recovery/burst/compaction·metrics units / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "T08",
+      "contract": "output no replay/unsubscribe/close·undefined (N,C,O)",
+      "route": "regression + 독립 output probe",
+      "result": "PASS · fresh: output unit + T08/T09 undefined/no replay/unsubscribe/close",
+      "status": "PASS"
+    },
+    {
+      "id": "T09",
+      "contract": "state/output listener 오류 격리·구독 정리 (F,O,S)",
+      "route": "독립 throw/unsubscribe/close probe",
+      "result": "PASS · fresh: T08/T09 throwing state/output/observerFailed 및 구독 정리",
+      "status": "PASS"
+    },
+    {
+      "id": "T10",
+      "contract": "combine/scope order/filter/Effect.map/signal (N,F,C)",
+      "route": "독립 실제 runtime composition",
+      "result": "PASS · fresh: T03/T10·T06/T10 composition/map/signal/ID / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "T11",
+      "contract": "task finished await/cancel/multiwait/abort fanout (C,Q,L)",
+      "route": "독립 task probe/기존 burst",
+      "result": "PASS · fresh: T05/T11 multiwait/idempotent cancel·late-work suppression + burst",
+      "status": "PASS"
+    },
+    {
+      "id": "T12",
+      "contract": "TestStore 구조/Map/Set/Date/undefined/custom 및 negative (N,F)",
+      "route": "4개 unit + 독립 실패 탐지",
+      "result": "PASS · fresh: 4 unit + 독립 wrong state/action/output/custom cyclic comparator",
+      "status": "PASS"
+    },
+    {
+      "id": "R01",
+      "contract": "SSR initial snapshot → hydration live state (N,R)",
+      "route": "React unit + tarball SSR/browser",
+      "result": "PASS · fresh: React SSR/hydration units + 네 tarball/exact browser checks",
+      "status": "PASS"
+    },
+    {
+      "id": "R02",
+      "contract": "selector/equality 교체·undefined·불필요 render (N,Q)",
+      "route": "selector unit/정적 hook 대조",
+      "result": "PASS · fresh+static: selector/equality/undefined/render units; hook 구조 무변경",
+      "status": "PASS"
+    },
+    {
+      "id": "R03",
+      "contract": "StrictMode mount/unmount 구독 무누수 (C,Q)",
+      "route": "React unit",
+      "result": "PASS · fresh: StrictMode mount/unmount unit / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "R04",
+      "contract": "typed provider/store 교체/미제공 오류 (N,F)",
+      "route": "React unit + 독립 boundary probe",
+      "result": "PASS · fresh: provider/store replacement units + missing Provider SSR probe / 두 Node",
+      "status": "PASS"
+    },
+    {
+      "id": "R05",
+      "contract": "tarball browser interaction·console·hydration (N,F)",
+      "route": "실제 Chromium/정확한 DOM 후조건",
+      "result": "PASS · fresh: 4 Chromium tarball consumers + 독립 exact 7/8/9/8, console/hydration 오류 0",
+      "status": "PASS"
+    },
+    {
+      "id": "R06",
+      "contract": "잘못된 SSR/UI 수치가 gate에서 거부됨 (F,S)",
+      "route": "정상 vs count×10 mutant",
+      "result": "PASS · fresh: 수정 전 두 mutant 잘못 통과 → 수정 후 SSR 70 / live 80 각각 값 oracle에서 거부",
+      "status": "PASS"
+    },
+    {
+      "id": "R07",
+      "contract": "Node20/22 × React18/19 소비자 행렬 (N)",
+      "route": "독립 설치/typecheck/SSR/build/browser",
+      "result": "PASS · fresh: Node20.19.0/22.23.3 × React18.2.0/19.2.8 독립 설치·typecheck·SSR·browser",
+      "status": "PASS"
+    },
+    {
+      "id": "P01",
+      "contract": "core/testing/KSP ABI baseline 일치 (S)",
+      "route": "3개 JVM ABI gate",
+      "result": "PASS · fresh: core/testing/KSP ABI --rerun-tasks, golden 변경 0",
+      "status": "PASS"
+    },
+    {
+      "id": "P02",
+      "contract": "Android/Compose 실제 AAR ABI·negative golden (S,F)",
+      "route": "2개 AAR gate/selftest",
+      "result": "PASS · fresh: Android/Compose AAR ABI --rerun-tasks + wrong-golden 2개 거부",
+      "status": "PASS"
+    },
+    {
+      "id": "P03",
+      "contract": "Maven JVM consumer 무 project substitution (N,S)",
+      "route": "independent refresh-dependencies test",
+      "result": "PASS · fresh: external JVM Maven test --refresh-dependencies --rerun-tasks",
+      "status": "PASS"
+    },
+    {
+      "id": "P04",
+      "contract": "Maven AAR 앱 consumer test/release build (N,S)",
+      "route": "independent Android fixture",
+      "result": "PASS · fresh: external AAR unit/release APK --refresh-dependencies --rerun-tasks",
+      "status": "PASS"
+    },
+    {
+      "id": "P05",
+      "contract": "npm exports/types/maps/license/불필요 파일 제외 (N,S)",
+      "route": "pack/publint/ATTW/maps/consumer errors",
+      "result": "PASS · fresh: 3 pack/publint/ATTW/source maps/licenses/타입 negative 검증",
+      "status": "PASS"
+    },
+    {
+      "id": "P06",
+      "contract": "Node20/22 clean install+typecheck+28 regressions (N,F)",
+      "route": "scoped exact Node/npm",
+      "result": "PASS · fresh: Node20·22 각각 npm ci + 28 tests/5 files/typecheck/build",
+      "status": "PASS"
+    },
+    {
+      "id": "P07",
+      "contract": "toolchain pin/checksum/bytecode/SDK/dependency 범위 (S)",
+      "route": "wrapper/manifest/resolution/classfile",
+      "result": "PASS · fresh+reused static: Gradle/JDK 버전·classfile 55/61 확인; pins/checksum/SDK 계약 무변경",
+      "status": "PASS"
+    },
+    {
+      "id": "C01",
+      "contract": "workflow 구조/action pin/timeout/권한 (F,S)",
+      "route": "canonical actionlint/정적 policy",
+      "result": "PASS · fresh+static: actionlint1.7.12 18 workflows·action pins·timeouts·permissions",
+      "status": "PASS"
+    },
+    {
+      "id": "C02",
+      "contract": "정확한 SHA·main-push CI 선행 증거/negative (F,S)",
+      "route": "helper 10개 실패 대조군",
+      "result": "PASS · fresh: exact-SHA/main-push normal + 10 negative evidence controls",
+      "status": "PASS"
+    },
+    {
+      "id": "C03",
+      "contract": "untrusted PR/비밀·publish 분리 (S)",
+      "route": "3개 workflow source trust review",
+      "result": "PASS · static: publish tag-push 조건/credential 분리/PR read-only/exact-SHA gate 유지",
+      "status": "PASS"
+    },
+    {
+      "id": "C04",
+      "contract": "dependency advisory scan 및 제한 명시 (S)",
+      "route": "npm audit + JVM graph 검토",
+      "result": "PASS · fresh bounded advisory scope: npm0; Maven runtime38 OSV0; query-only vulnerable control6",
+      "status": "PASS"
+    },
+    {
+      "id": "C05",
+      "contract": "package/runtime payload·secret 책임 경계 (S,O)",
+      "route": "packed file list/instrumentation source",
+      "result": "PASS · fresh+reused static: packed whitelist/maps·source payload 책임 경계; 보안감사 주장 없음",
+      "status": "PASS"
+    },
+    {
+      "id": "C06",
+      "contract": "실제 hosted CI가 같은 candidate를 검증 (N,S)",
+      "route": "아직 unpushed인 입력의 evidence 유무",
+      "result": "LIMIT · fresh: uncommitted/unpushed candidate; 같은 입력의 hosted main CI 증거 없음",
+      "status": "LIMIT"
+    },
+    {
+      "id": "C07",
+      "contract": "공개 registry 설치/권한/릴리스 완료 (N,S)",
+      "route": "실제 publish 후 remote-only consumer 필요",
+      "result": "LIMIT · fresh: publication 미수행; registry-only consumer/credential/승인 미증명",
+      "status": "LIMIT"
+    },
+    {
+      "id": "X01",
+      "contract": "Swift release/runtime 회귀 판정 제외 (N,C,R)",
+      "route": "main parity만 수행, CI-only 정책",
+      "result": "N/A · fresh parity only: Swift main 무변경, Swift runtime/release suite는 CI-only 제외",
+      "status": "N/A"
+    },
+    {
+      "id": "X02",
+      "contract": "비지원 platform/서비스/soak·보안감사 구분 (S,L)",
+      "route": "명시된 제외와 광고 계약 대조",
+      "result": "N/A · static: physical/다른 engine/RN/soak/deep security/Swift 동등성 등 명시 제외",
+      "status": "N/A"
+    }
+  ],
+  "evidenceIntegrity": {
+    "matrixMarkdownMatchesJson": true,
+    "matrixRows": 63,
+    "candidateInputsValidated": 128,
+    "rawEvidenceHashesValidated": 66,
+    "existingBaselineInputs": 796,
+    "changedExistingAllowlisted": 17,
+    "unchangedExistingBytes": 779,
+    "missingExisting": 0,
+    "newAllowlistedPaths": 27,
+    "historicalSidecarsUnchanged": 9,
+    "localMarkdownLinksChecked": 21,
+    "junitXmlFiles": 8,
+    "fullEndNonIgnoredFiles": 823,
+    "fullEndDirtyPaths": 165,
+    "verificationLog": "/tmp/innoflow-fixes-20261018.evgcyvL1/document-integrity-final.log"
+  },
+  "diagnosticSources": {
+    "nativeCancellation": "native-cancellation-probe.kt.txt"
+  }
+}

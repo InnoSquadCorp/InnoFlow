@@ -1,0 +1,6 @@
+public final class com/innosquad/innoflow/android/ViewModelFlowStoreKt {
+	public static final fun createFlowStore (Landroidx/lifecycle/ViewModel;Lcom/innosquad/innoflow/FlowFeature;Lcom/innosquad/innoflow/FlowInstrumentation;I)Lcom/innosquad/innoflow/FlowStore;
+	public static synthetic fun createFlowStore$default (Landroidx/lifecycle/ViewModel;Lcom/innosquad/innoflow/FlowFeature;Lcom/innosquad/innoflow/FlowInstrumentation;IILjava/lang/Object;)Lcom/innosquad/innoflow/FlowStore;
+	public static final fun ownFlowStore (Landroidx/lifecycle/ViewModel;Lcom/innosquad/innoflow/FlowStore;)Lcom/innosquad/innoflow/FlowStore;
+}
+

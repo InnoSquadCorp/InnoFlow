@@ -7,6 +7,49 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+
+- Kotlin/Android `1.0.0` packages for the core runtime, KSP `@InnoFlow`
+  generation, testing, ViewModel lifecycle ownership, and Compose lifecycle
+  collection, plus a real sample APK and published-artifact consumer fixture.
+- TypeScript/React `1.0.0` ESM packages for the framework-neutral runtime,
+  React hooks/provider, and testing helpers, plus React DOM/StrictMode coverage
+  and a Vite production consumer.
+- Independent `kotlin/v*` and `npm/v*` release gates so the existing Swift
+  package and release tags remain unchanged.
+- Shared runtime conformance fixtures, KSP compile/diagnostic consumers,
+  actual release-AAR API baselines, packed React 18/19 SSR/hydration/browser
+  consumers, and Android lifecycle/recreation/process-restoration gates.
+
+### Fixed
+
+- Validate Kotlin store capacity before attaching its owned Job, so rejected
+  construction leaves the parent and existing siblings unchanged.
+- Preserve generic owner/inner type arguments in KSP factories, including
+  multiple inner levels, nullable types, projections and aliased state.
+- Require exact packed-consumer SSR and browser counter values; exercise
+  independent SSR-only and live-browser value mutants in local/CI/release gates.
+- Verify stopped/saved Activity state before process-restoration probes and
+  support API26's protected background process with a guarded same-UID PID kill,
+  without force-stopping the app or targeting another process.
+- Bound Kotlin/TypeScript action admission with explicit overload failures,
+  preserve accepted FIFO actions, isolate dispatch failure/cancellation,
+  suppress late emissions, and cancel every active effect sharing an ID.
+- Preserve KSP feature visibility and escaped/default-package names and
+  diagnose unsupported declarations before generating invalid code.
+- Use structural assertions in TypeScript TestStore, including explicit
+  undefined state, and keep React selector memoization render-local with
+  stable SSR hydration snapshots.
+- Read the latest Compose output handler after recomposition; complete live
+  Kotlin output collectors on store close. Retain Node 20.19-compatible test
+  tooling and include valid sources/declaration maps in npm tarballs.
+
+### Changed
+
+- A separate Multiplatform CI workflow gates Kotlin ABI and Maven artifacts,
+  Android lint/APK assembly, npm package/type manifests, and platform-specific
+  consumer builds alongside the existing Swift workflow.
+
 ## [6.0.2] - 2026-10-07
 
 ### Fixed

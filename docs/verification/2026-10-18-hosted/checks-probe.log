@@ -1,0 +1,47 @@
+Multiplatform Contracts	Verify platform contracts and workflow policy	2026-10-18T07:51:29.1283237Z [multiplatform-ci] passing control and 10 negative evidence cases passed
+Multiplatform Contracts	Verify platform contracts and workflow policy	2026-10-18T07:51:29.3258533Z Ran 20 tests in 0.071s
+Android Lifecycle (API 35)	Verify lifecycle, recreation and process restoration	test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "35"
+Android Lifecycle (API 35)	Verify lifecycle, recreation and process restoration	2026-10-18T07:51:43.7404204Z test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "35"
+Android Lifecycle (API 35)	Verify lifecycle, recreation and process restoration	2026-10-18T07:53:11.5949637Z [command]/usr/bin/sh -c test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "35"
+Android Lifecycle (API 35)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:43.1946909Z Starting 1 tests on test(AVD) - 15
+Android Lifecycle (API 35)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:51.4944754Z Finished 1 tests on test(AVD) - 15
+Android Lifecycle (API 35)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:56.3965398Z Starting 2 tests on test(AVD) - 15
+Android Lifecycle (API 35)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:58.5950339Z Finished 2 tests on test(AVD) - 15
+Android Lifecycle (API 35)	Verify lifecycle, recreation and process restoration	2026-10-18T07:56:15.1046864Z Android process 4671 -> 4823, Count 2 restored (am-kill); /home/runner/work/_temp/innoflow-android-restoration-4dmt70vv
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.7648706Z > Task :inno-flow-compose:testDebugUnitTest NO-SOURCE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.7668591Z > Task :inno-flow-compose:test UP-TO-DATE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.7729068Z > Task :inno-flow-android:testDebugUnitTest FROM-CACHE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.7798693Z > Task :inno-flow-android:test UP-TO-DATE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.8008701Z > Task :inno-flow-core:testClasses UP-TO-DATE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.8048390Z > Task :inno-flow-core:test NO-SOURCE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.8247884Z > Task :inno-flow-ksp:testClasses UP-TO-DATE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.8318789Z > Task :inno-flow-ksp:test NO-SOURCE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.9447401Z > Task :inno-flow-testing:testClasses UP-TO-DATE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:14.9544984Z > Task :inno-flow-testing:test NO-SOURCE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:15.0501158Z > Task :sample:testClasses UP-TO-DATE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:15.0519523Z > Task :sample:test FROM-CACHE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:15.0520010Z > Task :android-sample:testDebugUnitTest FROM-CACHE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:15.0520571Z > Task :android-sample:test UP-TO-DATE
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:19.1286156Z > Task :inno-flow-core:checkKotlinAbi
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:19.1299534Z > Task :inno-flow-testing:checkKotlinAbi
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:19.1300763Z > Task :inno-flow-ksp:checkKotlinAbi
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:19.3320427Z > Task :inno-flow-android:checkKotlinAbi
+Kotlin Runtime and KSP Tests	Run Kotlin, Android, KSP, lint, and ABI checks	2026-10-18T07:52:19.4283861Z > Task :inno-flow-compose:checkKotlinAbi
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:52:30.0048980Z > Task :testClasses UP-TO-DATE
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:52:30.2917769Z > Task :test FROM-CACHE
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:52:53.8063164Z > Task :testDebugUnitTest FROM-CACHE
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:53:03.4373010Z [ksp-fixtures] positive: compiled
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:53:09.6673340Z [ksp-fixtures] private: expected diagnostic
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:53:13.3883791Z [ksp-fixtures] generic: expected diagnostic
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:53:16.9607246Z [ksp-fixtures] nested: expected diagnostic
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:53:20.5340087Z [ksp-fixtures] indirect: expected diagnostic
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:53:23.9281808Z [ksp-fixtures] abstract: expected diagnostic
+Kotlin Runtime and KSP Tests	Compile an independent published-artifact consumer	2026-10-18T07:53:27.8281924Z [android-api] Both real AAR API gates rejected changed baselines
+Android Lifecycle (API 23)	Verify lifecycle, recreation and process restoration	test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "23"
+Android Lifecycle (API 23)	Verify lifecycle, recreation and process restoration	2026-10-18T07:51:46.6558593Z test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "23"
+Android Lifecycle (API 23)	Verify lifecycle, recreation and process restoration	2026-10-18T07:52:59.4344841Z [command]/usr/bin/sh -c test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "23"
+Android Lifecycle (API 23)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:04.4741587Z Starting 1 tests on test(AVD) - 6.0
+Android Lifecycle (API 23)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:07.5743197Z Finished 1 tests on test(AVD) - 6.0
+Android Lifecycle (API 23)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:22.1741093Z Starting 2 tests on test(AVD) - 6.0
+Android Lifecycle (API 23)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:24.3742577Z Finished 2 tests on test(AVD) - 6.0
+Android Lifecycle (API 23)	Verify lifecycle, recreation and process restoration	2026-10-18T07:55:49.6261591Z RuntimeError: Refusing invalid sample PID: '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 317 319 321 415 426 435 444 445 554 617 637 657 668 758 772 775 778 810 831 864 867 889 895 1199 1200 1201 1202 1203 1204 1209 1210 1211 1212 1217 1236 1245 1254 1255 1262 1263 1264 1265 1266 1267 1268 1269 1272 1273 1274 1275 1276 1277 1279 1280 1567 1754 1788 1805 1996 2013 2111 2168 2183 2233 2273 2286 2329 2458 2474 2490 2513 2534 2656 2683 2838 2853 3083 3252'

@@ -1,0 +1,127 @@
+{
+  "status": "Draft",
+  "releaseApproval": null,
+  "publicationPerformed": false,
+  "implementationSha": "a3b1f06cbdd0aa22e883627e4198d8f6c646ea16",
+  "sourceManifest": "candidate-inputs.sha256",
+  "sourcePaths": 130,
+  "sourceManifestSha256": "2890afe7f0826aa0a28563de31089077ac234939d75330b7c7217c81802ff3fe",
+  "branch": "codex/multiplatform-flow",
+  "mainSha": "0a7e685d3749b3dc28c6d5e56b932c9ad7fc0b11",
+  "swiftDiffPaths": 0,
+  "runs": [
+    {
+      "phase": "initial",
+      "id": 39108493753,
+      "sha": "f4016461031468a7ebc372a47d256aa8e95bb2e0",
+      "conclusion": "failure",
+      "reason": "API23 UI tty capture failed before process termination",
+      "details": "verified-initial.json"
+    },
+    {
+      "phase": "probe",
+      "id": 39109230600,
+      "sha": "d405d71f73c55e8b82690cc10800161275a354f1",
+      "conclusion": "failure",
+      "reason": "UI file fallback passed; API23 all-PID pidof response safely rejected before termination",
+      "details": "verified-probe.json"
+    },
+    {
+      "phase": "pid",
+      "id": 39109770382,
+      "sha": "a3b1f06cbdd0aa22e883627e4198d8f6c646ea16",
+      "conclusion": "success",
+      "details": "verified-pid.json"
+    }
+  ],
+  "verified": {
+    "jobs": 6,
+    "artifactArchives": 5,
+    "artifactDigestsVerified": true,
+    "restorationControls": 32,
+    "ciEvidenceNegativeControls": 10,
+    "kotlinUnitAndConsumerTests": 30,
+    "kotlinUnitExecution": "Partly restored FROM-CACHE, not all fresh JVM execution",
+    "kotlinAbiChecks": 5,
+    "kspPositiveFixtures": 11,
+    "kspNegativeDiagnostics": 5,
+    "aarApiNegativeControls": 2,
+    "node": {
+      "20.19.0": {
+        "tests": 28,
+        "files": 5,
+        "react": [
+          "18.2.0",
+          "19.2.8"
+        ]
+      },
+      "22.23.3": {
+        "tests": 28,
+        "files": 5,
+        "react": [
+          "18.2.0",
+          "19.2.8"
+        ]
+      }
+    },
+    "android": {
+      "23": {
+        "instrumentation": 3,
+        "before": "3087",
+        "after": "3297",
+        "initial": 0,
+        "restored": 2,
+        "method": "am-kill",
+        "crashBufferBytes": 0
+      },
+      "35": {
+        "instrumentation": 3,
+        "before": "4581",
+        "after": "4754",
+        "initial": 0,
+        "restored": 2,
+        "method": "am-kill",
+        "crashBufferBytes": 0
+      }
+    }
+  },
+  "ledgerFollowup": {
+    "total": 63,
+    "pass": 59,
+    "fail": 0,
+    "limit": 2,
+    "notApplicable": 2,
+    "scope": "Previous local PASS rows reused; A06 newly closed. Not a fresh rerun of all 63 rows.",
+    "remaining": [
+      "C06 exact-SHA main-push release eligibility",
+      "C07 publication, registry-only consumers and release approval"
+    ]
+  },
+  "cleanup": [
+    {
+      "push": "f401646",
+      "reclaimedKiB": 0,
+      "freeGiB": 73
+    },
+    {
+      "push": "d405d71",
+      "reclaimedKiB": 0,
+      "freeGiB": 77
+    },
+    {
+      "push": "a3b1f06",
+      "reclaimedKiB": 0,
+      "freeGiB": 74
+    }
+  ],
+  "excluded": [
+    "Swift runtime/release",
+    "physical devices",
+    "other browser engines",
+    "React Native",
+    "long soak",
+    "deep security",
+    "registry-only consumer"
+  ],
+  "evidenceCommitBoundary": "A later evidence-only commit has distinct SHA and requires its own CI; this result is for the implementation SHA above, whose 130 source input bytes remain identical."
+}

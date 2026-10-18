@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="1" failures="0" errors="0" skipped="0" time="6.442" timestamp="2026-10-18T08:04:23" hostname="localhost">
+  <testsuite name="com.innosquad.innoflow.sample.android.RecreationTest" tests="1" failures="0" errors="0" skipped="0" time="4.855" timestamp="2026-10-18T08:04:23" hostname="localhost">
+    <properties>
+      <property name="device" value="test(AVD) - 15" />
+      <property name="flavor" value="" />
+      <property name="project" value=":android-sample" />
+    </properties>
+    <testcase name="stateSurvivesRecreationAndBackgroundResume" classname="com.innosquad.innoflow.sample.android.RecreationTest" time="4.855" />
+  </testsuite>
+</testsuites>

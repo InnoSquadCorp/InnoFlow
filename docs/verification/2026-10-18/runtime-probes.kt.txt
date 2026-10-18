@@ -1,0 +1,137 @@
+import com.innosquad.innoflow.*
+import com.innosquad.innoflow.testing.TestStore
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.test.*
+
+private data class Parent(val child: Int, val trace: List<String> = emptyList())
+
+private suspend fun constructor(capacity: Int): Boolean {
+    val parent = Job()
+    try {
+        val scope = CoroutineScope(parent + Dispatchers.Unconfined)
+        val result = runCatching {
+            FlowStore(0, Reducer<Int, Unit, Nothing> { s, _ -> transition(s) }, scope,
+                actionCapacity = capacity)
+        }
+        result.getOrNull()?.close()
+        val remaining = parent.children.count()
+        parent.complete()
+        val joined = withTimeoutOrNull(200) { parent.join(); true } ?: false
+        println("K01 capacity=$capacity error=${result.exceptionOrNull()?.javaClass?.simpleName} children=$remaining parentJoined=$joined")
+        check(if (capacity == 1) result.isSuccess && remaining == 0 && joined
+            else result.exceptionOrNull() is IllegalArgumentException)
+        return remaining == 0 && joined
+    } finally { parent.cancelAndJoin() }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+private fun composition() = runTest {
+    val outputs = mutableListOf<String>()
+    val child = Reducer<Int, String, String> { state, action -> when (action) {
+        "start" -> transition<Int, String, String>(state + 1)
+            .withEffect(Effect.send("next")).withOutputs("keep", "drop")
+        "next" -> transition<Int, String, String>(state + 2).withOutput("next")
+        else -> transition(state)
+    } }
+    val scoped: Reducer<Parent, String, String> = child.scope(
+        childState = { it.child }, replaceChildState = { p, c -> p.copy(child = c) },
+        childAction = { it.takeIf { a -> a.startsWith("child:") }?.removePrefix("child:") },
+        parentAction = { "child:$it" }, parentOutput = { if (it == "drop") null else "lift:$it" },
+    )
+    val after = Reducer<Parent, String, String> { state, action ->
+        transition<Parent, String, String>(state.copy(trace = state.trace + action)).withOutput("after:$action")
+    }
+    val store = FlowStore(Parent(0), combineReducers(scoped, after), backgroundScope,
+        object : FlowInstrumentation<Parent, String, String> {
+            override fun outputEmitted(output: String) { outputs += output }
+        })
+    try {
+        store.send("child:start").finish()
+        check(store.states.value == Parent(3, listOf("child:start", "child:next")))
+        check(outputs == listOf("lift:keep", "after:child:start", "lift:next", "after:child:next"))
+        store.send("unmatched").finish()
+        check(store.states.value.child == 3)
+        val empty = FlowStore(9, combineReducers<Int, Unit, Nothing>(), backgroundScope)
+        try { empty.send(Unit).finish(); check(empty.states.value == 9) } finally { empty.close() }
+        println("PASS K03/K11 composition: order, scoped state/actions, descendant completion, output lifting/filter, zero reducers")
+    } finally { store.close() }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+private fun mappedCancellationAndWaiters() = runTest {
+    val id = EffectId("mapped")
+    val otherId = EffectId("other")
+    var cancelled = 0
+    val store = FlowStore(0, Reducer<Int, String, Nothing> { s, a ->
+        val effect = when (a) {
+            "one", "two" -> Effect.run<Int>(id) { try { awaitCancellation() } finally { cancelled++ } }.map { it.toString() }
+            "other" -> Effect.run<Int>(otherId) { awaitCancellation() }.map { it.toString() }
+            else -> Effect.cancel<Int>(id).map { it.toString() }
+        }
+        transition<Int, String, Nothing>(s).withEffect(effect)
+    }, backgroundScope)
+    try {
+        val one = store.send("one"); val two = store.send("two"); val other = store.send("other")
+        runCurrent()
+        store.send("cancel").finish(); runCurrent()
+        one.finish(); two.finish()
+        check(cancelled == 2 && !other.isCompleted)
+        other.cancel(); other.cancel(); other.finish()
+        println("PASS K07 map preserves all-ID cancellation and unrelated work")
+    } finally { store.close() }
+
+    val gate = CompletableDeferred<Unit>()
+    val waiting = FlowStore(0, Reducer<Int, String, Nothing> { s, a ->
+        if (a == "start") transition<Int, String, Nothing>(s + 1).withEffect(Effect.run { gate.await(); send("done") })
+        else transition(s + 1)
+    }, backgroundScope)
+    try {
+        val root = waiting.send("start")
+        val waiter = launch { root.finish() }
+        val second = async { root.finish() }
+        runCurrent(); waiter.cancelAndJoin()
+        check(!root.isCompleted)
+        gate.complete(Unit); second.await(); root.finish(); root.cancel()
+        check(root.isCompleted && waiting.states.value == 2)
+        println("PASS K12 multiple waiters; cancelling a waiter does not cancel native deferred dispatch; repeated finish/cancel")
+    } finally { waiting.close() }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+private fun outputAndTesting() = runTest {
+    val store = FlowStore(0, Reducer<Int, Unit, String?> { s, _ ->
+        transition<Int, Unit, String?>(s + 1).withOutputs("live", null)
+    }, backgroundScope)
+    try {
+        store.send(Unit).finish()
+        val values = mutableListOf<String?>()
+        val collector = launch { store.outputs.collect { values += it } }
+        runCurrent(); check(values.isEmpty())
+        store.send(Unit).finish(); runCurrent()
+        check(values == listOf("live", null))
+        store.close(); collector.join()
+        println("PASS K09 output no replay, nullable value, collector completion on close")
+    } finally { store.close() }
+
+    val harness = TestStore(0, Reducer<Int, String, String> { s, a ->
+        transition<Int, String, String>(s + 1).withOutput(a)
+    }, backgroundScope)
+    try {
+        harness.send("a", 1); harness.assertActions(listOf("a")); harness.assertOutputs(listOf("a"))
+        check(runCatching { harness.send("b", 999) }.exceptionOrNull() is AssertionError)
+        check(runCatching { harness.assertActions(listOf("wrong")) }.exceptionOrNull() is AssertionError)
+        check(runCatching { harness.assertOutputs(listOf("wrong")) }.exceptionOrNull() is AssertionError)
+        harness.resetTrace(); harness.assertActions(emptyList()); harness.assertOutputs(emptyList())
+        harness.finish()
+        println("PASS K13 TestStore state/action/output negative assertions and reset/finish")
+    } finally { harness.close() }
+}
+
+fun main(args: Array<String>) = runBlocking {
+    check(constructor(1))
+    val constructorContract = constructor(0)
+    composition(); mappedCancellationAndWaiters(); outputAndTesting()
+    println("SUMMARY positive probes passed; F1 constructor contract=${if (constructorContract) "PASS" else "FAIL"}")
+    if ("--assert-contract" in args) check(constructorContract) { "F1 constructor retains orphan child Job" }
+}

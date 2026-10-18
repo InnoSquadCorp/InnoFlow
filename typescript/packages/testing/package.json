@@ -1,0 +1,37 @@
+{
+  "name": "@innosquad/inno-flow-testing",
+  "version": "1.0.0",
+  "description": "Action, state, and output assertions for InnoFlow TypeScript",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/InnoSquadCorp/InnoFlow.git",
+    "directory": "typescript/packages/testing"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist", "src/**/*.ts", "!src/**/*.test.ts", "README.md", "LICENSE"],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@innosquad/inno-flow": "^1.0.0"
+  },
+  "dependencies": {
+    "dequal": "^2.0.3"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "prepack": "tsc -b"
+  },
+  "keywords": ["testing", "state-management", "typescript"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

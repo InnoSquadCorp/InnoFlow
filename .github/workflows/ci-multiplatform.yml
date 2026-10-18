@@ -1,0 +1,206 @@
+name: Multiplatform CI
+
+on:
+  push:
+    branches: [main, develop, codex/multiplatform-flow]
+  pull_request:
+    branches: [main, develop]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+
+concurrency:
+  group: multiplatform-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: Multiplatform Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify platform contracts and workflow policy
+        run: |
+          ./scripts/check-multiplatform-contract.sh
+          ./scripts/check-workflow-action-pins.sh
+          ./scripts/check-workflow-job-timeouts.sh
+          python3 scripts/check-multiplatform-ci.py --self-test
+          python3 scripts/check-android-restoration-selftest.py
+
+  kotlin-tests:
+    name: Kotlin Runtime and KSP Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: contracts
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@f2beeb24e141e01a676f977032f5a29d81c9e27e # v5.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            11
+            17
+          cache: gradle
+
+      - name: Run Kotlin, Android, KSP, lint, and ABI checks
+        run: |
+          ./kotlin/gradlew -p kotlin \
+            test \
+            :android-sample:assembleDebug \
+            :android-sample:assembleRelease \
+            :inno-flow-android:lintRelease \
+            :inno-flow-compose:lintRelease \
+            :inno-flow-core:checkKotlinAbi \
+            :inno-flow-testing:checkKotlinAbi \
+            :inno-flow-ksp:checkKotlinAbi \
+            :inno-flow-android:checkKotlinAbi \
+            :inno-flow-compose:checkKotlinAbi \
+            publishAllPublicationsToTestRepository
+
+      - name: Compile an independent published-artifact consumer
+        run: |
+          ./kotlin/gradlew -p kotlin/consumer-fixture test --refresh-dependencies
+          ./kotlin/gradlew -p kotlin/android-consumer-fixture testDebugUnitTest assembleRelease --refresh-dependencies
+          python3 scripts/check-ksp-fixtures.py
+          python3 scripts/check-android-api-selftest.py
+
+      - name: Preserve JVM and AAR test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kotlin-unit-consumer-reports
+          path: |
+            kotlin/**/build/test-results/
+            kotlin/**/build/reports/tests/
+            kotlin/**/build/android-api/*.api
+          if-no-files-found: warn
+
+  typescript-tests:
+    name: TypeScript Runtime and React Adapter Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: contracts
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20.19.0", "22"]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install pinned npm
+        run: npm install --global npm@11.19.0
+
+      - name: Install TypeScript dependencies
+        run: |
+          npm ci
+          npm audit --audit-level=moderate
+        working-directory: typescript
+
+      - name: Typecheck, build, and test TypeScript packages
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          npm test 2>&1 | tee "$RUNNER_TEMP/typescript-tests.log"
+        working-directory: typescript
+
+      - name: Install the pinned browser
+        run: npx --no-install playwright install chromium --only-shell --with-deps
+        working-directory: typescript
+
+      - name: Install real tarballs and exercise React 18 and 19 in a browser
+        working-directory: typescript
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          INNOFLOW_REACT_VERSION=18.2.0 npm run test:packed 2>&1 | tee "$RUNNER_TEMP/packed-react18.log"
+          INNOFLOW_REACT_VERSION=19.2.8 npm run test:packed 2>&1 | tee "$RUNNER_TEMP/packed-react19.log"
+          npm run test:packed:selftest 2>&1 | tee "$RUNNER_TEMP/packed-value-controls.log"
+
+      - name: Preserve packed-consumer screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packed-consumers-node-${{ matrix.node }}
+          path: |
+            ${{ runner.temp }}/innoflow-packed-consumer-*/consumer*.png
+            ${{ runner.temp }}/typescript-tests.log
+            ${{ runner.temp }}/packed-*.log
+          if-no-files-found: warn
+
+  android-runtime:
+    name: Android Lifecycle (API ${{ matrix.api }})
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 23
+            target: default
+          - api: 35
+            target: google_apis
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@f2beeb24e141e01a676f977032f5a29d81c9e27e # v5.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            11
+            17
+          cache: gradle
+      - name: Enable hosted emulator acceleration
+        run: sudo chmod a+rw /dev/kvm
+      - name: Verify lifecycle, recreation and process restoration
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          TMPDIR: ${{ runner.temp }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb -s emulator-5554 shell getprop ro.build.fingerprint > "$RUNNER_TEMP/android-fingerprint.txt"
+            test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "${{ matrix.api }}"
+            ./kotlin/gradlew -p kotlin :inno-flow-compose:connectedDebugAndroidTest :android-sample:connectedDebugAndroidTest --no-parallel
+            python3 scripts/check-android-restoration.py --serial emulator-5554
+            adb -s emulator-5554 logcat -b crash -d > "$RUNNER_TEMP/android-crash.txt"
+      - name: Preserve Android test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-runtime-${{ matrix.api }}
+          path: |
+            kotlin/inno-flow-compose/build/reports/androidTests/
+            kotlin/android-sample/build/reports/androidTests/
+            kotlin/inno-flow-compose/build/outputs/androidTest-results/
+            kotlin/android-sample/build/outputs/androidTest-results/
+            ${{ runner.temp }}/innoflow-android-restoration-*/
+            ${{ runner.temp }}/android-*.txt
+          if-no-files-found: warn
