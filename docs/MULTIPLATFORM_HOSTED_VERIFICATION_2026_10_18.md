@@ -7,7 +7,8 @@ approved-at: null
 
 # Multiplatform hosted 검증 — 2026-10-18
 
-실행 상태: **커밋/푸시 및 원격 검증 진행 중**. 문서 상태는 Draft이며 출시 승인이 아니다.
+실행 상태: **고정 범위 커밋/푸시·원격 실행·산출물 검토 완료** (아래 exact SHA).
+문서 상태는 Draft이며 출시 승인이 아니다. 배포는 수행하지 않았다.
 
 ## 기준선·권한·고정 범위
 
@@ -22,8 +23,9 @@ approved-at: null
 - raw evidence: `/tmp/innoflow-hosted-20261018.CTW177i3`.
 - Swift source/tests/examples/manifests/locks/CI와 원래 dirty Swift checkout은 그대로 보존한다.
 - GitHub `Ethan-IS` 활성 계정, InnoSquadCorp 소속 및 저장소 ADMIN 권한을 확인했다.
-- 이번 추가는 작업 브랜치 push trigger와 test/log artifact 수집이다. runtime/ABI/lock의
-  이전 검증 바이트를 유지한다. 실패가 생기면 product/fixture/toolchain/CI infra를 구분한다.
+- 이번 추가는 작업 브랜치 push trigger, test/log artifact 수집, package LICENSE 원문 복구,
+  API23 검증 도구의 UI/PID 이식성 보완이다. Kotlin/TS runtime·공개 ABI·lock의 이전 검증
+  바이트를 유지한다. 실제 제품 결함과 fixture/toolchain/CI infra를 구분했다.
 - staged 공백 검사에서 원본 XML의 CRLF·생성 ABI/원문 LICENSE 끝 구분 줄은 바이트를
   바꾸지 않고 좁은 .gitattributes 규칙으로 취급한다. release-kotlin YAML의 여분 EOF만 정리했다.
 - 추가 포장 결함 P05-L: 3개 npm LICENSE에 잘못된 제목 접두어와 누락된 원문 구절이 있었다.
@@ -53,12 +55,16 @@ approved-at: null
 
 - [수정 후 로컬 원장](MULTIPLATFORM_FIX_VERIFICATION_2026_10_18.md)과 sidecar는
   당시 immutable 입력/관측으로 보존한다. 새 workflow 바이트는 별도 hosted manifest로 식별한다.
-- A06: 이번 실제 API23/35 실행으로 재개방한다.
-- C06: exact-SHA hosted **작업 브랜치** CI를 확인한다. release helper가 요구하는
+- A06: **PASS · fresh**. 실제 API23/35 instrumentation 각3건과 real process 복원을 확인했다.
+- C06: exact-SHA hosted **작업 브랜치** CI는 **PASS · fresh (6/6 jobs)**. release helper가 요구하는
   **main-push** eligibility는 main 병합·해당 SHA main CI 전까지 별개로 미충족이다.
   branch run을 main release evidence로 위장하거나 helper 조건을 완화하지 않는다.
-- C07: registry-only install/publication/출시 승인은 명시적 배포 금지로 미수행한다.
+- C07: **LIMIT**. registry-only install/publication/출시 승인은 명시적 배포 금지로 미수행했다.
 - X01/X02: Swift runtime/release, physical device/다른 engine/RN/soak·심층 보안은 이전 제외다.
+
+이전 63행 중 A06만 LIMIT→PASS로 갱신한 후속 집계는 **59 PASS / 0 FAIL / 2 LIMIT / 2 N/A**다.
+기존 58 PASS 전부를 이번에 재실행했다는 뜻이 아니다. 아래 원격 재실행/캐시 재사용과
+이전 로컬 증거의 재사용을 구분하며, C06 main-push eligibility와 C07는 여전히 LIMIT다.
 
 ## 실행 원장
 
@@ -113,4 +119,55 @@ approved-at: null
 - 두 번째 push도 local/tracking/remote SHA 동일, diverged0/0, clean, Swift/main diff0 확인
   후 cleanup했다. 회수0 KiB, free77 GiB이며 다른 build/compiler를 중단하지 않았다.
 
-다음 candidate SHA와 exact-SHA run, artifact/새 PID 결과는 실행 후 추가한다.
+### 구현 후보의 원격 성공 — 산출물까지 독립 대조
+
+- commit `a3b1f06cbdd0aa22e883627e4198d8f6c646ea16`, push event,
+  branch `codex/multiplatform-flow`, attempt1,
+  [run 39109770382](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/39109770382).
+  `.github/workflows/ci-multiplatform.yml`의 6개 job이 모두 success다.
+- 130개 runtime/build/contract/CI/shared 입력의 [manifest](verification/2026-10-18-hosted/candidate-inputs.sha256)
+  SHA-256은 `2890afe7f0826aa0a28563de31089077ac234939d75330b7c7217c81802ff3fe`다.
+  prose/결과/이미지를 제외해 self-reference를 피한다. 앞선 두 실패 후보 manifest도 따로 보존했다.
+- 5개 ZIP을 내려받아 GitHub의 artifact digest와 SHA-256이 전부 일치함을 확인하고,
+  run/branch/event/repository/head SHA 및 6개 checkout log의 SHA까지 대조했다.
+  성공 job 이름만 보지 않고 XML 실제 testcase 수, failures/errors/skips0, 화면/로그를 확인했다.
+
+| Job | ID | 검토한 결과 |
+| --- | --- | --- |
+| Contracts | 117623188613 | contract/pins/timeouts, exact-SHA normal+10 negatives, restoration32 controls |
+| Kotlin/KSP | 117623221439 | module/sample28+외부 JVM/AAR2, ABI5, lint/debug/release, KSP positive11/negative5, AAR negative2 |
+| Node20.19.0 | 117623221440 | test28/5files, React18.2.0/19.2.8 tarball SSR/hydration/browser 및 분리 SSR/live mutants 거부 |
+| Node22.23.3 | 117623221445 | test28/5files, 동일 React18/19 소비자 및 mutant controls |
+| Android API23 | 117623221430 | Compose2+recreation1, PID3087→3297, Count0→2 저장/새 process Count2 복원, am-kill |
+| Android API35 | 117623221449 | Compose2+recreation1, PID4581→4754, Count0→2 저장/새 process Count2 복원, am-kill |
+
+- API23은 fresh 파일 UI 수집과 legacy ps+정확 cmdline 대조를 실제 사용했다.
+  API35는 tty XML/modern pidof 경로를 실제 사용했다. 양쪽 STOPPED/saved state, 복원 XML,
+  screenshot을 직접 확인했고 crash buffer는 각각0 bytes이며 ANR 화면이 없었다.
+- 원격 Android instrumentation/두 process probe, Node unit/SSR/browser, contract32 controls는
+  이 run의 새 실행이다. JVM module/consumer unit task 일부는 `FROM-CACHE`였으며 XML은
+  해당 입력의 캐시 결과다. 이 30건을 전부 새 JVM 실행으로 부르지 않는다.
+  동일 runtime 바이트의 이전 로컬 `--rerun-tasks` 결과도 유지한다. 새 remote lint/ABI/KSP
+  실행 및 정확한 cache task 목록은 [검증 JSON](verification/2026-10-18-hosted/verified-pid.json)에 있다.
+- Kotlin/TS runtime, ABI, lock, Swift source/계약의 바이트는 최초 커밋과 동일하다.
+  두 도구 보완으로 runtime/공개 API를 우회하거나 assertion을 완화하지 않았다.
+- 세 번째 push도 local/tracking/remote SHA 동일, diverged0/0, clean, Swift/main diff0 확인 후
+  지정 cleanup을 실행했다. 회수0 KiB, free74 GiB였다. 73→77→74 GiB의 변동을 정리 효과로
+  계산하지 않는다. 다른 build/compiler를 중단하지 않았다.
+
+## 결과·보존·남은 경계
+
+- [Durable evidence](verification/2026-10-18-hosted/README.md)에는 metadata/원본 XML/PNG,
+  raw text의 JSON 표현, source/evidence hashes, 세 run의 판정과 검증기를 보존한다.
+  원격 artifact 만료 뒤에도 선택한 증거를 잃지 않도록 원본의 해시/텍스트를 같이 둔다.
+- 확인된 추가 문제는 npm LICENSE 복사본 결함과 API23 **검증 도구**의 UI/PID 이식성이다.
+  수정/대조가 끝났으며 이 원격 범위에서 새 runtime 결함을 확정하지 않았다.
+  `pidof` 다중 반환의 vendor 구현 세부 원인은 미확정이고 optional platform 연구다.
+- Swift runtime/release는 실행하지 않았다. physical device, 다른 browser engine, RN,
+  장기 soak, deep security, registry-only consumer는 검증하지 않았으며 이번 PASS에 포함하지 않는다.
+- 배포 금지에 따라 main merge/push, tag, GitHub Release, npm/GitHub Packages publish,
+  registry credential 사용은 없었다. main의 exact-SHA release eligibility와 출시 승인은 별도다.
+- 이 기록을 담는 후속 evidence-only commit은 별도 SHA다. 130개 manifest가 동일한지 확인하고
+  그 HEAD의 새 CI도 최종 handoff에서 확인한다. 위 run을 후속 SHA의 run으로 표시하지 않는다.
+
+고정된 종료 조건을 충족한 검증 기록이지, 모든 결함의 부재나 공개 1.0 출시 승인이 아니다.

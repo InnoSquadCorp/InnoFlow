@@ -13,8 +13,11 @@ required-result evaluation, and release preflight follow `main` independently.
 Use the [post-fix verification ledger](MULTIPLATFORM_FIX_VERIFICATION_2026_10_18.md)
 and its candidate-input manifest rather than the earlier pre-fix snapshot.
 Its 63-row scope distinguishes corrected defects, local consumer proof,
-device limitations and unpublished/hosted release gates. The local candidate
-is not approved for public release, despite the corrected local gates.
+device limitations and unpublished/hosted release gates. The latest
+[hosted follow-up](MULTIPLATFORM_HOSTED_VERIFICATION_2026_10_18.md) and its
+130-input manifest supersede the old uncommitted identity: branch CI and
+API23/35 are verified, while main-push eligibility/publication remain separate.
+The candidate is not approved for public release.
 
 From a clean checkout with Java 11/17, Android SDK 37, Node.js 20.19 or newer, and
 npm 11.19.0:

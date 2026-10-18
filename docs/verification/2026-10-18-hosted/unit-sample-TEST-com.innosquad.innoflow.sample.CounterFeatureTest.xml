@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.innosquad.innoflow.sample.CounterFeatureTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-18T07:41:49.912Z" hostname="runnervm8k3b6" time="0.568">
+  <properties/>
+  <testcase name="testStoreRecordsExhaustiveActionOrder()" classname="com.innosquad.innoflow.sample.CounterFeatureTest" time="0.396"/>
+  <testcase name="sharedCounterConformanceFixture()" classname="com.innosquad.innoflow.sample.CounterFeatureTest" time="0.131"/>
+  <testcase name="generatedFactoryRunsDescendantActions()" classname="com.innosquad.innoflow.sample.CounterFeatureTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

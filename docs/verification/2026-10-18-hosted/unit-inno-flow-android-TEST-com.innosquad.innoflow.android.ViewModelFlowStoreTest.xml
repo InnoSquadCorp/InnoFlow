@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.innosquad.innoflow.android.ViewModelFlowStoreTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-18T07:41:31.751Z" hostname="runnervm8k3b6" time="0.253">
+  <properties/>
+  <testcase name="viewModelStoreClearClosesOwnedFlowStore" classname="com.innosquad.innoflow.android.ViewModelFlowStoreTest" time="0.25"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

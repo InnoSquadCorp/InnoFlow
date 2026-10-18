@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="2" failures="0" errors="0" skipped="0" time="2.31" timestamp="2026-10-18T08:04:30" hostname="localhost">
+  <testsuite name="com.innosquad.innoflow.compose.LifecycleCollectionTest" tests="2" failures="0" errors="0" skipped="0" time="1.616" timestamp="2026-10-18T08:04:30" hostname="localhost">
+    <properties>
+      <property name="device" value="test(AVD) - 15" />
+      <property name="flavor" value="" />
+      <property name="project" value=":inno-flow-compose" />
+    </properties>
+    <testcase name="outputsUseLatestHandlerAndNeverReplayBackgroundEvents" classname="com.innosquad.innoflow.compose.LifecycleCollectionTest" time="1.212" />
+    <testcase name="stateCollectionPausesAndResumesWithLatestValue" classname="com.innosquad.innoflow.compose.LifecycleCollectionTest" time="0.404" />
+  </testsuite>
+</testsuites>

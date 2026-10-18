@@ -1,0 +1,485 @@
+{
+  "phase": "pid",
+  "sha": "a3b1f06cbdd0aa22e883627e4198d8f6c646ea16",
+  "runId": 39109770382,
+  "attempt": 1,
+  "workflow": ".github/workflows/ci-multiplatform.yml",
+  "branch": "codex/multiplatform-flow",
+  "event": "push",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "id": 117623188613,
+      "name": "Multiplatform Contracts",
+      "conclusion": "success"
+    },
+    {
+      "id": 117623221430,
+      "name": "Android Lifecycle (API 23)",
+      "conclusion": "success"
+    },
+    {
+      "id": 117623221439,
+      "name": "Kotlin Runtime and KSP Tests",
+      "conclusion": "success"
+    },
+    {
+      "id": 117623221440,
+      "name": "TypeScript Runtime and React Adapter Tests (20.19.0)",
+      "conclusion": "success"
+    },
+    {
+      "id": 117623221445,
+      "name": "TypeScript Runtime and React Adapter Tests (22)",
+      "conclusion": "success"
+    },
+    {
+      "id": 117623221449,
+      "name": "Android Lifecycle (API 35)",
+      "conclusion": "success"
+    }
+  ],
+  "artifactArchives": [
+    {
+      "name": "android-runtime-23",
+      "id": 12130570120,
+      "bytes": 48534,
+      "sha256": "e5c0de060b17c314ca31cd5336d44bf86a10e83efcbec6d9e71307c23a7aa702",
+      "githubDigestVerified": true
+    },
+    {
+      "name": "kotlin-unit-consumer-reports",
+      "id": 12130310819,
+      "bytes": 48286,
+      "sha256": "fd97c3698c63a96adda3e1f32b58bcfc44228b6f93befe90d6eda4c02d10c98d",
+      "githubDigestVerified": true
+    },
+    {
+      "name": "android-runtime-35",
+      "id": 12130270623,
+      "bytes": 76916,
+      "sha256": "cbcc721483fdf888f3c9c53215667f26f62adc32b4043097d51f74830b383c62",
+      "githubDigestVerified": true
+    },
+    {
+      "name": "packed-consumers-node-20.19.0",
+      "id": 12130020854,
+      "bytes": 38495,
+      "sha256": "71b53840587ce734ec11e243fddbbb8d9b78e91395efdfbdf13b079f6581bf57",
+      "githubDigestVerified": true
+    },
+    {
+      "name": "packed-consumers-node-22",
+      "id": 12129559360,
+      "bytes": 38488,
+      "sha256": "4e04f8b677d81f2ae8b227f8cbf4324dab40e339a071df9a75e81b55f7f8077e",
+      "githubDigestVerified": true
+    }
+  ],
+  "kotlin": {
+    "sample": {
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "sharedRuntimeScenarios()",
+        "ownerScopeCancellationFinishesDispatchTasks()",
+        "reducerFailureRejectsOnlyItsDispatchTreeAndStoreRemainsUsable()",
+        "actionQueueRemainsLosslessAcrossLargeBursts()",
+        "closeCancelsActiveTasksAndRejectsLaterSends()",
+        "cancellationIdImplementsLatestWins()",
+        "typedOutputIsRecordedOutsideState()",
+        "instrumentationFailureDoesNotChangeRuntimeSemantics()",
+        "liveOutputCollectorReceivesOutputsInOrder()",
+        "slowLiveOutputCollectorReportsBackpressureDrops()",
+        "cancellationFromObserverSuppressesOutputAndEffects()",
+        "cancelledAdmissionDoesNotReduceButIndependentDispatchDoes()",
+        "cancellationIdCancelsEveryMatchingRun()",
+        "effectFailureIsObservedAndRetryRemainsUsable()",
+        "effectProducerSuspendsInsteadOfDroppingActions()",
+        "concurrentProducersSerializeAgainstLatestState()",
+        "closeReleasesQueuedDispatches()",
+        "rejectedConstructionKeepsParentAndSiblingUnchanged()",
+        "invalidCapacityIsRejected()",
+        "validConstructionAndCloseReleaseTheOwnedJob()",
+        "outputCollectorsCompleteWhenStoreCloses()",
+        "cancelledIdSuppressesUncooperativeLateEmission()",
+        "boundedRootAdmissionRejectsOnlyOverflowAndRecovers()",
+        "testStoreRecordsExhaustiveActionOrder()",
+        "sharedCounterConformanceFixture()",
+        "generatedFactoryRunsDescendantActions()"
+      ]
+    },
+    "inno-flow-android": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "viewModelStoreClearClosesOwnedFlowStore"
+      ]
+    },
+    "android-sample": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "reconstructsTheFeatureFromExplicitSavedState"
+      ]
+    },
+    "consumer-fixture": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "generatedFactoryAndTestingArtifactAreConsumable()"
+      ]
+    },
+    "android-consumer-fixture": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "consumesPublishedTestingAndReducer"
+      ]
+    }
+  },
+  "typescript": {
+    "20.19.0": {
+      "unitTests": 28,
+      "unitFiles": 5,
+      "consumers": [
+        {
+          "react": "18.2.0",
+          "node": "20.19.0",
+          "result": "PASS"
+        },
+        {
+          "react": "19.2.8",
+          "node": "20.19.0",
+          "result": "PASS"
+        }
+      ],
+      "normalPackedControl": true,
+      "wrongSsrRejected": true,
+      "wrongBrowserRejected": true
+    },
+    "22": {
+      "unitTests": 28,
+      "unitFiles": 5,
+      "consumers": [
+        {
+          "react": "18.2.0",
+          "node": "22.23.3",
+          "result": "PASS"
+        },
+        {
+          "react": "19.2.8",
+          "node": "22.23.3",
+          "result": "PASS"
+        }
+      ],
+      "normalPackedControl": true,
+      "wrongSsrRejected": true,
+      "wrongBrowserRejected": true
+    }
+  },
+  "android": {
+    "23": {
+      "compose": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "cases": [
+          "outputsUseLatestHandlerAndNeverReplayBackgroundEvents",
+          "stateCollectionPausesAndResumesWithLatestValue"
+        ]
+      },
+      "recreation": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "cases": [
+          "stateSurvivesRecreationAndBackgroundResume"
+        ]
+      },
+      "fingerprint": "Android/sdk_phone_x86_64/generic_x86_64:6.0/MASTER/4174734:userdebug/test-keys",
+      "restoration": "PASS",
+      "result": {
+        "before": "3087",
+        "after": "3297",
+        "initial": 0,
+        "restored": 2,
+        "method": "am-kill"
+      },
+      "visibleCount": 2,
+      "crashBufferBytes": 0,
+      "fileFallbackUsed": true,
+      "probeDirectory": "/private/tmp/innoflow-hosted-20261018.CTW177i3/artifacts-pid/android-runtime-23/_temp/innoflow-android-restoration-x4a_lhtj",
+      "legacyProcessIdentityReads": 3
+    },
+    "35": {
+      "compose": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "cases": [
+          "outputsUseLatestHandlerAndNeverReplayBackgroundEvents",
+          "stateCollectionPausesAndResumesWithLatestValue"
+        ]
+      },
+      "recreation": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "cases": [
+          "stateSurvivesRecreationAndBackgroundResume"
+        ]
+      },
+      "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+      "restoration": "PASS",
+      "result": {
+        "before": "4581",
+        "after": "4754",
+        "initial": 0,
+        "restored": 2,
+        "method": "am-kill"
+      },
+      "visibleCount": 2,
+      "crashBufferBytes": 0,
+      "fileFallbackUsed": false,
+      "probeDirectory": "/private/tmp/innoflow-hosted-20261018.CTW177i3/artifacts-pid/android-runtime-35/_temp/innoflow-android-restoration-p8dc8m7r"
+    }
+  },
+  "gradleReusedTaskEvidence": [
+    ":android-sample:compileDebugAndroidTestNavigationResources FROM-CACHE",
+    ":android-sample:compileDebugKotlin FROM-CACHE",
+    ":android-sample:compileDebugNavigationResources FROM-CACHE",
+    ":android-sample:compileDebugUnitTestKotlin FROM-CACHE",
+    ":android-sample:compileReleaseArtProfile FROM-CACHE",
+    ":android-sample:compileReleaseKotlin FROM-CACHE",
+    ":android-sample:compileReleaseNavigationResources FROM-CACHE",
+    ":android-sample:compressDebugAndroidTestAssets FROM-CACHE",
+    ":android-sample:compressDebugAssets FROM-CACHE",
+    ":android-sample:compressReleaseAssets FROM-CACHE",
+    ":android-sample:desugarDebugFileDependencies FROM-CACHE",
+    ":android-sample:desugarReleaseFileDependencies FROM-CACHE",
+    ":android-sample:dexBuilderDebug FROM-CACHE",
+    ":android-sample:dexBuilderRelease FROM-CACHE",
+    ":android-sample:extractDeepLinksDebug FROM-CACHE",
+    ":android-sample:extractDeepLinksRelease FROM-CACHE",
+    ":android-sample:extractReleaseNativeSymbolTables FROM-CACHE",
+    ":android-sample:generateDebugAndroidTestAssets UP-TO-DATE",
+    ":android-sample:generateDebugAndroidTestGlobalSynthetics FROM-CACHE",
+    ":android-sample:generateDebugAndroidTestResources FROM-CACHE",
+    ":android-sample:generateDebugAssets UP-TO-DATE",
+    ":android-sample:generateDebugGlobalSynthetics FROM-CACHE",
+    ":android-sample:generateDebugRFile FROM-CACHE",
+    ":android-sample:generateDebugResources FROM-CACHE",
+    ":android-sample:generateReleaseAssets UP-TO-DATE",
+    ":android-sample:generateReleaseRFile FROM-CACHE",
+    ":android-sample:generateReleaseResources FROM-CACHE",
+    ":android-sample:javaPreCompileDebug FROM-CACHE",
+    ":android-sample:javaPreCompileDebugAndroidTest FROM-CACHE",
+    ":android-sample:javaPreCompileDebugUnitTest FROM-CACHE",
+    ":android-sample:javaPreCompileRelease FROM-CACHE",
+    ":android-sample:kspDebugKotlin FROM-CACHE",
+    ":android-sample:kspDebugUnitTestKotlin FROM-CACHE",
+    ":android-sample:kspReleaseKotlin FROM-CACHE",
+    ":android-sample:lintVitalAnalyzeRelease FROM-CACHE",
+    ":android-sample:mergeDebugResources FROM-CACHE",
+    ":android-sample:mergeDexRelease FROM-CACHE",
+    ":android-sample:mergeExtDexDebug FROM-CACHE",
+    ":android-sample:mergeExtDexRelease FROM-CACHE",
+    ":android-sample:mergeLibDexDebug FROM-CACHE",
+    ":android-sample:mergeProjectDexDebug FROM-CACHE",
+    ":android-sample:mergeReleaseGlobalSynthetics FROM-CACHE",
+    ":android-sample:mergeReleaseResources FROM-CACHE",
+    ":android-sample:optimizeReleaseResources FROM-CACHE",
+    ":android-sample:packageDebugResources FROM-CACHE",
+    ":android-sample:packageReleaseResources FROM-CACHE",
+    ":android-sample:parseDebugAndroidTestLocalResources FROM-CACHE",
+    ":android-sample:parseDebugLocalResources FROM-CACHE",
+    ":android-sample:parseReleaseLocalResources FROM-CACHE",
+    ":android-sample:preBuild UP-TO-DATE",
+    ":android-sample:preDebugBuild UP-TO-DATE",
+    ":android-sample:preDebugUnitTestBuild UP-TO-DATE",
+    ":android-sample:preReleaseBuild UP-TO-DATE",
+    ":android-sample:processDebugAndroidTestNavigationResources FROM-CACHE",
+    ":android-sample:processDebugMainManifest FROM-CACHE",
+    ":android-sample:processDebugManifest FROM-CACHE",
+    ":android-sample:processDebugManifestForPackage FROM-CACHE",
+    ":android-sample:processDebugNavigationResources FROM-CACHE",
+    ":android-sample:processDebugResources FROM-CACHE",
+    ":android-sample:processReleaseMainManifest FROM-CACHE",
+    ":android-sample:processReleaseManifest FROM-CACHE",
+    ":android-sample:processReleaseManifestForPackage FROM-CACHE",
+    ":android-sample:processReleaseNavigationResources FROM-CACHE",
+    ":android-sample:processReleaseResources FROM-CACHE",
+    ":android-sample:test UP-TO-DATE",
+    ":android-sample:testDebugUnitTest FROM-CACHE",
+    ":classes UP-TO-DATE",
+    ":compileDebugKotlin FROM-CACHE",
+    ":compileDebugNavigationResources FROM-CACHE",
+    ":compileDebugUnitTestKotlin FROM-CACHE",
+    ":compileKotlin FROM-CACHE",
+    ":compileReleaseArtProfile FROM-CACHE",
+    ":compileReleaseKotlin FROM-CACHE",
+    ":compileReleaseNavigationResources FROM-CACHE",
+    ":compileTestKotlin FROM-CACHE",
+    ":compressReleaseAssets FROM-CACHE",
+    ":desugarReleaseFileDependencies FROM-CACHE",
+    ":dexBuilderRelease FROM-CACHE",
+    ":extractDeepLinksDebug FROM-CACHE",
+    ":extractDeepLinksRelease FROM-CACHE",
+    ":extractReleaseNativeSymbolTables FROM-CACHE",
+    ":generateDebugRFile FROM-CACHE",
+    ":generateDebugResources FROM-CACHE",
+    ":generateReleaseAssets UP-TO-DATE",
+    ":generateReleaseRFile FROM-CACHE",
+    ":generateReleaseResources FROM-CACHE",
+    ":inno-flow-android:compileDebugKotlin FROM-CACHE",
+    ":inno-flow-android:compileDebugLibraryResources FROM-CACHE",
+    ":inno-flow-android:compileDebugUnitTestKotlin FROM-CACHE",
+    ":inno-flow-android:compileReleaseKotlin FROM-CACHE",
+    ":inno-flow-android:compileReleaseLibraryResources FROM-CACHE",
+    ":inno-flow-android:extractDeepLinksDebug FROM-CACHE",
+    ":inno-flow-android:extractDeepLinksForAarRelease FROM-CACHE",
+    ":inno-flow-android:extractDeepLinksRelease FROM-CACHE",
+    ":inno-flow-android:extractReleaseAnnotations FROM-CACHE",
+    ":inno-flow-android:generateDebugAssets UP-TO-DATE",
+    ":inno-flow-android:generateDebugRFile FROM-CACHE",
+    ":inno-flow-android:generateDebugResources FROM-CACHE",
+    ":inno-flow-android:generateDebugUnitTestStubRFile FROM-CACHE",
+    ":inno-flow-android:generateReleaseAssets UP-TO-DATE",
+    ":inno-flow-android:generateReleaseRFile FROM-CACHE",
+    ":inno-flow-android:generateReleaseResources FROM-CACHE",
+    ":inno-flow-android:javaPreCompileDebug FROM-CACHE",
+    ":inno-flow-android:javaPreCompileDebugUnitTest FROM-CACHE",
+    ":inno-flow-android:javaPreCompileRelease FROM-CACHE",
+    ":inno-flow-android:lintAnalyzeRelease FROM-CACHE",
+    ":inno-flow-android:lintVitalAnalyzeRelease FROM-CACHE",
+    ":inno-flow-android:packageDebugResources FROM-CACHE",
+    ":inno-flow-android:packageReleaseResources FROM-CACHE",
+    ":inno-flow-android:parseDebugLocalResources FROM-CACHE",
+    ":inno-flow-android:parseReleaseLocalResources FROM-CACHE",
+    ":inno-flow-android:preBuild UP-TO-DATE",
+    ":inno-flow-android:preDebugBuild UP-TO-DATE",
+    ":inno-flow-android:preDebugUnitTestBuild UP-TO-DATE",
+    ":inno-flow-android:preReleaseBuild UP-TO-DATE",
+    ":inno-flow-android:processDebugManifest FROM-CACHE",
+    ":inno-flow-android:processDebugNavigationResources FROM-CACHE",
+    ":inno-flow-android:processReleaseManifest FROM-CACHE",
+    ":inno-flow-android:processReleaseNavigationResources FROM-CACHE",
+    ":inno-flow-android:syncReleaseLibJars FROM-CACHE",
+    ":inno-flow-android:test UP-TO-DATE",
+    ":inno-flow-android:testDebugUnitTest FROM-CACHE",
+    ":inno-flow-compose:compileDebugAndroidTestNavigationResources FROM-CACHE",
+    ":inno-flow-compose:compileDebugKotlin FROM-CACHE",
+    ":inno-flow-compose:compileDebugLibraryResources FROM-CACHE",
+    ":inno-flow-compose:compileReleaseKotlin FROM-CACHE",
+    ":inno-flow-compose:compileReleaseLibraryResources FROM-CACHE",
+    ":inno-flow-compose:compressDebugAndroidTestAssets FROM-CACHE",
+    ":inno-flow-compose:extractDeepLinksDebug FROM-CACHE",
+    ":inno-flow-compose:extractDeepLinksForAarRelease FROM-CACHE",
+    ":inno-flow-compose:extractDeepLinksRelease FROM-CACHE",
+    ":inno-flow-compose:extractReleaseAnnotations FROM-CACHE",
+    ":inno-flow-compose:generateDebugAndroidTestAssets UP-TO-DATE",
+    ":inno-flow-compose:generateDebugAndroidTestGlobalSynthetics FROM-CACHE",
+    ":inno-flow-compose:generateDebugAndroidTestResources FROM-CACHE",
+    ":inno-flow-compose:generateDebugAssets UP-TO-DATE",
+    ":inno-flow-compose:generateDebugRFile FROM-CACHE",
+    ":inno-flow-compose:generateDebugResources FROM-CACHE",
+    ":inno-flow-compose:generateDebugUnitTestStubRFile FROM-CACHE",
+    ":inno-flow-compose:generateReleaseAssets UP-TO-DATE",
+    ":inno-flow-compose:generateReleaseRFile FROM-CACHE",
+    ":inno-flow-compose:generateReleaseResources FROM-CACHE",
+    ":inno-flow-compose:javaPreCompileDebug FROM-CACHE",
+    ":inno-flow-compose:javaPreCompileDebugAndroidTest FROM-CACHE",
+    ":inno-flow-compose:javaPreCompileDebugUnitTest FROM-CACHE",
+    ":inno-flow-compose:javaPreCompileRelease FROM-CACHE",
+    ":inno-flow-compose:lintAnalyzeRelease FROM-CACHE",
+    ":inno-flow-compose:lintVitalAnalyzeRelease FROM-CACHE",
+    ":inno-flow-compose:packageDebugResources FROM-CACHE",
+    ":inno-flow-compose:packageReleaseResources FROM-CACHE",
+    ":inno-flow-compose:parseDebugAndroidTestLocalResources FROM-CACHE",
+    ":inno-flow-compose:parseDebugLocalResources FROM-CACHE",
+    ":inno-flow-compose:parseReleaseLocalResources FROM-CACHE",
+    ":inno-flow-compose:preBuild UP-TO-DATE",
+    ":inno-flow-compose:preDebugAndroidTestBuild UP-TO-DATE",
+    ":inno-flow-compose:preDebugBuild UP-TO-DATE",
+    ":inno-flow-compose:preDebugUnitTestBuild UP-TO-DATE",
+    ":inno-flow-compose:preReleaseBuild UP-TO-DATE",
+    ":inno-flow-compose:processDebugAndroidTestNavigationResources FROM-CACHE",
+    ":inno-flow-compose:processDebugManifest FROM-CACHE",
+    ":inno-flow-compose:processDebugNavigationResources FROM-CACHE",
+    ":inno-flow-compose:processReleaseManifest FROM-CACHE",
+    ":inno-flow-compose:processReleaseNavigationResources FROM-CACHE",
+    ":inno-flow-compose:syncReleaseLibJars FROM-CACHE",
+    ":inno-flow-compose:test UP-TO-DATE",
+    ":inno-flow-core:classes UP-TO-DATE",
+    ":inno-flow-core:compileKotlin FROM-CACHE",
+    ":inno-flow-core:internalDumpKotlinAbi FROM-CACHE",
+    ":inno-flow-core:testClasses UP-TO-DATE",
+    ":inno-flow-ksp:compileKotlin FROM-CACHE",
+    ":inno-flow-ksp:internalDumpKotlinAbi FROM-CACHE",
+    ":inno-flow-ksp:testClasses UP-TO-DATE",
+    ":inno-flow-testing:classes UP-TO-DATE",
+    ":inno-flow-testing:compileKotlin FROM-CACHE",
+    ":inno-flow-testing:internalDumpKotlinAbi FROM-CACHE",
+    ":inno-flow-testing:testClasses UP-TO-DATE",
+    ":javaPreCompileDebug FROM-CACHE",
+    ":javaPreCompileDebugUnitTest FROM-CACHE",
+    ":javaPreCompileRelease FROM-CACHE",
+    ":kspDebugKotlin FROM-CACHE",
+    ":kspDebugUnitTestKotlin FROM-CACHE",
+    ":kspKotlin FROM-CACHE",
+    ":kspReleaseKotlin FROM-CACHE",
+    ":kspTestKotlin FROM-CACHE",
+    ":lintVitalAnalyzeRelease FROM-CACHE",
+    ":mergeDebugResources FROM-CACHE",
+    ":mergeDexRelease FROM-CACHE",
+    ":mergeExtDexRelease FROM-CACHE",
+    ":mergeReleaseGlobalSynthetics FROM-CACHE",
+    ":mergeReleaseResources FROM-CACHE",
+    ":optimizeReleaseResources FROM-CACHE",
+    ":packageDebugResources FROM-CACHE",
+    ":packageReleaseResources FROM-CACHE",
+    ":parseDebugLocalResources FROM-CACHE",
+    ":parseReleaseLocalResources FROM-CACHE",
+    ":preBuild UP-TO-DATE",
+    ":preDebugBuild UP-TO-DATE",
+    ":preDebugUnitTestBuild UP-TO-DATE",
+    ":preReleaseBuild UP-TO-DATE",
+    ":processDebugMainManifest FROM-CACHE",
+    ":processDebugManifest FROM-CACHE",
+    ":processDebugManifestForPackage FROM-CACHE",
+    ":processDebugNavigationResources FROM-CACHE",
+    ":processDebugResources FROM-CACHE",
+    ":processReleaseMainManifest FROM-CACHE",
+    ":processReleaseManifest FROM-CACHE",
+    ":processReleaseManifestForPackage FROM-CACHE",
+    ":processReleaseNavigationResources FROM-CACHE",
+    ":processReleaseResources FROM-CACHE",
+    ":sample:classes UP-TO-DATE",
+    ":sample:compileKotlin FROM-CACHE",
+    ":sample:compileTestKotlin FROM-CACHE",
+    ":sample:kspKotlin FROM-CACHE",
+    ":sample:kspTestKotlin FROM-CACHE",
+    ":sample:test FROM-CACHE",
+    ":sample:testClasses UP-TO-DATE",
+    ":test FROM-CACHE",
+    ":testClasses UP-TO-DATE",
+    ":testDebugUnitTest FROM-CACHE"
+  ],
+  "rawLogsSha256": "7adb60cca923cc1e4d2572b631f236ba20c90a3e9d4b46f06c7308639f7350ee",
+  "decision": "PASS"
+}

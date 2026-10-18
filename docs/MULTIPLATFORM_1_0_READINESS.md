@@ -1,13 +1,16 @@
 # Multiplatform 1.0 readiness
 
-Status: **local corrected candidate; public release HOLD** (2026-10-18).
+Status: **committed, pushed and hosted-verified candidate; public release HOLD** (2026-10-18).
 Evidence document status is Draft: no maintainer release approval is recorded.
-The implementation is intentionally uncommitted/unpublished in
-`codex/multiplatform-flow`.
+The implementation is committed/pushed in `codex/multiplatform-flow`, but remains
+unpublished. Swift/main is unchanged; no merge or release tag was created.
 
-The authoritative [post-fix 63-row ledger](MULTIPLATFORM_FIX_VERIFICATION_2026_10_18.md)
-records **58 PASS, 0 FAIL, 3 LIMIT, 2 N/A**. This closes the agreed local
-verification scope, not every possible defect or public 1.0 acceptance.
+The historical [post-fix local 63-row ledger](MULTIPLATFORM_FIX_VERIFICATION_2026_10_18.md)
+records **58 PASS, 0 FAIL, 3 LIMIT, 2 N/A**. The latest
+[hosted follow-up](MULTIPLATFORM_HOSTED_VERIFICATION_2026_10_18.md) closes A06 with
+actual API23/35 process restoration and six successful exact-SHA branch jobs.
+Its follow-up rollup is **59 PASS, 0 FAIL, 2 LIMIT, 2 N/A**; unchanged local rows
+are reused, not all freshly rerun. This is not public 1.0 acceptance.
 The [pre-fix ledger](MULTIPLATFORM_VERIFICATION_2026_10_18.md) and its sidecars
 remain historical evidence; do not use its old input manifest for this candidate.
 
@@ -19,6 +22,8 @@ remain historical evidence; do not use its old input manifest for this candidate
 | F2 KSP generic-inner rendering | Rebuild each generic owner/inner boundary | 7 new supported-feature fixtures plus existing visibility/name fixtures compile; plain/function/suspend/manual/inner independent consumers pass; 5 unsupported-feature diagnostics remain |
 | F3 packed SSR/browser false positives | Compare exact SSR/DOM values, not substrings | Actual normal gate passes; independent SSR 70 and live UI 80 mutants are rejected on both Node versions |
 | API26 restoration probe | Require saved STOPPED state, unchanged numeric PID and exact cmdline; same-UID debug PID fallback only when needed | Standard probe passes on API26 and API34; 16 positive/negative safety controls pass |
+| Hosted API23 portability | Fresh owned UI-file fallback; exact ps NAME plus own-UID cmdline instead of the legacy image's all-PID pidof response | 32 safety/UI/PID controls; API23 and35 real process restoration pass; both earlier hosted failures remain archived |
+| npm license packaging | Match all three package LICENSE copies byte-for-byte to unchanged root LICENSE; enforce equality in package validation | Original malformed copy is rejected; Node20/22 package and tarball consumers pass |
 
 No Kotlin public ABI baseline changed. Swift source/tests/examples/manifests,
 locks, skills and Swift CI still match `origin/main` at
@@ -56,15 +61,31 @@ Raw evidence: `/tmp/innoflow-fixes-20261018.evgcyvL1`.
 Durable input identities, result JSON and reproduction instructions:
 [post-fix evidence](verification/2026-10-18-fixes/README.md).
 
+## Hosted evidence
+
+Implementation SHA `a3b1f06cbdd0aa22e883627e4198d8f6c646ea16` passed
+[Multiplatform CI](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/39109770382)
+on a push to `codex/multiplatform-flow`. All six jobs and five artifact digests
+were independently checked. API23 PID `3087 → 3297` and API35 `4581 → 4754`
+restore exact `Count: 2` after `am kill`, with saved STOPPED evidence, fresh
+screenshots/XML and empty crash buffers. Each API also passes three actual
+instrumentation cases. Node20/22 each passes 28 tests and React18/19 consumers.
+
+The JVM unit/consumer reports cover 30 passing cases, but some task results
+were restored from Gradle cache; do not describe all 30 as fresh execution.
+Device/Node/probe controls were newly executed. Full identity, historical
+failures, source manifest, test reports and reproduction instructions are in
+[hosted evidence](verification/2026-10-18-hosted/README.md).
+
 ## Remaining release gates and exclusions
 
 | Ledger | Not yet proven | Required next evidence |
 | --- | --- | --- |
-| A06 | Hosted API23/35 runtime | Actual device jobs for the final committed candidate; local API26/34 is not a substitute |
 | C06 | Exact-SHA main-push CI | Successful Multiplatform CI on the eventual tagged main SHA, including device/browser jobs |
 | C07 | Registry-only installation/publication | Explicit maintainer approval, registry permissions/credentials, publication and fresh remote-only consumers |
 
-No commit, push, tag, Release, npm or GitHub Packages publication occurred.
+Commit/push and branch CI are complete. Main was not merged/pushed; no tag,
+Release, npm or GitHub Packages publication occurred, as explicitly requested.
 Registry availability and production operations have not been demonstrated.
 
 Swift runtime validation is explicitly N/A under the CI-only/main-preservation

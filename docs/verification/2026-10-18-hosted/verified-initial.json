@@ -1,0 +1,348 @@
+{
+  "phase": "initial",
+  "sha": "f4016461031468a7ebc372a47d256aa8e95bb2e0",
+  "runId": 39108493753,
+  "attempt": 1,
+  "workflow": ".github/workflows/ci-multiplatform.yml",
+  "branch": "codex/multiplatform-flow",
+  "event": "push",
+  "conclusion": "failure",
+  "jobs": [
+    {
+      "id": 117619388413,
+      "name": "Multiplatform Contracts",
+      "conclusion": "success"
+    },
+    {
+      "id": 117619416080,
+      "name": "Kotlin Runtime and KSP Tests",
+      "conclusion": "success"
+    },
+    {
+      "id": 117619416116,
+      "name": "TypeScript Runtime and React Adapter Tests (22)",
+      "conclusion": "success"
+    },
+    {
+      "id": 117619416120,
+      "name": "TypeScript Runtime and React Adapter Tests (20.19.0)",
+      "conclusion": "success"
+    },
+    {
+      "id": 117619416154,
+      "name": "Android Lifecycle (API 35)",
+      "conclusion": "success"
+    },
+    {
+      "id": 117619416164,
+      "name": "Android Lifecycle (API 23)",
+      "conclusion": "failure"
+    }
+  ],
+  "artifactArchives": [
+    {
+      "name": "android-runtime-35",
+      "id": 12129602454,
+      "bytes": 67425,
+      "sha256": "c48fc81e314deb82f8db827efc092b763c40d671aed979cea2767b2d6754fa8d",
+      "githubDigestVerified": true
+    },
+    {
+      "name": "android-runtime-23",
+      "id": 12129387878,
+      "bytes": 41580,
+      "sha256": "ee8e64262905682afe4f50cd1ebe906e6f3e2919a07d99dc6f867715789049f7",
+      "githubDigestVerified": true
+    },
+    {
+      "name": "packed-consumers-node-20.19.0",
+      "id": 12129178406,
+      "bytes": 38495,
+      "sha256": "3338fe99330ee5cc7e4a179b31d6419440dc8670997607ad3592f970f6c8024e",
+      "githubDigestVerified": true
+    },
+    {
+      "name": "kotlin-unit-consumer-reports",
+      "id": 12129163794,
+      "bytes": 48286,
+      "sha256": "e5ca46fb24b53f9f6d080865681651686782dc01ddf0ef1e8f7cb808b3c1075f",
+      "githubDigestVerified": true
+    },
+    {
+      "name": "packed-consumers-node-22",
+      "id": 12128913707,
+      "bytes": 38495,
+      "sha256": "3c4383feb9c8858c4b835eb0bf89da52b594e20c4b0d8abc94862911dafef9d9",
+      "githubDigestVerified": true
+    }
+  ],
+  "kotlin": {
+    "sample": {
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "sharedRuntimeScenarios()",
+        "ownerScopeCancellationFinishesDispatchTasks()",
+        "reducerFailureRejectsOnlyItsDispatchTreeAndStoreRemainsUsable()",
+        "actionQueueRemainsLosslessAcrossLargeBursts()",
+        "closeCancelsActiveTasksAndRejectsLaterSends()",
+        "cancellationIdImplementsLatestWins()",
+        "typedOutputIsRecordedOutsideState()",
+        "instrumentationFailureDoesNotChangeRuntimeSemantics()",
+        "liveOutputCollectorReceivesOutputsInOrder()",
+        "slowLiveOutputCollectorReportsBackpressureDrops()",
+        "cancellationFromObserverSuppressesOutputAndEffects()",
+        "cancelledAdmissionDoesNotReduceButIndependentDispatchDoes()",
+        "cancellationIdCancelsEveryMatchingRun()",
+        "effectFailureIsObservedAndRetryRemainsUsable()",
+        "effectProducerSuspendsInsteadOfDroppingActions()",
+        "concurrentProducersSerializeAgainstLatestState()",
+        "closeReleasesQueuedDispatches()",
+        "rejectedConstructionKeepsParentAndSiblingUnchanged()",
+        "invalidCapacityIsRejected()",
+        "validConstructionAndCloseReleaseTheOwnedJob()",
+        "outputCollectorsCompleteWhenStoreCloses()",
+        "cancelledIdSuppressesUncooperativeLateEmission()",
+        "boundedRootAdmissionRejectsOnlyOverflowAndRecovers()",
+        "testStoreRecordsExhaustiveActionOrder()",
+        "sharedCounterConformanceFixture()",
+        "generatedFactoryRunsDescendantActions()"
+      ]
+    },
+    "inno-flow-android": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "viewModelStoreClearClosesOwnedFlowStore"
+      ]
+    },
+    "android-sample": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "reconstructsTheFeatureFromExplicitSavedState"
+      ]
+    },
+    "consumer-fixture": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "generatedFactoryAndTestingArtifactAreConsumable()"
+      ]
+    },
+    "android-consumer-fixture": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        "consumesPublishedTestingAndReducer"
+      ]
+    }
+  },
+  "typescript": {
+    "20.19.0": {
+      "unitTests": 28,
+      "unitFiles": 5,
+      "consumers": [
+        {
+          "react": "18.2.0",
+          "node": "20.19.0",
+          "result": "PASS"
+        },
+        {
+          "react": "19.2.8",
+          "node": "20.19.0",
+          "result": "PASS"
+        }
+      ],
+      "normalPackedControl": true,
+      "wrongSsrRejected": true,
+      "wrongBrowserRejected": true
+    },
+    "22": {
+      "unitTests": 28,
+      "unitFiles": 5,
+      "consumers": [
+        {
+          "react": "18.2.0",
+          "node": "22.23.3",
+          "result": "PASS"
+        },
+        {
+          "react": "19.2.8",
+          "node": "22.23.3",
+          "result": "PASS"
+        }
+      ],
+      "normalPackedControl": true,
+      "wrongSsrRejected": true,
+      "wrongBrowserRejected": true
+    }
+  },
+  "android": {
+    "23": {
+      "compose": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "cases": [
+          "outputsUseLatestHandlerAndNeverReplayBackgroundEvents",
+          "stateCollectionPausesAndResumesWithLatestValue"
+        ]
+      },
+      "recreation": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "cases": [
+          "stateSurvivesRecreationAndBackgroundResume"
+        ]
+      },
+      "fingerprint": "Android/sdk_phone_x86_64/generic_x86_64:6.0/MASTER/4174734:userdebug/test-keys",
+      "restoration": "FAIL",
+      "detail": "No successful probe result JSON; failed screenshot retained"
+    },
+    "35": {
+      "compose": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "cases": [
+          "outputsUseLatestHandlerAndNeverReplayBackgroundEvents",
+          "stateCollectionPausesAndResumesWithLatestValue"
+        ]
+      },
+      "recreation": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "cases": [
+          "stateSurvivesRecreationAndBackgroundResume"
+        ]
+      },
+      "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+      "restoration": "PASS",
+      "result": {
+        "before": "4638",
+        "after": "4811",
+        "initial": 0,
+        "restored": 2,
+        "method": "am-kill"
+      },
+      "visibleCount": 2,
+      "crashBufferBytes": 0,
+      "fileFallbackUsed": false,
+      "probeDirectory": "/private/tmp/innoflow-hosted-20261018.CTW177i3/artifacts-initial/android-runtime-35/_temp/innoflow-android-restoration-aqo2zj5n"
+    }
+  },
+  "gradleReusedTaskEvidence": [
+    ":android-sample:compileDebugAndroidTestNavigationResources FROM-CACHE",
+    ":android-sample:compileDebugNavigationResources FROM-CACHE",
+    ":android-sample:compileReleaseNavigationResources FROM-CACHE",
+    ":android-sample:compressDebugAndroidTestAssets FROM-CACHE",
+    ":android-sample:compressDebugAssets FROM-CACHE",
+    ":android-sample:extractDeepLinksRelease FROM-CACHE",
+    ":android-sample:generateDebugAndroidTestAssets UP-TO-DATE",
+    ":android-sample:generateDebugAndroidTestGlobalSynthetics FROM-CACHE",
+    ":android-sample:generateDebugAndroidTestResources FROM-CACHE",
+    ":android-sample:generateDebugAssets UP-TO-DATE",
+    ":android-sample:generateDebugGlobalSynthetics FROM-CACHE",
+    ":android-sample:generateReleaseAssets UP-TO-DATE",
+    ":android-sample:generateReleaseRFile FROM-CACHE",
+    ":android-sample:generateReleaseResources FROM-CACHE",
+    ":android-sample:javaPreCompileDebugAndroidTest FROM-CACHE",
+    ":android-sample:javaPreCompileDebugUnitTest FROM-CACHE",
+    ":android-sample:javaPreCompileRelease FROM-CACHE",
+    ":android-sample:kspReleaseKotlin FROM-CACHE",
+    ":android-sample:parseDebugAndroidTestLocalResources FROM-CACHE",
+    ":android-sample:parseReleaseLocalResources FROM-CACHE",
+    ":android-sample:preBuild UP-TO-DATE",
+    ":android-sample:preDebugBuild UP-TO-DATE",
+    ":android-sample:preDebugUnitTestBuild UP-TO-DATE",
+    ":android-sample:preReleaseBuild UP-TO-DATE",
+    ":android-sample:processDebugAndroidTestNavigationResources FROM-CACHE",
+    ":android-sample:processReleaseNavigationResources FROM-CACHE",
+    ":classes UP-TO-DATE",
+    ":compileReleaseNavigationResources FROM-CACHE",
+    ":extractDeepLinksRelease FROM-CACHE",
+    ":generateReleaseAssets UP-TO-DATE",
+    ":generateReleaseRFile FROM-CACHE",
+    ":generateReleaseResources FROM-CACHE",
+    ":inno-flow-android:compileDebugLibraryResources FROM-CACHE",
+    ":inno-flow-android:extractDeepLinksDebug FROM-CACHE",
+    ":inno-flow-android:extractDeepLinksRelease FROM-CACHE",
+    ":inno-flow-android:generateDebugAssets UP-TO-DATE",
+    ":inno-flow-android:generateDebugResources FROM-CACHE",
+    ":inno-flow-android:generateReleaseAssets UP-TO-DATE",
+    ":inno-flow-android:generateReleaseRFile FROM-CACHE",
+    ":inno-flow-android:generateReleaseResources FROM-CACHE",
+    ":inno-flow-android:javaPreCompileDebug FROM-CACHE",
+    ":inno-flow-android:javaPreCompileDebugUnitTest FROM-CACHE",
+    ":inno-flow-android:javaPreCompileRelease FROM-CACHE",
+    ":inno-flow-android:parseDebugLocalResources FROM-CACHE",
+    ":inno-flow-android:parseReleaseLocalResources FROM-CACHE",
+    ":inno-flow-android:preBuild UP-TO-DATE",
+    ":inno-flow-android:preDebugBuild UP-TO-DATE",
+    ":inno-flow-android:preDebugUnitTestBuild UP-TO-DATE",
+    ":inno-flow-android:preReleaseBuild UP-TO-DATE",
+    ":inno-flow-android:processDebugNavigationResources FROM-CACHE",
+    ":inno-flow-android:processReleaseManifest FROM-CACHE",
+    ":inno-flow-android:processReleaseNavigationResources FROM-CACHE",
+    ":inno-flow-compose:compileDebugLibraryResources FROM-CACHE",
+    ":inno-flow-compose:compileReleaseLibraryResources FROM-CACHE",
+    ":inno-flow-compose:extractDeepLinksDebug FROM-CACHE",
+    ":inno-flow-compose:extractDeepLinksForAarRelease FROM-CACHE",
+    ":inno-flow-compose:extractDeepLinksRelease FROM-CACHE",
+    ":inno-flow-compose:generateDebugAndroidTestAssets UP-TO-DATE",
+    ":inno-flow-compose:generateDebugAndroidTestResources FROM-CACHE",
+    ":inno-flow-compose:generateDebugAssets UP-TO-DATE",
+    ":inno-flow-compose:generateDebugResources FROM-CACHE",
+    ":inno-flow-compose:generateReleaseAssets UP-TO-DATE",
+    ":inno-flow-compose:generateReleaseRFile FROM-CACHE",
+    ":inno-flow-compose:generateReleaseResources FROM-CACHE",
+    ":inno-flow-compose:javaPreCompileDebug FROM-CACHE",
+    ":inno-flow-compose:javaPreCompileDebugAndroidTest FROM-CACHE",
+    ":inno-flow-compose:javaPreCompileDebugUnitTest FROM-CACHE",
+    ":inno-flow-compose:javaPreCompileRelease FROM-CACHE",
+    ":inno-flow-compose:parseReleaseLocalResources FROM-CACHE",
+    ":inno-flow-compose:preBuild UP-TO-DATE",
+    ":inno-flow-compose:preDebugAndroidTestBuild UP-TO-DATE",
+    ":inno-flow-compose:preDebugBuild UP-TO-DATE",
+    ":inno-flow-compose:preDebugUnitTestBuild UP-TO-DATE",
+    ":inno-flow-compose:preReleaseBuild UP-TO-DATE",
+    ":inno-flow-compose:processDebugAndroidTestNavigationResources FROM-CACHE",
+    ":inno-flow-compose:processReleaseManifest FROM-CACHE",
+    ":inno-flow-compose:processReleaseNavigationResources FROM-CACHE",
+    ":inno-flow-compose:test UP-TO-DATE",
+    ":inno-flow-core:classes UP-TO-DATE",
+    ":inno-flow-core:testClasses UP-TO-DATE",
+    ":inno-flow-ksp:testClasses UP-TO-DATE",
+    ":inno-flow-testing:classes UP-TO-DATE",
+    ":inno-flow-testing:testClasses UP-TO-DATE",
+    ":javaPreCompileRelease FROM-CACHE",
+    ":parseReleaseLocalResources FROM-CACHE",
+    ":preBuild UP-TO-DATE",
+    ":preDebugBuild UP-TO-DATE",
+    ":preDebugUnitTestBuild UP-TO-DATE",
+    ":preReleaseBuild UP-TO-DATE",
+    ":processReleaseNavigationResources FROM-CACHE",
+    ":sample:classes UP-TO-DATE",
+    ":sample:testClasses UP-TO-DATE",
+    ":testClasses UP-TO-DATE"
+  ],
+  "rawLogsSha256": "21f2c45115d45f127a980eabf0d2f970de7b77ae21859619eda030810361953e",
+  "decision": "HISTORICAL RUN FAILURE PRESERVED"
+}

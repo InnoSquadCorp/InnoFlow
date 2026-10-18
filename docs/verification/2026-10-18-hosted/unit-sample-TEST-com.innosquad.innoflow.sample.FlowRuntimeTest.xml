@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.innosquad.innoflow.sample.FlowRuntimeTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-18T07:41:50.493Z" hostname="runnervm8k3b6" time="0.395">
+  <properties/>
+  <testcase name="ownerScopeCancellationFinishesDispatchTasks()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.018"/>
+  <testcase name="reducerFailureRejectsOnlyItsDispatchTreeAndStoreRemainsUsable()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.019"/>
+  <testcase name="actionQueueRemainsLosslessAcrossLargeBursts()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.22"/>
+  <testcase name="closeCancelsActiveTasksAndRejectsLaterSends()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.018"/>
+  <testcase name="cancellationIdImplementsLatestWins()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.017"/>
+  <testcase name="typedOutputIsRecordedOutsideState()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.013"/>
+  <testcase name="instrumentationFailureDoesNotChangeRuntimeSemantics()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.009"/>
+  <testcase name="liveOutputCollectorReceivesOutputsInOrder()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.036"/>
+  <testcase name="slowLiveOutputCollectorReportsBackpressureDrops()" classname="com.innosquad.innoflow.sample.FlowRuntimeTest" time="0.016"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

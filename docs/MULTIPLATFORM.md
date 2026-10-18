@@ -12,8 +12,11 @@ authorized release, use locally built Maven artifacts or npm tarballs. See the
 The [post-fix 63-row verification ledger](MULTIPLATFORM_FIX_VERIFICATION_2026_10_18.md)
 supersedes the earlier defect findings: the two product defects and consumer
 value-gate defect are fixed, and the standard process-restoration probe now
-passes locally on API26 and API34. Hosted API23/35, exact-SHA main CI and
-registry-only installation remain release gates; this is not public 1.0 approval.
+passes locally on API26 and API34. The
+[hosted follow-up](MULTIPLATFORM_HOSTED_VERIFICATION_2026_10_18.md) also confirms
+API23/35 real process restoration and all six exact-SHA branch CI jobs.
+Exact-SHA main release CI and registry-only installation remain separate
+release gates; no packages/tags were published and this is not public 1.0 approval.
 
 | Platform | Version line | Authoring entry point | Runtime/UI integration |
 | --- | --- | --- | --- |
