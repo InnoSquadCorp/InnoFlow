@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import { readFile, writeFile } from "node:fs/promises";
+import { StrictMode, createElement } from "react";
+import { renderToString } from "react-dom/server";
+import { defineFlow, transition } from "@innosquad/inno-flow";
+import { TestStore } from "@innosquad/inno-flow-testing";
+import { App, makeStore } from "./feature.mjs";
+
+const store = makeStore({ count: 7 });
+const html = renderToString(createElement(StrictMode, null, createElement(App, { store })));
+const renderedCounters = [...html.matchAll(/<output\b[^>]*>([\s\S]*?)<\/output>/g)].map(match => match[1]);
+assert.deepEqual(renderedCounters, ["Count: 7"], "Packed consumer SSR value mismatch");
+const test = new TestStore(defineFlow({ initialState: { count: 0 }, reducer: state => transition({ count: state.count + 1 }) }));
+await test.send({ type: "increment" }, { count: 1 });
+test.assertActions([{ type: "increment" }]);
+await test.finish();
+test.close();
+const template = await readFile("index.html", "utf8");
+await writeFile("index.html", template.replace("__SSR__", html).replace("__STATE__", JSON.stringify(store.getState()).replaceAll("<", "\\u003c")));
+store.close();
+console.log("Packed core, testing and React SSR: passed");

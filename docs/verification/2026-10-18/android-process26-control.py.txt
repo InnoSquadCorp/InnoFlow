@@ -1,0 +1,64 @@
+"""External diagnostic only; never force-stop the app or kill another process."""
+from pathlib import Path
+import re
+import subprocess
+import time
+import xml.etree.ElementTree as XML
+
+adb = ['/Users/changwooson/Library/Android/sdk/platform-tools/adb', '-s', 'emulator-5582']
+package = 'com.innosquad.innoflow.sample.android'
+evidence = Path('/tmp/innoflow-verification-20261018.vkS7JQI8')
+def command(*args):
+    return subprocess.check_output(adb + list(args), timeout=30).decode()
+def hierarchy():
+    raw = command('exec-out', 'uiautomator', 'dump', '/dev/tty')
+    match = re.search(r'(<\?xml.*</hierarchy>)', raw, re.S)
+    assert match, 'No UI tree'
+    (evidence / 'android-api26-control-ui.xml').write_text(match[1])
+    return XML.fromstring(match[1])
+def count(expected=None):
+    deadline = time.monotonic() + 20
+    while True:
+        for node in hierarchy().iter('node'):
+            label = node.get('text', '')
+            assert "isn't responding" not in label, label
+            match = re.fullmatch(r'Count: (-?\d+)', label)
+            if match and (expected is None or int(match[1]) == expected): return int(match[1])
+        assert time.monotonic() < deadline, f'No exact Count: {expected}'
+        time.sleep(.2)
+def click(label):
+    for node in hierarchy().iter('node'):
+        if node.get('text') == label:
+            x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds', '')))
+            command('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2)); return
+    raise AssertionError(f'No {label}')
+assert command('shell', 'getprop', 'ro.build.version.sdk').strip() == '26'
+command('shell', 'am', 'start', '-W', '-n', package + '/.MainActivity')
+initial = count()
+for expected in range(initial + 1, initial + 3): click('Increase'); assert count(expected) == expected
+target = initial + 2
+before = command('shell', 'pidof', package).strip()
+assert re.fullmatch(r'[0-9]+', before), before
+command('shell', 'input', 'keyevent', '3')
+deadline = time.monotonic() + 20
+while True:
+    activities = command('shell', 'dumpsys', 'activity', 'activities')
+    record = re.search(r'Hist #\d+: ActivityRecord\{[^\n]*' + re.escape(package) + r'.*?(?=\n\s*Running activities|\n\s*\* Hist|\Z)', activities, re.S)
+    if record and 'stopped=true' in record[0]: break
+    assert time.monotonic() < deadline, 'Activity not confirmed stopped; refusing kill'
+    time.sleep(.2)
+(evidence / 'android-api26-control-stopped.txt').write_text(record[0])
+assert command('shell', 'pidof', package).strip() == before
+cmdline = command('shell', 'run-as', package, 'cat', f'/proc/{before}/cmdline').rstrip('\0')
+assert cmdline == package, f'Refusing kill of {cmdline}'
+command('shell', 'run-as', package, 'kill', '-9', before)
+deadline = time.monotonic() + 15
+while subprocess.run(adb + ['shell', 'pidof', package], capture_output=True).returncode == 0:
+    assert time.monotonic() < deadline, 'Target process survived'; time.sleep(.2)
+command('shell', 'am', 'start', '-W', '-n', package + '/.MainActivity')
+after = command('shell', 'pidof', package).strip()
+assert after != before
+assert count(target) == target
+with (evidence / 'android-api26-control-restored.png').open('wb') as image:
+    subprocess.run(adb + ['exec-out', 'screencap', '-p'], stdout=image, check=True, timeout=20)
+print(f'PASS external API26 control: stopped activity, verified same-UID cmdline, process {before} -> {after}, exact Count {target} restored; initial {initial}')

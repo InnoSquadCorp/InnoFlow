@@ -169,6 +169,15 @@ Cross-framework ownership:
 - Transport and session lifecycle stay outside InnoFlow.
 - Construction-time dependency graphs stay outside InnoFlow and enter reducers as explicit bundles.
 
+Cross-platform implementations live in this repository and share the semantic
+contract in `contracts/SEMANTICS.md`. Swift remains macro-first, Kotlin offers
+`@InnoFlow` KSP generation with a compiler-plugin-free `FlowFeature` fallback,
+and TypeScript uses the declaration-first `defineFlow` boundary. Platform
+packages have independent release versions; changes to shared semantics must
+update the affected conformance tests, the repository gate, and CI. Do not
+reshape the existing Swift API merely to match the Kotlin or TypeScript 1.0
+runtime.
+
 ## Project Overview
 
 InnoFlow is a SwiftUI-native architecture framework built around:
@@ -184,6 +193,10 @@ InnoFlow is a SwiftUI-native architecture framework built around:
 The data flow is:
 
 `Action -> reducer composition -> state mutation + ReducerEffect/Output -> Store runtime -> View or coordinator`
+
+The Kotlin/Android and React/TypeScript package layout, consumption examples,
+and independent release boundary are documented in
+[`docs/MULTIPLATFORM.md`](docs/MULTIPLATFORM.md).
 
 ## Official authoring style
 

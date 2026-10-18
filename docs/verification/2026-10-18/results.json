@@ -1,0 +1,850 @@
+{
+  "schemaVersion": 1,
+  "validationDate": "2026-10-18",
+  "timezone": "Asia/Seoul",
+  "decision": "verification-scope-closed; public 1.0.0 approval withheld",
+  "baseline": {
+    "branch": "codex/multiplatform-flow",
+    "head": "0a7e685d3749b3dc28c6d5e56b932c9ad7fc0b11",
+    "originMain": "0a7e685d3749b3dc28c6d5e56b932c9ad7fc0b11",
+    "includesUncommittedImplementation": true,
+    "startedAtUtc": "2026-10-18T06:03:55Z",
+    "initialNonIgnoredFiles": 786,
+    "initialDirtyPaths": 128,
+    "startFullManifestSha256": "66d6d029390500b7f6eb6230179f43d6e5c3cc0341b39bb325bb896540abf790",
+    "candidateInputFiles": 125,
+    "candidateInputManifest": "candidate-inputs.sha256",
+    "candidateInputManifestSha256": "43301e03a6e90d47d3af1dc293d5bd47476341f3f0d1b0e439e1d00d8eac0dd3",
+    "previousReviewEndMatchesStart": true
+  },
+  "counts": {
+    "PASS": 54,
+    "FAIL": 3,
+    "LIMIT": 4,
+    "N/A": 2
+  },
+  "toolchains": {
+    "host": "macOS 27.0.1 arm64",
+    "jdkLauncher": "17.0.20.1",
+    "gradle": "9.7.0",
+    "kotlinPlugin": "2.4.10",
+    "ksp": "2.3.11",
+    "agp": "9.3.1",
+    "coreClassfileMajor": 55,
+    "androidComposeClassfileMajor": 61,
+    "node": [
+      "20.19.0",
+      "22.23.3"
+    ],
+    "npm": "11.19.0",
+    "typescript": "5.9.3",
+    "react": [
+      "18.2.0",
+      "19.2.8"
+    ],
+    "chromium": "156.0.8078.4",
+    "androidLocalApis": [
+      26,
+      34
+    ],
+    "androidHostedApisUnverified": [
+      23,
+      35
+    ]
+  },
+  "freshExecuted": {
+    "kotlinModuleSampleUnitTests": 26,
+    "independentJvmAndAarUnitTests": 2,
+    "typescriptTestsPerNode": 28,
+    "typescriptFilesPerNode": 5,
+    "kotlinSharedRuntimeScenarios": 6,
+    "typescriptSharedRuntimeScenarios": 6,
+    "reactTestsIncludedIn28": 7,
+    "packedConsumerCombinations": 4,
+    "independentExactBrowserCombinations": 4,
+    "androidInstrumentationTestsPerApi": 3,
+    "androidInstrumentationTotal": 6,
+    "typescriptProbeGroupsPerNode": 7,
+    "productionFailuresCorrected": 0
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "P2",
+      "kind": "product",
+      "row": "K01",
+      "status": "open",
+      "control": "capacity 1 -> children 0, parent joined",
+      "counterexample": "capacity 0 -> exception, children 1, parent did not join"
+    },
+    {
+      "id": "F2",
+      "severity": "P2",
+      "kind": "product",
+      "row": "G03",
+      "status": "open",
+      "control": "same generic-inner state explicit FlowStore compiles",
+      "counterexample": "annotated supported-shape feature generates invalid generic owner/inner type"
+    },
+    {
+      "id": "F3",
+      "severity": "P2",
+      "kind": "validation-tool",
+      "row": "R06",
+      "status": "open",
+      "control": "normal SSR/UI exact values 7/8/9/8",
+      "counterexample": "current gate accepts 70/80/90/80; independent exact control rejects all four"
+    }
+  ],
+  "boundaries": [
+    {
+      "row": "A05",
+      "kind": "fixture",
+      "status": "limited",
+      "detail": "API26 standard am-kill probe fails to terminate PID; independent stopped/same-UID process-kill restoration passes"
+    },
+    {
+      "row": "A06",
+      "kind": "environment",
+      "status": "unverified",
+      "detail": "API23/35 phone images unavailable locally; hosted candidate not pushed"
+    },
+    {
+      "row": "C06",
+      "kind": "hosted-ci",
+      "status": "unverified",
+      "detail": "uncommitted/untracked input has no exact final committed-candidate hosted run"
+    },
+    {
+      "row": "C07",
+      "kind": "public-release",
+      "status": "not-authorized-or-executed",
+      "detail": "no tags/publication; registry-only consumer credentials and installation unverified"
+    }
+  ],
+  "advisories": {
+    "npmKnownVulnerabilities": 0,
+    "mavenCoordinates": 38,
+    "mavenAffectedPackages": 0,
+    "queryControlAdvisories": 6,
+    "checkedAt": "2026-10-18T06:24:22.966Z",
+    "scope": "all five published Kotlin modules resolved runtimeClasspath only; not build/test/plugin graph or exploitability audit",
+    "report": "maven-advisories.json",
+    "notAFullSecurityAudit": true
+  },
+  "preservation": {
+    "swiftMatchesOriginMain": true,
+    "existingProductionInputsUnchanged": true,
+    "unexpectedExistingFileChanges": [],
+    "unexpectedAddedNonDocumentationFiles": [],
+    "intentionalExistingDocumentationChanges": [
+      "docs/MULTIPLATFORM.md",
+      "docs/MULTIPLATFORM_1_0_READINESS.md",
+      "docs/RELEASING_MULTIPLATFORM.md"
+    ],
+    "allowedNewDocumentation": [
+      "docs/MULTIPLATFORM_VERIFICATION_2026_10_18.md",
+      "docs/verification/2026-10-18/"
+    ],
+    "commitsCreated": 0,
+    "pushes": 0,
+    "tags": 0,
+    "publications": 0,
+    "ownedEmulatorsClosed": [
+      5580,
+      5582
+    ],
+    "otherBuildCompilerProcessesStopped": false
+  },
+  "rawEvidenceDirectory": "/tmp/innoflow-verification-20261018.vkS7JQI8",
+  "runRecords": [
+    {
+      "log": "full-local.log",
+      "sha256": "0f3200c6f6aae3ab29bd190d2e7e1db9b8e0b831aed8bedfc5ce614e41bb4239",
+      "exitCode": 0,
+      "interpretation": "local producer/consumer/static/Node22 full gate; not absence of F1/F2/F3",
+      "evidence": "fresh"
+    },
+    {
+      "log": "kotlin-unit-fresh.log",
+      "sha256": "48df9af61b15125d35b5e2c9398546295b4426c68b7434f254a2917557086fd6",
+      "exitCode": 0,
+      "interpretation": "26 unit tests, --rerun-tasks, 74 tasks executed",
+      "evidence": "fresh"
+    },
+    {
+      "log": "jvm-consumer-fresh.log",
+      "sha256": "eb6d42a3534ccba3993550a2c276498e80eac2cc81d5764687c6810b536da323",
+      "exitCode": 0,
+      "interpretation": "1 actual published-artifact consumer test; 6 tasks rerun",
+      "evidence": "fresh"
+    },
+    {
+      "log": "aar-consumer-fresh.log",
+      "sha256": "e3766fc5f3df9c180c73c77d12377b15b02bf9bd2e1c1420c73911898708a964",
+      "exitCode": 0,
+      "interpretation": "1 AAR consumer test plus release APK; 74 tasks rerun",
+      "evidence": "fresh"
+    },
+    {
+      "log": "runtime-probes.log",
+      "sha256": "1733a9d712d04678fe878e251cde0f8e298bbd4dfcda7f3ee8407805cc243ef6",
+      "exitCode": 0,
+      "interpretation": "positive diagnostic groups; F1 observation FAIL",
+      "evidence": "fresh"
+    },
+    {
+      "log": "runtime-expected-failure.log",
+      "sha256": "e4881a9dc293fc9d732c5f3b235640265de7484a18092394c0dae6bd3e13a67e",
+      "exitCode": 1,
+      "interpretation": "confirmed F1 contract violation, not corrected",
+      "evidence": "fresh"
+    },
+    {
+      "log": "kotlin-native-result.log",
+      "sha256": "babd38ad5f39490ec7251ceb287837000545a906f3f2c6c1752566eed8ed6915",
+      "exitCode": 0,
+      "interpretation": "native error/cancel/timeout mapping control",
+      "evidence": "fresh"
+    },
+    {
+      "log": "ksp-plain.log",
+      "sha256": "493de38af9709da6f793689073e7205cb682b3f9e5528f6c2c3248dc487592d2",
+      "exitCode": 0,
+      "interpretation": "positive compile control",
+      "evidence": "fresh"
+    },
+    {
+      "log": "ksp-function.log",
+      "sha256": "6a66e222e94dc0cdb252218edeb0a9e7cc223bf60110d51e3cca9a8119d6dc71",
+      "exitCode": 0,
+      "interpretation": "positive compile control",
+      "evidence": "fresh"
+    },
+    {
+      "log": "ksp-suspend.log",
+      "sha256": "7ee5e5e7c916fe698dfdb6c2521226d2175c3f971c1f32a96d08b17eb898c350",
+      "exitCode": 0,
+      "interpretation": "positive compile control",
+      "evidence": "fresh"
+    },
+    {
+      "log": "ksp-innerManual.log",
+      "sha256": "6ef2254f67057b3096cba9ad229a5974f372c7426e25041f34acbae2c9ddfe1c",
+      "exitCode": 0,
+      "interpretation": "positive F2 manual-factory control",
+      "evidence": "fresh"
+    },
+    {
+      "log": "ksp-inner.log",
+      "sha256": "f76b706c9a640392f3a85d3cf2ec40b0525b5567c9d2285af9e2809ed81e91dd",
+      "exitCode": 1,
+      "interpretation": "confirmed F2 generated-type failure",
+      "evidence": "fresh"
+    },
+    {
+      "log": "ksp-alias.log",
+      "sha256": "475b1c3f45c108d7ef2fc844f4f597b3570719a48b1eb74d2c8d977ba9f57fbd",
+      "exitCode": 1,
+      "interpretation": "intentional direct-spelling limitation, not F2",
+      "evidence": "fresh"
+    },
+    {
+      "log": "node20-install.log",
+      "sha256": "6713b037520f7b35cad925bf47d2c39370643df5ca03c0e5ce4f9ec0b39cd1d8",
+      "exitCode": 0,
+      "interpretation": "scoped clean install",
+      "evidence": "fresh"
+    },
+    {
+      "log": "node20-tests.log",
+      "sha256": "a8be35023e89fdabcb29e6448b7dd4cbeced16b275dce115c05902a0bc632c7f",
+      "exitCode": 0,
+      "interpretation": "28 tests in 5 files plus types/build/package checks",
+      "evidence": "fresh"
+    },
+    {
+      "log": "typescript-probes-node20.log",
+      "sha256": "e554cee3b2c73062f70c1c532067ba75bd37e8be2cf656074ae5d6eb63035910",
+      "exitCode": 0,
+      "interpretation": "7 independent diagnostic groups",
+      "evidence": "fresh"
+    },
+    {
+      "log": "typescript-probes-node22.log",
+      "sha256": "a55c8147f9036df8b281c4e49a3fd7c46650df71c8f6cec1ea34533cadb7b4ec",
+      "exitCode": 0,
+      "interpretation": "7 independent diagnostic groups",
+      "evidence": "fresh"
+    },
+    {
+      "log": "browser-node22-react18.log",
+      "sha256": "208b02837b9cadb4ff6445ccb70825eaebea34bd7633599f64e493d258d48576",
+      "exitCode": 0,
+      "interpretation": "actual packed consumer; independent exact values checked separately",
+      "evidence": "fresh"
+    },
+    {
+      "log": "browser-node20-react18.log",
+      "sha256": "07a1df953b1d143dffe2a0139cf0ea8f4e0dfa566cc9a00dd32f1d10cb0ed679",
+      "exitCode": 0,
+      "interpretation": "actual packed consumer; independent exact values checked separately",
+      "evidence": "fresh"
+    },
+    {
+      "log": "browser-node20-react19.log",
+      "sha256": "de7ed8e9faada0d44a6672a496835e0c7ef468cb8a59a5248105d101fb3c4575",
+      "exitCode": 0,
+      "interpretation": "actual packed consumer; independent exact values checked separately",
+      "evidence": "fresh"
+    },
+    {
+      "log": "exact-node22-react19.log",
+      "sha256": "39fa1ddd5ff43bd5bcc2074c269d4b9db453bff3495a4efc1a92ac8f8a63ce58",
+      "exitCode": 0,
+      "interpretation": "exact SSR 7 / hydration 8 / Increase 9 / Decrease 8",
+      "evidence": "fresh"
+    },
+    {
+      "log": "exact-node22-react18.log",
+      "sha256": "a14d1a768e389b6ff61b6aaa01a69be822ea5f7fb45beebf1b709284439bc0ed",
+      "exitCode": 0,
+      "interpretation": "exact SSR 7 / hydration 8 / Increase 9 / Decrease 8",
+      "evidence": "fresh"
+    },
+    {
+      "log": "exact-node20-react18.log",
+      "sha256": "148efd8615e4586d94bcabd62b40df2a0af5bae7538c3f2d9797586909641ae9",
+      "exitCode": 0,
+      "interpretation": "exact SSR 7 / hydration 8 / Increase 9 / Decrease 8",
+      "evidence": "fresh"
+    },
+    {
+      "log": "exact-node20-react19.log",
+      "sha256": "85e25fa1cde6931d0eba23a58b6cc32c6a1eefe898e13c399d9664bb101aabfa",
+      "exitCode": 0,
+      "interpretation": "exact SSR 7 / hydration 8 / Increase 9 / Decrease 8",
+      "evidence": "fresh"
+    },
+    {
+      "log": "browser-mutant-current-gate.log",
+      "sha256": "ccb936f8b67bb7d8d18667444401a225e4156bbd16c9230c7e186a1f009bee66",
+      "exitCode": 0,
+      "interpretation": "F3: incorrectly accepted deliberately wrong consumer values",
+      "evidence": "fresh"
+    },
+    {
+      "log": "exact-mutant-expected-failure.log",
+      "sha256": "2c7086201134d12d662e880c42d5b3fb317d849c73029738e1b61319fa2d4353",
+      "exitCode": 1,
+      "interpretation": "independent control rejects SSR 70 / UI 80,90,80",
+      "evidence": "fresh"
+    },
+    {
+      "log": "android-api34-instrumentation.log",
+      "sha256": "349d8437d564b4da883ae2a974ef3a4c71ece1b5f8ccbc3896326aadaf479f1c",
+      "exitCode": 0,
+      "interpretation": "3 fresh tests; no failures or skips",
+      "evidence": "fresh"
+    },
+    {
+      "log": "android-api34-restoration.log",
+      "sha256": "0a45c47ead69b3045189bb1f889182b9d2d2b5eac301eccdef26908cbd46904c",
+      "exitCode": 0,
+      "interpretation": "PID 6776 -> 7605; Count 2",
+      "evidence": "fresh"
+    },
+    {
+      "log": "android-api26-instrumentation.log",
+      "sha256": "ea5b1baddfe2381474fde4d7908cb4e9f828729cd0c382b99b2170873bc12e90",
+      "exitCode": 0,
+      "interpretation": "3 fresh tests; no failures or skips",
+      "evidence": "fresh"
+    },
+    {
+      "log": "android-api26-restoration.log",
+      "sha256": "62501db3ccd78ae947fdc1a53de14aa353a21861d77523e4e7677ffd07b9ace4",
+      "exitCode": 1,
+      "interpretation": "fixture boundary: am kill did not terminate previous process; not counted as runtime PASS",
+      "evidence": "fresh"
+    },
+    {
+      "log": "android-api26-manual-control.log",
+      "sha256": "23b1e7ffc7cf60c27fac733ea58edebfa7406bcb3993d5109c19b0f51dfb8a39",
+      "exitCode": 0,
+      "interpretation": "stopped and same-UID verified process kill; PID 4510 -> 5061; Count 4",
+      "evidence": "fresh"
+    },
+    {
+      "log": "actionlint.log",
+      "sha256": "2539771ec9dec7be419645f067e41847e41fce165b25e4cf18056a5c282c7aa0",
+      "exitCode": 0,
+      "interpretation": "actionlint 1.7.12 validates 18 workflows",
+      "evidence": "fresh"
+    },
+    {
+      "log": "action-pins.log",
+      "sha256": "a2c1efb3e5dc3196129222bc14afe3fa301dd22c7593d84c3bad110ac5a7388e",
+      "exitCode": 0,
+      "interpretation": "canonical action pin gate",
+      "evidence": "fresh"
+    },
+    {
+      "log": "workflow-timeouts.log",
+      "sha256": "cf97c2e87b4ca475a818d7fae78a817d3b1bfb71f01196ca29bccf8583a2aac0",
+      "exitCode": 0,
+      "interpretation": "canonical job timeout gate",
+      "evidence": "fresh"
+    },
+    {
+      "log": "maven-advisories.log",
+      "sha256": "4ae43f65e7317885c4ff061f5d84d22c75094dc78b3e5f84f55ae772ee3e4852",
+      "exitCode": 0,
+      "interpretation": "38 Maven runtime coordinates, 0 advisory matches; known-vulnerable query-only control detects 6",
+      "evidence": "fresh"
+    }
+  ],
+  "matrix": [
+    {
+      "id": "B01",
+      "contract": "기준선/dirty/Swift/기존 입력 보존 (S)",
+      "route": "시작·종료 파일 해시, main diff",
+      "status": "PASS",
+      "evidence": "PASS · fresh: §7.8, 문서만 변경"
+    },
+    {
+      "id": "B02",
+      "contract": "두 runtime의 portable contract 일치 (N,F,C,R,O)",
+      "route": "counter/runtime 공통 fixture",
+      "status": "PASS",
+      "evidence": "PASS · fresh: §7.1/2, counter 및 runtime 6개 시나리오"
+    },
+    {
+      "id": "B03",
+      "contract": "모든 모듈·공개 API·지원 환경 inventory (S)",
+      "route": "source/export/manifest/ABI/doc 대조",
+      "status": "PASS",
+      "evidence": "PASS · static+fresh: §2/7.5, 5 Kotlin + 3 npm 전부 대조"
+    },
+    {
+      "id": "B04",
+      "contract": "immutable state/비협조 작업/영속화 경계 일치 (F,C,R,L)",
+      "route": "계약 문서·구현·반례 구분",
+      "status": "PASS",
+      "evidence": "PASS · static+fresh: SEMANTICS, late-emission tests, §7.3/4"
+    },
+    {
+      "id": "K01",
+      "contract": "constructor 인자 거부가 parent job을 누수하지 않음 (F,L)",
+      "route": "capacity 1 vs 0 독립 Job probe",
+      "status": "FAIL",
+      "evidence": "FAIL · fresh: F1, children 0/join true vs 1/false"
+    },
+    {
+      "id": "K02",
+      "contract": "최신 state 기준 FIFO·다중 producer 직렬화 (N,Q)",
+      "route": "JVM regression/8 producers",
+      "status": "PASS",
+      "evidence": "PASS · fresh: ReleaseContractsTest concurrentProducersSerializeAgainstLatestState"
+    },
+    {
+      "id": "K03",
+      "contract": "root+descendant effect/action 완료 소유권 (N,Q)",
+      "route": "sample/독립 effect mapping probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: CounterFeatureTest + runtime-probes.log K03/K11"
+    },
+    {
+      "id": "K04",
+      "contract": "reducer 실패가 다른 root를 오염시키지 않음 (F,R)",
+      "route": "실패/후속 성공 dispatch",
+      "status": "PASS",
+      "evidence": "PASS · fresh: FlowRuntimeTest reducerFailureRejectsOnlyItsDispatchTreeAndStoreRemainsUsable"
+    },
+    {
+      "id": "K05",
+      "contract": "effect 실패/취소 의미와 독립 재시도 (F,C,R,O)",
+      "route": "exception/cancel/timeout 대조",
+      "status": "PASS",
+      "evidence": "PASS · fresh: ReleaseContractsTest effectFailureIsObservedAndRetryRemainsUsable + kotlin-native-result.log; timeout 보완은 O1"
+    },
+    {
+      "id": "K06",
+      "contract": "root 취소·close·시작 전/late emission 차단 (C,Q)",
+      "route": "queued/active/uncooperative regression",
+      "status": "PASS",
+      "evidence": "PASS · fresh: cancelledAdmission/closeReleasesQueuedDispatches/cancelledIdSuppressesUncooperativeLateEmission"
+    },
+    {
+      "id": "K07",
+      "contract": "ID latest/all matching 취소, 다른 ID 독립 (C,Q)",
+      "route": "ID regression + mapped ID probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: cancellationId tests + runtime-probes.log K07"
+    },
+    {
+      "id": "K08",
+      "contract": "bounded admission/backpressure/회복 (L,Q,R)",
+      "route": "overflow/10,000 actions/stress",
+      "status": "PASS",
+      "evidence": "PASS · fresh: boundedRootAdmission/effectProducerSuspends + 4,000 concurrent actions"
+    },
+    {
+      "id": "K09",
+      "contract": "output live order/no replay/drop 관측/close 종료 (N,L,O,C)",
+      "route": "collector regression + probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: liveOutput/slowLiveOutput/outputCollectorsComplete + nullable/no-replay probe"
+    },
+    {
+      "id": "K10",
+      "contract": "instrumentation 오류 격리/metric/페이로드 경계 (F,O,S)",
+      "route": "throw observer/queue stats + static",
+      "status": "PASS",
+      "evidence": "PASS · fresh+static: instrumentationFailure/actionQueue tests; payload-free 아님, §7.6"
+    },
+    {
+      "id": "K11",
+      "contract": "combine/scope/transition/map 조합 순서·필터 (N,F,C)",
+      "route": "독립 실제 runtime composition probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: runtime-probes.log K03/K11; unmatched/zero reducer 대조 포함"
+    },
+    {
+      "id": "K12",
+      "contract": "task await/cancel idempotency/owner 취소 (C,Q)",
+      "route": "다중 waiter/취소 waiter/owner probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: runtime-probes.log K12 + ownerScopeCancellationFinishesDispatchTasks"
+    },
+    {
+      "id": "K13",
+      "contract": "TestStore action/output/state/finish 및 실패 탐지 (N,F)",
+      "route": "sample + 독립 negative assertions",
+      "status": "PASS",
+      "evidence": "PASS · fresh: sample trace + runtime-probes.log K13, 잘못된 기대값 3종 거부"
+    },
+    {
+      "id": "G01",
+      "contract": "public/internal/object/default/escaped factory compile (N)",
+      "route": "독립 published KSP fixture",
+      "status": "PASS",
+      "evidence": "PASS · fresh: full-local.log positive; nullable Map/List, star projection 포함"
+    },
+    {
+      "id": "G02",
+      "contract": "private/nested/generic/abstract/indirect 진단 (F,S)",
+      "route": "5개 expected-failure fixture",
+      "status": "PASS",
+      "evidence": "PASS · fresh: full-local.log 5개 지정 diagnostic 확인"
+    },
+    {
+      "id": "G03",
+      "contract": "지원 feature의 state/action/output 타입 rendering (N,F)",
+      "route": "plain/function/suspend/generic-inner compile",
+      "status": "FAIL",
+      "evidence": "FAIL · fresh: F2; plain/function/suspend/manual exit 0, inner exit 1"
+    },
+    {
+      "id": "G04",
+      "contract": "compiler-plugin-free fallback 및 alias 경계 (N,F)",
+      "route": "explicit FlowStore 대조/진단",
+      "status": "PASS",
+      "evidence": "PASS · fresh+static: ksp-innerManual exit 0; alias는 direct-spelling 진단, O2"
+    },
+    {
+      "id": "A01",
+      "contract": "ViewModel clear가 소유 Store만 닫음 (C,Q)",
+      "route": "Android module unit",
+      "status": "PASS",
+      "evidence": "PASS · fresh+static: viewModelStoreClearClosesOwnedFlowStore; addCloseable/viewModelScope의 소유권 대조"
+    },
+    {
+      "id": "A02",
+      "contract": "Compose lifecycle state/output 최신 handler (N,C,O)",
+      "route": "2개 instrumentation/API별 증거",
+      "status": "PASS",
+      "evidence": "PASS · fresh: API26/34 각각 2개; state pause/resume, 최신 handler, background output 미재생"
+    },
+    {
+      "id": "A03",
+      "contract": "recreation/background-resume 상태 유지 (N,R)",
+      "route": "sample instrumentation",
+      "status": "PASS",
+      "evidence": "PASS · fresh: API26/34 각각 stateSurvivesRecreationAndBackgroundResume 1개"
+    },
+    {
+      "id": "A04",
+      "contract": "API 34 실제 process kill 뒤 PID/visible state 복원 (R)",
+      "route": "serial별 restoration probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: PID 6776→7605, Count 2, screenshot/XML 보존"
+    },
+    {
+      "id": "A05",
+      "contract": "API 26 process 복원 증거/ANR 구분 (R,F)",
+      "route": "available AVD/환경 확인 후 isolated probe",
+      "status": "LIMIT",
+      "evidence": "LIMIT · fresh: 자동 am-kill probe 실패; stopped/동일 UID PID 검증 후 별도 process-kill 복원은 4510→5061, Count 4 PASS (§7.4)"
+    },
+    {
+      "id": "A06",
+      "contract": "minSdk API 23/current-line 35 runtime (N,R,C)",
+      "route": "hosted matrix와 로컬 환경 가용성",
+      "status": "LIMIT",
+      "evidence": "LIMIT · static: 로컬 image/AVD 없음, 아직 unpushed; API26/34로 대체하지 않음"
+    },
+    {
+      "id": "A07",
+      "contract": "debug/release 앱·lint·SavedState 단위 검증 (N,F)",
+      "route": "Gradle build/test/lint",
+      "status": "PASS",
+      "evidence": "PASS · fresh: full local build/lint + --rerun-tasks SavedState 1개"
+    },
+    {
+      "id": "T01",
+      "contract": "positive finite integer capacity 검증 (F,L)",
+      "route": "기존 invalid-capacity regression",
+      "status": "PASS",
+      "evidence": "PASS · fresh: rejects invalid capacities, Node20/22"
+    },
+    {
+      "id": "T02",
+      "contract": "FIFO/reentrant send, 비재귀 drain (N,Q,L)",
+      "route": "20,000 chain/2,000 burst",
+      "status": "PASS",
+      "evidence": "PASS · fresh: drains a long reentrant chain / lossless FIFO metrics, Node20/22"
+    },
+    {
+      "id": "T03",
+      "contract": "root+descendant 완료와 mapping 소유권 (N,Q)",
+      "route": "existing + 독립 composition",
+      "status": "PASS",
+      "evidence": "PASS · fresh: waits for descendant actions + typescript-probes Node20/22 T03/T10"
+    },
+    {
+      "id": "T04",
+      "contract": "reducer/effect 실패 격리와 재시도 (F,R)",
+      "route": "실패/후속 성공 regression",
+      "status": "PASS",
+      "evidence": "PASS · fresh: reducer/effect failure tests + sibling abort/independent retry probe"
+    },
+    {
+      "id": "T05",
+      "contract": "prestart/root/close 취소 및 late emission 차단 (C,Q)",
+      "route": "regression + waiter probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: release-contract tests + T05/T11 external probe"
+    },
+    {
+      "id": "T06",
+      "contract": "ID latest/all matching 및 다른 ID 독립 (C,Q)",
+      "route": "regression + mapped ID probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: same-ID/latest tests + T06/T10 signal/ID mapping probe"
+    },
+    {
+      "id": "T07",
+      "contract": "bounded overflow·회복/queue compaction (L,R)",
+      "route": "overflow/large burst/metrics",
+      "status": "PASS",
+      "evidence": "PASS · fresh: reentrant overflow recovery, 20,000 chain; static splice/drain cleanup"
+    },
+    {
+      "id": "T08",
+      "contract": "output no replay/unsubscribe/close·undefined (N,C,O)",
+      "route": "regression + 독립 output probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: typed output test + T08/T09 undefined/no-replay/unsubscribe/close probe"
+    },
+    {
+      "id": "T09",
+      "contract": "state/output listener 오류 격리·구독 정리 (F,O,S)",
+      "route": "독립 throw/unsubscribe/close probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: T08/T09, observerFailed 자체 throw도 격리"
+    },
+    {
+      "id": "T10",
+      "contract": "combine/scope order/filter/Effect.map/signal (N,F,C)",
+      "route": "독립 실제 runtime composition",
+      "status": "PASS",
+      "evidence": "PASS · fresh: T03/T10 및 T06/T10, Node20/22"
+    },
+    {
+      "id": "T11",
+      "contract": "task finished await/cancel/multiwait/abort fanout (C,Q,L)",
+      "route": "독립 task probe/기존 burst",
+      "status": "PASS",
+      "evidence": "PASS · fresh: T05/T11 + 2,000 effects; repeated wait/cancel와 late user-code 실행 구분"
+    },
+    {
+      "id": "T12",
+      "contract": "TestStore 구조/Map/Set/Date/undefined/custom 및 negative (N,F)",
+      "route": "4개 unit + 독립 실패 탐지",
+      "status": "PASS",
+      "evidence": "PASS · fresh: 4개 unit + wrong state/action/output 및 cyclic custom comparator probe"
+    },
+    {
+      "id": "R01",
+      "contract": "SSR initial snapshot → hydration live state (N,R)",
+      "route": "React unit + tarball SSR/browser",
+      "status": "PASS",
+      "evidence": "PASS · fresh: hydration unit + 4개 exact browser, SSR 7→client 8"
+    },
+    {
+      "id": "R02",
+      "contract": "selector/equality 교체·undefined·불필요 render (N,Q)",
+      "route": "selector unit/정적 hook 대조",
+      "status": "PASS",
+      "evidence": "PASS · fresh+static: React selector 3개 unit, render-local memo/commit ref 대조"
+    },
+    {
+      "id": "R03",
+      "contract": "StrictMode mount/unmount 구독 무누수 (C,Q)",
+      "route": "React unit",
+      "status": "PASS",
+      "evidence": "PASS · fresh: releases StrictMode subscriptions on unmount, store replacement"
+    },
+    {
+      "id": "R04",
+      "contract": "typed provider/store 교체/미제공 오류 (N,F)",
+      "route": "React unit + 독립 boundary probe",
+      "status": "PASS",
+      "evidence": "PASS · fresh: provider/store replacement units + missing Provider SSR 오류 대조"
+    },
+    {
+      "id": "R05",
+      "contract": "tarball browser interaction·console·hydration (N,F)",
+      "route": "실제 Chromium/정확한 DOM 후조건",
+      "status": "PASS",
+      "evidence": "PASS · fresh: 4개 exact-* log, Count 7/8/9/8, console/recoverable errors 0"
+    },
+    {
+      "id": "R06",
+      "contract": "잘못된 SSR/UI 수치가 gate에서 거부됨 (F,S)",
+      "route": "정상 vs count×10 mutant",
+      "status": "FAIL",
+      "evidence": "FAIL · fresh: F3, 기존 gate exit 0; 독립 exact probe는 네 값 오류로 exit 1"
+    },
+    {
+      "id": "R07",
+      "contract": "Node20/22 × React18/19 소비자 행렬 (N)",
+      "route": "독립 설치/typecheck/SSR/build/browser",
+      "status": "PASS",
+      "evidence": "PASS · fresh: 네 tarball 소비자 + 별도 정확한 SSR/DOM 검사 (§7.2)"
+    },
+    {
+      "id": "P01",
+      "contract": "core/testing/KSP ABI baseline 일치 (S)",
+      "route": "3개 JVM ABI gate",
+      "status": "PASS",
+      "evidence": "PASS · fresh: full-local.log checkKotlinAbi 3개 실행, 기존 compiler outputs 일부 재사용"
+    },
+    {
+      "id": "P02",
+      "contract": "Android/Compose 실제 AAR ABI·negative golden (S,F)",
+      "route": "2개 AAR gate/selftest",
+      "status": "PASS",
+      "evidence": "PASS · fresh: 2개 실제 AAR comparison + 잘못된 임시 golden 거부"
+    },
+    {
+      "id": "P03",
+      "contract": "Maven JVM consumer 무 project substitution (N,S)",
+      "route": "independent refresh-dependencies test",
+      "status": "PASS",
+      "evidence": "PASS · fresh: refresh 후 --rerun-tasks test 1개, 6 tasks 실행"
+    },
+    {
+      "id": "P04",
+      "contract": "Maven AAR 앱 consumer test/release build (N,S)",
+      "route": "independent Android fixture",
+      "status": "PASS",
+      "evidence": "PASS · fresh: test 1개 + release APK, 74 tasks 실행"
+    },
+    {
+      "id": "P05",
+      "contract": "npm exports/types/maps/license/불필요 파일 제외 (N,S)",
+      "route": "pack/publint/ATTW/maps/consumer errors",
+      "status": "PASS",
+      "evidence": "PASS · fresh: 3개 package validation/타입 소비자; ESM-only, CJS 의도적 제외"
+    },
+    {
+      "id": "P06",
+      "contract": "Node20/22 clean install+typecheck+28 regressions (N,F)",
+      "route": "scoped exact Node/npm",
+      "status": "PASS",
+      "evidence": "PASS · fresh: 각 Node에서 ci + test, 5 files/28 tests, npm 11.19.0"
+    },
+    {
+      "id": "P07",
+      "contract": "toolchain pin/checksum/bytecode/SDK/dependency 범위 (S)",
+      "route": "wrapper/manifest/resolution/classfile",
+      "status": "PASS",
+      "evidence": "PASS · fresh+static: Java major 55/61, wrapper/distribution 진위 대조; legacy wrapper 보완은 O3"
+    },
+    {
+      "id": "C01",
+      "contract": "workflow 구조/action pin/timeout/권한 (F,S)",
+      "route": "canonical actionlint/정적 policy",
+      "status": "PASS",
+      "evidence": "PASS · fresh+static: actionlint 1.7.12, 18 workflows, pins/timeouts 성공"
+    },
+    {
+      "id": "C02",
+      "contract": "정확한 SHA·main-push CI 선행 증거/negative (F,S)",
+      "route": "helper 10개 실패 대조군",
+      "status": "PASS",
+      "evidence": "PASS · fresh: passing control + 10개 잘못된 CI evidence 거부"
+    },
+    {
+      "id": "C03",
+      "contract": "untrusted PR/비밀·publish 분리 (S)",
+      "route": "3개 workflow source trust review",
+      "status": "PASS",
+      "evidence": "PASS · static: CI read-only, checkout credential 미보존; publish는 tag push+exact main CI로 제한"
+    },
+    {
+      "id": "C04",
+      "contract": "dependency advisory scan 및 제한 명시 (S)",
+      "route": "npm audit + JVM graph 검토",
+      "status": "PASS",
+      "evidence": "PASS · fresh: npm audit 0; 5개 Kotlin 모듈의 Maven runtime 38개 OSV match 0, known-vulnerable control 6개 탐지 (§7.6)"
+    },
+    {
+      "id": "C05",
+      "contract": "package/runtime payload·secret 책임 경계 (S,O)",
+      "route": "packed file list/instrumentation source",
+      "status": "PASS",
+      "evidence": "PASS · static+fresh: pack allowlist/maps/license; runtime 기본 전송/로그 없음, instrumentation payload redaction은 앱 책임"
+    },
+    {
+      "id": "C06",
+      "contract": "실제 hosted CI가 같은 candidate를 검증 (N,S)",
+      "route": "아직 unpushed인 입력의 evidence 유무",
+      "status": "LIMIT",
+      "evidence": "LIMIT · static: 미커밋/비추적 구현이므로 HEAD의 과거 CI는 이 입력 증거가 아님"
+    },
+    {
+      "id": "C07",
+      "contract": "공개 registry 설치/권한/릴리스 완료 (N,S)",
+      "route": "실제 publish 후 remote-only consumer 필요",
+      "status": "LIMIT",
+      "evidence": "LIMIT · not executed: publish/tag 승인 없음; 로컬 consumer를 registry 설치로 계산하지 않음"
+    },
+    {
+      "id": "X01",
+      "contract": "Swift release/runtime 회귀 판정 제외 (N,C,R)",
+      "route": "main parity만 수행, CI-only 정책",
+      "status": "N/A",
+      "evidence": "N/A · 명시적 scope 제외; 바이트 보존 B01은 fresh 검증"
+    },
+    {
+      "id": "X02",
+      "contract": "비지원 platform/서비스/soak·보안감사 구분 (S,L)",
+      "route": "명시된 제외와 광고 계약 대조",
+      "status": "N/A",
+      "evidence": "N/A · §3의 비지원 기능, 전체 보안/성능/미래 버전·모든 browser 조합 증명은 제외"
+    }
+  ]
+}

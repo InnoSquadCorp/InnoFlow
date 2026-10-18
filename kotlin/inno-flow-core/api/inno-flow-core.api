@@ -1,0 +1,112 @@
+public final class com/innosquad/innoflow/CompositionKt {
+	public static final fun combineReducers ([Lcom/innosquad/innoflow/Reducer;)Lcom/innosquad/innoflow/Reducer;
+	public static final fun scope (Lcom/innosquad/innoflow/Reducer;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Lcom/innosquad/innoflow/Reducer;
+}
+
+public final class com/innosquad/innoflow/Effect {
+	public static final field Companion Lcom/innosquad/innoflow/Effect$Companion;
+	public final fun map (Lkotlin/jvm/functions/Function1;)Lcom/innosquad/innoflow/Effect;
+}
+
+public final class com/innosquad/innoflow/Effect$Companion {
+	public final fun cancel-vLiv_O4 (Ljava/lang/String;)Lcom/innosquad/innoflow/Effect;
+	public final fun run-cZFaqwo (Ljava/lang/String;ZLkotlin/jvm/functions/Function2;)Lcom/innosquad/innoflow/Effect;
+	public static synthetic fun run-cZFaqwo$default (Lcom/innosquad/innoflow/Effect$Companion;Ljava/lang/String;ZLkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lcom/innosquad/innoflow/Effect;
+	public final fun send (Ljava/lang/Object;)Lcom/innosquad/innoflow/Effect;
+}
+
+public final class com/innosquad/innoflow/EffectId {
+	public static final synthetic fun box-impl (Ljava/lang/String;)Lcom/innosquad/innoflow/EffectId;
+	public static fun constructor-impl (Ljava/lang/String;)Ljava/lang/String;
+	public fun equals (Ljava/lang/Object;)Z
+	public static fun equals-impl (Ljava/lang/String;Ljava/lang/Object;)Z
+	public static final fun equals-impl0 (Ljava/lang/String;Ljava/lang/String;)Z
+	public final fun getValue ()Ljava/lang/String;
+	public fun hashCode ()I
+	public static fun hashCode-impl (Ljava/lang/String;)I
+	public fun toString ()Ljava/lang/String;
+	public static fun toString-impl (Ljava/lang/String;)Ljava/lang/String;
+	public final synthetic fun unbox-impl ()Ljava/lang/String;
+}
+
+public abstract interface class com/innosquad/innoflow/EffectScope {
+	public abstract fun send (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class com/innosquad/innoflow/FlowFeature {
+	public abstract fun getInitialState ()Ljava/lang/Object;
+	public abstract fun getReducer ()Lcom/innosquad/innoflow/Reducer;
+}
+
+public abstract interface class com/innosquad/innoflow/FlowInstrumentation {
+	public static final field Companion Lcom/innosquad/innoflow/FlowInstrumentation$Companion;
+	public fun actionQueueDrained (Lcom/innosquad/innoflow/FlowQueueMetrics;)V
+	public fun actionQueued (Ljava/lang/Object;I)V
+	public fun actionReduced (Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V
+	public fun dispatchFailed (Ljava/lang/Object;Ljava/lang/Throwable;)V
+	public fun effectFinished-xG1w4Io (Ljava/lang/String;)V
+	public fun effectStarted-xG1w4Io (Ljava/lang/String;)V
+	public fun outputDropped (Ljava/lang/Object;)V
+	public fun outputEmitted (Ljava/lang/Object;)V
+}
+
+public final class com/innosquad/innoflow/FlowInstrumentation$Companion {
+	public final fun none ()Lcom/innosquad/innoflow/FlowInstrumentation;
+}
+
+public final class com/innosquad/innoflow/FlowInstrumentation$DefaultImpls {
+	public static fun actionQueueDrained (Lcom/innosquad/innoflow/FlowInstrumentation;Lcom/innosquad/innoflow/FlowQueueMetrics;)V
+	public static fun actionQueued (Lcom/innosquad/innoflow/FlowInstrumentation;Ljava/lang/Object;I)V
+	public static fun actionReduced (Lcom/innosquad/innoflow/FlowInstrumentation;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V
+	public static fun dispatchFailed (Lcom/innosquad/innoflow/FlowInstrumentation;Ljava/lang/Object;Ljava/lang/Throwable;)V
+	public static fun effectFinished-xG1w4Io (Lcom/innosquad/innoflow/FlowInstrumentation;Ljava/lang/String;)V
+	public static fun effectStarted-xG1w4Io (Lcom/innosquad/innoflow/FlowInstrumentation;Ljava/lang/String;)V
+	public static fun outputDropped (Lcom/innosquad/innoflow/FlowInstrumentation;Ljava/lang/Object;)V
+	public static fun outputEmitted (Lcom/innosquad/innoflow/FlowInstrumentation;Ljava/lang/Object;)V
+}
+
+public final class com/innosquad/innoflow/FlowQueueFullException : java/lang/IllegalStateException {
+	public fun <init> (I)V
+	public final fun getCapacity ()I
+}
+
+public final class com/innosquad/innoflow/FlowQueueMetrics {
+	public final fun getPendingActionHighWaterMark ()I
+	public final fun getProcessedActionCount ()I
+}
+
+public final class com/innosquad/innoflow/FlowStore : java/io/Closeable {
+	public fun <init> (Ljava/lang/Object;Lcom/innosquad/innoflow/Reducer;Lkotlinx/coroutines/CoroutineScope;Lcom/innosquad/innoflow/FlowInstrumentation;I)V
+	public synthetic fun <init> (Ljava/lang/Object;Lcom/innosquad/innoflow/Reducer;Lkotlinx/coroutines/CoroutineScope;Lcom/innosquad/innoflow/FlowInstrumentation;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public final fun finish (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getOutputs ()Lkotlinx/coroutines/flow/Flow;
+	public final fun getStates ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun send (Ljava/lang/Object;)Lcom/innosquad/innoflow/FlowTask;
+}
+
+public final class com/innosquad/innoflow/FlowTask {
+	public final fun cancel ()V
+	public final fun finish (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun isCompleted ()Z
+}
+
+public abstract interface annotation class com/innosquad/innoflow/InnoFlow : java/lang/annotation/Annotation {
+}
+
+public abstract interface class com/innosquad/innoflow/Reducer {
+	public abstract fun reduce (Ljava/lang/Object;Ljava/lang/Object;)Lcom/innosquad/innoflow/Transition;
+}
+
+public final class com/innosquad/innoflow/Transition {
+	public final fun getState ()Ljava/lang/Object;
+	public final fun withEffect (Lcom/innosquad/innoflow/Effect;)Lcom/innosquad/innoflow/Transition;
+	public final fun withEffects ([Lcom/innosquad/innoflow/Effect;)Lcom/innosquad/innoflow/Transition;
+	public final fun withOutput (Ljava/lang/Object;)Lcom/innosquad/innoflow/Transition;
+	public final fun withOutputs ([Ljava/lang/Object;)Lcom/innosquad/innoflow/Transition;
+}
+
+public final class com/innosquad/innoflow/TransitionKt {
+	public static final fun transition (Ljava/lang/Object;)Lcom/innosquad/innoflow/Transition;
+}
+

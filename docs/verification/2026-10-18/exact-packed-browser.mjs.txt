@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const scratch = process.argv[2]; assert.ok(scratch);
+const root = '/Users/changwooson/Developer/InnoSquad/InnoFlow-worktrees/multiplatform/InnoFlow/typescript';
+const { chromium } = await import(pathToFileURL(join(root, 'node_modules/playwright/index.mjs')));
+const { preview } = await import(pathToFileURL(join(scratch, 'node_modules/vite/dist/node/index.js')));
+const manifest = JSON.parse(await readFile(join(scratch, 'node_modules/react/package.json'), 'utf8'));
+const server = await preview({ root: scratch, preview: { host: '127.0.0.1', port: 0 } });
+const browser = await chromium.launch({ headless: true });
+const violations = [], observations = {};
+const exact = (actual, expected, label) => { if (actual !== expected) violations.push(`${label}: expected ${expected}, actual ${actual}`); };
+try {
+  const address = server.httpServer.address(); assert.ok(address && typeof address === 'object');
+  const url = `http://127.0.0.1:${address.port}`;
+  const ssrPage = await browser.newPage({ javaScriptEnabled: false });
+  await ssrPage.goto(url); observations.ssr = await ssrPage.getByRole('status').textContent();
+  exact(observations.ssr, 'Count: 7', 'SSR'); await ssrPage.close();
+  const page = await browser.newPage(); const errors = [];
+  page.on('pageerror', error => errors.push(String(error)));
+  page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  await page.goto(url);
+  await page.waitForFunction(initial => document.querySelector('output')?.textContent !== initial, observations.ssr, { timeout: 15000 });
+  observations.display = [await page.getByRole('status').textContent()];
+  exact(observations.display[0], 'Count: 8', 'hydration');
+  for (const [button, expected] of [['Increase', 'Count: 9'], ['Decrease', 'Count: 8']]) {
+    const previous = await page.getByRole('status').textContent();
+    await page.getByRole('button', { name: button, exact: true }).click();
+    await page.waitForFunction(value => document.querySelector('output')?.textContent !== value, previous, { timeout: 15000 });
+    const actual = await page.getByRole('status').textContent(); observations.display.push(actual); exact(actual, expected, button);
+  }
+  observations.hydrationErrors = await page.evaluate(() => window.hydrationErrors);
+  assert.deepEqual(observations.hydrationErrors, []); assert.deepEqual(errors, []);
+  await page.screenshot({ path: `/tmp/innoflow-verification-20261018.vkS7JQI8/exact-${basename(scratch)}.png`, fullPage: true });
+  console.log(JSON.stringify({ node: process.versions.node, browser: browser.version(), react: manifest.version, scratch, observations, violations }));
+  assert.deepEqual(violations, [], 'Exact visible/SSR values are required');
+} finally {
+  await browser.close(); await new Promise(resolve => server.httpServer.close(resolve));
+}

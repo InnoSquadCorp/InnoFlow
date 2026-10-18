@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "scenarios": [
+    { "name": "root and descendant FIFO", "initial": 0, "steps": ["increment", "later", "increment"], "state": 3, "outputs": [], "failures": 0 },
+    { "name": "ephemeral outputs preserve order", "initial": 2, "steps": ["emit", "increment", "emit"], "state": 3, "outputs": [2, 3], "failures": 0 },
+    { "name": "reducer failure and retry", "initial": 0, "steps": ["failReducer", "increment"], "state": 1, "outputs": [], "failures": 1 },
+    { "name": "effect failure and retry", "initial": 0, "steps": ["failEffect", "increment"], "state": 1, "outputs": [], "failures": 1 },
+    { "name": "selective cancellation suppresses a late descendant", "initial": 0, "steps": ["startDelayed", "cancel", "increment", "release"], "state": 1, "outputs": [], "failures": 0 },
+    { "name": "close cancels work and rejects new actions", "initial": 4, "steps": ["startDelayed", "close", "release", "increment"], "state": 4, "outputs": [], "failures": 1 }
+  ]
+}

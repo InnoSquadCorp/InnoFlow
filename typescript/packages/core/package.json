@@ -1,0 +1,31 @@
+{
+  "name": "@innosquad/inno-flow",
+  "version": "1.0.0",
+  "description": "Platform-neutral unidirectional state, effect, and output runtime",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/InnoSquadCorp/InnoFlow.git",
+    "directory": "typescript/packages/core"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist", "src/**/*.ts", "!src/**/*.test.ts", "README.md", "LICENSE"],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "prepack": "tsc -b"
+  },
+  "keywords": ["state-management", "unidirectional-data-flow", "typescript"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

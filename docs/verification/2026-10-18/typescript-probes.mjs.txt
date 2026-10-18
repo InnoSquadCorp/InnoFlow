@@ -1,0 +1,123 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+const root = '/Users/changwooson/Developer/InnoSquad/InnoFlow-worktrees/multiplatform/InnoFlow/typescript';
+const { combineReducers, scopeReducer, Effect, effectId, transition, defineFlow, createStore } =
+  await import(pathToFileURL(`${root}/packages/core/dist/index.js`));
+const { TestStore } = await import(pathToFileURL(`${root}/packages/testing/dist/index.js`));
+const tick = () => new Promise(resolve => setImmediate(resolve));
+let passed = 0;
+async function probe(name, body) { await body(); passed++; console.log(`PASS ${name}`); }
+
+await probe('T03/T10 composition order, action/output lift/filter, empty reducers', async () => {
+  const child = (state, action) => transition(state + (action === 'start' ? 1 : 2), {
+    effects: action === 'start' ? [Effect.send('next')] : [], outputs: [action, 'drop'],
+  });
+  const scoped = scopeReducer({ reducer: child, childState: state => state.child,
+    replaceChildState: (state, child) => ({ ...state, child }),
+    childAction: action => action.startsWith('child:') ? action.slice(6) : undefined,
+    parentAction: action => `child:${action}`,
+    parentOutput: output => output === 'drop' ? undefined : `lift:${output}` });
+  const after = (state, action) => transition({ ...state, trace: [...state.trace, action] }, { outputs: [`after:${action}`] });
+  const store = createStore(defineFlow({ initialState: { child: 0, trace: [] }, reducer: combineReducers(scoped, after) }));
+  try {
+    const outputs = []; store.subscribeOutput(value => outputs.push(value));
+    await store.send('child:start').finished();
+    assert.deepEqual(store.getState(), { child: 3, trace: ['child:start', 'child:next'] });
+    assert.deepEqual(outputs, ['lift:start', 'after:child:start', 'lift:next', 'after:child:next']);
+    await store.send('unmatched').finished(); assert.equal(store.getState().child, 3);
+    const empty = createStore(defineFlow({ initialState: 9, reducer: combineReducers() }));
+    try { await empty.send('any').finished(); assert.equal(empty.getState(), 9); } finally { empty.close(); }
+  } finally { store.close(); }
+});
+
+await probe('T06/T10 Effect.map ID/signal preservation and matching cancellation', async () => {
+  const id = effectId('mapped'); const otherId = effectId('other'); const signals = [];
+  const store = createStore(defineFlow({ initialState: 0, reducer: (state, action) => transition(state, {
+    effects: [action === 'cancel' ? Effect.map(Effect.cancel(id), String) : Effect.map(Effect.run(
+      ({ signal }) => { signals.push(signal); return new Promise(resolve => signal.addEventListener('abort', resolve, { once: true })); },
+      { id: action === 'other' ? otherId : id }), String)],
+  }) }));
+  try {
+    const one = store.send('one'), two = store.send('two'), other = store.send('other');
+    await tick(); assert.equal(signals.length, 3);
+    await store.send('cancel').finished(); await Promise.all([one.finished(), two.finished()]);
+    assert.deepEqual(signals.map(signal => signal.aborted), [true, true, false]);
+    assert.equal(other.isCompleted, false); other.cancel(); await other.finished();
+  } finally { store.close(); }
+});
+
+await probe('T08/T09 live output, undefined, no replay, listener faults, unsubscribe/close', async () => {
+  const errors = [];
+  const store = createStore(defineFlow({ initialState: 0, reducer: state => transition(state + 1, { outputs: [undefined, 'live'] }) }),
+    { instrumentation: { observerFailed: error => { errors.push(error.message); throw new Error('observer also fails'); } } });
+  try {
+    await store.send('prior').finished();
+    const values = []; let states = 0;
+    store.subscribe(() => { throw new Error('state observer'); });
+    const stopState = store.subscribe(() => states++);
+    store.subscribeOutput(() => { throw new Error('output observer'); });
+    const stopOutput = store.subscribeOutput(value => values.push(value));
+    assert.deepEqual(values, []); await store.send('now').finished();
+    assert.deepEqual(values, [undefined, 'live']); assert.equal(states, 1); assert.equal(errors.length, 3);
+    stopState(); stopState(); stopOutput(); stopOutput();
+    await store.send('after unsubscribe').finished();
+    assert.deepEqual(values, [undefined, 'live']); assert.equal(states, 1);
+    store.close(); store.close();
+    assert.throws(() => store.send('closed'), /closed/);
+    assert.throws(() => store.subscribe(() => {}), /closed/);
+    assert.throws(() => store.subscribeOutput(() => {}), /closed/);
+  } finally { store.close(); }
+});
+
+await probe('T05/T11 multiple waiters, idempotent cancellation, logical late-work suppression', async () => {
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  let started = 0, late = 0;
+  const store = createStore(defineFlow({ initialState: 0, reducer: (state, action) => action === 'start'
+    ? transition(state, { effects: [Effect.run(async ({ send }) => { started++; await gate; send('late'); late++; })] })
+    : transition(state + 1) }));
+  try {
+    const task = store.send('start'); const waits = [task.finished(), task.finished()];
+    await tick(); assert.equal(started, 1); assert.equal(task.isCompleted, false);
+    task.cancel(); task.cancel(); await Promise.all(waits); assert.equal(task.isCompleted, true);
+    release(); await tick(); await task.finished(); assert.equal(late, 1); assert.equal(store.getState(), 0);
+    await store.send('independent').finished(); assert.equal(store.getState(), 1);
+  } finally { store.close(); }
+});
+
+await probe('T04 effect failure aborts sibling resources and later independent root succeeds', async () => {
+  let sibling;
+  const store = createStore(defineFlow({ initialState: 0, reducer: (state, action) => action === 'fail'
+    ? transition(state, { effects: [Effect.run(({ signal }) => { sibling = signal; return new Promise(() => {}); }), Effect.run(() => { throw new Error('expected effect failure'); })] })
+    : transition(state + 1) }));
+  try {
+    await assert.rejects(store.send('fail').finished(), /expected effect failure/);
+    assert.equal(sibling.aborted, true); await store.send('retry').finished(); assert.equal(store.getState(), 1);
+  } finally { store.close(); }
+});
+
+await probe('T12 TestStore rejects wrong state/action/output; reset and custom cyclic state', async () => {
+  const test = new TestStore(defineFlow({ initialState: { value: 0 }, reducer: (state, action) => transition({ value: state.value + 1 }, { outputs: [action] }) }));
+  try {
+    await test.send({ type: 'a' }, { value: 1 }); test.assertActions([{ type: 'a' }]); test.assertOutputs([{ type: 'a' }]);
+    await assert.rejects(test.send({ type: 'b' }, { value: 999 }), /State mismatch/);
+    assert.throws(() => test.assertActions([{ type: 'wrong' }]), /Action sequence mismatch/);
+    assert.throws(() => test.assertOutputs([{ type: 'wrong' }]), /Output sequence mismatch/);
+    test.resetTrace(); test.assertActions([]); test.assertOutputs([]); await test.finish();
+  } finally { test.close(); }
+  const cyclic = { id: 1 }; cyclic.self = cyclic;
+  const custom = new TestStore(defineFlow({ initialState: cyclic, reducer: state => transition(state) }), { stateEquals: (a, b) => a.id === b.id });
+  try { await custom.send(undefined, { id: 1 }); } finally { custom.close(); }
+});
+
+await probe('R04 missing provider fails, valid typed provider SSR succeeds', async () => {
+  const require = createRequire(`${root}/package.json`);
+  const { createElement } = require('react'); const { renderToString } = require('react-dom/server');
+  const { createFlowContext } = await import(pathToFileURL(`${root}/packages/react/dist/index.js`));
+  const context = createFlowContext(); const Child = () => createElement('span', null, context.useState());
+  assert.throws(() => renderToString(createElement(Child)), /Provider is missing/);
+  const store = createStore(defineFlow({ initialState: 7, reducer: state => transition(state) }));
+  try { assert.equal(renderToString(createElement(context.Provider, { store }, createElement(Child))), '<span>7</span>'); }
+  finally { store.close(); }
+});
+console.log(`SUMMARY Node ${process.versions.node}: ${passed} independent probe groups passed`);

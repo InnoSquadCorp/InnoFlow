@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.innosquad.innoflow.sample.ReleaseContractsTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-18T06:49:53.784Z" hostname="woody-Mac.local" time="1.106">
+  <properties/>
+  <testcase name="cancellationFromObserverSuppressesOutputAndEffects()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.01"/>
+  <testcase name="cancelledAdmissionDoesNotReduceButIndependentDispatchDoes()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.003"/>
+  <testcase name="cancellationIdCancelsEveryMatchingRun()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.003"/>
+  <testcase name="effectFailureIsObservedAndRetryRemainsUsable()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.177"/>
+  <testcase name="effectProducerSuspendsInsteadOfDroppingActions()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.743"/>
+  <testcase name="concurrentProducersSerializeAgainstLatestState()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.133"/>
+  <testcase name="closeReleasesQueuedDispatches()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.004"/>
+  <testcase name="rejectedConstructionKeepsParentAndSiblingUnchanged()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.011"/>
+  <testcase name="invalidCapacityIsRejected()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.002"/>
+  <testcase name="validConstructionAndCloseReleaseTheOwnedJob()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.005"/>
+  <testcase name="outputCollectorsCompleteWhenStoreCloses()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.004"/>
+  <testcase name="cancelledIdSuppressesUncooperativeLateEmission()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.003"/>
+  <testcase name="boundedRootAdmissionRejectsOnlyOverflowAndRecovers()" classname="com.innosquad.innoflow.sample.ReleaseContractsTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

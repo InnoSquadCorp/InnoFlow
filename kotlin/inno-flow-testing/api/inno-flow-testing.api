@@ -1,0 +1,14 @@
+public final class com/innosquad/innoflow/testing/TestStore : java/lang/AutoCloseable {
+	public fun <init> (Ljava/lang/Object;Lcom/innosquad/innoflow/Reducer;Lkotlinx/coroutines/CoroutineScope;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;)V
+	public synthetic fun <init> (Ljava/lang/Object;Lcom/innosquad/innoflow/Reducer;Lkotlinx/coroutines/CoroutineScope;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun assertActions (Ljava/util/List;)V
+	public final fun assertOutputs (Ljava/util/List;)V
+	public fun close ()V
+	public final fun finish (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getState ()Ljava/lang/Object;
+	public final fun resetTrace ()V
+	public final fun send (Ljava/lang/Object;Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun send (Ljava/lang/Object;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun send$default (Lcom/innosquad/innoflow/testing/TestStore;Ljava/lang/Object;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+

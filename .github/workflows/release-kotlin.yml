@@ -1,0 +1,81 @@
+name: Release Kotlin and Android
+
+on:
+  push:
+    tags:
+      - 'kotlin/v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  packages: write
+
+concurrency:
+  group: release-kotlin-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@f2beeb24e141e01a676f977032f5a29d81c9e27e # v5.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            11
+            17
+          cache: gradle
+
+      - name: Verify release version
+        if: github.ref_type == 'tag'
+        run: |
+          VERSION="${GITHUB_REF_NAME#kotlin/v}"
+          grep -F "version = \"${VERSION}\"" kotlin/build.gradle.kts
+
+      - name: Validate release artifacts and consumers
+        run: |
+          ./kotlin/gradlew -p kotlin \
+            test \
+            :android-sample:assembleDebug \
+            :android-sample:assembleRelease \
+            :inno-flow-android:lintRelease \
+            :inno-flow-compose:lintRelease \
+            :inno-flow-core:checkKotlinAbi \
+            :inno-flow-testing:checkKotlinAbi \
+            :inno-flow-ksp:checkKotlinAbi \
+            :inno-flow-android:checkKotlinAbi \
+            :inno-flow-compose:checkKotlinAbi \
+            publishAllPublicationsToTestRepository
+          ./kotlin/gradlew -p kotlin/consumer-fixture test --refresh-dependencies
+          ./kotlin/gradlew -p kotlin/android-consumer-fixture testDebugUnitTest assembleRelease --refresh-dependencies
+          python3 scripts/check-ksp-fixtures.py
+          python3 scripts/check-android-api-selftest.py
+          python3 scripts/check-android-restoration-selftest.py
+
+      - name: Require exact-SHA main CI including device and browser gates
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: python3 scripts/check-multiplatform-ci.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Publish Maven artifacts to GitHub Packages
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: ./kotlin/gradlew -p kotlin publishAllPublicationsToGitHubPackagesRepository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify installation from GitHub Packages
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: |
+          ./kotlin/gradlew -p kotlin/consumer-fixture test --refresh-dependencies -PinnoFlowRepository=https://maven.pkg.github.com/InnoSquadCorp/InnoFlow
+          ./kotlin/gradlew -p kotlin/android-consumer-fixture testDebugUnitTest assembleRelease --refresh-dependencies -PinnoFlowRepository=https://maven.pkg.github.com/InnoSquadCorp/InnoFlow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
