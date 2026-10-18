@@ -54,7 +54,7 @@ relaunch, preserving screenshot, XML, stopped Activity dump and result JSON.
 Do not run it concurrently with instrumentation on the same device.
 
 The local script and contract CI also run
-`python3 scripts/check-android-restoration-selftest.py` (16 safety controls).
+`python3 scripts/check-android-restoration-selftest.py` (20 safety/UI-capture controls).
 `npm run test:packed:selftest` in `typescript` runs the actual packed gate in
 isolated normal/SSR-wrong/live-browser-wrong consumers. The SSR mutation and
 post-hydration UI mutation must both fail their specific exact-value oracle;

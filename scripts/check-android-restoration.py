@@ -8,6 +8,7 @@ import re
 import subprocess
 import tempfile
 import time
+import uuid
 import xml.etree.ElementTree as XML
 
 PACKAGE = "com.innosquad.innoflow.sample.android"
@@ -40,6 +41,7 @@ class RestorationProbe:
     def __init__(self, adb, evidence):
         self.adb = adb
         self.evidence = evidence
+        self.ui_dump_path = f"/data/local/tmp/innoflow-restoration-ui-{uuid.uuid4().hex}.xml"
 
     def command(self, *arguments):
         return subprocess.check_output(self.adb + list(arguments), timeout=30).decode()
@@ -109,7 +111,23 @@ class RestorationProbe:
 
     def hierarchy(self):
         raw = self.command("exec-out", "uiautomator", "dump", "/dev/tty")
+        (self.evidence / "ui-tty-output.txt").write_text(raw, encoding="utf-8")
         match = re.search(r"(<\?xml.*</hierarchy>)", raw, re.S)
+        if not match:
+            # Older adb/uiautomator combinations may not expose XML via /dev/tty.
+            # A unique owned file, removed before and after every dump, prevents
+            # an unsuccessful command from returning a previous UI snapshot.
+            self.command("shell", "rm", "-f", self.ui_dump_path)
+            try:
+                status = self.command("shell", "uiautomator", "dump", self.ui_dump_path)
+                (self.evidence / "ui-file-status.txt").write_text(status, encoding="utf-8")
+                if "ERROR:" in status or f"dumped to: {self.ui_dump_path}" not in status:
+                    raise RuntimeError(f"UI hierarchy file dump failed: {status}")
+                raw = self.command("exec-out", "cat", self.ui_dump_path)
+                (self.evidence / "ui-file-output.txt").write_text(raw, encoding="utf-8")
+                match = re.search(r"(<\?xml.*</hierarchy>)", raw, re.S)
+            finally:
+                self.command("shell", "rm", "-f", self.ui_dump_path)
         if not match:
             raise RuntimeError("UI hierarchy is unavailable")
         (self.evidence / "latest-ui.xml").write_text(match.group(1), encoding="utf-8")

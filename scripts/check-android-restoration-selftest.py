@@ -189,6 +189,40 @@ class RestorationSafetyTests(unittest.TestCase):
             self.probe.terminate_saved_process("-1")
         self.assertEqual(self.probe.calls, [])
 
+    def test_tty_hierarchy_uses_exact_xml_without_fallback(self):
+        xml = '<?xml version="1.0"?><hierarchy><node text="Count: 2"/></hierarchy>'
+        with patch.object(self.probe, "command", return_value=xml + "UI hierarchy dumped to: /dev/tty") as command:
+            self.assertEqual(self.probe.hierarchy().find("node").get("text"), "Count: 2")
+            command.assert_called_once_with("exec-out", "uiautomator", "dump", "/dev/tty")
+
+    def test_legacy_tty_fallback_reads_only_a_fresh_file_and_cleans_it(self):
+        xml = '<?xml version="1.0"?><hierarchy><node text="Count: 2"/></hierarchy>'
+        path = self.probe.ui_dump_path
+        with patch.object(self.probe, "command", side_effect=["no tty XML", "",
+                f"UI hierchary dumped to: {path}", xml, ""]) as command:
+            self.assertEqual(self.probe.hierarchy().find("node").get("text"), "Count: 2")
+            self.assertEqual([call.args for call in command.call_args_list], [
+                ("exec-out", "uiautomator", "dump", "/dev/tty"),
+                ("shell", "rm", "-f", path), ("shell", "uiautomator", "dump", path),
+                ("exec-out", "cat", path), ("shell", "rm", "-f", path)])
+
+    def test_failed_dump_never_reads_a_stale_hierarchy(self):
+        path = self.probe.ui_dump_path
+        with patch.object(self.probe, "command", side_effect=["", "", "ERROR: could not get idle state.", ""]) as command:
+            with self.assertRaisesRegex(RuntimeError, "UI hierarchy file dump failed"):
+                self.probe.hierarchy()
+            self.assertFalse(any("cat" in call.args for call in command.call_args_list))
+            self.assertEqual(command.call_args.args, ("shell", "rm", "-f", path))
+
+    def test_missing_or_invalid_file_hierarchy_is_not_success(self):
+        path = self.probe.ui_dump_path
+        for result in ("not XML", subprocess.CalledProcessError(1, ["cat", path])):
+            with self.subTest(result=result), patch.object(self.probe, "command", side_effect=["", "",
+                    f"UI hierarchy dumped to: {path}", result, ""]) as command:
+                with self.assertRaises((RuntimeError, subprocess.CalledProcessError)):
+                    self.probe.hierarchy()
+                self.assertEqual(command.call_args.args, ("shell", "rm", "-f", path))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

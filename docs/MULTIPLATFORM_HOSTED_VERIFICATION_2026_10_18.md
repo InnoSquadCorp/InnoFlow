@@ -62,5 +62,33 @@ approved-at: null
 
 ## 실행 원장
 
-아직 완료되지 않았다. candidate SHA, run/attempt/job IDs, 실제 실행 수, 실패 이력,
-artifact identity, push cleanup, 남은 release gate를 실행 결과와 함께 기록한다.
+### 최초 hosted 실행 — 실패 보존
+
+- commit `f4016461031468a7ebc372a47d256aa8e95bb2e0`, push event, 작업 브랜치,
+  [run 39108493753](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/39108493753).
+- 계약, Kotlin/JVM/AAR/KSP, Node20.19.0/22.23.3, API35 job은 success다.
+  API23 job은 failure이며 원래 결과를 재시도 성공으로 덮지 않는다.
+- API23 Compose2 + sample recreation1은 통과했고, 정식 probe가 initial UI XML을
+  가져오지 못해 process kill 이전에 실패했다. 실패 screenshot은 정상 Count0이며
+  해당 실행으로 process restoration을 PASS 판정하지 않는다. raw UI 출력은 최초
+  helper에 보존되지 않았으므로 tty/file/idle의 세부 원인을 아직 단정하지 않는다.
+- API35는 PID `4638 → 4811`, 정확한 Count2를 am-kill 뒤 복원했다.
+- Node20/22 각각 unit28/5files, 네 React18/19 소비자와 두 분리 mutant 거부를
+  artifact log로 확인했다. 다운로드한 ZIP SHA-256이 GitHub digest와 일치했다.
+- 첫 push 뒤 local/tracking/remote SHA 동일, diverged `0 0`, worktree clean,
+  Swift/main diff0을 확인한 뒤 cleanup을 실행했다. 251개 지정 디렉터리에서
+  회수0 KiB, free73 GiB였으며 다른 build/compiler를 중단하지 않았다.
+
+### UI 수집 portability 보완 — 다음 후보에서 재검증
+
+- tty raw 출력을 저장하고 XML이 없으면 별도 고유 temp XML 파일을 사용한다.
+  매번 dump 전/후 자신의 temp 파일만 지워 stale XML을 수락하지 않는다.
+  dump의 error/성공 출력, 실제 파일 XML을 보존하고 실패는 그대로 실패한다.
+- exact Count/STOPPED/saved state/UID/PID/새 PID assertion은 약화하지 않았다.
+  정상 tty, legacy-file 성공, dump 실패/stale 거부, missing/invalid XML을 추가해
+  20개 안전/UI-capture selftests가 통과했다. 실제 API23 성공은 아직 별도 증거가 필요하다.
+- 파일 기반 dump 계약과 idle/null-root 실패 경로는
+  [AOSP DumpCommand](https://android.googlesource.com/platform/frameworks/uiautomator/+/17fac436d78f6ac642386a245fb4fdb7243a91a4/cmds/uiautomator/src/com/android/commands/uiautomator/DumpCommand.java)를 대조했다.
+  이 소스 대조가 현재 API23 실패의 세부 원인을 확정하거나 실제 device 결과를 대신하지 않는다.
+
+다음 candidate SHA와 exact-SHA run, artifact/새 PID 결과는 실행 후 추가한다.
