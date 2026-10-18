@@ -41,12 +41,19 @@ class RestorationProbe:
     def __init__(self, adb, evidence):
         self.adb = adb
         self.evidence = evidence
+        self.sdk = None
         self.ui_dump_path = f"/data/local/tmp/innoflow-restoration-ui-{uuid.uuid4().hex}.xml"
 
     def command(self, *arguments):
         return subprocess.check_output(self.adb + list(arguments), timeout=30).decode()
 
     def read_pid(self):
+        if self.sdk is None:
+            self.sdk = self.command("shell", "getprop", "ro.build.version.sdk").strip()
+            if not re.fullmatch(r"[1-9][0-9]*", self.sdk):
+                raise RuntimeError(f"Invalid device SDK: {self.sdk!r}")
+        if self.sdk == "23":
+            return self.read_legacy_pid()
         result = subprocess.run(self.adb + ["shell", "pidof", PACKAGE],
                                 capture_output=True, timeout=10, check=False)
         value = result.stdout.decode().strip()
@@ -55,6 +62,37 @@ class RestorationProbe:
         if result.returncode != 0:
             raise RuntimeError(f"pidof failed: {result.stderr.decode()}")
         return checked_pid(value)
+
+    def read_legacy_pid(self):
+        # The API23 image's pidof returns all PIDs instead of filtering by name.
+        # Its toolbox ps exposes the full app NAME. Match that field exactly,
+        # then independently verify /proc under the debug sample's own UID.
+        raw = self.command("shell", "ps")
+        (self.evidence / "legacy-ps.txt").write_text(raw, encoding="utf-8")
+        lines = raw.splitlines()
+        header = lines[0].split() if lines else []
+        if "PID" not in header or not header or header[-1] != "NAME":
+            raise RuntimeError("Unrecognized legacy ps format; refusing PID lookup")
+        pids = []
+        for line in lines[1:]:
+            fields = line.split()
+            if fields and fields[-1] == PACKAGE:
+                # Android 6 toolbox prints an unlabelled state before NAME.
+                extra_state = len(fields) == len(header) + 1 and re.fullmatch(r"[RSDZTtXxKWPI]", fields[-2])
+                if len(fields) != len(header) and not extra_state:
+                    raise RuntimeError("Unrecognized legacy ps sample row")
+                pids.append(checked_pid(fields[header.index("PID")]))
+        if len(pids) > 1:
+            raise RuntimeError("Refusing multiple exact sample processes")
+        if not pids:
+            return None
+        pid = pids[0]
+        cmdline = self.command("shell", "run-as", PACKAGE, "cat", f"/proc/{pid}/cmdline")
+        if cmdline.rstrip("\0") != PACKAGE:
+            raise RuntimeError(f"Refusing unexpected cmdline: {cmdline!r}")
+        with (self.evidence / "legacy-pids.jsonl").open("a", encoding="utf-8") as output:
+            output.write(json.dumps(dict(pid=pid, cmdline=cmdline)) + "\n")
+        return pid
 
     def require_same_pid(self, expected):
         if self.read_pid() != expected:

@@ -174,10 +174,12 @@ class RestorationSafetyTests(unittest.TestCase):
         self.assert_no_pid_kill()
 
     def test_pidof_error_is_not_treated_as_a_dead_process(self):
+        probe = restoration.RestorationProbe(["fake-adb"], Path(self.temp.name))
+        probe.sdk = "35"
         with patch.object(restoration.subprocess, "run", return_value=subprocess.CompletedProcess(
                 [], 127, stdout=b"", stderr=b"pidof: inaccessible")):
             with self.assertRaisesRegex(RuntimeError, "pidof failed"):
-                restoration.RestorationProbe(["fake-adb"], Path(self.temp.name)).read_pid()
+                probe.read_pid()
 
     def test_zero_exit_status_is_not_process_death(self):
         self.probe.survives = True
@@ -222,6 +224,98 @@ class RestorationSafetyTests(unittest.TestCase):
                 with self.assertRaises((RuntimeError, subprocess.CalledProcessError)):
                     self.probe.hierarchy()
                 self.assertEqual(command.call_args.args, ("shell", "rm", "-f", path))
+
+
+class LegacyPidTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="innoflow-legacy-pid-selftest-")
+        self.addCleanup(self.temp.cleanup)
+        self.probe = restoration.RestorationProbe(["fake-adb"], Path(self.temp.name))
+        self.probe.sdk = "23"
+        self.header = "USER PID PPID VSIZE RSS WCHAN PC NAME\n"
+
+    def ps(self, name=PACKAGE, pid="1234"):
+        return f"u0_a64 {pid} 317 123456 1234 ffffffff 00000000 S {name}\n"
+
+    def test_sdk_lookup_is_cached_and_selects_the_legacy_path(self):
+        self.probe.sdk = None
+        with patch.object(self.probe, "command", side_effect=[
+                "23\r\n", self.header + self.ps(), PACKAGE + "\0", self.header + self.ps(), PACKAGE + "\0"]) as command:
+            self.assertEqual(self.probe.read_pid(), "1234")
+            self.assertEqual(self.probe.read_pid(), "1234")
+            self.assertEqual(sum(call.args == ("shell", "getprop", "ro.build.version.sdk")
+                                 for call in command.call_args_list), 1)
+
+    def test_invalid_sdk_is_not_process_death(self):
+        for sdk in ("", "23 35", "denied"):
+            self.probe.sdk = None
+            with self.subTest(sdk=sdk), patch.object(self.probe, "command", return_value=sdk):
+                with self.assertRaisesRegex(RuntimeError, "Invalid device SDK"):
+                    self.probe.read_pid()
+
+    def test_api23_all_pidof_output_is_not_used_as_a_pid(self):
+        # The hosted API23 pidof returned every process, including PID 1.
+        all_pids = subprocess.CompletedProcess([], 0, stdout=b"1 2 317 1234\n", stderr=b"")
+        with patch.object(restoration.subprocess, "run", return_value=all_pids) as pidof:
+            with patch.object(self.probe, "command", side_effect=[
+                    self.header + self.ps("other.app", "2") + self.ps(), PACKAGE + "\0"]) as command:
+                self.assertEqual(self.probe.read_pid(), "1234")
+                self.assertEqual(command.call_args.args,
+                                 ("shell", "run-as", PACKAGE, "cat", "/proc/1234/cmdline"))
+            pidof.assert_not_called()
+
+    def test_absent_exact_sample_is_process_death(self):
+        with patch.object(self.probe, "command", return_value=self.header + self.ps("other.app")) as command:
+            self.assertIsNone(self.probe.read_pid())
+            command.assert_called_once_with("shell", "ps")
+
+    def test_prefix_and_worker_names_are_not_the_sample(self):
+        for name in (PACKAGE + ".other", PACKAGE + ":worker", PACKAGE[:15]):
+            with self.subTest(name=name), patch.object(self.probe, "command", return_value=self.header + self.ps(name)):
+                self.assertIsNone(self.probe.read_pid())
+
+    def test_multiple_exact_processes_are_rejected(self):
+        with patch.object(self.probe, "command", return_value=self.header + self.ps() + self.ps(pid="5678")):
+            with self.assertRaisesRegex(RuntimeError, "multiple exact sample"):
+                self.probe.read_pid()
+
+    def test_invalid_pid_is_rejected_before_proc_read(self):
+        for pid in ("0", "-1", "123;kill"):
+            with self.subTest(pid=pid), patch.object(self.probe, "command", return_value=self.header + self.ps(pid=pid)) as command:
+                with self.assertRaisesRegex(RuntimeError, "invalid sample PID"):
+                    self.probe.read_pid()
+                command.assert_called_once_with("shell", "ps")
+
+    def test_exact_ps_name_still_requires_exact_cmdline(self):
+        for cmdline in ("other.app\0", PACKAGE + ":worker\0", PACKAGE + "\0extra\0"):
+            with self.subTest(cmdline=cmdline), patch.object(self.probe, "command", side_effect=[self.header + self.ps(), cmdline]):
+                with self.assertRaisesRegex(RuntimeError, "unexpected cmdline"):
+                    self.probe.read_pid()
+
+    def test_unrecognized_ps_format_is_not_process_death(self):
+        for text in ("", "ps: permission denied", "USER PID NAME EXTRA\n", "USER NAME\n"):
+            with self.subTest(text=text), patch.object(self.probe, "command", return_value=text):
+                with self.assertRaisesRegex(RuntimeError, "Unrecognized legacy ps"):
+                    self.probe.read_pid()
+
+    def test_malformed_exact_sample_row_is_not_accepted(self):
+        for row in ("u0_a64 1234 " + PACKAGE, self.ps().replace(" S ", " unexpected-state ")):
+            with self.subTest(row=row), patch.object(self.probe, "command", return_value=self.header + row):
+                with self.assertRaisesRegex(RuntimeError, "Unrecognized legacy ps sample row"):
+                    self.probe.read_pid()
+
+    def test_proc_read_failure_is_not_process_death(self):
+        with patch.object(self.probe, "command", side_effect=[self.header + self.ps(),
+                subprocess.CalledProcessError(1, ["cat"], output=b"permission denied")]):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.probe.read_pid()
+
+    def test_modern_multiple_pidof_output_remains_rejected(self):
+        self.probe.sdk = "35"
+        with patch.object(restoration.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=b"1234 5678\n", stderr=b"")):
+            with self.assertRaisesRegex(RuntimeError, "invalid sample PID"):
+                self.probe.read_pid()
 
 
 if __name__ == "__main__":

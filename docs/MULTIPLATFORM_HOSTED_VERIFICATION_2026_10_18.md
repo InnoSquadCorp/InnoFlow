@@ -79,16 +79,38 @@ approved-at: null
   Swift/main diff0을 확인한 뒤 cleanup을 실행했다. 251개 지정 디렉터리에서
   회수0 KiB, free73 GiB였으며 다른 build/compiler를 중단하지 않았다.
 
-### UI 수집 portability 보완 — 다음 후보에서 재검증
+### UI 수집 portability 보완 — PID 조회 단계까지 진행
 
 - tty raw 출력을 저장하고 XML이 없으면 별도 고유 temp XML 파일을 사용한다.
   매번 dump 전/후 자신의 temp 파일만 지워 stale XML을 수락하지 않는다.
   dump의 error/성공 출력, 실제 파일 XML을 보존하고 실패는 그대로 실패한다.
 - exact Count/STOPPED/saved state/UID/PID/새 PID assertion은 약화하지 않았다.
   정상 tty, legacy-file 성공, dump 실패/stale 거부, missing/invalid XML을 추가해
-  20개 안전/UI-capture selftests가 통과했다. 실제 API23 성공은 아직 별도 증거가 필요하다.
+  당시 20개 안전/UI-capture selftests가 통과했다.
 - 파일 기반 dump 계약과 idle/null-root 실패 경로는
   [AOSP DumpCommand](https://android.googlesource.com/platform/frameworks/uiautomator/+/17fac436d78f6ac642386a245fb4fdb7243a91a4/cmds/uiautomator/src/com/android/commands/uiautomator/DumpCommand.java)를 대조했다.
   이 소스 대조가 현재 API23 실패의 세부 원인을 확정하거나 실제 device 결과를 대신하지 않는다.
+
+### 두 번째 hosted 실행 — 별도 PID 조회 실패 보존
+
+- commit `d405d71f73c55e8b82690cc10800161275a354f1`,
+  [run 39109230600](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/39109230600).
+  API23 이외 5개 job은 success이며 API23 job은 failure다.
+- API23 tty raw에는 XML 없이 `UI hierchary dumped to: /dev/tty`만 있었다.
+  새 고유 파일 dump는 성공해 initial Count0, Increase 두 번 뒤 정확한 Count2까지
+  확인했다. 따라서 첫 실행의 수집 경계는 해소됐지만 이 결과를 복원 PASS로 세지 않는다.
+- 다음 PID 조회에서 API23 이미지의 `pidof <package>`가 PID1을 포함한 다수 PID를
+  반환했다. 기존 단일 양수 PID guard가 kill 전에 거부했다. 다른 앱/시스템 프로세스는
+  종료하지 않았다. instrumentation 3건은 이 실행에서도 통과했다.
+- API23만 toolbox `ps`의 마지막 NAME을 package와 완전 일치시켜 후보를 식별하고,
+  단일 양수 PID 및 sample own-UID `/proc/<pid>/cmdline`을 다시 대조하도록 보완했다.
+  process 부재와 도구/format/권한 실패를 구분하며, SDK24+ pidof 경로와 기존 kill guard는 유지한다.
+- Android6 toolbox의 헤더에 없는 state 열은
+  [AOSP ps.c](https://android.googlesource.com/platform/system/core/+/android-6.0.0_r1/toolbox/ps.c)의
+  실제 출력 코드를 대조했다. `pidof`가 반환한 다수 PID의 상세 구현 원인은 단정하지 않는다.
+- 해당 all-PID 응답의 focused red 재현을 먼저 확인했고 수정 후 32 safety/UI/PID controls가
+  통과했다. prefix/worker/중복/잘못된 PID·cmdline/권한·format 실패를 PASS로 수용하지 않는다.
+- 두 번째 push도 local/tracking/remote SHA 동일, diverged0/0, clean, Swift/main diff0 확인
+  후 cleanup했다. 회수0 KiB, free77 GiB이며 다른 build/compiler를 중단하지 않았다.
 
 다음 candidate SHA와 exact-SHA run, artifact/새 PID 결과는 실행 후 추가한다.
