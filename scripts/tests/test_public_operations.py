@@ -47,6 +47,20 @@ class PublicOperationsTests(unittest.TestCase):
                 with self.subTest(job=job, replacement=replacement):
                     self.reject(path, mutate)
 
+    def test_refresh_budgets_and_plan_isolation_cannot_regress(self):
+        coordinator = '.github/workflows/dependabot-auto-merge.yml'
+        for before, after in [('        timeout-minutes: 6\n', ''), ('        timeout-minutes: 3\n', ''),
+                              ('        timeout-minutes: 6\n', '        timeout-minutes: 9\n'),
+                              ('    timeout-minutes: 10\n', '    timeout-minutes: 5\n'),
+                              ("      - name: Report PR-isolated Ready plan rejections\n        if: steps.plan.outputs.rejected != '[]'\n",
+                               "      - name: Report PR-isolated Ready plan rejections\n        if: false\n"),
+                              ("(needs.ready-plan.result == 'success' || (needs.ready-plan.result == 'failure' && needs.ready-plan.outputs.rejected != '' && needs.ready-plan.outputs.rejected != '[]'))",
+                               "(needs.ready-plan.result == 'success' || needs.ready-plan.result == 'failure')")]:
+            with self.subTest(before=before, after=after):
+                self.assertEqual((self.root / coordinator).read_text().count(before), 1)
+                self.reject(coordinator, lambda text, a=before, b=after: text.replace(a, b))
+        p.validate(self.root)
+
     def test_native_reporter_and_serialized_writers_cannot_expand_or_bypass(self):
         reporter = '.github/workflows/dependabot-ready.yml'
         for before, after in [('actions: read', 'actions: write'),

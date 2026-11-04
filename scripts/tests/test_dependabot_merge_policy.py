@@ -71,6 +71,7 @@ class Transcript:
         self.native_run = dict(self.ready_run, id=NATIVE_RUN, workflow_id=12, path=self.native_workflow['path'],
                                check_suite_id=900, status='completed', conclusion='success',
                                created_at=datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'))
+        self.native_run['run_started_at'] = self.native_run['created_at']
         self.native_runs = [self.native_run]
         self.native_job = dict(id=9001, name=p.READY, status='completed', conclusion='success',
             check_run_url=f'https://api.github.com/repos/{p.REPOSITORY}/check-runs/9000',

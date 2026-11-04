@@ -1,14 +1,18 @@
 """Adversarial native Ready attribution, verdict and bounded-rerun contracts."""
+import contextlib
 import copy
 from datetime import datetime, timezone, timedelta
 import importlib.util
 import json
+import io
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
 from unittest import mock
+import urllib.parse
 
 from test_dependabot_merge_policy import Transcript, p, HEAD, BASE, NUMBER, RUN, READY_RUN, NATIVE_RUN, TRUSTED
 
@@ -64,6 +68,12 @@ class NativeReadyTests(unittest.TestCase):
         os.environ.update(GITHUB_JOB='ready-refresh', GITHUB_EVENT_NAME='workflow_run', GITHUB_WORKFLOW_SHA=BASE)
         return target
 
+    def write(self, target, enabled=False):
+        # The workflow: a verifying preflight step, then a POST-only request step.
+        request, reason = n.preflight(self.api, p, target, enabled)
+        self.assertTrue(request, reason)
+        return n.refresh(self.api, p, target)
+
     def fork(self):
         self.api.pr['user'] = dict(login='human', id=1, type='User')
         self.api.pr['head']['repo'] = dict(id=101, full_name='contributor/InnoFlow', fork=True)
@@ -90,7 +100,7 @@ class NativeReadyTests(unittest.TestCase):
             self.api.mutations.append((method, path, payload))
             self.api.native_run.update(run_attempt=2, status='queued', conclusion=None)
         with mock.patch.object(self.api, 'mutate', side_effect=advance):
-            self.assertIn('Verified native reporter rerun requested', n.refresh(self.api, p, target, False))
+            self.assertIn('Verified native reporter rerun requested', self.write(target))
         self.assertEqual(len(self.api.mutations), 1)
 
     def test_snapshot_rejects_stale_or_foreign_event_payload(self):
@@ -323,23 +333,33 @@ class NativeReadyTests(unittest.TestCase):
             self.api.mutations.append((method, path, payload))
             self.api.native_run.update(run_attempt=2, status='queued', conclusion=None)
         with mock.patch.object(self.api, 'mutate', side_effect=advance), mock.patch.object(n.time, 'sleep'):
-            self.assertIn('Verified', n.refresh(self.api, p, target, False))
+            self.assertIn('Verified', self.write(target))
         self.assertEqual(self.api.mutations, [('POST', p.route('actions/jobs/9001/rerun'), {})])
         self.assertNotIn('macro-tests', self.api.mutations[0][1])
 
     def test_wrong_job_head_attempt_workflow_and_writer_context_never_post(self):
+        # The workflow feeds both steps the same matrix target; preflight owns
+        # every tuple check, so a mismatch never reaches the request step.
         for mutate in [lambda t: t.update(job=2000), lambda t: t.update(run=RUN), lambda t: t.update(head=BASE),
                        lambda t: t.update(attempt=2), lambda t: t.update(pr=True), lambda t: t.update(extra=1)]:
             self.api = Transcript()
             target = self.writer()
             mutate(target)
-            with self.assertRaises(p.Rejected): n.refresh(self.api, p, target, False)
+            with self.assertRaises(p.Rejected): n.preflight(self.api, p, target, False)
             self.assertFalse(self.api.mutations)
-        for key, value in [('GITHUB_REF', 'refs/heads/unsafe'), ('GITHUB_WORKFLOW_REF', 'foreign'), ('GITHUB_JOB', 'bot-ready')]:
+        for mutate in [lambda t: t.update(pr=True), lambda t: t.update(extra=1), lambda t: t.update(head='x')]:
+            self.api = Transcript()
+            target = self.writer()
+            mutate(target)
+            with self.assertRaisesRegex(p.Rejected, 'invalid refresh target'): n.refresh(self.api, p, target)
+            self.assertFalse(self.api.mutations)
+        for key, value in [('GITHUB_REF', 'refs/heads/unsafe'), ('GITHUB_WORKFLOW_REF', 'foreign'), ('GITHUB_JOB', 'bot-ready'),
+                           ('GITHUB_EVENT_NAME', 'pull_request_target')]:
             self.api = Transcript()
             target = self.writer()
             with mock.patch.dict(os.environ, **{key:value}):
-                with self.assertRaises(p.Rejected): n.refresh(self.api, p, target, False)
+                with self.assertRaises(p.Rejected): n.preflight(self.api, p, target, False)
+                with self.assertRaises(p.Rejected): n.refresh(self.api, p, target)
             self.assertFalse(self.api.mutations)
 
     def test_refresh_limits_and_unknown_sources_block_without_retry(self):
@@ -350,13 +370,79 @@ class NativeReadyTests(unittest.TestCase):
             if field == 'run_attempt':
                 self.api.native_jobs[(NATIVE_RUN, 50)] = [self.api.native_job]
                 target['attempt'] = 50
-            with self.assertRaises(p.Rejected): n.refresh(self.api, p, target, False)
+            with self.assertRaises(p.Rejected): n.preflight(self.api, p, target, False)
             self.assertFalse(self.api.mutations)
+
+    def test_request_step_posts_before_any_read_so_execution_means_attempt(self):
+        # 2026-11-04: the request step re-ran the whole preflight (proof pairs,
+        # receipts, claim history) and the job timeout cut it before any POST.
+        # Its executed step then blocked the tuple until a manual reporter rerun.
+        target = self.writer()
+        self.assertTrue(n.preflight(self.api, p, target, False)[0])
+        calls = []
+        original_get = self.api.get
+        def get(route):
+            calls.append(('GET', route))
+            return original_get(route)
+        def pages(route, key=None):
+            calls.append(('PAGES', route))
+            raise AssertionError('request step must not page history or proofs')
+        def advance(method, path, payload):
+            calls.append((method, path))
+            self.api.native_run.update(run_attempt=2, status='queued', conclusion=None)
+        with mock.patch.object(self.api, 'get', side_effect=get), mock.patch.object(self.api, 'pages', side_effect=pages), \
+                mock.patch.object(self.api, 'mutate', side_effect=advance), \
+                mock.patch.object(p, 'proof', side_effect=AssertionError('request step must not prove')):
+            self.assertIn('Verified', n.refresh(self.api, p, target))
+        self.assertEqual(calls[0], ('POST', p.route('actions/jobs/9001/rerun')))
+        self.assertEqual([call for call in calls if call[0] == 'POST'], [calls[0]])
+
+    def test_preflight_cut_by_its_step_timeout_leaves_tuple_unpoisoned(self):
+        target = self.writer()
+        prior = self.api.ready_jobs[(READY_RUN, 1)][0]
+        # A step timeout fails preflight; the runner then skips the request step.
+        prior.update(status='completed', conclusion='failure',
+                     steps=[dict(name=n.PREFLIGHT_STEP, status='completed', conclusion='failure'),
+                            dict(name=n.REQUEST_STEP, status='completed', conclusion='skipped')])
+        current = dict(self.api.ready_run, id=READY_RUN + 1)
+        self.api.ready_runs.append(current)
+        self.api.refresh_writers.append(current)
+        self.api.ready_jobs[(READY_RUN + 1, 1)] = [dict(prior, id=7778, status='in_progress', conclusion=None,
+            steps=[dict(name=n.PREFLIGHT_STEP, status='in_progress', conclusion=None)])]
+        def advance(method, path, payload):
+            self.api.mutations.append((method, path, payload))
+            self.api.native_run.update(run_attempt=2, status='queued', conclusion=None)
+        with mock.patch.dict(os.environ, GITHUB_RUN_ID=str(READY_RUN + 1)), \
+                mock.patch.object(self.api, 'mutate', side_effect=advance), mock.patch.object(n.time, 'sleep'):
+            self.assertIn('Verified', self.write(target))
+        self.assertEqual(self.api.mutations, [('POST', p.route('actions/jobs/9001/rerun'), {})])
+
+    def test_claim_history_is_attempt_scoped_and_skips_runs_that_cannot_claim(self):
+        target = self.writer()
+        started = datetime.fromisoformat(self.api.native_run['created_at'].replace('Z', '+00:00'))
+        self.api.native_run['run_started_at'] = self.api.native_run['created_at']
+        pr_target = dict(self.api.ready_run, id=READY_RUN + 5, event='pull_request_target')
+        self.api.refresh_writers.append(pr_target)
+        self.api.ready_jobs[(READY_RUN + 5, 1)] = [dict(id=7790, name=n.claim_name(target), status='completed',
+            conclusion='failure', steps=[dict(name=n.REQUEST_STEP, status='completed', conclusion='failure')])]
+        self.assertTrue(n.preflight(self.api, p, target, False)[0])
+        history = [route for route in self.api.reads if 'dependabot-auto-merge.yml/runs?created=' in route]
+        bound = urllib.parse.urlencode({'created': '>=' + self.api.native_run['run_started_at']})
+        self.assertTrue(history and all(route.endswith('runs?' + bound) for route in history), history)
+        self.assertFalse(any(f'actions/runs/{READY_RUN + 5}/' in route for route in self.api.reads))
+        # A rerun attempt starts later than its run: an older writer cannot claim it.
+        self.api.native_run['run_started_at'] = (started + timedelta(seconds=5)).isoformat().replace('+00:00', 'Z')
+        with self.assertRaisesRegex(p.Rejected, 'writer predates reporter attempt'):
+            n.preflight(self.api, p, target, False)
+        del self.api.native_run['run_started_at']
+        with self.assertRaisesRegex(p.Rejected, 'authoritative start time'):
+            n.preflight(self.api, p, target, False)
+        self.assertFalse(self.api.mutations)
 
     def test_unknown_post_reads_once_sequence_and_durable_claim_blocks_next_writer(self):
         target = self.writer()
         with mock.patch.object(self.api, 'mutate', side_effect=TimeoutError('lost reply')) as mutation, mock.patch.object(n.time, 'sleep'):
-            with self.assertRaisesRegex(p.Rejected, 'unconfirmed'): n.refresh(self.api, p, target, False)
+            with self.assertRaisesRegex(p.Rejected, 'unconfirmed'): self.write(target)
             self.assertEqual(mutation.call_count, 1)
         prior = self.api.ready_jobs[(READY_RUN, 1)][0]
         prior.update(status='completed', conclusion='failure')
@@ -366,7 +452,7 @@ class NativeReadyTests(unittest.TestCase):
         self.api.refresh_writers.append(current)
         self.api.ready_jobs[(READY_RUN + 1, 1)] = [dict(prior, id=7778, status='in_progress')]
         with mock.patch.dict(os.environ, GITHUB_RUN_ID=str(READY_RUN + 1)), mock.patch.object(self.api, 'mutate') as mutation:
-            with self.assertRaisesRegex(p.Rejected, 'prior refresh'): n.refresh(self.api, p, target, False)
+            with self.assertRaisesRegex(p.Rejected, 'prior refresh'): n.preflight(self.api, p, target, False)
             mutation.assert_not_called()
 
     def test_unstarted_earlier_claims_defer_preflight_but_contradictions_block(self):
@@ -383,14 +469,10 @@ class NativeReadyTests(unittest.TestCase):
             other['created_at'] = (current_started - timedelta(seconds=1)).isoformat()
             with self.subTest(status=status), self.assertRaises(n.Deferred):
                 n.reject_prior_claim(self.api, p, target, self.api.native_run)
-            # The request step holds the per-PR queue: an unstarted claim can
-            # only run afterwards and observe this executed request step.
-            n.reject_prior_claim(self.api, p, target, self.api.native_run, defer_unstarted=False)
         other['created_at'] = (current_started + timedelta(seconds=1)).isoformat()
         other.update(status='completed', conclusion='failure')
-        for defer in (True, False):
-            with self.assertRaisesRegex(p.Rejected, 'ambiguous'):
-                n.reject_prior_claim(self.api, p, target, self.api.native_run, defer_unstarted=defer)
+        with self.assertRaisesRegex(p.Rejected, 'ambiguous'):
+            n.reject_prior_claim(self.api, p, target, self.api.native_run)
         self.assertFalse(self.api.mutations)
 
     def burst(self, target):
@@ -429,7 +511,7 @@ class NativeReadyTests(unittest.TestCase):
             later['steps'][0].update(status='completed', conclusion='success')
             later['steps'][1].update(status='in_progress')
             with mock.patch.object(self.api, 'mutate', side_effect=advance), mock.patch.object(n.time, 'sleep'):
-                self.assertIn('Verified', n.refresh(self.api, p, target, False))
+                self.assertIn('Verified', n.refresh(self.api, p, target))
         self.assertEqual(self.api.mutations, [('POST', p.route('actions/jobs/9001/rerun'), {})])
 
     def test_executed_request_step_still_requires_operator_recovery(self):
@@ -439,15 +521,16 @@ class NativeReadyTests(unittest.TestCase):
         # no later wake can erase that conservative interlock.
         first.update(status='completed', conclusion='failure')
         first['steps'][0].update(status='completed', conclusion='success')
-        first['steps'][1].update(status='completed', conclusion='failure')
         contender['status'] = 'in_progress'
         later.update(status='in_progress', started_at=(started + timedelta(seconds=4)).isoformat(),
                      steps=[dict(name=n.PREFLIGHT_STEP, status='in_progress', conclusion=None)])
-        with mock.patch.dict(os.environ, GITHUB_RUN_ID=str(READY_RUN + 1)):
-            with self.assertRaisesRegex(p.Rejected, 'prior refresh'):
-                n.preflight(self.api, p, target, False)
-            with self.assertRaisesRegex(p.Rejected, 'prior refresh'):
-                n.refresh(self.api, p, target, False)
+        # Failed after a lost reply, or cut by its timeout mid-POST: either way
+        # the request step executed and its outcome is not proof of no POST.
+        for conclusion in ('failure', 'cancelled'):
+            first['steps'][1].update(status='completed', conclusion=conclusion)
+            with self.subTest(conclusion=conclusion), mock.patch.dict(os.environ, GITHUB_RUN_ID=str(READY_RUN + 1)):
+                with self.assertRaisesRegex(p.Rejected, 'prior refresh'):
+                    n.preflight(self.api, p, target, False)
         self.assertFalse(self.api.mutations)
 
     def test_preflight_cli_publishes_request_decision_and_rejection_requests_nothing(self):
@@ -476,20 +559,32 @@ class NativeReadyTests(unittest.TestCase):
             self.api.native_run.update(run_attempt=2, status='queued', conclusion=None)
             raise TimeoutError('reply lost after acceptance')
         with mock.patch.object(self.api, 'mutate', side_effect=lost) as mutation:
-            self.assertIn('Verified', n.refresh(self.api, p, target, False))
+            self.assertIn('Verified', self.write(target))
             self.assertEqual(mutation.call_count, 1)
 
     def test_plan_and_writer_recheck_races_and_armed_bot(self):
-        target = self.writer()
-        with mock.patch.object(n, 'refresh_plan', side_effect=[target, None]):
-            with self.assertRaisesRegex(p.Rejected, 'changed before'): n.refresh(self.api, p, target, False)
-        self.assertFalse(self.api.mutations)
+        # The reporter or auto-merge request moving while the claim history is
+        # read invalidates the plan without a second full proof.
+        races = [lambda api: api.native_run.update(run_attempt=2, status='queued', conclusion=None),
+                 lambda api: api.native_run.update(conclusion='success'),
+                 lambda api: api.pr.update(auto_merge=dict(enabled_by=dict(p.BOT)))]
+        for race in races:
+            self.api = Transcript()
+            target = self.writer()
+            original = n.reject_prior_claim
+            def racing(api, policy, claimed, reporter, race=race):
+                original(api, policy, claimed, reporter)
+                race(self.api)
+            with self.subTest(race=race), mock.patch.object(n, 'reject_prior_claim', side_effect=racing):
+                with self.assertRaisesRegex(p.Rejected, 'changed before'): n.preflight(self.api, p, target, False)
+            self.assertFalse(self.api.mutations)
         self.api = Transcript()
         target = self.writer()
         self.api.pr['user'] = dict(p.BOT)
         self.api.pr['auto_merge'] = dict(enabled_by=dict(p.BOT))
+        self.verdict(True)
         with mock.patch.object(n, 'refresh_plan', return_value=target):
-            with self.assertRaises(p.Rejected): n.refresh(self.api, p, target, True)
+            with self.assertRaisesRegex(p.Rejected, 'armed refresh only activates'): n.preflight(self.api, p, target, True)
         self.assertFalse(self.api.mutations)
 
     def test_snapshot_ref_workflow_event_job_source_and_run_guards(self):
@@ -536,6 +631,30 @@ class NativeReadyTests(unittest.TestCase):
                 self.assertEqual(n.main(), 1)
                 api.assert_not_called()
             self.assertFalse(self.api.mutations)
+
+    def test_plan_isolates_one_prs_policy_rejection_from_the_others(self):
+        # 2026-11-04 06:33: PR #71's obsolete reporter rejected the whole plan
+        # job, so PR #73 was never planned. Only that PR is now withheld.
+        self.verdict(False)
+        self.api.base = 'e' * 40
+        self.api.source_blobs[f'contents/{n.REPORTER_PATH}?ref={BASE}'] = 'f' * 40
+        other = dict(pr=NUMBER + 1, head=HEAD, run=NATIVE_RUN + 7, attempt=1, job=9701)
+        real = n.refresh_plan
+        def plan(api, policy, number, enabled):
+            return real(api, policy, number, enabled) if number == NUMBER else other
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'output'
+            stderr = io.StringIO()
+            with mock.patch.object(n, 'policy_module', return_value=p), mock.patch.object(p, 'GitHub', return_value=self.api), \
+                    mock.patch.object(n.sys, 'argv', ['ready-policy', 'plan']), \
+                    mock.patch.dict(os.environ, PR_NUMBERS=json.dumps([NUMBER, NUMBER + 1]), GITHUB_OUTPUT=str(output)), \
+                    mock.patch.object(n, 'refresh_plan', side_effect=plan), contextlib.redirect_stderr(stderr):
+                self.assertEqual(n.main(), 0)
+            self.assertEqual(output.read_text(), 'targets=' + json.dumps([other], separators=(',', ':')) +
+                             f'\nrejected=[{NUMBER}]\n')
+        self.assertIn(f'PR #{NUMBER}: obsolete reporter definition/policy', stderr.getvalue())
+        self.assertEqual(n.plan_targets(self.api, p, [NUMBER], True), ([], [NUMBER]))
+        self.assertFalse(self.api.mutations)
 
     def test_coordinator_refuses_unreceipted_success_or_changed_failure_and_cancels(self):
         self.api.pr['auto_merge'] = dict(enabled_by=dict(p.BOT))
@@ -587,6 +706,23 @@ class NativeReadyTests(unittest.TestCase):
         self.assertIn('dependabot-ready-policy.py preflight', writer[preflight:request])
         self.assertIn("if: steps.preflight.outputs.request == 'true'", writer[request:])
         self.assertIn('dependabot-ready-policy.py refresh', writer[request:])
+        # Each step owns a budget inside the job timeout: slow verification is
+        # cut in preflight (request skipped), never inside the request step.
+        job_limit = int(re.search(r'^    timeout-minutes: ([0-9]+)$', writer, re.M)[1])
+        limits = [int(re.search(r'^        timeout-minutes: ([0-9]+)$', section, re.M)[1])
+                  for section in (writer[preflight:request], writer[request:])]
+        self.assertLess(sum(limits), job_limit)
+        self.assertEqual(writer.count('REFRESH_TARGET: ${{ toJSON(matrix.target) }}'), 2)
+        self.assertNotIn('DEPENDABOT_AUTO_MERGE_ENABLED', writer[request:])
+        # A PR-isolated plan rejection still fails the planner, after targets.
+        planner = coordinator.split('  ready-plan:\n', 1)[1].split('  ready-refresh:\n', 1)[0]
+        self.assertIn('rejected: ${{ steps.plan.outputs.rejected }}', planner)
+        report = planner.index('name: Report PR-isolated Ready plan rejections')
+        self.assertLess(planner.index('dependabot-ready-policy.py plan'), report)
+        self.assertIn("if: steps.plan.outputs.rejected != '[]'", planner[report:])
+        self.assertIn('exit 1', planner[report:])
+        self.assertIn("(needs.ready-plan.result == 'success' || (needs.ready-plan.result == 'failure' && "
+                      "needs.ready-plan.outputs.rejected != '' && needs.ready-plan.outputs.rejected != '[]'))", writer)
         code = (ROOT / 'scripts/dependabot-ready-policy.py').read_text()
         self.assertEqual(code.count('api.mutate('), 1)
         self.assertIn('actions/jobs/{target[\'job\']}/rerun', code)

@@ -108,6 +108,24 @@ def workflow_boundaries(root):
         require("github.ref == 'refs/heads/main'" in job and "github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'" in job, name + ': trusted execution guard missing')
     require("needs: [inspect, bot-ready]" in jobs['ready-plan'] and "always()" in jobs['ready-plan'],
             'refresh plan must follow completed bot reconciliation')
+    # One PR's plan rejection still fails the planner, but only after the other
+    # PRs' verified targets are published for the writer to use.
+    planner, refresh = jobs['ready-plan'], jobs['ready-refresh']
+    require('rejected: ${{ steps.plan.outputs.rejected }}' in planner and
+            planner.index('dependabot-ready-policy.py plan') < planner.find("if: steps.plan.outputs.rejected != '[]'") and
+            "(needs.ready-plan.result == 'success' || (needs.ready-plan.result == 'failure' && "
+            "needs.ready-plan.outputs.rejected != '' && needs.ready-plan.outputs.rejected != '[]'))" in refresh,
+            'ready-plan must isolate and still report per-PR rejections')
+    # Verification is bounded by the preflight step's own timeout, so it is cut
+    # with the request step skipped; the POST-only request keeps its own room.
+    steps = [refresh.split('      - name: ' + name + '\n', 1) for name in
+             ('Preflight verified native Ready refresh', 'Request verified native Ready refresh')]
+    budgets = [re.findall(r'^        timeout-minutes: ([1-9][0-9]*)$', part[1].split('\n      - ', 1)[0], re.M)
+               if len(part) == 2 else [] for part in steps]
+    job_budget = re.findall(r'^    timeout-minutes: ([1-9][0-9]*)$', refresh, re.M)
+    require(all(len(budget) == 1 for budget in budgets) and len(job_budget) == 1 and
+            sum(int(budget[0]) for budget in budgets) < int(job_budget[0]),
+            'ready-refresh: preflight and request steps need own budgets inside the job timeout')
     require("id: gate" in jobs['bot-ready'] and "name: ${{ steps.gate.outputs.arm_receipt || 'No native arm receipt' }}" in jobs['bot-ready'] and
             "if: steps.gate.outputs.arm_receipt != ''" in jobs['bot-ready'], 'post-enable receipt publication missing')
     for unsafe in ['pull_request.head' , 'secrets.', 'download-artifact', 'cache@', 'gh pr merge', 'pip install', 'npm install', 'continue-on-error']:

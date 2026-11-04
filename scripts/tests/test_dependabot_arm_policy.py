@@ -470,13 +470,35 @@ class DependabotArmPolicyTests(unittest.TestCase):
         os.environ.update(GITHUB_RUN_ID='970', GITHUB_EVENT_NAME='workflow_run', GITHUB_JOB='ready-refresh')
         return target
 
+    def write(self, target):
+        # The workflow: a verifying preflight step, then a POST-only request step.
+        request, reason = n.preflight(self.api, p, target, True)
+        self.assertTrue(request, reason)
+        return n.refresh(self.api, p, target)
+
     def test_armed_refresh_requires_same_writer_receipt_and_confirms_single_rerun(self):
         target = self.prepare_refresh()
-        result = n.refresh(self.api, p, target, True)
+        result = self.write(target)
         self.assertIn('Verified native reporter rerun requested', result)
         reruns = [mutation for mutation in self.api.mutations if mutation[0] == 'POST']
         self.assertEqual(reruns, [('POST', p.route('actions/jobs/9001/rerun'), {})])
         self.assertTrue(n.desired(self.api, p, NUMBER, True)[0])
+
+    def test_armed_preflight_spends_one_proof_pair_on_its_own_receipt(self):
+        # 2026-11-04: preflight proved the PR six times (plan, armed check, final
+        # plan) and scanned receipts newest-first; the request step repeated it.
+        target = self.prepare_refresh()
+        receipts = []
+        original = a.authenticated_receipt
+        def recorded(*args, **kwargs):
+            receipts.append(kwargs.get('writer_run'))
+            return original(*args, **kwargs)
+        with mock.patch.object(p, 'proof', wraps=p.proof) as proof, mock.patch.object(p, 'arm_policy', return_value=a), \
+                mock.patch.object(a, 'authenticated_receipt', side_effect=recorded):
+            self.assertEqual(n.preflight(self.api, p, target, True)[0], True)
+        self.assertEqual(proof.call_count, 2)
+        self.assertEqual(receipts, [970])
+        self.assertFalse(any(mutation[0] == 'POST' for mutation in self.api.mutations))
 
     def test_refresh_unknown_write_never_retries(self):
         for outcome in ('raise_after_apply', 'raise_without_apply'):
@@ -487,10 +509,10 @@ class DependabotArmPolicyTests(unittest.TestCase):
                 self.api.rerun_outcome = outcome
                 with mock.patch.object(n.time, 'sleep'):
                     if outcome == 'raise_after_apply':
-                        self.assertIn('Verified native reporter rerun requested', n.refresh(self.api, p, target, True))
+                        self.assertIn('Verified native reporter rerun requested', self.write(target))
                     else:
                         with self.assertRaisesRegex(p.Rejected, 'refresh outcome unconfirmed; no retry'):
-                            n.refresh(self.api, p, target, True)
+                            self.write(target)
                 self.assertEqual(len([mutation for mutation in self.api.mutations if mutation[0] == 'POST']), 1)
 
 
@@ -514,8 +536,11 @@ class DependabotArmPolicyTests(unittest.TestCase):
         self.api.ready_jobs[(971, 1)] = [copy.deepcopy(self.api.ready_jobs[(970, 1)][-1])]
         self.api.ready_jobs[(970, 1)].pop()  # Only the new writer owns a refresh claim.
         os.environ['GITHUB_RUN_ID'] = '971'
-        with self.assertRaisesRegex(p.Rejected, 'no trusted post-enable receipt'):
-            n.refresh(self.api, p, target, True)
+        # Without its own receipt the writer sees nothing to activate and the
+        # request step stays skipped; the receipt-holding run decides instead.
+        request, reason = n.preflight(self.api, p, target, True)
+        self.assertFalse(request)
+        self.assertIn('no receipt in this writer run', reason)
         self.assertFalse(any(mutation[0] == 'POST' for mutation in self.api.mutations))
 
 
@@ -631,7 +656,7 @@ class DependabotArmPolicyTests(unittest.TestCase):
         target = self.prepare_refresh()
         self.api.rerun_advances = 2
         with self.assertRaises(p.Rejected):
-            n.refresh(self.api, p, target, True)
+            self.write(target)
         self.assertEqual(self.api.native_run['run_attempt'], 3)
         self.assertEqual(len([mutation for mutation in self.api.mutations if mutation[0] == 'POST']), 1)
         self.assert_blocked()

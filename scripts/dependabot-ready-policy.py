@@ -190,7 +190,9 @@ def current_pr(api, p, number, head=None):
     return pr
 
 
-def desired(api, p, number, enabled):
+def desired(api, p, number, enabled, writer_run=None):
+    # A refresh writer passes its own run: it counts an armed bot as ready only
+    # through the post-enable receipt that this same coordinator run published.
     pr = current_pr(api, p, number)
     if not p.bot(pr):
         return True, "Manual PR: normal CI/review requirements remain; no auto-merge approval."
@@ -201,7 +203,7 @@ def desired(api, p, number, enabled):
         p.same(first, second)
         arm = p.arm_policy()
         arm.authenticated_receipt(api, p, this_policy(), number,
-                                  second["pr"], expected_proof=second)
+                                  second["pr"], expected_proof=second, writer_run=writer_run)
         return True, "Current native request and post-enable receipt match full exact-head/base/CI proof."
     except p.Rejected as error:
         return False, "Blocked: " + str(error)
@@ -283,7 +285,7 @@ def require_success(api, p, number, head):
     return run["id"], run["run_attempt"], check["id"]
 
 
-def refresh_plan(api, p, number, enabled):
+def refresh_plan(api, p, number, enabled, writer_run=None):
     pr = current_pr(api, p, number)
     run = latest(api, p, number, pr["head"]["sha"])
     if run.get("status") in {"queued", "pending", "waiting", "requested", "in_progress"}:
@@ -291,10 +293,28 @@ def refresh_plan(api, p, number, enabled):
     job, check, source = job_record(api, p, run)
     source_compatible(api, p, source)
     actual = controlled_verdict(p, run, job, check)
-    expected, _ = desired(api, p, number, enabled)
+    expected, _ = desired(api, p, number, enabled, writer_run)
     if actual == expected:
         return None
     return dict(pr=number, head=pr["head"]["sha"], run=run["id"], attempt=run["run_attempt"], job=job["id"])
+
+
+def plan_targets(api, p, numbers, enabled):
+    """Verified refresh targets plus PRs whose own plan was rejected."""
+    plans, rejected = [], []
+    for number in numbers:
+        # A policy rejection is that PR's own fail-closed verdict: it is never
+        # refreshed and the job still fails after the others are published.
+        # API/infrastructure errors are not PR verdicts and abort every plan.
+        try:
+            plan = refresh_plan(api, p, number, enabled)
+        except p.Rejected as error:
+            print(f"Native Ready plan rejected PR #{number}: {error}", file=sys.stderr)
+            rejected.append(number)
+            continue
+        if plan is not None:
+            plans.append(plan)
+    return plans, rejected
 
 
 class Deferred(Exception):
@@ -305,22 +325,32 @@ def claim_name(target):
     return f"Ready refresh PR{target['pr']} run{target['run']} attempt{target['attempt']}"
 
 
-def reject_prior_claim(api, p, target, reporter, defer_unstarted=True):
+def reject_prior_claim(api, p, target, reporter):
     writer_id = int(os.environ["GITHUB_RUN_ID"])
     writer_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
     writer = api.get(p.route(f"actions/runs/{writer_id}"))
     workflow = api.get(p.route("actions/workflows/dependabot-auto-merge.yml"))
+    # A claim names one reporter attempt, so none can predate that attempt.
+    # Writers created earlier reject themselves here, before their request
+    # step, which bounds the history to the target attempt rather than the run.
+    since = reporter.get("run_started_at")
+    p.require(isinstance(since, str) and since >= reporter.get("created_at", "~"),
+              "reporter attempt lacks an authoritative start time")
     p.require(workflow.get("path") == p.COORDINATOR_PATH and workflow.get("state") == "active" and
               writer.get("workflow_id") == workflow.get("id") and writer.get("run_attempt") == writer_attempt and
               writer.get("event") == os.environ.get("GITHUB_EVENT_NAME") and
               writer.get("path", "").split("@")[0] == p.COORDINATOR_PATH and
               writer.get("repository", {}).get("full_name") == p.REPOSITORY and
-              writer.get("created_at", "") >= reporter.get("created_at", "~"), "writer predates reporter or has foreign identity")
-    query = urllib.parse.urlencode({"created": ">=" + reporter["created_at"]})
+              writer.get("created_at", "") >= since, "writer predates reporter attempt or has foreign identity")
+    query = urllib.parse.urlencode({"created": ">=" + since})
     writers = api.pages(p.route("actions/workflows/dependabot-auto-merge.yml/runs?" + query), "workflow_runs")
     claims = []
     for run in writers:
         p.require(run.get("path", "").split("@")[0] == p.COORDINATOR_PATH, "foreign refresh history")
+        # The refresh job never runs for pull_request_target; those runs cannot
+        # hold a claim, so their job history is not read.
+        if run.get("event") == "pull_request_target":
+            continue
         for attempt in range(1, run["run_attempt"] + 1):
             for job in api.pages(p.route(f"actions/runs/{run['id']}/attempts/{attempt}/jobs"), "jobs"):
                 if job.get("name") == claim_name(target):
@@ -342,18 +372,21 @@ def reject_prior_claim(api, p, target, reporter, defer_unstarted=True):
                       "prior refresh queued/terminal history is ambiguous; no automatic retry")
             # A run created after this writer started cannot have executed
             # beforehand; per-PR concurrency prevents it executing alongside us.
-            if created > started or not defer_unstarted:
+            if created > started:
                 continue
             # An earlier unstarted claim is ambiguous to preflight: yield without
             # entering the request step, so the tuple stays unpoisoned for it.
             raise Deferred("an earlier refresh claim has not started; it will decide this tuple")
+        # Only the request step can POST. A preflight that was rejected, deferred
+        # or cut by its step timeout leaves it skipped; any executed request
+        # step may have POSTed and its lost reply is no permission to POST again.
         step = next((s for s in (job.get("steps") or []) if s.get("name") == REQUEST_STEP), None)
         p.require(step is not None and step.get("conclusion") == "skipped",
                   "prior refresh attempt exists/uncertain: explicitly rerun reporter for a new source attempt")
 
 
-def verified_refresh(api, p, target, enabled, defer_unstarted):
-    """Read-only writer checks; the latest reporter run to rerun, or None if no refresh is needed."""
+def writer_context(p, target):
+    """Environment and target shape only; never reads the API."""
     p.trusted_context(os.environ)
     p.require(os.environ.get("GITHUB_JOB") == "ready-refresh" and
               os.environ.get("GITHUB_EVENT_NAME") in {"workflow_run", "schedule", "push", "workflow_dispatch"},
@@ -361,11 +394,18 @@ def verified_refresh(api, p, target, enabled, defer_unstarted):
     p.require(set(target) == {"pr", "head", "run", "attempt", "job"} and
               all(type(target[k]) is int and target[k] > 0 for k in ("pr", "run", "attempt", "job")) and
               isinstance(target["head"], str) and p.SHA.fullmatch(target["head"]), "invalid refresh target")
+
+
+def verified_refresh(api, p, target, enabled):
+    """Read-only preflight; the latest reporter run to rerun, or None if this writer has nothing to request."""
+    writer_context(p, target)
     source = os.environ.get("GITHUB_WORKFLOW_SHA", "")
     p.require(bool(p.SHA.fullmatch(source)), "invalid immutable writer source")
     source_compatible(api, p, source)
-    current_pr(api, p, target["pr"], target["head"])
-    observed = refresh_plan(api, p, target["pr"], enabled)
+    planned = current_pr(api, p, target["pr"], target["head"])
+    # One proof pair decides the plan. For an armed bot it counts only this
+    # run's own post-enable receipt; the writer cannot enable/cancel.
+    observed = refresh_plan(api, p, target["pr"], enabled, writer_run=int(os.environ["GITHUB_RUN_ID"]))
     if observed is None:
         return None
     p.require(observed == target, "refresh plan became obsolete")
@@ -374,50 +414,51 @@ def verified_refresh(api, p, target, enabled, defer_unstarted):
     age = datetime.now(timezone.utc) - created
     p.require(timedelta(0) <= age < timedelta(days=30) and run["run_attempt"] < 50,
               "native reporter rerun age/attempt limit reached; fresh PR lifecycle event required")
-    reject_prior_claim(api, p, target, run, defer_unstarted)
-    # The writer cannot enable/cancel. Armed refresh is narrowly limited to
-    # this run's completed post-enable receipt, for failure -> next activation.
+    reject_prior_claim(api, p, target, run)
+    # Cheap final identity reads instead of a second full proof: the rerun
+    # reporter re-verifies everything itself. Head, request and attempt must
+    # not have moved while the claim history was read.
     pr = current_pr(api, p, target["pr"], target["head"])
-    if p.bot(pr) and pr.get("auto_merge"):
-        first, second = p.proof(api, target["pr"]), p.proof(api, target["pr"])
-        p.same(first, second)
-        p.arm_policy().authenticated_receipt(api, p, this_policy(), target["pr"], second["pr"],
-                                             expected_proof=second, writer_run=int(os.environ["GITHUB_RUN_ID"]))
-    p.require(refresh_plan(api, p, target["pr"], enabled) == target, "reporter/eligibility changed before refresh")
+    again = latest(api, p, target["pr"], target["head"])
+    p.require(all(again.get(key) == run.get(key) for key in ("id", "run_attempt", "status", "conclusion")) and
+              bool(pr.get("auto_merge")) == bool(planned.get("auto_merge")), "reporter/eligibility changed before refresh")
+    # Armed refresh is narrowly limited to failure -> receipt-authorized activation.
+    p.require(not (p.bot(pr) and pr.get("auto_merge")) or run.get("conclusion") == "failure",
+              "armed refresh only activates a receipt-authorized failure")
     return run
 
 
 def preflight(api, p, target, enabled):
-    # Never POSTs. A rejection or deferral here leaves the request step skipped,
-    # which later writers accept as proof that this claim requested nothing.
+    # Never POSTs, and holds all verification. A rejection, deferral or step
+    # timeout here leaves the request step skipped, which later writers accept
+    # as proof that this claim requested nothing.
     try:
-        run = verified_refresh(api, p, target, enabled, defer_unstarted=True)
+        run = verified_refresh(api, p, target, enabled)
     except Deferred as reason:
         return False, "Deferred: " + str(reason)
     if run is None:
-        return False, "No native refresh needed or reporter already running."
-    return True, "Verified refresh preconditions; the request step may rerun the reporter once."
+        return False, "No native refresh needed, reporter already running, or no receipt in this writer run."
+    return True, "Verified refresh preconditions; the request step only reruns the reporter once."
 
 
-def refresh(api, p, target, enabled):
-    # Preflight already yielded to earlier unstarted claims while holding this
-    # per-PR queue slot; any claim still unstarted runs only after this step.
-    run = verified_refresh(api, p, target, enabled, defer_unstarted=False)
-    if run is None:
-        return "No native refresh needed or reporter already running."
+def refresh(api, p, target):
+    # Runs only after this job's preflight verified the tuple and its claim
+    # history; per-PR concurrency keeps every other claim queued meanwhile. No
+    # API read precedes the POST, so an executed request step means a POST was
+    # attempted and verification time can never be mistaken for a request.
+    writer_context(p, target)
     try:
         api.mutate("POST", p.route(f"actions/jobs/{target['job']}/rerun"), {})
     except Exception:
-        # A lost reply is not permission to POST again. Observed writer job
-        # history conservatively blocks another automatic request for this tuple.
+        # A lost reply is not permission to POST again. The executed request
+        # step conservatively blocks another automatic request for this tuple.
         pass
     for index in range(4):
         live = api.get(p.route(f"actions/runs/{target['run']}"))
         if live.get("run_attempt", 0) > target["attempt"]:
-            p.require(live.get("run_attempt") == target["attempt"] + 1 and
-                      live.get("id") == target["run"] and live.get("display_title") == run.get("display_title"),
-                      "rerun reporter identity/binding changed")
-            validate_run(api, p, live, {"id": run["workflow_id"]}, api.get(p.route("")),
+            p.require(live.get("run_attempt") == target["attempt"] + 1 and live.get("id") == target["run"],
+                      "rerun reporter identity changed")
+            validate_run(api, p, live, api.get(p.route("actions/workflows/dependabot-ready.yml")), api.get(p.route("")),
                          current_pr(api, p, target["pr"], target["head"]), target["pr"], target["head"])
             return "Verified native reporter rerun requested; final readiness remains pending."
         if index < 3:
@@ -446,20 +487,17 @@ def main():
             p.trusted_context(os.environ)
             numbers = json.loads(os.environ["PR_NUMBERS"])
             p.require(isinstance(numbers, list) and all(type(n) is int and n > 0 for n in numbers) and len(set(numbers)) == len(numbers), "invalid refresh PR targets")
-            plans = []
-            for number in numbers:
-                plan = refresh_plan(api, p, number, enabled)
-                if plan is not None:
-                    plans.append(plan)
+            plans, rejected = plan_targets(api, p, numbers, enabled)
             with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
                 stream.write("targets=" + json.dumps(plans, separators=(",", ":")) + "\n")
+                stream.write("rejected=" + json.dumps(rejected, separators=(",", ":")) + "\n")
         elif args.command == "preflight":
             request, reason = preflight(api, p, json.loads(os.environ["REFRESH_TARGET"]), enabled)
             with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
                 stream.write("request=" + str(request).lower() + "\n")
             print(reason)
         else:
-            print(refresh(api, p, json.loads(os.environ["REFRESH_TARGET"]), enabled))
+            print(refresh(api, p, json.loads(os.environ["REFRESH_TARGET"])))
         return 0
     except (p.Rejected, KeyError, TypeError, ValueError, OSError) as error:
         print("Native Ready rejected: " + str(error), file=sys.stderr)

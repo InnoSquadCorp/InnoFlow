@@ -144,9 +144,14 @@ an exact completed/successful `bot-ready` job and its final step plus the succes
 inspector's source attribution. It does not wait for the entire coordinator run,
 which still contains the refresh job. All Ready/receipt source checkouts are immutable.
 
-`ready-plan` runs after bot reconciliation. Its narrowly privileged actions-write
-writer may rerun only the verified failed reporter job for the immediately next
-attempt, while armed only with the same coordinator run's completed receipt.
+`ready-plan` runs after bot reconciliation and plans each PR in isolation. A PR
+whose own plan is rejected, such as an obsolete reporter definition, gets no target;
+the planner publishes the other PRs' verified targets and then fails. The writer runs
+for those published targets, never when the planner failed without them: API or
+infrastructure errors still abort the whole plan unpublished. Its narrowly privileged
+actions-write writer may rerun only the verified failed reporter job for the
+immediately next attempt, while armed only with the same coordinator run's completed
+receipt.
 The readonly reporter rechecks that receipt, the native request and current full
 proof before publishing success. A receipt cannot authorize attempt N+2 or a new
 reporter run. Existing armed success/pending is maintained only with its matching
@@ -157,13 +162,25 @@ No job waits for another participant's completion while holding the queue: refre
 only observes rerun acceptance/attempt advancement. A queued activation with no job
 yet is recognized only by the exact receipt and predecessor; it exempts no check
 IDs and cannot hide an orphan check. Authoritative prior-writer history prevents
-duplicate requests for the same run/attempt. Each refresh claim runs a read-only
-preflight before its request step, and only an executed request step blocks later
-claims for that tuple. Preflight yields to an earlier unstarted claim instead of
-failing, so a burst of wakes resolves at its last claim without poisoning the
-tuple; the request step itself never retries. Unknown write outcomes get bounded
-readback, never a blind retry. API/infrastructure failures require operator
-recovery. A new trusted definition requires a fresh PR lifecycle run, not a rerun
+duplicate requests for the same run/attempt. That history starts when the target
+attempt started: an earlier-created writer rejects itself before requesting, and
+`pull_request_target` runs, which never run the writer, are not read.
+
+Each refresh claim keeps all verification in a read-only preflight step, then a
+request step that only POSTs and reads back the next attempt. Preflight spends one
+proof pair, counting an armed bot only through the writer run's own receipt, and
+ends with cheap PR/attempt identity reads instead of a second full proof; the rerun
+reporter re-verifies everything itself. No API read precedes the POST, so an
+executed request step means a POST was attempted, and only such a step blocks later
+claims for that tuple. Preflight has its own timeout inside the job timeout and
+leaves the request step room: slow verification is cut with the request skipped,
+so it cannot poison the tuple. `check-public-operations.py` enforces these budgets.
+Preflight yields to an earlier unstarted claim instead of failing, so a burst of
+wakes resolves at its last claim without poisoning the tuple; the request step
+itself never retries. An executed request step that failed, timed out or lost its
+reply still requires an explicit reporter rerun: a lost reply is no permission to
+POST again. Unknown write outcomes get bounded readback, never a blind retry.
+API/infrastructure failures require operator recovery. A new trusted definition requires a fresh PR lifecycle run, not a rerun
 of old workflow code against a new policy. Checks permissions remain read-only;
 no API creates or patches Ready.
 
