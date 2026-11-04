@@ -54,6 +54,9 @@ head/test-merge SHA and attempt. All API pages are read. Missing, duplicate,
 foreign, stale, pending, failed, cancelled, neutral and unexpected skipped results
 fail closed. Earlier completed runs/attempts can be superseded only by the fully
 validated latest attempt. Additional current-head checks/statuses must succeed.
+CodeRabbit therefore reports through its commit status (`review_progress: false`
+in `.coderabbit.yaml`): a review skipped for a seatless bot PR ends that status as
+success, whereas the equivalent check run ends as skipped.
 Ready does not wait on itself.
 
 An entirely skipped metadata event is exempt only after `ci-metadata-policy.py`
