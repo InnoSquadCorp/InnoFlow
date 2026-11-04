@@ -15,6 +15,12 @@ reviews:
   # Review comment style
   comment_mode: concise  # 'concise' or 'verbose'
   
+  # Report results as the `CodeRabbit` commit status instead of a check run.
+  # Bot PRs without a review seat are skipped: the status still ends as success,
+  # but a skipped check run blocks the Dependabot auto-merge proof.
+  commit_status: true
+  review_progress: false
+  
   # Paths to ignore
   ignore:
     - "**/*.xcodeproj/**"
