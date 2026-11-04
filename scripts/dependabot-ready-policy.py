@@ -14,7 +14,10 @@ import urllib.parse
 REPORTER_PATH = ".github/workflows/dependabot-ready.yml"
 SOURCE_STEP = "Evaluate Ready snapshot from "
 ENFORCE_STEP = "Enforce Ready snapshot"
+PREFLIGHT_STEP = "Preflight verified native Ready refresh"
 REQUEST_STEP = "Request verified native Ready refresh"
+# Job states that have not executed any step; per-PR concurrency still holds them.
+NOT_STARTED = {"queued", "pending", "waiting", "requested"}
 BINDING = re.compile(r"Ready v1 pr:([1-9][0-9]*) head:([a-f0-9]{40}) head-repo:([1-9][0-9]*) base-repo:([1-9][0-9]*) base:main source:([a-f0-9]{40})")
 
 
@@ -294,11 +297,15 @@ def refresh_plan(api, p, number, enabled):
     return dict(pr=number, head=pr["head"]["sha"], run=run["id"], attempt=run["run_attempt"], job=job["id"])
 
 
+class Deferred(Exception):
+    """An earlier same-tuple claim has not started; it decides instead of this writer."""
+
+
 def claim_name(target):
     return f"Ready refresh PR{target['pr']} run{target['run']} attempt{target['attempt']}"
 
 
-def reject_prior_claim(api, p, target, reporter):
+def reject_prior_claim(api, p, target, reporter, defer_unstarted=True):
     writer_id = int(os.environ["GITHUB_RUN_ID"])
     writer_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
     writer = api.get(p.route(f"actions/runs/{writer_id}"))
@@ -328,20 +335,25 @@ def reject_prior_claim(api, p, target, reporter):
             continue
         if job.get("status") == "completed" and job.get("conclusion") == "skipped":
             continue
-        if job.get("status") == "queued":
+        if job.get("status") in NOT_STARTED:
             created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
             p.require(run.get("status") in {"queued", "pending", "waiting", "in_progress", "requested"} and
-                      created.tzinfo is not None and created > started,
+                      created.tzinfo is not None,
                       "prior refresh queued/terminal history is ambiguous; no automatic retry")
             # A run created after this writer started cannot have executed
             # beforehand; per-PR concurrency prevents it executing alongside us.
-            continue
+            if created > started or not defer_unstarted:
+                continue
+            # An earlier unstarted claim is ambiguous to preflight: yield without
+            # entering the request step, so the tuple stays unpoisoned for it.
+            raise Deferred("an earlier refresh claim has not started; it will decide this tuple")
         step = next((s for s in (job.get("steps") or []) if s.get("name") == REQUEST_STEP), None)
         p.require(step is not None and step.get("conclusion") == "skipped",
                   "prior refresh attempt exists/uncertain: explicitly rerun reporter for a new source attempt")
 
 
-def refresh(api, p, target, enabled):
+def verified_refresh(api, p, target, enabled, defer_unstarted):
+    """Read-only writer checks; the latest reporter run to rerun, or None if no refresh is needed."""
     p.trusted_context(os.environ)
     p.require(os.environ.get("GITHUB_JOB") == "ready-refresh" and
               os.environ.get("GITHUB_EVENT_NAME") in {"workflow_run", "schedule", "push", "workflow_dispatch"},
@@ -355,14 +367,14 @@ def refresh(api, p, target, enabled):
     current_pr(api, p, target["pr"], target["head"])
     observed = refresh_plan(api, p, target["pr"], enabled)
     if observed is None:
-        return "No native refresh needed or reporter already running."
+        return None
     p.require(observed == target, "refresh plan became obsolete")
     run = latest(api, p, target["pr"], target["head"])
     created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
     age = datetime.now(timezone.utc) - created
     p.require(timedelta(0) <= age < timedelta(days=30) and run["run_attempt"] < 50,
               "native reporter rerun age/attempt limit reached; fresh PR lifecycle event required")
-    reject_prior_claim(api, p, target, run)
+    reject_prior_claim(api, p, target, run, defer_unstarted)
     # The writer cannot enable/cancel. Armed refresh is narrowly limited to
     # this run's completed post-enable receipt, for failure -> next activation.
     pr = current_pr(api, p, target["pr"], target["head"])
@@ -372,6 +384,27 @@ def refresh(api, p, target, enabled):
         p.arm_policy().authenticated_receipt(api, p, this_policy(), target["pr"], second["pr"],
                                              expected_proof=second, writer_run=int(os.environ["GITHUB_RUN_ID"]))
     p.require(refresh_plan(api, p, target["pr"], enabled) == target, "reporter/eligibility changed before refresh")
+    return run
+
+
+def preflight(api, p, target, enabled):
+    # Never POSTs. A rejection or deferral here leaves the request step skipped,
+    # which later writers accept as proof that this claim requested nothing.
+    try:
+        run = verified_refresh(api, p, target, enabled, defer_unstarted=True)
+    except Deferred as reason:
+        return False, "Deferred: " + str(reason)
+    if run is None:
+        return False, "No native refresh needed or reporter already running."
+    return True, "Verified refresh preconditions; the request step may rerun the reporter once."
+
+
+def refresh(api, p, target, enabled):
+    # Preflight already yielded to earlier unstarted claims while holding this
+    # per-PR queue slot; any claim still unstarted runs only after this step.
+    run = verified_refresh(api, p, target, enabled, defer_unstarted=False)
+    if run is None:
+        return "No native refresh needed or reporter already running."
     try:
         api.mutate("POST", p.route(f"actions/jobs/{target['job']}/rerun"), {})
     except Exception:
@@ -395,11 +428,11 @@ def refresh(api, p, target, enabled):
 def main():
     p = policy_module()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("snapshot", "plan", "refresh"))
+    parser.add_argument("command", choices=("snapshot", "plan", "preflight", "refresh"))
     parser.add_argument("--pr", type=int)
     args = parser.parse_args()
     try:
-        if args.command in {"plan", "refresh"}:
+        if args.command in {"plan", "preflight", "refresh"}:
             p.trusted_context(os.environ)
         api = p.GitHub()
         enabled = os.environ.get("DEPENDABOT_AUTO_MERGE_ENABLED") == "true"
@@ -420,6 +453,11 @@ def main():
                     plans.append(plan)
             with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
                 stream.write("targets=" + json.dumps(plans, separators=(",", ":")) + "\n")
+        elif args.command == "preflight":
+            request, reason = preflight(api, p, json.loads(os.environ["REFRESH_TARGET"]), enabled)
+            with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+                stream.write("request=" + str(request).lower() + "\n")
+            print(reason)
         else:
             print(refresh(api, p, json.loads(os.environ["REFRESH_TARGET"]), enabled))
         return 0

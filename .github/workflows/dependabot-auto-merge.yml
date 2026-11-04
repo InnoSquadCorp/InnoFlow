@@ -95,7 +95,17 @@ jobs:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
           sparse-checkout: scripts
+      # Read-only. Rejection or deferral skips the request step, which later
+      # claims accept as proof that this claim never POSTed.
+      - name: Preflight verified native Ready refresh
+        id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REFRESH_TARGET: ${{ toJSON(matrix.target) }}
+          DEPENDABOT_AUTO_MERGE_ENABLED: ${{ vars.DEPENDABOT_AUTO_MERGE_ENABLED }}
+        run: python3 -B scripts/dependabot-ready-policy.py preflight
       - name: Request verified native Ready refresh
+        if: steps.preflight.outputs.request == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REFRESH_TARGET: ${{ toJSON(matrix.target) }}

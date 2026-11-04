@@ -154,7 +154,11 @@ No job waits for another participant's completion while holding the queue: refre
 only observes rerun acceptance/attempt advancement. A queued activation with no job
 yet is recognized only by the exact receipt and predecessor; it exempts no check
 IDs and cannot hide an orphan check. Authoritative prior-writer history prevents
-duplicate requests for the same run/attempt. Unknown write outcomes get bounded
+duplicate requests for the same run/attempt. Each refresh claim runs a read-only
+preflight before its request step, and only an executed request step blocks later
+claims for that tuple. Preflight yields to an earlier unstarted claim instead of
+failing, so a burst of wakes resolves at its last claim without poisoning the
+tuple; the request step itself never retries. Unknown write outcomes get bounded
 readback, never a blind retry. API/infrastructure failures require operator
 recovery. A new trusted definition requires a fresh PR lifecycle run, not a rerun
 of old workflow code against a new policy. Checks permissions remain read-only;
