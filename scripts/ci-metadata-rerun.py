@@ -121,9 +121,9 @@ def request(api, p, target):
         return label + ": no longer eligible"
     try:
         api.mutate("POST", p.route(f"actions/runs/{target['run']}/rerun"), {})
-    except Exception:
+    except Exception as error:
         # A lost reply is not permission to POST again; read the attempt back.
-        pass
+        print(f"{label}: rerun request raised {type(error).__name__}: {error}", file=sys.stderr)
     for index in range(4):
         live = api.get(p.route(f"actions/runs/{target['run']}"))
         if live.get("run_attempt", 0) > target["attempt"]:

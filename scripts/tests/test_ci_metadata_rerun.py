@@ -1,6 +1,7 @@
 """A metadata recheck that outwaited its queued validation is rerun once, exactly."""
 import copy
 import importlib.util
+import io
 import os
 from pathlib import Path
 import re
@@ -111,9 +112,11 @@ class MetadataRerunTests(unittest.TestCase):
     def test_an_unconfirmed_request_is_reported_without_a_second_post(self):
         api = RerunAPI()
         api.accept = False
-        with mock.patch.object(r.time, 'sleep'), self.assertRaisesRegex(p.Rejected, 'unconfirmed'):
+        with mock.patch.object(r.time, 'sleep'), mock.patch('sys.stderr', new_callable=io.StringIO) as stderr, \
+                self.assertRaisesRegex(p.Rejected, 'unconfirmed'):
             r.request(api, p, TARGET)
         self.assertEqual(len(api.posts), 1)
+        self.assertIn('rerun request raised OSError: lost reply', stderr.getvalue())
 
     def test_entrypoint_requires_the_trusted_background_writer(self):
         api = RerunAPI()
