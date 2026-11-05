@@ -91,15 +91,21 @@ def partition(api, runs, *, repository, repository_id, workflow_id, number, head
                 observed.add(check_id)
                 check = by_id.get(check_id, {})
                 gate = job['name'] in GATES
-                expected = 'success' if gate else 'skipped'
+                # A superseded attempt may have failed while its validation was
+                # still queued. Only the latest attempt must verify validation.
+                failed = gate and attempt < run['run_attempt'] and job.get('conclusion') == 'failure'
+                expected = 'failure' if failed else 'success' if gate else 'skipped'
                 if gate:
                     steps = job.get('steps', [])
                     verify = [s for s in steps if s.get('name') == 'Verify prior validation for metadata']
                     normal = [s for s in steps if s.get('name') == GATES[job['name']]]
-                    require(len(verify) == 1 and verify[0].get('conclusion') == 'success' and
+                    outcomes = {'success', 'skipped', 'failure'} if failed else {'success', 'skipped'}
+                    require(len(verify) == 1 and (failed or verify[0].get('conclusion') == 'success') and
                             len(normal) == 1 and normal[0].get('conclusion') == 'skipped' and
-                            all(s.get('status') == 'completed' and s.get('conclusion') in {'success', 'skipped'}
-                                for s in steps), 'metadata gate did not verify prior validation')
+                            all(s.get('status') == 'completed' and s.get('conclusion') in outcomes
+                                for s in steps) and
+                            (not failed or any(s.get('conclusion') == 'failure' for s in steps)),
+                            'metadata gate did not verify prior validation')
                 else:
                     require(job.get('steps') == [], 'metadata run executed validation work')
                 require(type(job.get('id')) is int and job['id'] > 0 and
@@ -121,3 +127,24 @@ def partition(api, runs, *, repository, repository_id, workflow_id, number, head
         ignored.update(observed)
         metadata_runs.add((run['id'], run['run_attempt']))
     return validations, ignored, metadata_runs
+
+
+def failed_noop(jobs):
+    """True when an attempt failed only in metadata gates and executed no validation work."""
+    names = [j.get('name') for j in jobs]
+    if len(names) != len(set(names)) or set(names) not in INVENTORIES:
+        return False
+    failed = False
+    for job in jobs:
+        if job.get('status') != 'completed':
+            return False
+        if job['name'] not in GATES:
+            if job.get('conclusion') != 'skipped' or job.get('steps') != []:
+                return False
+            continue
+        steps = job.get('steps')
+        normal = [s for s in steps if s.get('name') == GATES[job['name']]] if isinstance(steps, list) else []
+        if job.get('conclusion') not in {'success', 'failure'} or len(normal) != 1 or normal[0].get('conclusion') != 'skipped':
+            return False
+        failed = failed or job['conclusion'] == 'failure'
+    return failed

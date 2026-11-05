@@ -409,8 +409,23 @@ class DependabotPolicyTests(unittest.TestCase):
         self.transport('ready-refresh', 'completed', 'skipped')
         self.transport('post-merge-plan', 'queued')
         self.transport('post-merge', 'queued')
+        self.transport('metadata-rerun', 'completed', 'skipped')
         self.assertIn('armed', p.coordinate(self.api, NUMBER, True))
         self.assertEqual(self.api.native_check['conclusion'], 'failure')
+
+    def test_metadata_rerun_transport_is_only_a_terminal_empty_pr_target_skip(self):
+        mutations = [lambda j,c: j.update(steps=[dict(name='unexpected execution')]),
+                     lambda j,c: j.update(steps=None), lambda j,c: j.update(status='in_progress'),
+                     lambda j,c: j.update(conclusion='success'), lambda j,c: j.update(conclusion='failure'),
+                     lambda j,c: c.update(conclusion='success'), lambda j,c: c.update(status='queued'),
+                     lambda j,c: j.update(name='metadata-rerun '), lambda j,c: c.update(app=dict(id=999)),
+                     lambda j,c: j.update(run_attempt=2)]
+        for mutate in mutations:
+            self.api = Transcript()
+            job, check = self.transport('metadata-rerun', 'completed', 'skipped')
+            mutate(job, check)
+            with self.subTest(mutation=mutate), self.assertRaises(p.Rejected): p.proof(self.api, NUMBER)
+            self.assertFalse(self.api.mutations)
 
     def test_actual_unexpanded_refresh_name_is_only_a_bound_empty_pr_target_skip(self):
         self.failure_barrier()
@@ -682,12 +697,12 @@ class DependabotPolicyTests(unittest.TestCase):
         docc = (ROOT / '.github/workflows/docs.yml').read_text()
         docs = (ROOT / '.github/workflows/docs-publish.yml').read_text()
         self.assertEqual(coordinator.count('ref: refs/heads/main'), 2)
-        self.assertEqual(coordinator.count('ref: ${{ github.workflow_sha }}'), 4)
+        self.assertEqual(coordinator.count('ref: ${{ github.workflow_sha }}'), 5)
         inspect = coordinator.split('  inspect:\n', 1)[1].split('  ready-plan:\n', 1)[0]
         self.assertIn('ref: ${{ github.workflow_sha }}', inspect)
         self.assertIn('name: ' + p.COORDINATOR_SOURCE_STEP + '${{ github.workflow_sha }}', inspect)
-        self.assertEqual(coordinator.count('queue: max'), 3)
-        self.assertEqual(coordinator.count('persist-credentials: false'), 6)
+        self.assertEqual(coordinator.count('queue: max'), 4)
+        self.assertEqual(coordinator.count('persist-credentials: false'), 7)
         for unsafe in ['pull_request.head', 'secrets.', 'download-artifact', 'cache@', 'gh pr merge', 'pip install']:
             self.assertNotIn(unsafe, coordinator)
         self.assertIn('permissions: {}', notice)

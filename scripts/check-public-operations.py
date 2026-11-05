@@ -18,6 +18,7 @@ PERMISSIONS = {
     'bot-ready': {'contents': 'write', 'actions': 'read', 'checks': 'read', 'pull-requests': 'write'},
     'post-merge-plan': {'contents': 'read', 'actions': 'read', 'pull-requests': 'read'},
     'post-merge': {'contents': 'read', 'actions': 'write', 'pull-requests': 'read'},
+    'metadata-rerun': {'contents': 'read', 'actions': 'write', 'pull-requests': 'read'},
 }
 
 
@@ -97,7 +98,7 @@ def workflow_boundaries(root):
         require(block is not None, name + ': missing explicit dedicated permissions')
         found = dict(re.findall(r'^      ([\w-]+): (read|write|none)$', block[1], re.M))
         require(found == expected, name + ': permissions expanded or missing')
-        if name in {'ready-refresh', 'bot-ready', 'post-merge'}:
+        if name in {'ready-refresh', 'bot-ready', 'post-merge', 'metadata-rerun'}:
             require('      cancel-in-progress: false' in job and '      queue: max' in job,
                     name + ': serialized writers must retain pending work')
         trusted_ref = 'ref: refs/heads/main' if name in {'post-merge-plan', 'post-merge'} else 'ref: ${{ github.workflow_sha }}'

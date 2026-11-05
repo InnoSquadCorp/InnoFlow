@@ -271,3 +271,87 @@ class MetadataProofTests(unittest.TestCase):
         self.assertEqual(len(b.base.mutations), 2)
         self.assertIn('enablePullRequestAutoMerge', b.base.mutations[0][1])
         self.assertIn('disablePullRequestAutoMerge', b.base.mutations[1][1])
+
+
+def fail_gates(jobs, checks):
+    for job in jobs:
+        if job['name'] in m.GATES:
+            job['conclusion'] = 'failure'
+            job['steps'][-1]['conclusion'] = 'failure'
+    gate_checks = {int(j['check_run_url'].rsplit('/', 1)[1]) for j in jobs if j['name'] in m.GATES}
+    for check in checks:
+        if check['id'] in gate_checks:
+            check['conclusion'] = 'failure'
+
+
+def rerun_after_failed_wait(api, succeed=True):
+    """Attempt 1 timed out waiting; the coordinator reran it after validation finished."""
+    fail_gates(api.jobs, api.checks)
+    api.run['conclusion'] = 'failure'
+    api.rerun()
+    if succeed:
+        for job in api.jobs:
+            if job['name'] in m.GATES:
+                job['conclusion'] = 'success'
+                job['steps'][-1]['conclusion'] = 'success'
+        rerun_checks = {int(j['check_run_url'].rsplit('/', 1)[1]) for j in api.jobs}
+        for check in api.checks:
+            if check['id'] in rerun_checks and check['name'] in m.GATES:
+                check['conclusion'] = 'success'
+        api.run['conclusion'] = 'success'
+
+
+class MetadataRerunProofTests(unittest.TestCase):
+    def test_a_successful_rerun_supersedes_a_failed_validation_wait(self):
+        for inventory in m.INVENTORIES:
+            api = reuse_api(inventory=inventory)
+            rerun_after_failed_wait(api)
+            self.assertEqual(reuse.p.prove(api, api.base.event, reuse.CONTEXT, now=api.base.now)['run'], reuse.RUN)
+            b = MetadataAPI(bot.Transcript(), bot.NUMBER, bot.HEAD, bot.BASE, bot.MERGE, inventory=inventory)
+            rerun_after_failed_wait(b)
+            self.assertEqual(bot.p.proof(b, bot.NUMBER)['run'], bot.RUN)
+            self.assertEqual(b.base.mutations, [])
+
+    def test_only_superseded_gate_failures_without_validation_work_are_tolerated(self):
+        def first(api):
+            return api.jobs_by_attempt[1]
+        def gate(jobs):
+            return next(j for j in jobs if j['name'] in m.GATES)
+        mutations = [
+            lambda a: None,  # the final attempt itself still failed
+            lambda a: gate(first(a))['steps'][0].update(conclusion='success'),
+            lambda a: gate(first(a))['steps'][-1].update(conclusion='success'),
+            lambda a: gate(first(a)).update(conclusion='cancelled'),
+            lambda a: gate(first(a))['steps'][-1].update(status='in_progress'),
+            lambda a: next(j for j in first(a) if j['name'] not in m.GATES).update(conclusion='failure'),
+            lambda a: next(j for j in first(a) if j['name'] not in m.GATES).update(steps=[{'name': 'executed'}]),
+            lambda a: next(c for c in a.checks if c['id'] == int(gate(first(a))['check_run_url'].rsplit('/', 1)[1]))
+                .update(conclusion='success'),
+        ]
+        for index, mutate in enumerate(mutations):
+            api = reuse_api()
+            rerun_after_failed_wait(api, succeed=index != 0)
+            mutate(api)
+            with self.subTest(index=index), self.assertRaises(ValueError):
+                reuse.p.prove(api, api.base.event, reuse.CONTEXT, now=api.base.now)
+
+    def test_failed_noop_recognizes_only_gate_failures_without_validation_work(self):
+        api = reuse_api()
+        self.assertFalse(m.failed_noop(api.jobs))
+        fail_gates(api.jobs, api.checks)
+        self.assertTrue(m.failed_noop(api.jobs))
+        gate = next(j for j in api.jobs if j['name'] in m.GATES)
+        other = next(j for j in api.jobs if j['name'] not in m.GATES)
+        mutations = [lambda: gate['steps'][0].update(conclusion='success'), lambda: gate.update(conclusion='cancelled'),
+                     lambda: gate.update(steps=None), lambda: gate.update(status='in_progress'),
+                     lambda: other.update(conclusion='failure'), lambda: other.update(steps=[{'name': 'executed'}]),
+                     lambda: api.jobs.pop(), lambda: api.jobs.append(copy.deepcopy(api.jobs[0])),
+                     lambda: other.update(name='Forged')]
+        for index, mutate in enumerate(mutations):
+            api = reuse_api()
+            fail_gates(api.jobs, api.checks)
+            gate = next(j for j in api.jobs if j['name'] in m.GATES)
+            other = next(j for j in api.jobs if j['name'] not in m.GATES)
+            mutate()
+            with self.subTest(index=index):
+                self.assertFalse(m.failed_noop(api.jobs))
