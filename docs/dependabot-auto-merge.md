@@ -67,6 +67,18 @@ unrecognized no-ops fail closed. The shared metadata verifier is included in the
 Ready reporter's source-compatibility proof. Empty Ready target lists allocate
 no planner, while main/schedule/manual post-merge recovery remains independent.
 
+A metadata recheck waits at most 5h50m for its validation, so a validation queued
+longer on scarce runners leaves the newer recheck failed, and no later event
+replaces those required checks. The coordinator's `metadata-rerun` job
+(`ci-metadata-rerun.py`) reruns that exact run only after the latest validation of
+the same head and current test merge succeeds, only when the failed attempt
+started before that success, and only when the attempt failed solely in its
+metadata gates. The rerun's own verifier still decides the checks, and the merge
+proof accepts earlier failed gate attempts only when the latest attempt verified
+validation. A stale test merge is never rerun; it needs a new head or base
+update. Ready refresh then follows on the next coordinator event or the hourly
+schedule.
+
 Optional requested reviewers/teams are notifications for an exactly verified
 same-repository Dependabot PR, not an additional approval requirement. Requests
 and CODEOWNERS stay unchanged; a manual re-request alone is not a pause switch.

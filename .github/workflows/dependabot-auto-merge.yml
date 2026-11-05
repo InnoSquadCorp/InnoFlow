@@ -204,3 +204,32 @@ jobs:
           PLANNED_MAIN: ${{ needs.post-merge-plan.outputs.main_sha }}
           PLANNED_PR: ${{ needs.post-merge-plan.outputs.pr }}
         run: python3 -B scripts/dependabot-merge-policy.py post-merge --pr "$PLANNED_PR" --expected-sha "$PLANNED_MAIN"
+
+  # A metadata-only CI recheck waits a bounded time for its exact validation.
+  # When validation outlasts that wait, rerun the unchanged recheck once that
+  # validation succeeds; its own fail-closed verifier still decides the checks.
+  metadata-rerun:
+    needs: inspect
+    if: needs.inspect.result == 'success' && github.repository == 'InnoSquadCorp/InnoFlow' && github.ref == 'refs/heads/main' && github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main' && github.event_name != 'pull_request_target' && needs.inspect.outputs.prs != '' && needs.inspect.outputs.prs != '[]'
+    concurrency:
+      group: ci-metadata-rerun
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Checkout trusted coordinator only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Rerun metadata rechecks that failed before validation finished
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBERS: ${{ needs.inspect.outputs.prs }}
+        run: python3 -B scripts/ci-metadata-rerun.py
