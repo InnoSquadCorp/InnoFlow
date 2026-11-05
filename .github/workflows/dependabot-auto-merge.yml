@@ -92,7 +92,7 @@ jobs:
       cancel-in-progress: false
       queue: max
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 11
     permissions:
       contents: read
       actions: write
@@ -101,14 +101,15 @@ jobs:
     steps:
       - name: Checkout trusted coordinator only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 1
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
           sparse-checkout: scripts
       # Read-only and holds all verification. Rejection, deferral or this step's
       # own timeout skips the request step, which later claims accept as proof
-      # that this claim never POSTed. Its budget leaves the request step room
-      # inside the job timeout, so slow verification never cuts a request.
+      # that this claim never POSTed. Every step's budget, checkout included,
+      # fits inside the job timeout, so slow earlier steps never cut a request.
       - name: Preflight verified native Ready refresh
         id: preflight
         timeout-minutes: 6

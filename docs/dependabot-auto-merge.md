@@ -157,10 +157,12 @@ inspector's source attribution. It does not wait for the entire coordinator run,
 which still contains the refresh job. All Ready/receipt source checkouts are immutable.
 
 `ready-plan` runs after bot reconciliation and plans each PR in isolation. A PR
-whose own plan is rejected, such as an obsolete reporter definition, gets no target;
-the planner publishes the other PRs' verified targets and then fails. The writer runs
-for those published targets, never when the planner failed without them: API or
-infrastructure errors still abort the whole plan unpublished. Its narrowly privileged
+whose own plan is rejected gets no target: an obsolete reporter definition, or a
+recorded reporter cancellation or infrastructure failure that awaits operator
+recovery for that PR. The planner publishes the other PRs' verified targets and
+then fails. The writer runs for those published targets, never when the planner
+failed without them: errors of the planner's own API reads still abort the whole
+plan unpublished. Its narrowly privileged
 actions-write writer may rerun only the verified failed reporter job for the
 immediately next attempt, while armed only with the same coordinator run's completed
 receipt.
@@ -184,9 +186,11 @@ proof pair, counting an armed bot only through the writer run's own receipt, and
 ends with cheap PR/attempt identity reads instead of a second full proof; the rerun
 reporter re-verifies everything itself. No API read precedes the POST, so an
 executed request step means a POST was attempted, and only such a step blocks later
-claims for that tuple. Preflight has its own timeout inside the job timeout and
-leaves the request step room: slow verification is cut with the request skipped,
-so it cannot poison the tuple. `check-public-operations.py` enforces these budgets.
+claims for that tuple. Every refresh step, checkout included, has its own timeout
+and together they fit inside the job timeout, so slow earlier steps never shorten
+the request step: slow verification is cut with the request skipped, so it cannot
+poison the tuple. A job cancelled mid-step likewise records later default steps as
+skipped. `check-public-operations.py` enforces these budgets.
 Preflight yields to an earlier unstarted claim instead of failing, so a burst of
 wakes resolves at its last claim without poisoning the tuple; the request step
 itself never retries. An executed request step that failed, timed out or lost its

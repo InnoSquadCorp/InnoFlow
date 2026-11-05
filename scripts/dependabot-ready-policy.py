@@ -303,9 +303,11 @@ def plan_targets(api, p, numbers, enabled):
     """Verified refresh targets plus PRs whose own plan was rejected."""
     plans, rejected = [], []
     for number in numbers:
-        # A policy rejection is that PR's own fail-closed verdict: it is never
-        # refreshed and the job still fails after the others are published.
-        # API/infrastructure errors are not PR verdicts and abort every plan.
+        # A policy rejection is that PR's own fail-closed verdict, including a
+        # recorded reporter cancellation or infrastructure failure awaiting
+        # operator recovery: it is never refreshed and the job still fails after
+        # the others are published. This planner's own API errors are not PR
+        # verdicts; they raise outside Rejected and abort every plan.
         try:
             plan = refresh_plan(api, p, number, enabled)
         except p.Rejected as error:

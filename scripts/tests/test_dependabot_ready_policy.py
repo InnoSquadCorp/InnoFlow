@@ -634,27 +634,40 @@ class NativeReadyTests(unittest.TestCase):
 
     def test_plan_isolates_one_prs_policy_rejection_from_the_others(self):
         # 2026-11-04 06:33: PR #71's obsolete reporter rejected the whole plan
-        # job, so PR #73 was never planned. Only that PR is now withheld.
-        self.verdict(False)
-        self.api.base = 'e' * 40
-        self.api.source_blobs[f'contents/{n.REPORTER_PATH}?ref={BASE}'] = 'f' * 40
+        # job, so PR #73 was never planned. Only that PR is now withheld. A
+        # recorded reporter cancellation or infrastructure failure is likewise
+        # that PR's operator-recovery state, not an error of this planner's API.
+        def obsolete(api):
+            api.base = 'e' * 40
+            api.source_blobs[f'contents/{n.REPORTER_PATH}?ref={BASE}'] = 'f' * 40
+        def cancelled(api):
+            for item in [api.native_run, api.native_job, api.native_check]:
+                item['conclusion'] = 'cancelled'
+        def evaluation_failed(api):
+            api.native_job['steps'][1]['conclusion'] = 'failure'
         other = dict(pr=NUMBER + 1, head=HEAD, run=NATIVE_RUN + 7, attempt=1, job=9701)
         real = n.refresh_plan
         def plan(api, policy, number, enabled):
             return real(api, policy, number, enabled) if number == NUMBER else other
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / 'output'
-            stderr = io.StringIO()
-            with mock.patch.object(n, 'policy_module', return_value=p), mock.patch.object(p, 'GitHub', return_value=self.api), \
-                    mock.patch.object(n.sys, 'argv', ['ready-policy', 'plan']), \
-                    mock.patch.dict(os.environ, PR_NUMBERS=json.dumps([NUMBER, NUMBER + 1]), GITHUB_OUTPUT=str(output)), \
-                    mock.patch.object(n, 'refresh_plan', side_effect=plan), contextlib.redirect_stderr(stderr):
-                self.assertEqual(n.main(), 0)
-            self.assertEqual(output.read_text(), 'targets=' + json.dumps([other], separators=(',', ':')) +
-                             f'\nrejected=[{NUMBER}]\n')
-        self.assertIn(f'PR #{NUMBER}: obsolete reporter definition/policy', stderr.getvalue())
-        self.assertEqual(n.plan_targets(self.api, p, [NUMBER], True), ([], [NUMBER]))
-        self.assertFalse(self.api.mutations)
+        for record, reason in [(obsolete, 'obsolete reporter definition/policy'),
+                               (cancelled, 'reporter must be terminal success/failure; cancelled/unknown requires operator recovery'),
+                               (evaluation_failed, 'reporter infrastructure/API/evaluation failure requires operator recovery')]:
+            self.api = Transcript()
+            self.verdict(False)
+            record(self.api)
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / 'output'
+                stderr = io.StringIO()
+                with mock.patch.object(n, 'policy_module', return_value=p), mock.patch.object(p, 'GitHub', return_value=self.api), \
+                        mock.patch.object(n.sys, 'argv', ['ready-policy', 'plan']), \
+                        mock.patch.dict(os.environ, PR_NUMBERS=json.dumps([NUMBER, NUMBER + 1]), GITHUB_OUTPUT=str(output)), \
+                        mock.patch.object(n, 'refresh_plan', side_effect=plan), contextlib.redirect_stderr(stderr):
+                    self.assertEqual(n.main(), 0)
+                self.assertEqual(output.read_text(), 'targets=' + json.dumps([other], separators=(',', ':')) +
+                                 f'\nrejected=[{NUMBER}]\n')
+                self.assertIn(f'PR #{NUMBER}: {reason}', stderr.getvalue())
+                self.assertEqual(n.plan_targets(self.api, p, [NUMBER], True), ([], [NUMBER]))
+                self.assertFalse(self.api.mutations)
 
     def test_coordinator_refuses_unreceipted_success_or_changed_failure_and_cancels(self):
         self.api.pr['auto_merge'] = dict(enabled_by=dict(p.BOT))
@@ -706,11 +719,14 @@ class NativeReadyTests(unittest.TestCase):
         self.assertIn('dependabot-ready-policy.py preflight', writer[preflight:request])
         self.assertIn("if: steps.preflight.outputs.request == 'true'", writer[request:])
         self.assertIn('dependabot-ready-policy.py refresh', writer[request:])
-        # Each step owns a budget inside the job timeout: slow verification is
-        # cut in preflight (request skipped), never inside the request step.
+        # Each step, checkout included, owns a budget inside the job timeout:
+        # slow checkout or verification is cut before the request step (request
+        # skipped), never inside or shortening the request step.
+        checkout = writer.index('name: Checkout trusted coordinator only')
+        self.assertLess(checkout, preflight)
         job_limit = int(re.search(r'^    timeout-minutes: ([0-9]+)$', writer, re.M)[1])
         limits = [int(re.search(r'^        timeout-minutes: ([0-9]+)$', section, re.M)[1])
-                  for section in (writer[preflight:request], writer[request:])]
+                  for section in (writer[checkout:preflight], writer[preflight:request], writer[request:])]
         self.assertLess(sum(limits), job_limit)
         self.assertEqual(writer.count('REFRESH_TARGET: ${{ toJSON(matrix.target) }}'), 2)
         self.assertNotIn('DEPENDABOT_AUTO_MERGE_ENABLED', writer[request:])
