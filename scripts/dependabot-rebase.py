@@ -9,8 +9,9 @@ repository secret holds that account's narrowly scoped token for the one comment
 Updates are serialized: while one update is current and not parked on a failed
 validation, or a request is still pending, nothing else is asked. Only Dependabot's
 own +1 reaction proves it accepted a request, so a comment from an account it does
-not obey never holds or ends the queue. The comment only starts Dependabot's own
-rebase; CI and the merge proof decide everything else.
+not obey only delays the queue until the acknowledgement window passes and never
+ends it. The comment only starts Dependabot's own rebase; CI and the merge proof
+decide everything else.
 """
 from datetime import datetime, timedelta, timezone
 import importlib.util

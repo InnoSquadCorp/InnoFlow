@@ -267,9 +267,11 @@ trusted-main source with a read-only job token. It asks for one rebase at a time
   `@dependabot rebase`. Dependabot marks a command it accepts with its own +1
   reaction within seconds and ignores accounts without push access, so only that
   reaction makes a rebase or recreate request made after the head commit pending
-  work, for one hour. An unacknowledged request holds the queue for ten minutes
-  and then decides nothing, so a stranger's comment can neither stall nor end the
-  queue. The secret's own unacknowledged request fails the run (its account may
+  work, for one hour. An unacknowledged request, whoever wrote it, holds the queue
+  for ten minutes because Dependabot may not have answered yet, and then decides
+  nothing. A stranger's comment therefore delays the queue by at most ten minutes
+  per comment (repeated comments repeat the delay) and never ends it for that
+  head. The secret's own unacknowledged request fails the run (its account may
   lack push access) and is never repeated for the same head; neither is an
   accepted request that produced no new head.
 
