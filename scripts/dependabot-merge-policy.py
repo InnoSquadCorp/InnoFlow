@@ -507,16 +507,16 @@ def coordinator_check_ids(api, number, head, checks):
             for job in jobs:
                 bare_skip = job.get("name") == "bot-ready" and job.get("status") == "completed" and job.get("conclusion") == "skipped"
                 refresh_skip = job.get("name") in {"ready-refresh", SKIPPED_REFRESH_NAME}
-                rerun_skip = job.get("name") == "metadata-rerun"
+                rerun_skip = job.get("name") in {"metadata-rerun", "capacity-rerun"}
                 require(job.get("name") in names or bare_skip or refresh_skip or rerun_skip,
                         "unexpected coordinator transport job")
                 check_id = coordinator_job_check(job, run, attempt, head, by_id)
                 if rerun_skip:
-                    # The metadata rerun writer runs only for background events.
+                    # The CI rerun writers run only for background events.
                     check = by_id[check_id]
                     require(job.get("status") == check.get("status") == "completed" and
                             job.get("conclusion") == check.get("conclusion") == "skipped" and job.get("steps") == [],
-                            "PR-target metadata rerun transport must be a terminal empty skip")
+                            "PR-target CI rerun transport must be a terminal empty skip")
                 if refresh_skip:
                     check = by_id[check_id]
                     require(job.get("status") == check.get("status") == "completed" and

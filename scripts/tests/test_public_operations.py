@@ -18,7 +18,7 @@ class PublicOperationsTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         files = p.LOCKS + ['Package.swift', p.SAMPLE + '/Package.swift', 'Tools/generate-docc.sh', '.github/dependabot.yml']
-        files += ['.github/workflows/' + n for n in ['ci.yml', 'coverage.yml', 'docs.yml', 'asan.yml', 'dependabot-auto-merge.yml', 'dependabot-review-notice.yml', 'dependabot-ready.yml']]
+        files += ['.github/workflows/' + n for n in ['ci.yml', 'coverage.yml', 'docs.yml', 'asan.yml', 'dependabot-auto-merge.yml', 'dependabot-review-notice.yml', 'dependabot-ready.yml', 'dependabot-rebase.yml']]
         for f in files:
             target = self.root / f
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -168,6 +168,28 @@ class PublicOperationsTests(unittest.TestCase):
         f.write_text('// new live consumer')
         with self.assertRaisesRegex(ValueError, 'manifest'):
             p.validate(self.root)
+
+    def test_rebase_secret_stays_in_one_trusted_background_step(self):
+        path = '.github/workflows/dependabot-rebase.yml'
+        for before, after in [('on:\n  push:\n', 'on:\n  pull_request_target:\n  push:\n'),
+                              ('    types: [requested]\n', '    types: [completed]\n'),
+                              ('      pull-requests: read\n', '      pull-requests: write\n'),
+                              ('      actions: read\n', '      actions: read\n      issues: write\n'),
+                              ('GH_TOKEN: ${{ github.token }}', 'GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}'),
+                              ('ref: ${{ github.workflow_sha }}', 'ref: ${{ github.event.workflow_run.head_sha }}'),
+                              ('persist-credentials: false', 'persist-credentials: true'),
+                              ("github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-rebase.yml@refs/heads/main'", 'true'),
+                              ('    timeout-minutes: 5\n', '    timeout-minutes: 5\n    continue-on-error: true\n'),
+                              ('jobs:\n  request:\n', 'jobs:\n  extra:\n    runs-on: ubuntu-latest\n  request:\n')]:
+            with self.subTest(before=before, after=after):
+                self.assertEqual((self.root / path).read_text().count(before), 1)
+                self.reject(path, lambda text, a=before, b=after: text.replace(a, b))
+        # Moving the secret out of the request step, e.g. to the job, is rejected.
+        def hoist(text):
+            secret = '          DEPENDABOT_REBASE_TOKEN: ${{ secrets.DEPENDABOT_REBASE_TOKEN }}\n'
+            return text.replace(secret, '').replace('    timeout-minutes: 5\n', '    timeout-minutes: 5\n    env:\n  ' + secret)
+        self.reject(path, hoist)
+        p.validate(self.root)
 
     def test_permissions_and_trusted_execution_cannot_expand(self):
         path = '.github/workflows/dependabot-auto-merge.yml'

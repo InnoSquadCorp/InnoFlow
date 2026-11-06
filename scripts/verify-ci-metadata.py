@@ -5,11 +5,13 @@ and validation-label set is accepted. All transport is read-only and bounded.
 """
 import argparse
 from datetime import datetime, timedelta, timezone
+import http.client
 import json
 import os
 from pathlib import Path
 import re
 import sys
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
@@ -25,6 +27,17 @@ VERIFY_STEP = 'Verify prior validation for metadata'
 
 class PendingValidation(ValueError):
     """Only a correctly bound native validation still running may be retried."""
+
+
+# GitHub answered nothing about validation on these: a dropped connection,
+# timeout or server-side failure. API answers and proof failures stay fatal.
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def transient(error):
+    if isinstance(error, HTTPError):
+        return error.code in RETRYABLE_STATUS
+    return isinstance(error, (URLError, ConnectionError, TimeoutError, http.client.IncompleteRead))
 
 
 def require(value, message):
@@ -218,6 +231,11 @@ def main():
         print('CI metadata waiting: ' + str(error), file=sys.stderr)
         return 75
     except Exception as error:
+        if transient(error):
+            # Retry the unchanged verifier inside the same bounded wait.
+            print(f'CI metadata waiting: transient GitHub API failure: {type(error).__name__}: {error}',
+                  file=sys.stderr)
+            return 75
         print('CI metadata gate rejected: ' + str(error), file=sys.stderr)
         return 1
 

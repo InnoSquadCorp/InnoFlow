@@ -1,0 +1,46 @@
+name: Dependabot rebase
+
+# A main change leaves open Dependabot updates on an obsolete base. Dependabot
+# obeys `@dependabot rebase` only from an account with push access, never from
+# the workflow token, so the optional DEPENDABOT_REBASE_TOKEN secret holds that
+# account's token for the one comment. Without it this only names the update
+# that needs a manual request. The secret stays out of the coordinator.
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [requested]
+    branches: [main]
+  schedule:
+    - cron: '47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-rebase
+  cancel-in-progress: false
+
+jobs:
+  request:
+    if: github.repository == 'InnoSquadCorp/InnoFlow' && github.ref == 'refs/heads/main' && github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-rebase.yml@refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - name: Checkout trusted rebase policy only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Request one serialized Dependabot rebase
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPENDABOT_REBASE_TOKEN: ${{ secrets.DEPENDABOT_REBASE_TOKEN }}
+        run: python3 -B scripts/dependabot-rebase.py

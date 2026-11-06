@@ -1,9 +1,16 @@
 """Native proof positive controls, stale/failing evidence and race regressions."""
 import copy
 from datetime import datetime, timedelta, timezone
+import http.client
 import importlib.util
+import io
+import json
+import os
 from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('gate', ROOT / 'scripts/verify-ci-metadata.py')
@@ -209,3 +216,35 @@ class MetadataGateTests(unittest.TestCase):
         for associations in [None,[],[dict(number=45),dict(number=46)],[dict(number='46')]]:
             t=Transcript();t.runs.append({**other,'pull_requests':associations})
             with self.subTest(associations=associations),self.assertRaises(ValueError):t.prove()
+
+
+class EntrypointTransportTests(unittest.TestCase):
+    """A dropped API reply proves nothing, so only it joins the bounded wait."""
+
+    def main(self,outcome):
+        with tempfile.TemporaryDirectory() as temp:
+            event=Path(temp)/'event.json';event.write_text(json.dumps(Transcript().event))
+            with mock.patch.dict(os.environ,dict(GITHUB_EVENT_PATH=str(event),GH_TOKEN='test'),clear=True), \
+                    mock.patch.object(gate,'prove',side_effect=outcome),mock.patch('sys.argv',['verify-ci-metadata.py']), \
+                    mock.patch('sys.stdout',new_callable=io.StringIO), \
+                    mock.patch('sys.stderr',new_callable=io.StringIO) as stderr:
+                return gate.main(),stderr.getvalue()
+
+    def test_dropped_connections_and_server_failures_wait_but_api_answers_reject(self):
+        def reply(code):return urllib.error.HTTPError('https://api.github.com/repos/x',code,'reply',{},None)
+        # PR #71 metadata run #504 failed after 409 waits on the first error.
+        waits=[http.client.RemoteDisconnected('Remote end closed connection without response'),
+               ConnectionResetError(104,'Connection reset by peer'),TimeoutError('The read operation timed out'),
+               urllib.error.URLError(OSError('Temporary failure in name resolution')),http.client.IncompleteRead(b'{'),
+               *map(reply,(429,500,502,503,504)),gate.PendingValidation('latest bound native validation is still running')]
+        for error in waits:
+            status,stderr=self.main(error)
+            with self.subTest(error=repr(error)):
+                self.assertEqual(status,75);self.assertIn('CI metadata waiting',stderr)
+        rejects=[*map(reply,(401,403,404,422)),ValueError('latest real validation has not succeeded'),
+                 KeyError('pull_request'),json.JSONDecodeError('Expecting value','',0)]
+        for error in rejects:
+            status,stderr=self.main(error)
+            with self.subTest(error=repr(error)):
+                self.assertEqual(status,1);self.assertIn('CI metadata gate rejected',stderr)
+        self.assertEqual(self.main(lambda *args:dict(run=10))[0],0)

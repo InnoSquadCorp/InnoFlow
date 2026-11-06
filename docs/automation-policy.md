@@ -152,10 +152,13 @@ validation. Reserved label names are compared case-insensitively, matching nativ
 workflow expressions. Making a PR Ready does not grant CI success, invalidate an
 actual failure, or bypass native review rules.
 
-Title/body edits and unrelated label additions/removals create an entirely skipped
-`CI metadata-only v1` run with its own per-run concurrency key. They cannot cancel
-real validation or publish a new **CI Required** / **Build Documentation** verdict;
-the aggregate names become **CI Metadata Only** / **Documentation Metadata Only**.
+Title/body edits and unrelated label additions/removals create a `CI metadata-only v1`
+run with its own per-run concurrency key. Every validation job is skipped, so it
+cannot cancel real validation. Its **CI Required** / **Build Documentation** gates
+keep those names but skip their own aggregation: the `Verify prior validation for
+metadata` step only mirrors the latest real validation of the exact head, live base,
+workflow and label set. It waits a bounded time for that validation and retries
+transient GitHub API failures within the same bound, but never synthesizes a pass.
 Base edits and missing label identity select real validation. No-op recognition
 binds the immutable workflow blob, merge parents, run/attempt, complete skipped
 job inventory and native check provenance. Titles alone are never proof. Pending
@@ -170,8 +173,8 @@ schedule and manual post-merge recovery retain their separate admission path.
 The existing required policy job runs `scripts/check-ci-workflows.py`, pinning
 **actionlint 1.7.12** and the platform archive SHA-256. It bounds downloads, extracts
 only the verified regular executable, and disables optional host-dependent
-shellcheck/pyflakes integration. Its three `concurrency.queue: max` compatibility
-exceptions match exact diagnostic file, line, column, kind and text; other
+shellcheck/pyflakes integration. Its reviewed `concurrency.queue` compatibility
+exceptions (`QUEUE_LOCATIONS`) match exact diagnostic file, line, column, kind and text; other
 workflow errors remain blocking. All runner job timeouts were already explicit
 and are retained without lowering validation budgets.
 
