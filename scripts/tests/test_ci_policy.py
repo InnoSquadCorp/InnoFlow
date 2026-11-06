@@ -99,6 +99,7 @@ class SelectionTests(unittest.TestCase):
             ([".github/workflows/dependabot-auto-merge.yml"], {"policy", "docs-required"}),
             ([".github/workflows/dependabot-review-notice.yml"], {"policy", "docs-required"}),
             ([".github/workflows/dependabot-ready.yml"], {"policy", "docs-required"}),
+            ([".github/workflows/dependabot-rebase.yml"], {"policy", "docs-required"}),
             (["docs/contracts/coverage-policy.json"], set(policy.JOBS)),
             (["docs/contracts/runtime-test-inventory.json"], set(policy.JOBS)),
             (["docs/contracts/release-evidence-policy.json"], set(policy.JOBS)),

@@ -1,7 +1,9 @@
 """Adversarial metadata transcripts for the privileged coordinator; no network."""
 import copy
 from datetime import datetime, timezone
+import http.client
 import importlib.util
+import io
 import json
 import os
 import re
@@ -410,22 +412,24 @@ class DependabotPolicyTests(unittest.TestCase):
         self.transport('post-merge-plan', 'queued')
         self.transport('post-merge', 'queued')
         self.transport('metadata-rerun', 'completed', 'skipped')
+        self.transport('capacity-rerun', 'completed', 'skipped')
         self.assertIn('armed', p.coordinate(self.api, NUMBER, True))
         self.assertEqual(self.api.native_check['conclusion'], 'failure')
 
-    def test_metadata_rerun_transport_is_only_a_terminal_empty_pr_target_skip(self):
-        mutations = [lambda j,c: j.update(steps=[dict(name='unexpected execution')]),
-                     lambda j,c: j.update(steps=None), lambda j,c: j.update(status='in_progress'),
-                     lambda j,c: j.update(conclusion='success'), lambda j,c: j.update(conclusion='failure'),
-                     lambda j,c: c.update(conclusion='success'), lambda j,c: c.update(status='queued'),
-                     lambda j,c: j.update(name='metadata-rerun '), lambda j,c: c.update(app=dict(id=999)),
-                     lambda j,c: j.update(run_attempt=2)]
-        for mutate in mutations:
-            self.api = Transcript()
-            job, check = self.transport('metadata-rerun', 'completed', 'skipped')
-            mutate(job, check)
-            with self.subTest(mutation=mutate), self.assertRaises(p.Rejected): p.proof(self.api, NUMBER)
-            self.assertFalse(self.api.mutations)
+    def test_ci_rerun_transport_is_only_a_terminal_empty_pr_target_skip(self):
+        for name in ('metadata-rerun', 'capacity-rerun'):
+            mutations = [lambda j,c: j.update(steps=[dict(name='unexpected execution')]),
+                         lambda j,c: j.update(steps=None), lambda j,c: j.update(status='in_progress'),
+                         lambda j,c: j.update(conclusion='success'), lambda j,c: j.update(conclusion='failure'),
+                         lambda j,c: c.update(conclusion='success'), lambda j,c: c.update(status='queued'),
+                         lambda j,c: j.update(name=j['name'] + ' '), lambda j,c: c.update(app=dict(id=999)),
+                         lambda j,c: j.update(run_attempt=2)]
+            for mutate in mutations:
+                self.api = Transcript()
+                job, check = self.transport(name, 'completed', 'skipped')
+                mutate(job, check)
+                with self.subTest(name=name, mutation=mutate), self.assertRaises(p.Rejected): p.proof(self.api, NUMBER)
+                self.assertFalse(self.api.mutations)
 
     def test_actual_unexpanded_refresh_name_is_only_a_bound_empty_pr_target_skip(self):
         self.failure_barrier()
@@ -697,12 +701,12 @@ class DependabotPolicyTests(unittest.TestCase):
         docc = (ROOT / '.github/workflows/docs.yml').read_text()
         docs = (ROOT / '.github/workflows/docs-publish.yml').read_text()
         self.assertEqual(coordinator.count('ref: refs/heads/main'), 2)
-        self.assertEqual(coordinator.count('ref: ${{ github.workflow_sha }}'), 5)
+        self.assertEqual(coordinator.count('ref: ${{ github.workflow_sha }}'), 6)
         inspect = coordinator.split('  inspect:\n', 1)[1].split('  ready-plan:\n', 1)[0]
         self.assertIn('ref: ${{ github.workflow_sha }}', inspect)
         self.assertIn('name: ' + p.COORDINATOR_SOURCE_STEP + '${{ github.workflow_sha }}', inspect)
-        self.assertEqual(coordinator.count('queue: max'), 4)
-        self.assertEqual(coordinator.count('persist-credentials: false'), 7)
+        self.assertEqual(coordinator.count('queue: max'), 5)
+        self.assertEqual(coordinator.count('persist-credentials: false'), 8)
         for unsafe in ['pull_request.head', 'secrets.', 'download-artifact', 'cache@', 'gh pr merge', 'pip install']:
             self.assertNotIn(unsafe, coordinator)
         self.assertIn('permissions: {}', notice)
@@ -763,6 +767,26 @@ class DependabotPolicyTests(unittest.TestCase):
         with mock.patch.object(api, 'request', return_value=(dict(total_count=2, jobs=[{}]), {})):
             with self.assertRaises(p.Rejected): api.pages(p.route('actions/runs/1/jobs'), 'jobs')
         with self.assertRaises(p.Rejected): api.request('GET', 'repos/foreign/project/pulls/1')
+
+    def test_broken_replies_surface_as_transport_errors_every_caller_handles(self):
+        class Socket:
+            def __init__(self, raw): self.raw = raw
+            def makefile(self, *args, **kwargs): return io.BytesIO(self.raw)
+        def reply(raw):
+            response = http.client.HTTPResponse(Socket(raw))
+            response.begin()
+            return response
+        api = p.GitHub('test-token')
+        with mock.patch.object(p.urllib.request, 'urlopen',
+                               return_value=reply(b'HTTP/1.1 200 OK\r\nContent-Length: 14\r\n\r\n{"number": 45}')):
+            self.assertEqual(api.get(p.route('pulls/45')), dict(number=45))
+        for failure in [lambda: reply(b'HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n{"number": 4'),
+                        lambda: reply(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n64\r\n{"num'),
+                        lambda: reply(b'NOT-HTTP\r\n\r\n'), lambda: reply(b'')]:
+            with mock.patch.object(p.urllib.request, 'urlopen', side_effect=lambda *a, **k: failure()), \
+                    self.subTest(failure=failure), self.assertRaises(ConnectionError) as caught:
+                api.get(p.route('pulls/45'))
+            self.assertIsInstance(caught.exception.__cause__, http.client.HTTPException)
 
     def test_graphql_thread_page_two_blocker_and_invalid_cursor(self):
         first = self.api.graphql('', {})

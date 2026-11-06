@@ -249,3 +249,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBERS: ${{ needs.inspect.outputs.prs }}
         run: python3 -B scripts/ci-metadata-rerun.py
+
+  # Hosted macOS capacity shortages cancel queued validation jobs before any step
+  # runs. Rerun only those failed jobs, once per validation; the rerun's own jobs
+  # still decide every check, and any other failure stays the change's verdict.
+  capacity-rerun:
+    needs: inspect
+    if: needs.inspect.result == 'success' && github.repository == 'InnoSquadCorp/InnoFlow' && github.ref == 'refs/heads/main' && github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-auto-merge.yml@refs/heads/main' && github.event_name != 'pull_request_target' && needs.inspect.outputs.prs != '' && needs.inspect.outputs.prs != '[]'
+    concurrency:
+      group: ci-capacity-rerun
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+      pull-requests: read
+    steps:
+      - name: Checkout trusted coordinator only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Rerun validation jobs that never got a hosted runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBERS: ${{ needs.inspect.outputs.prs }}
+        run: python3 -B scripts/ci-capacity-rerun.py
