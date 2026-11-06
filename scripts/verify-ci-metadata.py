@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import ssl
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -37,6 +38,8 @@ RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 def transient(error):
     if isinstance(error, HTTPError):
         return error.code in RETRYABLE_STATUS
+    if isinstance(error, URLError) and isinstance(error.reason, ssl.SSLCertVerificationError):
+        return False  # An untrusted certificate stays untrusted; waiting cannot fix it.
     return isinstance(error, (URLError, ConnectionError, TimeoutError, http.client.IncompleteRead))
 
 
@@ -63,7 +66,12 @@ class API:
                                    'X-GitHub-Api-Version': '2022-11-28'})
         with build_opener(NoRedirect).open(request, timeout=30) as response:
             payload = response.read(8_000_001)
+            # read(amt) returns a body cut short of Content-Length instead of
+            # raising; http.client keeps the undelivered byte count in length.
+            missing = getattr(response, 'length', None)
         require(len(payload) <= 8_000_000, 'oversized GitHub response')
+        if missing:
+            raise http.client.IncompleteRead(payload, missing)
         return json.loads(payload)
 
     def pages(self, route, key):

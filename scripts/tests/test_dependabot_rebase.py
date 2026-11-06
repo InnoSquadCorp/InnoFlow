@@ -21,6 +21,8 @@ NOW = datetime(2026, 11, 6, 3, 0, tzinfo=timezone.utc)
 COMMITTED = '2026-11-06T01:00:00Z'
 TRUSTED = dict(GITHUB_REPOSITORY=p.REPOSITORY, GITHUB_REF='refs/heads/main', GITHUB_WORKFLOW_REF=r.WORKFLOW_REF,
                GITHUB_EVENT_NAME='push', GH_TOKEN='job-token')
+# The secret's account, a maintainer, and a stranger without push access.
+OWN, MAINTAINER, STRANGER = 500, 600, 700
 
 
 def stamp(moment):
@@ -33,10 +35,10 @@ class RebaseAPI:
     def __init__(self):
         self.repo = dict(id=100, full_name=p.REPOSITORY)
         self.workflow = dict(id=10, path=p.CI_PATH, state='active')
-        self.prs, self.runs, self.comments, self.commits = {}, {}, {}, {}
+        self.prs, self.runs, self.comments, self.commits, self.reactions = {}, {}, {}, {}, {}
         for number in (73, 71):
             self.add(number)
-        self.posts = []
+        self.posts, self.identities = [], []
 
     def add(self, number, base=OLD, user=None):
         head = format(number, 'x') * 40
@@ -54,8 +56,13 @@ class RebaseAPI:
                                         f'CI validation v2 pr:{number} head:{head} base:{MAIN} source:{"c" * 40} '
                                         'release:true asan:false concurrency:false')))
 
-    def comment(self, number, created, body=r.COMMAND, updated=None):
-        self.comments[number].append(dict(body=body, created_at=stamp(created), updated_at=stamp(updated or created)))
+    def comment(self, number, created, body=r.COMMAND, updated=None, author=MAINTAINER, ack=True):
+        """Dependabot reacts +1 within seconds to a command it accepts (#71 and #73, 2026-11-03..05)."""
+        identifier = 9000 + sum(map(len, self.comments.values()))
+        self.comments[number].append(dict(id=identifier, body=body, user=dict(id=author, type='User'),
+                                          created_at=stamp(created), updated_at=stamp(updated or created)))
+        self.reactions[identifier] = [dict(content='+1', user=dict(p.BOT))] if ack else []
+        return identifier
 
     def get(self, route):
         suffix = route.removeprefix(f'repos/{p.REPOSITORY}').lstrip('/')
@@ -75,26 +82,33 @@ class RebaseAPI:
         found = re.fullmatch(r'issues/([0-9]+)/comments\?since=(.+)', suffix)
         if found:
             return copy.deepcopy([c for c in self.comments[int(found[1])] if c['updated_at'] >= found[2]])
+        found = re.fullmatch(r'issues/comments/([0-9]+)/reactions\?content=%2B1', suffix)
+        if found:
+            return copy.deepcopy([x for x in self.reactions[int(found[1])] if x['content'] == '+1'])
         raise AssertionError('Unexpected pages: ' + route)
 
 
 class Writer:
     """The secret-holding account; only it may comment."""
 
-    def __init__(self, api, accept=True, lost=False):
-        self.api, self.accept, self.lost = api, accept, lost
+    def __init__(self, api, accept=True, lost=False, ack=True):
+        self.api, self.accept, self.lost, self.ack = api, accept, lost, ack
+
+    def graphql(self, query, variables):
+        self.api.identities.append(query)
+        return dict(viewer=dict(databaseId=OWN))
 
     def mutate(self, method, route, payload):
         self.api.posts.append((method, route, copy.deepcopy(payload)))
         if self.accept:
-            self.api.comment(int(route.rsplit('/', 2)[1]), NOW, payload['body'])
+            self.api.comment(int(route.rsplit('/', 2)[1]), NOW, payload['body'], author=OWN, ack=self.ack)
         if self.lost or not self.accept:
             raise OSError('lost reply')
 
 
 class RebaseTests(unittest.TestCase):
-    def plan(self, api):
-        return r.plan(api, p, NOW)
+    def plan(self, api, now=NOW, own=OWN):
+        return r.plan(api, p, now, own)
 
     def test_the_oldest_stale_update_is_asked_exactly_once(self):
         api = RebaseAPI()
@@ -102,11 +116,11 @@ class RebaseTests(unittest.TestCase):
         self.assertEqual(target, dict(pr=71, head=api.prs[71]['head']['sha'], main=MAIN,
                                       committed=datetime(2026, 11, 6, 1, 0, tzinfo=timezone.utc)))
         self.assertIn('PR71', reason)
-        self.assertIn('rebase requested', r.request(api, Writer(api), p, target, NOW))
+        self.assertIn('Dependabot accepted the rebase request', r.request(api, Writer(api), p, target, NOW, OWN))
         self.assertEqual(api.posts, [('POST', f'repos/{p.REPOSITORY}/issues/71/comments', {'body': '@dependabot rebase'})])
         # The pending request holds the queue; #73 waits instead of racing it.
         self.assertIsNone(self.plan(api)[0])
-        self.assertIn('no longer the next stale update', r.request(api, Writer(api), p, target, NOW))
+        self.assertIn('no longer the next stale update', r.request(api, Writer(api), p, target, NOW, OWN))
         self.assertEqual(len(api.posts), 1)
 
     def test_a_current_update_holds_the_queue_until_its_validation_fails(self):
@@ -149,6 +163,9 @@ class RebaseTests(unittest.TestCase):
         api = RebaseAPI()
         api.comment(71, NOW - timedelta(hours=1))
         self.assertEqual(self.plan(api)[0]['pr'], 73)
+        # A newer request still awaiting its acknowledgement holds after an old accepted one.
+        api.comment(71, NOW - timedelta(minutes=1), ack=False)
+        self.assertIn('waiting for Dependabot to acknowledge', self.plan(api)[1])
         # Requests before the current head, or other text, are not pending work.
         before = datetime(2026, 11, 6, 0, 59, tzinfo=timezone.utc)
         for created, body, updated in [(before, r.COMMAND, None), (before, r.COMMAND, NOW),
@@ -165,6 +182,43 @@ class RebaseTests(unittest.TestCase):
         api.commits['1' * 40] = dict(sha='1' * 40, committer=dict(date=stamp(NOW)))
         api.runs['1' * 40] = []
         self.assertIn('PR71 is the current update', self.plan(api)[1])
+
+    def test_only_requests_dependabot_accepted_hold_or_end_the_queue(self):
+        # PR #71, 2026-11-04 01:49: an unacknowledged request was followed by no rebase.
+        for author in (STRANGER, MAINTAINER, OWN):
+            api = RebaseAPI()
+            api.comment(71, NOW - timedelta(minutes=9), author=author, ack=False)
+            with self.subTest(author=author):
+                target, reason = self.plan(api)
+                self.assertIsNone(target)
+                self.assertIn('waiting for Dependabot to acknowledge', reason)
+        late = NOW - timedelta(minutes=10)
+        for author in (STRANGER, MAINTAINER):
+            api = RebaseAPI()
+            api.comment(71, late, author=author, ack=False)
+            with self.subTest(author=author):
+                self.assertEqual(self.plan(api)[0]['pr'], 71)
+        # The secret's own ignored request is never repeated; without the secret it is anyone's.
+        api = RebaseAPI()
+        api.comment(71, late, author=OWN, ack=False)
+        self.assertEqual(self.plan(api)[0]['pr'], 73)
+        self.assertEqual(self.plan(api, own=None)[0]['pr'], 71)
+        # Only Dependabot's own +1 is its acceptance.
+        for reaction in [dict(content='+1', user=dict(p.BOT, id=1)), dict(content='+1', user=dict(p.BOT, type='User')),
+                         dict(content='+1', user=dict(login='person', id=1, type='User')),
+                         dict(content='heart', user=dict(p.BOT))]:
+            api = RebaseAPI()
+            api.reactions[api.comment(71, late, author=STRANGER, ack=False)] = [reaction]
+            with self.subTest(reaction=reaction):
+                self.assertEqual(self.plan(api)[0]['pr'], 71)
+        api = RebaseAPI()
+        api.comment(71, late, author=STRANGER)
+        self.assertIn("waiting for Dependabot's new head", self.plan(api)[1])
+        api = RebaseAPI()
+        api.comments[71].append(dict(id='9000', body=r.COMMAND, user=dict(id=STRANGER), created_at=stamp(NOW),
+                                     updated_at=stamp(NOW)))
+        with self.assertRaises(p.Rejected):
+            self.plan(api)
 
     def test_only_open_same_repository_dependabot_updates_into_main_are_considered(self):
         for change in [lambda a: a.prs[71].update(draft=True), lambda a: a.prs[71].update(user=dict(login='person', id=1, type='User')),
@@ -197,12 +251,24 @@ class RebaseTests(unittest.TestCase):
         api = RebaseAPI()
         target = self.plan(api)[0]
         with mock.patch('sys.stderr', new_callable=io.StringIO) as stderr:
-            self.assertIn('rebase requested', r.request(api, Writer(api, lost=True), p, target, NOW))
+            self.assertIn('Dependabot accepted', r.request(api, Writer(api, lost=True), p, target, NOW, OWN))
         self.assertIn('rebase request raised OSError: lost reply', stderr.getvalue())
         api = RebaseAPI()
         with mock.patch.object(r.time, 'sleep'), mock.patch('sys.stderr', new_callable=io.StringIO), \
                 self.assertRaisesRegex(p.Rejected, 'unconfirmed'):
-            r.request(api, Writer(api, accept=False), p, target, NOW)
+            r.request(api, Writer(api, accept=False), p, target, NOW, OWN)
+        self.assertEqual(len(api.posts), 1)
+
+    def test_an_unacknowledged_request_fails_loudly_and_is_never_repeated(self):
+        api = RebaseAPI()
+        target = self.plan(api)[0]
+        with mock.patch.object(r.time, 'sleep') as sleep, self.assertRaisesRegex(p.Rejected, 'lack push access'):
+            r.request(api, Writer(api, ack=False), p, target, NOW, OWN)
+        self.assertEqual((len(api.posts), sleep.call_count), (1, 5))
+        self.assertIn('waiting for Dependabot to acknowledge', self.plan(api)[1])
+        later = NOW + r.ACKNOWLEDGE
+        self.assertEqual(self.plan(api, later)[0]['pr'], 73)
+        self.assertIn('no longer the next stale update', r.request(api, Writer(api), p, target, later, OWN))
         self.assertEqual(len(api.posts), 1)
 
     def entry(self, api, environment, writer=None):
@@ -222,10 +288,19 @@ class RebaseTests(unittest.TestCase):
         status, output = self.entry(api, dict(TRUSTED, DEPENDABOT_REBASE_TOKEN='rebase-token'), Writer(api))
         self.assertEqual(status, 0)
         self.assertEqual(self.tokens, [None, 'rebase-token'])
-        self.assertEqual(len(api.posts), 1)
+        self.assertEqual((len(api.posts), api.identities), (1, ['query { viewer { databaseId } }']))
+        # The account that comments must be known before anything is asked.
+        for viewer in [dict(viewer=dict(databaseId='500')), dict(viewer=dict(databaseId=True)),
+                       dict(viewer=dict(databaseId=0)), dict(viewer=None), {}]:
+            api = RebaseAPI()
+            writer = Writer(api)
+            writer.graphql = lambda query, variables, viewer=viewer: viewer
+            with self.subTest(viewer=viewer):
+                status, _ = self.entry(api, dict(TRUSTED, DEPENDABOT_REBASE_TOKEN='rebase-token'), writer)
+                self.assertEqual((status, api.posts), (1, []))
         api = RebaseAPI()
         status, output = self.entry(api, TRUSTED)
-        self.assertEqual((status, api.posts, self.tokens), (0, [], [None]))
+        self.assertEqual((status, api.posts, self.tokens, api.identities), (0, [], [None], []))
         self.assertIn('::notice title=Dependabot rebase needed::', output)
         self.assertIn('PR #71', output)
         for change in [dict(GITHUB_EVENT_NAME='pull_request_target'), dict(GITHUB_EVENT_NAME='pull_request'),

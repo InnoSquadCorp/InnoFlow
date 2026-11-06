@@ -1,7 +1,9 @@
 """Adversarial metadata transcripts for the privileged coordinator; no network."""
 import copy
 from datetime import datetime, timezone
+import http.client
 import importlib.util
+import io
 import json
 import os
 import re
@@ -765,6 +767,26 @@ class DependabotPolicyTests(unittest.TestCase):
         with mock.patch.object(api, 'request', return_value=(dict(total_count=2, jobs=[{}]), {})):
             with self.assertRaises(p.Rejected): api.pages(p.route('actions/runs/1/jobs'), 'jobs')
         with self.assertRaises(p.Rejected): api.request('GET', 'repos/foreign/project/pulls/1')
+
+    def test_broken_replies_surface_as_transport_errors_every_caller_handles(self):
+        class Socket:
+            def __init__(self, raw): self.raw = raw
+            def makefile(self, *args, **kwargs): return io.BytesIO(self.raw)
+        def reply(raw):
+            response = http.client.HTTPResponse(Socket(raw))
+            response.begin()
+            return response
+        api = p.GitHub('test-token')
+        with mock.patch.object(p.urllib.request, 'urlopen',
+                               return_value=reply(b'HTTP/1.1 200 OK\r\nContent-Length: 14\r\n\r\n{"number": 45}')):
+            self.assertEqual(api.get(p.route('pulls/45')), dict(number=45))
+        for failure in [lambda: reply(b'HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n{"number": 4'),
+                        lambda: reply(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n64\r\n{"num'),
+                        lambda: reply(b'NOT-HTTP\r\n\r\n'), lambda: reply(b'')]:
+            with mock.patch.object(p.urllib.request, 'urlopen', side_effect=lambda *a, **k: failure()), \
+                    self.subTest(failure=failure), self.assertRaises(ConnectionError) as caught:
+                api.get(p.route('pulls/45'))
+            self.assertIsInstance(caught.exception.__cause__, http.client.HTTPException)
 
     def test_graphql_thread_page_two_blocker_and_invalid_cursor(self):
         first = self.api.graphql('', {})

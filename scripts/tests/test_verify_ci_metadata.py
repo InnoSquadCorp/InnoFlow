@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import ssl
 import tempfile
 import unittest
 from unittest import mock
@@ -236,15 +237,46 @@ class EntrypointTransportTests(unittest.TestCase):
         waits=[http.client.RemoteDisconnected('Remote end closed connection without response'),
                ConnectionResetError(104,'Connection reset by peer'),TimeoutError('The read operation timed out'),
                urllib.error.URLError(OSError('Temporary failure in name resolution')),http.client.IncompleteRead(b'{'),
+               urllib.error.URLError(ssl.SSLEOFError(8,'EOF occurred in violation of protocol')),
                *map(reply,(429,500,502,503,504)),gate.PendingValidation('latest bound native validation is still running')]
         for error in waits:
             status,stderr=self.main(error)
             with self.subTest(error=repr(error)):
                 self.assertEqual(status,75);self.assertIn('CI metadata waiting',stderr)
         rejects=[*map(reply,(401,403,404,422)),ValueError('latest real validation has not succeeded'),
+                 urllib.error.URLError(ssl.SSLCertVerificationError(1,'[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed')),
                  KeyError('pull_request'),json.JSONDecodeError('Expecting value','',0)]
         for error in rejects:
             status,stderr=self.main(error)
             with self.subTest(error=repr(error)):
                 self.assertEqual(status,1);self.assertIn('CI metadata gate rejected',stderr)
         self.assertEqual(self.main(lambda *args:dict(run=10))[0],0)
+
+
+class Socket:
+    """Raw HTTP bytes ending where the connection closed; real http.client parsing, no network."""
+    def __init__(self,raw):self.raw=raw
+    def makefile(self,*args,**kwargs):return io.BytesIO(self.raw)
+
+
+class ResponseBodyTests(unittest.TestCase):
+    """A body cut short of its declared length is a dropped transfer, not malformed JSON."""
+
+    def get(self,raw):
+        response=http.client.HTTPResponse(Socket(raw));response.begin()
+        opener=mock.Mock();opener.open.return_value=response
+        with mock.patch.object(gate,'build_opener',return_value=opener):
+            return gate.API(REPO,'test').get(f'repos/{REPO}/pulls/45')
+
+    def test_short_bodies_join_the_wait_and_complete_or_oversized_ones_do_not(self):
+        body=b'{"number": 45}'
+        self.assertEqual(self.get(b'HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s'%(len(body),body)),dict(number=45))
+        self.assertEqual(self.get(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\ne\r\n%s\r\n0\r\n\r\n'%body),
+                         dict(number=45))
+        for raw in [b'HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n{"number": 4',
+                    b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n64\r\n{"number": 4']:
+            with self.subTest(raw=raw[:40]),self.assertRaises(http.client.IncompleteRead) as caught:
+                self.get(raw)
+            self.assertTrue(gate.transient(caught.exception))
+        oversized=b'HTTP/1.1 200 OK\r\nContent-Length: 9000000\r\n\r\n'+b' '*8_000_001
+        with self.assertRaisesRegex(ValueError,'oversized'):self.get(oversized)

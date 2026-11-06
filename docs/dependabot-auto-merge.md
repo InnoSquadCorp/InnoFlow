@@ -81,9 +81,12 @@ metadata gates. The rerun's own verifier still decides the checks, and the merge
 proof accepts earlier failed gate attempts only when the latest attempt verified
 validation. A stale test merge is never rerun; it needs a new head or base
 update. Ready refresh then follows on the next coordinator event or the hourly
-schedule. The metadata verifier treats a dropped connection, timeout or GitHub
-429/5xx reply as "not yet known" and retries within the same 5h50m bound; every
-API answer and proof failure still rejects at once.
+schedule. The metadata verifier treats a dropped connection, timeout, a body cut
+short of its declared length or a GitHub 429/5xx reply as "not yet known" and
+retries within the same 5h50m bound; every API answer, an untrusted TLS
+certificate and every proof failure still reject at once. The coordinator scripts
+report a broken API reply as a connection error, so one PR's transport failure
+never stops the others.
 
 Hosted macOS arm64 capacity shortages cancel queued validation jobs before any
 step runs, with GitHub's annotation "The job was not acquired by Runner of type
@@ -261,9 +264,14 @@ trusted-main source with a read-only job token. It asks for one rebase at a time
   latest validation is pending, running or successful, nothing else is asked; a
   failed validation parks it so the queue moves on.
 - Otherwise the oldest stale update is asked once, with the exact comment
-  `@dependabot rebase`. A rebase or recreate request made after its head commit,
-  by anyone, is pending work for one hour; a request Dependabot ignored is never
-  repeated for the same head.
+  `@dependabot rebase`. Dependabot marks a command it accepts with its own +1
+  reaction within seconds and ignores accounts without push access, so only that
+  reaction makes a rebase or recreate request made after the head commit pending
+  work, for one hour. An unacknowledged request holds the queue for ten minutes
+  and then decides nothing, so a stranger's comment can neither stall nor end the
+  queue. The secret's own unacknowledged request fails the run (its account may
+  lack push access) and is never repeated for the same head; neither is an
+  accepted request that produced no new head.
 
 The comment only starts Dependabot's own rebase. CI, the merge proof and Ready
 decide everything after it. Without the secret, the workflow only reports the

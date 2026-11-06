@@ -158,6 +158,20 @@ class CapacityRerunTests(unittest.TestCase):
                 mock.patch.dict(os.environ, BACKGROUND, clear=True):
             self.assertEqual(r.main(), 0)
         self.assertEqual(len(api.posts), 1)
+        # A broken reply for one PR (normalized to ConnectionError) leaves the others to proceed.
+        api = CapacityAPI()
+        read = api.get
+        def get(route):
+            if route == f'repos/{p.REPOSITORY}/pulls/999':
+                raise ConnectionError('GitHub API reply broken: IncompleteRead')
+            return read(route)
+        api.get = get
+        with mock.patch.object(r, 'load', return_value=p), mock.patch.object(p, 'GitHub', return_value=api), \
+                mock.patch.dict(os.environ, dict(BACKGROUND, PR_NUMBERS=f'[999, {bot.NUMBER}]'), clear=True), \
+                mock.patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            self.assertEqual(r.main(), 1)
+        self.assertIn('PR999: no capacity rerun: GitHub API reply broken', stderr.getvalue())
+        self.assertEqual(len(api.posts), 1)
         for change in (dict(GITHUB_EVENT_NAME='pull_request_target'), dict(GITHUB_JOB='metadata-rerun'),
                        dict(GITHUB_REF='refs/heads/unmerged'), dict(PR_NUMBERS='[45, 45]'), dict(PR_NUMBERS='["45"]')):
             api = CapacityAPI()
