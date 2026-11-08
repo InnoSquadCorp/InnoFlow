@@ -3,8 +3,9 @@
 The repository prepares native squash auto-merge for verified Dependabot PRs,
 including majors and SwiftSyntax updates. Existing review, compatibility, API,
 coverage and performance checks remain in force. Human PRs are never automatically
-armed by this coordinator. No new PAT, App installation, credential or bypass is
-created, and this implementation does not change repository settings.
+armed by this coordinator. The coordinator uses no PAT, App installation, credential
+or bypass, and this implementation does not change repository settings. Only the
+separate, optional rebase requester below can hold an owner-provided secret.
 
 ## Trusted execution
 
@@ -27,7 +28,10 @@ artifacts or PR-controlled shell commands execute with write permission.
 | post-merge-plan | contents, actions, pull-requests read |
 | native Ready | contents, actions, checks, pull-requests read |
 | post-merge | contents, pull-requests read; actions write |
+| metadata-rerun | contents, pull-requests read; actions write |
+| capacity-rerun | contents, checks, pull-requests read; actions write |
 | Review Notice | no permissions, checkout, dependencies, secrets or artifacts |
+| Dependabot rebase | contents, actions, pull-requests read; optional `DEPENDABOT_REBASE_TOKEN` in one step |
 
 These scopes are prepared code and need owner review before merging/activation.
 The post-merge job's actions-write scope has no arbitrary dispatch interface:
@@ -77,7 +81,25 @@ metadata gates. The rerun's own verifier still decides the checks, and the merge
 proof accepts earlier failed gate attempts only when the latest attempt verified
 validation. A stale test merge is never rerun; it needs a new head or base
 update. Ready refresh then follows on the next coordinator event or the hourly
-schedule.
+schedule. The metadata verifier treats a dropped connection, timeout, a body cut
+short of its declared length or a GitHub 429/5xx reply as "not yet known" and
+retries within the same 5h50m bound; every API answer, an untrusted TLS
+certificate and every proof failure still reject at once. The coordinator scripts
+report a broken API reply as a connection error, so one PR's transport failure
+never stops the others.
+
+Hosted macOS arm64 capacity shortages cancel queued validation jobs before any
+step runs, with GitHub's annotation "The job was not acquired by Runner of type
+hosted even after multiple attempts". Nothing replaces the failed CI Required
+that follows. The coordinator's `capacity-rerun` job (`ci-capacity-rerun.py`)
+reruns only the failed jobs of the latest validation of the current PR head, and
+only for its first attempt. Every failed job must be either such a capacity
+cancellation (no runner, no step, that exact failure annotation) or an aggregate
+gate whose aggregation step alone failed. A real failure, a timeout or a
+cancellation by a newer push is the change's verdict and is never rerun. The
+rerun's own jobs decide every check, and a capacity loss in the rerun waits for
+an operator. Main-branch CI is outside this job: failed main runs still need
+operator review.
 
 Optional requested reviewers/teams are notifications for an exactly verified
 same-repository Dependabot PR, not an additional approval requirement. Requests
@@ -223,6 +245,46 @@ main push or its DocC/coverage jobs. Hourly schedules are best-effort, not an ex
 This change does not assert that native Ready fork handling, main proof reuse or
 post-merge recovery has been observed after deployment; fixture tests are distinct
 from live activation evidence.
+
+## Serialized rebase requests
+
+Every main change leaves the other open Dependabot PRs on an obsolete base. Their
+merge proof rejects until Dependabot rebases them, and a policy change also needs
+that fresh lifecycle event for a new Ready. Dependabot obeys `@dependabot rebase`
+only from an account with push access; it refuses `github-actions[bot]` and GitHub
+Apps, and a workflow-token branch update would neither start CI nor keep the PR
+Dependabot-managed. The separate `Dependabot rebase` workflow
+(`dependabot-rebase.py`) therefore keeps that credential out of the coordinator.
+
+It runs only on main pushes, a requested main CI run (which covers post-merge
+recovery dispatch), the hourly schedule and manual dispatch, from immutable
+trusted-main source with a read-only job token. It asks for one rebase at a time:
+
+- A Dependabot PR whose base is current main is the current update. While its
+  latest validation is pending, running or successful, nothing else is asked; a
+  failed validation parks it so the queue moves on.
+- Otherwise the oldest stale update is asked once, with the exact comment
+  `@dependabot rebase`. Dependabot marks a command it accepts with its own +1
+  reaction within seconds and ignores accounts without push access, so only that
+  reaction makes a rebase or recreate request made after the head commit pending
+  work, for one hour. An unacknowledged request, whoever wrote it, holds the queue
+  for ten minutes because Dependabot may not have answered yet, and then decides
+  nothing. A stranger's comment therefore delays the queue by at most ten minutes
+  per comment (repeated comments repeat the delay) and never ends it for that
+  head. The secret's own unacknowledged request fails the run (its account may
+  lack push access) and is never repeated for the same head; neither is an
+  accepted request that produced no new head.
+
+The comment only starts Dependabot's own rebase. CI, the merge proof and Ready
+decide everything after it. Without the secret, the workflow only reports the
+update that needs a manual `@dependabot rebase`.
+
+To enable it, the owner creates a fine-grained personal access token for an
+account with push access, limited to this repository and **Pull requests: Read
+and write**, with an expiry, and stores it as the repository secret
+`DEPENDABOT_REBASE_TOKEN`. Deleting the secret returns to manual requests.
+`check-public-operations.py` keeps the triggers, the read-only job token and the
+single step holding the secret under review.
 
 ## Owner-approved flag-last activation
 

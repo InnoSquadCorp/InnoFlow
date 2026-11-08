@@ -19,7 +19,22 @@ PERMISSIONS = {
     'post-merge-plan': {'contents': 'read', 'actions': 'read', 'pull-requests': 'read'},
     'post-merge': {'contents': 'read', 'actions': 'write', 'pull-requests': 'read'},
     'metadata-rerun': {'contents': 'read', 'actions': 'write', 'pull-requests': 'read'},
+    'capacity-rerun': {'contents': 'read', 'actions': 'write', 'checks': 'read', 'pull-requests': 'read'},
 }
+# The only workflow holding a non-GITHUB_TOKEN credential: background events
+# only, read-only job token, one secret in one step, immutable trusted source.
+REBASE_TRIGGERS = """on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [requested]
+    branches: [main]
+  schedule:
+    - cron: '47 * * * *'
+  workflow_dispatch:
+"""
+REBASE_SECRET = '          DEPENDABOT_REBASE_TOKEN: ${{ secrets.DEPENDABOT_REBASE_TOKEN }}\n'
 
 
 def require(value, reason):
@@ -98,7 +113,7 @@ def workflow_boundaries(root):
         require(block is not None, name + ': missing explicit dedicated permissions')
         found = dict(re.findall(r'^      ([\w-]+): (read|write|none)$', block[1], re.M))
         require(found == expected, name + ': permissions expanded or missing')
-        if name in {'ready-refresh', 'bot-ready', 'post-merge', 'metadata-rerun'}:
+        if name in {'ready-refresh', 'bot-ready', 'post-merge', 'metadata-rerun', 'capacity-rerun'}:
             require('      cancel-in-progress: false' in job and '      queue: max' in job,
                     name + ': serialized writers must retain pending work')
         trusted_ref = 'ref: refs/heads/main' if name in {'post-merge-plan', 'post-merge'} else 'ref: ${{ github.workflow_sha }}'
@@ -148,6 +163,26 @@ def workflow_boundaries(root):
         require(unsafe not in reporter, 'unsafe native reporter input: ' + unsafe)
     notice = (root / '.github/workflows/dependabot-review-notice.yml').read_text()
     require('permissions: {}' in notice and 'uses:' not in notice and 'secrets.' not in notice and 'GH_TOKEN' not in notice, 'review notice must be inert and zero-permission')
+    rebase = (root / '.github/workflows/dependabot-rebase.yml').read_text()
+    require(re.search(r'^on:\n.*?(?=^\S)', rebase, re.M | re.S)[0].rstrip('\n') + '\n' == REBASE_TRIGGERS,
+            'rebase requests must stay on trusted background events')
+    jobs = re.findall(r'^  ([\w-]+):\n', rebase.split('\njobs:\n', 1)[1], re.M)
+    block = re.search(r'^    permissions:\n((?:^      [\w-]+: (?:read|write|none)\n)+)', rebase, re.M)
+    require(jobs == ['request'] and block is not None and
+            dict(re.findall(r'^      ([\w-]+): (read|write|none)$', block[1], re.M)) ==
+            {'contents': 'read', 'actions': 'read', 'pull-requests': 'read'},
+            'rebase job token must remain read-only')
+    require(rebase.count('secrets.') == 1 and rebase.count(REBASE_SECRET) == 1 and
+            rebase.index(REBASE_SECRET) > rebase.index('      - name: Request one serialized Dependabot rebase\n'),
+            'only the rebase request step may hold its one secret')
+    require(rebase.count('ref: ${{ github.workflow_sha }}') == 1 and rebase.count('persist-credentials: false') == 1 and
+            rebase.count('sparse-checkout: scripts') == 1 and 'run: python3 -B scripts/dependabot-rebase.py' in rebase,
+            'rebase job must run only trusted immutable source')
+    require("github.ref == 'refs/heads/main'" in rebase and "github.workflow_ref == 'InnoSquadCorp/InnoFlow/.github/workflows/dependabot-rebase.yml@refs/heads/main'" in rebase,
+            'rebase job trusted execution guard missing')
+    for unsafe in ['pull_request', 'github.event.', ': write', 'secrets: inherit', 'download-artifact', 'cache@',
+                   'pip install', 'npm install', 'continue-on-error']:
+        require(unsafe not in rebase, 'unsafe rebase workflow input: ' + unsafe)
     for path in ['ci.yml', 'coverage.yml', 'docs.yml', 'asan.yml']:
         workflow = (root / '.github/workflows' / path).read_text()
         require(not re.search(r'^\s+(?:contents|actions|checks|pull-requests|pages|id-token):\s*write', workflow, re.M), path + ': validation token must remain read-only')

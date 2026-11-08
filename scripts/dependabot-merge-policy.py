@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Trusted metadata-only Dependabot coordinator. Never downloads PR code/artifacts."""
 import argparse
+import http.client
 import importlib.util
 import json
 import os
@@ -155,9 +156,14 @@ class GitHub:
                      "Accept": "application/vnd.github+json", "Content-Type": "application/json",
                      "X-GitHub-Api-Version": "2022-11-28"})
         # No mutation retries: an unknown outcome must be read back first.
-        with urllib.request.urlopen(request, timeout=30) as response:
-            raw = response.read()
-            return (json.loads(raw) if raw else None), response.headers
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                raw = response.read()
+                return (json.loads(raw) if raw else None), response.headers
+        except http.client.HTTPException as error:
+            # A cut-short body or broken status line is a transport failure that is
+            # not an OSError; normalize it so every caller's OSError path applies.
+            raise ConnectionError(f"GitHub API reply broken: {type(error).__name__}: {error}") from error
 
     def get(self, path):
         return self.request("GET", path)[0]
@@ -507,16 +513,16 @@ def coordinator_check_ids(api, number, head, checks):
             for job in jobs:
                 bare_skip = job.get("name") == "bot-ready" and job.get("status") == "completed" and job.get("conclusion") == "skipped"
                 refresh_skip = job.get("name") in {"ready-refresh", SKIPPED_REFRESH_NAME}
-                rerun_skip = job.get("name") == "metadata-rerun"
+                rerun_skip = job.get("name") in {"metadata-rerun", "capacity-rerun"}
                 require(job.get("name") in names or bare_skip or refresh_skip or rerun_skip,
                         "unexpected coordinator transport job")
                 check_id = coordinator_job_check(job, run, attempt, head, by_id)
                 if rerun_skip:
-                    # The metadata rerun writer runs only for background events.
+                    # The CI rerun writers run only for background events.
                     check = by_id[check_id]
                     require(job.get("status") == check.get("status") == "completed" and
                             job.get("conclusion") == check.get("conclusion") == "skipped" and job.get("steps") == [],
-                            "PR-target metadata rerun transport must be a terminal empty skip")
+                            "PR-target CI rerun transport must be a terminal empty skip")
                 if refresh_skip:
                     check = by_id[check_id]
                     require(job.get("status") == check.get("status") == "completed" and

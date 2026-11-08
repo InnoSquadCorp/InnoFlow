@@ -42,6 +42,7 @@ WORKFLOW_IMPACT = {
     "dependabot-auto-merge.yml": set(),
     "dependabot-review-notice.yml": set(),
     "dependabot-ready.yml": set(),
+    "dependabot-rebase.yml": set(),
 }
 DOC_TOOLS = {
     "Tools/generate-docc.sh", "scripts/check-doc-contract.sh",
