@@ -107,32 +107,60 @@ class PublicOperationsTests(unittest.TestCase):
     def test_current_contract(self):
         p.validate(self.root)
 
-    def test_macro_opt_out_gate_rejects_removed_logical_identity_or_dispatch(self):
+    def assert_macro_gate_rejects(self, mutations, failure):
+        """Each mutation removes one thing the macro gate pins; the gate must then fail."""
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / 'InnoFlow'
             shutil.copytree(ROOT, root, ignore=shutil.ignore_patterns('.git', '.build*', '__pycache__'))
-            path = root / 'Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift'
-            original = path.read_text()
             command = ['bash', str(root / 'scripts/check-macro-operations.sh')]
             result = subprocess.run(command, cwd=root, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            mutations = [
-                ('logicalIdentifier(identifier.name)', 'identifier.name.text'),
-                ('logicalIdentifier(member.name)', 'member.name.text'),
-                ('let isExplicitlyIgnored = hasCasePathIgnoredAttribute(enumCaseDecl)',
-                 'let isExplicitlyIgnored = false'),
-                ('isExplicitlyIgnored: isExplicitlyIgnored,', 'isExplicitlyIgnored: false,'),
-                ('if isExplicitlyIgnored {', 'if false {'),
-            ]
-            for before, after in mutations:
-                with self.subTest(before=before):
-                    self.assertIn(before, original)
+            for source, before, after in mutations:
+                with self.subTest(source=source, before=before):
+                    path = root / source
+                    original = path.read_text()
+                    self.assertEqual(original.count(before), 1, before)
                     path.write_text(original.replace(before, after))
                     result = subprocess.run(command, cwd=root, capture_output=True, text=True)
                     self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                    self.assertIn('action-path synthesis must honor the per-case opt-out marker',
-                                  result.stdout + result.stderr)
+                    self.assertIn(failure, result.stdout + result.stderr)
                     path.write_text(original)
+
+    def test_macro_opt_out_gate_rejects_removed_logical_identity_or_dispatch(self):
+        action = 'Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift'
+        shared = 'Sources/InnoFlowMacros/InnoFlowMacro+OutputPathSynthesis.swift'
+        self.assert_macro_gate_rejects([
+            # The marker is matched by its logical name, plain or module-qualified.
+            (shared, 'return logicalIdentifier(identifier.name)', 'return identifier.name.text'),
+            (shared, 'return logicalIdentifier(member.name)', 'return member.name.text'),
+            (shared, 'if outputAttributeName(attribute) == expectedName {', 'if false {'),
+            # The shared traversal finds the marker and hands it to the generation scope.
+            (shared, 'named: "InnoFlowCasePathIgnored",', 'named: "InnoFlowCasePathIgnoredDisabled",'),
+            (shared, 'ignoredContexts: ignoredContexts', 'ignoredContexts: []'),
+            (shared, '(site.unavailableContexts + site.ignoredContexts).filter',
+             'site.unavailableContexts.filter'),
+            # Action synthesis walks that traversal and stops where the scope is empty.
+            (action, 'return synthesizedConditionalCasePathSources(',
+             'return unconditionalCasePathSources('),
+            (action, 'casePathGenerationScope(at: site, manualContexts: manualContexts)',
+             'casePathGenerationScope(at: site, manualContexts: [])'),
+            (action, 'casePathGenerationScope(at: site, manualContexts: manualContexts) else {\n      return []',
+             'casePathGenerationScope(at: site, manualContexts: manualContexts) else {\n      preconditionFailure()'),
+        ], 'action-path synthesis must honor the per-case opt-out marker')
+
+    def test_macro_path_gate_rejects_unshared_manual_path_or_collision_rule(self):
+        action = 'Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift'
+        shared = 'Sources/InnoFlowMacros/InnoFlowMacro+OutputPathSynthesis.swift'
+        self.assert_macro_gate_rejects([
+            (action, 'let manualContexts = manualPathNames.contexts(\n      memberName,\n'
+                     '      overlapping: site.conditionalContext\n    )',
+             'let manualContexts: [OutputConditionalContext] = []'),
+            (action, 'guard\n      reserveGeneratedCasePathName(', 'guard\n      reserveActionPathName('),
+            (shared, 'manualContexts: manualPathNames.contexts(\n          memberName,\n'
+                     '          overlapping: site.conditionalContext\n        )',
+             'manualContexts: []'),
+            (shared, 'guard\n      reserveGeneratedCasePathName(', 'guard\n      reserveOutputPathName('),
+        ], 'must apply the shared manual-path and collision rule')
 
     def test_every_swift_syntax_lock_and_generator_requires_coherence(self):
         for f in p.LOCKS:

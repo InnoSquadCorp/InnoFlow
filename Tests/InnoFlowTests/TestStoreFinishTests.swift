@@ -10,7 +10,7 @@ import Testing
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-@Suite("TestStore Finish Tests", .serialized)
+@Suite("TestStore Finish Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreFinishTests {
   @Test("finish returns immediately when no effects or actions remain")
@@ -31,7 +31,7 @@ struct TestStoreFinishTests {
 
     guard
       case .unhandledWork(let pending) =
-        await store.finishResult(timeout: .seconds(1))
+        await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     else {
       Issue.record("Expected finish to report buffered actions")
       return
@@ -51,7 +51,7 @@ struct TestStoreFinishTests {
     #expect(store.finishActivity.snapshot.runCount == 1)
 
     let finishing = Task { @MainActor in
-      await store.finishResult(timeout: .seconds(1))
+      await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     }
     await gate.open()
 
@@ -67,7 +67,7 @@ struct TestStoreFinishTests {
     #expect(store.finishActivity.snapshot.compositeCount == 2)
 
     let finishing = Task { @MainActor in
-      await store.finishResult(timeout: .seconds(1))
+      await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     }
     await gate.open()
 
@@ -83,7 +83,7 @@ struct TestStoreFinishTests {
     #expect(store.finishActivity.snapshot.compositeCount == 1)
 
     let finishing = Task { @MainActor in
-      await store.finishResult(timeout: .seconds(1))
+      await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     }
     await gate.open()
 
@@ -120,7 +120,7 @@ struct TestStoreFinishTests {
 
     await store.send(.emitAfterGate(42))
     let finishing = Task { @MainActor in
-      await store.finishResult(timeout: .seconds(1))
+      await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     }
 
     await gate.open()
@@ -141,7 +141,7 @@ struct TestStoreFinishTests {
 
     await store.send(.emitAfterGate(42))
     let finishing = Task { @MainActor in
-      await store.finishResult(timeout: .seconds(1))
+      await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     }
 
     await gate.open()
@@ -202,7 +202,7 @@ struct TestStoreFinishTests {
     await store.send(.start)
     let runTask = try #require(store.runningTasks.values.first?.task)
     let finishing = Task { @MainActor in
-      await store.finishResult(timeout: .seconds(1))
+      await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     }
 
     await emit.open()
@@ -269,7 +269,7 @@ struct TestStoreFinishTests {
 
     await store.cancelAllEffects()
 
-    #expect(await store.finishResult(timeout: .seconds(1)) == .success)
+    #expect(await store.finishResult(timeout: scaledTestDeadline(.seconds(1))) == .success)
     _ = await runTask.result
     #expect(store.finishActivity.snapshot.activeCount == 0)
   }
@@ -410,7 +410,7 @@ struct TestStoreFinishTests {
     #expect(store.finishActivity.snapshot.debounceCount == 1)
 
     let finishing = Task { @MainActor in
-      await store.finishResult(timeout: .seconds(1))
+      await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     }
     await releaseRecursion.open()
 
@@ -447,7 +447,7 @@ struct TestStoreFinishTests {
     #expect(store.finishActivity.snapshot.throttleCount == 1)
 
     let finishing = Task { @MainActor in
-      await store.finishResult(timeout: .seconds(1))
+      await store.finishResult(timeout: scaledTestDeadline(.seconds(1)))
     }
     await releaseRecursion.open()
 

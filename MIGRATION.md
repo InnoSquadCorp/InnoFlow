@@ -8,6 +8,113 @@ The current development skill fixture now validates exact 6.0.2. Its
 [fresh consumer evidence](skills/validation.md) is separate from the historical
 6.0.0 receipt retained in the 6.0.1 and 6.0.2 tags.
 
+## Unreleased
+
+These notes describe changes after 6.0.2 that are not in a published release.
+
+### Key-path selection lifetime
+
+In 6.0.x a `Store` or `ScopedStore` kept every key-path selection it had ever
+created until the owner itself was released, and kept evaluating the
+selection's key path on every action. That retained selections for views that
+no longer existed, grew without bound when one call site used dynamic key
+paths, and evaluated stale key paths against later states.
+
+A key-path selection is now alive while one of these holds:
+
+- a caller holds the returned `SelectedStore`;
+- its value was read and the notification for that read has not been
+  delivered yet (this is what keeps a transient view-body read such as
+  `store.select(\.count).requireAlive()` working);
+- one notification has been delivered since the last read. A reader that
+  reads again during this window gets the same handle back;
+- its liveness alone was read (`isAlive`). No value change notifies such a
+  reader, so the owner keeps the selection until it is deactivated.
+
+What to check:
+
+- Code that created a key-path selection, discarded the handle, never read
+  it, and relied on it staying registered must keep the handle.
+- Code that compared handle identity across two value changes without holding
+  the handle or reading it in between may now see a new handle.
+- A selection's key path is no longer evaluated after the selection is
+  released. A selection that was read stays registered until its value has
+  changed twice, whether or not the read was tracked, so a key path that can
+  trap for some states (for example an `Array` index) is still evaluated for
+  that long, and while a reader holds or observes the selection.
+- Selecting on a `ScopedStore` whose collection element was removed returns a
+  selection that is not alive: `optionalValue` is `nil` and `requireAlive()`
+  traps. In 6.0.x the same call site returned the cached, deactivated handle.
+
+No source changes are required for selections that are held or read in a view
+body.
+
+### Reducer-returned cancellation
+
+A `.cancel(id)`, a `cancelInFlight: true` replacement, a newer debounce
+request and a `latest` lane request now take effect in the MainActor turn of
+the reduction that returned them, for the work of every earlier effect. An
+action that the cancelled or replaced work had already queued is dropped; in
+6.0.x it could still be reduced. The effect that issued the request keeps its
+declaration order, so `.concatenate(.send(a).cancellable(id), .cancel(id))`
+still delivers `a`.
+
+`TestStore` applies the same rule. A test that received an action from work
+its next `send` cancels through a composite effect (for example
+`.concatenate(.cancel(id), .send(next))`) no longer receives it, matching
+`Store`.
+
+Cancellation is delivered synchronously. A task-cancellation handler inside
+an effect operation (`withTaskCancellationHandler`, `AsyncStream`
+termination) can therefore run on the main thread during `send`,
+`cancelEffects(identifiedBy:)` or `Store.deinit`. Do not block there on work
+the main thread is waiting to do, such as a lock the caller holds or
+`DispatchQueue.main.sync`.
+
+### Throttle trailing requests
+
+When the newest trailing request of a throttle window belongs to a dispatch
+that is cancelled before the window closes, the window now fires the request
+it replaced. In 6.0.x it fired nothing if the cancelled dispatch's effect had
+already been interpreted, and the replaced request otherwise. A window
+retains up to eight superseded requests.
+
+### Case-path synthesis
+
+`Action` path synthesis now also covers a payload written `_ name: Payload` and
+cases inside `#if`; `Output` now covers `_ name: Payload`. A manual canonical
+path declared in the enum body keeps working and replaces the synthesized one.
+The one source-affecting case is a manual path declared in an *extension* for
+such a case: the attached macro cannot see it, so it now redeclares the
+generated member (`invalid redeclaration of '<name>CasePath'`). Move the path
+into the enum body, delete it, or mark the case `@InnoFlowCasePathIgnored`.
+
+A case made unavailable by `@available(swift, obsoleted: …)` needs
+`@InnoFlowCasePathIgnored`; the macro cannot evaluate language-mode or
+deployment-target availability and its helper would reference the case.
+
+### ManualTestClock wait deadlines
+
+`waitForSleepers(atLeast:)`, `waitForSleepRegistrations(toReach:)`,
+`waitForNowReads(toReach:)` and `advance(by:onceSleepersReach:)` keep their
+signatures. A wait whose event never happens now throws
+`ManualTestClock.WaitTimeout` after the clock's wait deadline
+(`ManualTestClock.defaultWaitTimeout`, ten seconds) instead of suspending.
+Each method has a sibling overload with an explicit `timeout:` for tests that
+need a different bound.
+
+A clock can carry its own bound: `ManualTestClock(waitTimeout: .seconds(2))`.
+Calls without `timeout:` use that value.
+
+`TestStoreScenarioStep.advance(_:by:onceSleepersReach:label:)` keeps its
+signature, but its wait for the sleeper threshold now uses the store's effect
+timeout (one second by default) instead of the clock's ten seconds, and an
+unmet threshold is a recorded test failure instead of a silently completed
+step. A scenario whose effect needs longer than the store deadline to reach
+its first sleep must raise that deadline (`effectTimeout:` or
+`INNOFLOW_TESTSTORE_EFFECT_TIMEOUT`). The failure is reported at the store's
+most recent assertion call site, because the step has no call-site parameters.
+
 ## 6.0.2
 
 No runtime or public API migration from the existing 6.0.1 tag is required.
@@ -595,7 +702,10 @@ site alone. Each call creates an independent handle unless a stable semantic
 If a view relied on repeated closure calls at one call site returning the
 same handle, pass an ID that covers every captured input and retain the handle
 for as long as that identity is needed. Calls from different source locations
-do not share a handle. Key-path-only selections keep their existing cache.
+do not share a handle. Key-path-only selections keep one identity per call
+site and key path. In 6.0.x the owner keeps that selection for its own
+lifetime; the lifetime rules that follow 6.0.2 are described under
+"Unreleased" above.
 Code that stores a closure-based `select` method itself as a function value
 must adapt to the new defaulted `id:` parameter; Swift does not apply default
 arguments when converting a method to a function value.

@@ -270,7 +270,7 @@ warn_if_optimize_none_workaround_should_be_retested() {
     local major="${BASH_REMATCH[1]}"
     local minor="${BASH_REMATCH[2]}"
     if (( major > 6 || (major == 6 && minor >= 4) )); then
-      echo "[principle-gates] Warning: Swift ${major}.${minor} detected; retest removing @_optimize(none) from Store, StoreOutputHub, and TestStore deinits (swiftlang/swift#88173)."
+      echo "[principle-gates] Warning: Swift ${major}.${minor} detected; retest removing @_optimize(none) from Store, StoreOutputHub, SelectedStore, and TestStore deinits (swiftlang/swift#88173)."
     fi
   fi
 }
@@ -905,6 +905,9 @@ run_doc_contract_checks() {
   test -x scripts/check-api-compatibility.sh
   search_lines "STABLE_VERSION" scripts/check-api-compatibility.sh scripts/check-release-sync.sh >/dev/null
   search_lines "diagnose-api-breaking-changes" scripts/check-api-compatibility.sh >/dev/null
+  test -x scripts/check-api-breakage-allowlist.py
+  search_lines "check-api-breakage-allowlist.py" scripts/check-api-compatibility.sh >/dev/null
+  search_lines "declaration must be a package-access declaration" scripts/check-api-breakage-allowlist.py >/dev/null
   search_lines "scripts/check-api-compatibility.sh" .github/workflows/ci.yml >/dev/null
   scripts/check-api-compatibility.sh
   if [[ -n "$release_sync_output" ]]; then
@@ -957,7 +960,8 @@ run_doc_contract_checks() {
   search_lines "validationReport" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "ADR-phase-transition-guards|guard-bearing transitions remain intentionally out of scope" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc docs/adr >/dev/null
   search_lines "ADR-declarative-phase-map|topology-only|post-reduce" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc docs/adr >/dev/null
-  search_lines "best-effort async cleanup|deadlock-resistant|deadlock risk" ARCHITECTURE_CONTRACT.md README.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines "delivers task cancellation synchronously" ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
+  search_lines "deadlock-resistant|deadlock risk" ARCHITECTURE_CONTRACT.md README.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "StoreInstrumentation\\.sink|swift-metrics|Datadog|Prometheus" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "@Environment" README.md Sources/InnoFlow/InnoFlow.docc >/dev/null
   search_lines "Dependencies" README.md ARCHITECTURE_CONTRACT.md Sources/InnoFlow/InnoFlow.docc Examples/InnoFlowSampleApp/README.md >/dev/null
@@ -1131,15 +1135,70 @@ run_macro_operations_checks() {
     echo "[principle-gates] Failed: the action-path opt-out macro must remain registered"
     exit 1
   fi
+  # Action and Output synthesis share one traversal. The traversal computes
+  # where the opt-out marker applies, matching the attribute by its logical
+  # name in both the plain and the module-qualified spelling, and both
+  # element synthesizers derive their generation scope from it, so neither
+  # can ignore the marker.
   local action_path_source="Sources/InnoFlowMacros/InnoFlowMacro+CasePathSynthesis.swift"
-  if ! grep -F 'logicalIdentifier(identifier.name) == "InnoFlowCasePathIgnored"' "$action_path_source" >/dev/null \
-      || ! grep -F 'logicalIdentifier(member.name) == "InnoFlowCasePathIgnored"' "$action_path_source" >/dev/null \
-      || ! grep -F 'let isExplicitlyIgnored = hasCasePathIgnoredAttribute(enumCaseDecl)' "$action_path_source" >/dev/null \
-      || ! grep -F 'isExplicitlyIgnored: isExplicitlyIgnored,' "$action_path_source" >/dev/null \
-      || ! search_multiline 'if isExplicitlyIgnored[[:space:]]*\{[[:space:]]*return nil' "$action_path_source" >/dev/null; then
+  local shared_path_source="Sources/InnoFlowMacros/InnoFlowMacro+OutputPathSynthesis.swift"
+  if ! grep -F 'named: "InnoFlowCasePathIgnored",' "$shared_path_source" >/dev/null \
+      || ! grep -F 'if outputAttributeName(attribute) == expectedName {' "$shared_path_source" >/dev/null \
+      || ! grep -F 'return logicalIdentifier(identifier.name)' "$shared_path_source" >/dev/null \
+      || ! grep -F 'return logicalIdentifier(member.name)' "$shared_path_source" >/dev/null \
+      || ! grep -F 'ignoredContexts: ignoredContexts' "$shared_path_source" >/dev/null \
+      || ! grep -F '(site.unavailableContexts + site.ignoredContexts).filter' "$shared_path_source" >/dev/null \
+      || ! grep -F 'synthesizedConditionalCasePathSources(' "$action_path_source" >/dev/null \
+      || ! grep -F 'casePathGenerationScope(at: site, manualContexts: manualContexts)' "$action_path_source" >/dev/null \
+      || ! search_multiline 'casePathGenerationScope\(at: site, manualContexts: manualContexts\)[[:space:]]*else[[:space:]]*\{[[:space:]]*return \[\]' "$action_path_source" >/dev/null; then
     echo "[principle-gates] Failed: action-path synthesis must honor the per-case opt-out marker"
     exit 1
   fi
+  # Manual paths and name collisions follow one rule for both enums: each
+  # synthesizer excludes the conditions of a canonical manual path before it
+  # reserves the helper name through the shared reservation.
+  local path_source
+  for path_source in "$action_path_source" "$shared_path_source"; do
+    if ! search_multiline 'manualPathNames\.contexts\([[:space:]]*memberName,[[:space:]]*overlapping: site\.conditionalContext[[:space:]]*\)' "$path_source" >/dev/null \
+        || ! search_multiline 'guard[[:space:]]+reserveGeneratedCasePathName\(' "$path_source" >/dev/null; then
+      echo "[principle-gates] Failed: $path_source must apply the shared manual-path and collision rule"
+      exit 1
+    fi
+  done
+  if ! grep -F 'actionCaseInsideIfConfigSynthesizesConditionalPath' Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift >/dev/null \
+      || ! grep -F 'actionCasesInsideElseIfAndNestedIfConfigKeepTheirStructure' Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift >/dev/null \
+      || ! grep -F 'actionPathsMirrorAvailability' Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift >/dev/null \
+      || ! grep -F 'localPayloadNameWithoutLabelSynthesizesCasePath' Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift >/dev/null \
+      || ! grep -F 'manualActionPathsReplaceSynthesisWhereTheyAreActive' Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift >/dev/null \
+      || ! grep -F 'sameActionCaseNameInSeparateConditionsSynthesizesBothPaths' Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift >/dev/null; then
+    echo "[principle-gates] Failed: macro tests must cover declaration-site Action path synthesis"
+    exit 1
+  fi
+  local parity_test
+  for parity_test in \
+      manualPathTakesPrecedence \
+      manualPathInNarrowerConditionSynthesizesTheComplement \
+      sameCaseNameInSeparateConditionsIsNotACollision \
+      differentlyNamedCasesInOverlappingConditionsCollide \
+      copiedAvailabilityCarriesNoComment \
+      outputLocalPayloadNamesSynthesizeLikeUnlabeledPayloads; do
+    if ! grep -F "func $parity_test(" Tests/InnoFlowMacrosTests/CasePathDeclarationSiteParityTests.swift >/dev/null; then
+      echo "[principle-gates] Failed: macro tests must lock the shared Action/Output declaration-site rule ($parity_test)"
+      exit 1
+    fi
+  done
+  if ! grep -F 'childPhaseMapIsNotTheFeaturesOwn' Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift >/dev/null \
+      || ! grep -F 'ownDomainPhaseMapIsStillDiagnosed' Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift >/dev/null; then
+    echo "[principle-gates] Failed: macro tests must cover child-domain phase map detection"
+    exit 1
+  fi
+  local consumer_feature
+  for consumer_feature in ManualPathPrecedenceFeature RepeatedCaseNameFeature DeclarationSiteOptionalParent; do
+    if ! grep -F "struct $consumer_feature" Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift >/dev/null; then
+      echo "[principle-gates] Failed: the declaration-site consumer must compile $consumer_feature with the real compiler"
+      exit 1
+    fi
+  done
   if ! grep -F 'manualCasePathsSuppressUnsupportedPayloadWarnings' Tests/InnoFlowMacrosTests/InnoFlowMacrosTests.swift >/dev/null; then
     echo "[principle-gates] Failed: macro tests must cover canonical manual CasePath warning suppression"
     exit 1

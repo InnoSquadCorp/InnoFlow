@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import os
+import Synchronization
 
 /// A snapshot of effect-runtime metrics observed by
 /// ``StoreInstrumentationMetricsCollector``.
@@ -76,7 +76,7 @@ public struct StoreInstrumentationMetricsSnapshot: Sendable, Equatable {
 ///
 /// Designed to be paired with one or more stores via `instrumentation()` —
 /// the collector exposes a `Sendable` instrumentation value that increments
-/// internal counters under an `OSAllocatedUnfairLock`. Call `snapshot()` from
+/// internal counters under an `Mutex`. Call `snapshot()` from
 /// any thread (or `.combined(...)` it with other adapters) to read the
 /// running totals as an immutable value.
 ///
@@ -98,9 +98,7 @@ public struct StoreInstrumentationMetricsSnapshot: Sendable, Equatable {
 /// metricsBackend.gauge("innoflow.run.failed", value: snap.runFailed)
 /// ```
 public final class StoreInstrumentationMetricsCollector<Action: Sendable>: Sendable {
-  private let storage = OSAllocatedUnfairLock<StoreInstrumentationMetricsSnapshot>(
-    initialState: .init()
-  )
+  private let storage = Mutex<StoreInstrumentationMetricsSnapshot>(.init())
 
   public init() {}
 
@@ -118,8 +116,9 @@ public final class StoreInstrumentationMetricsCollector<Action: Sendable>: Senda
   /// A `StoreInstrumentation` value that increments the collector's counters
   /// for every observed event.
   public func instrumentation() -> StoreInstrumentation<Action> {
-    let storage = self.storage
-    return .sink { event in
+    // The mutex is stored inline and cannot be copied out, so the sink keeps
+    // the collector alive instead of a separately allocated lock.
+    return .sink { [self] event in
       storage.withLock { snapshot in
         switch event {
         case .runStarted:

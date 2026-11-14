@@ -8,7 +8,7 @@ import SwiftSyntaxMacros
 import SwiftSyntaxMacrosTestSupport
 import Testing
 
-@Suite("Macro Tests")
+@Suite("Macro Tests", .timeLimit(.minutes(5)))
 struct InnoFlowBindablePropertyDirectUseDiagnosticsTests {
 
   @Test("@InnoFlow warns when State declares BindableProperty<T> directly")

@@ -162,6 +162,10 @@ package final class SingleScopeCache {
 
 @MainActor
 package final class CollectionScopeOffsetBox {
+  /// Offset recorded for an element that the indexed collection does not
+  /// contain. Valid only while the box's revision is the bucket's revision.
+  package static let absent = -1
+
   package var offset: Int
   package var revision: UInt64
 
@@ -188,6 +192,101 @@ package final class CollectionScopeCacheBucket {
     storesByID.removeValue(forKey: id)
     offsetsByID.removeValue(forKey: id)
   }
+
+  /// Records the current offset of every row that still has an element and
+  /// returns the elements whose rows can observe a difference: elements that
+  /// changed value and elements that are gone.
+  ///
+  /// Starts a new revision. Every state change reaches the projection
+  /// registry before any row resolves its element, and only a structural
+  /// change can add or remove an element, so a box indexed by the current
+  /// revision stays valid until the next structural change indexes again.
+  /// Returns `nil` when the collection exposes no contiguous storage and
+  /// every row has to be refreshed; removed rows then keep an outdated box
+  /// and resolve through their linear fallback.
+  package func reindex<CollectionState: Collection>(
+    from previousCollection: CollectionState,
+    to nextCollection: CollectionState
+  ) -> [AnyHashable]?
+  where CollectionState.Element: Equatable & Identifiable {
+    let previousRevision = revision
+    revision &+= 1
+    guard !offsetsByID.isEmpty else { return [] }
+
+    let affected = previousCollection.withContiguousStorageIfAvailable { previous in
+      nextCollection.withContiguousStorageIfAvailable { next -> [AnyHashable] in
+        var affectedElementIDs: [AnyHashable] = []
+        for offset in 0..<next.count {
+          let element = next[offset]
+          let elementID = AnyHashable(element.id)
+          guard let offsetBox = offsetsByID[elementID] else { continue }
+
+          // The box still holds the element's offset in the previous
+          // collection when it was indexed by the previous revision — unless
+          // the rows were scoped again after the reduction and before this
+          // pass, which indexes them against the next collection. Identical
+          // bytes are the same element either way; otherwise the element at
+          // that offset must be confirmed before its value is compared.
+          let previousOffset = offsetBox.offset
+          let isUnchanged =
+            offsetBox.revision == previousRevision
+            && previousOffset >= 0 && previousOffset < previous.count
+            && (projectionElementsAreBitwiseEqual(previous, previousOffset, next, offset)
+              || (previous[previousOffset].id == element.id
+                && previous[previousOffset] == element))
+          if !isUnchanged {
+            affectedElementIDs.append(elementID)
+          }
+          offsetBox.offset = offset
+          offsetBox.revision = revision
+        }
+        for (elementID, offsetBox) in offsetsByID where offsetBox.revision != revision {
+          // The element is gone. Record that for this revision so its row
+          // deactivates without scanning the collection for it.
+          offsetBox.offset = CollectionScopeOffsetBox.absent
+          offsetBox.revision = revision
+          affectedElementIDs.append(elementID)
+        }
+        return affectedElementIDs
+      }
+    }
+    if case .some(.some(let affectedElementIDs)) = affected {
+      return affectedElementIDs
+    }
+
+    for (offset, element) in nextCollection.enumerated() {
+      guard let offsetBox = offsetsByID[AnyHashable(element.id)] else { continue }
+      offsetBox.offset = offset
+      offsetBox.revision = revision
+    }
+    return nil
+  }
+}
+
+/// Whether two stored elements have identical bytes.
+///
+/// Identical bytes mean identical stored properties and identical references
+/// to any out-of-line storage, so the elements are the same value and a row
+/// showing one cannot observe a difference from the other. The check is only
+/// ever used to skip work: elements that differ in bytes are still compared
+/// with `==`, which also covers padding that happens to differ. The one
+/// deliberate consequence is for irreflexive values such as a `Double` NaN:
+/// an element that did not change is treated as unchanged even though `==`
+/// would call it different from itself.
+package func projectionElementsAreBitwiseEqual<Element>(
+  _ lhs: UnsafeBufferPointer<Element>,
+  _ lhsOffset: Int,
+  _ rhs: UnsafeBufferPointer<Element>,
+  _ rhsOffset: Int
+) -> Bool {
+  let size = MemoryLayout<Element>.size
+  guard size > 0 else { return true }
+  guard let lhsBase = lhs.baseAddress, let rhsBase = rhs.baseAddress else { return false }
+  return memcmp(
+    UnsafeRawPointer(lhsBase + lhsOffset),
+    UnsafeRawPointer(rhsBase + rhsOffset),
+    size
+  ) == 0
 }
 
 /// CollectionScopeCache pins one active projection signature to each
@@ -219,41 +318,61 @@ package final class CollectionScopeCache {
   package func store(_ bucket: CollectionScopeCacheBucket, for keyPath: AnyKeyPath) {
     buckets[keyPath] = bucket
   }
+
+  /// The row family currently cached for a collection key path, if any.
+  package func activeBucket(for keyPath: AnyKeyPath) -> CollectionScopeCacheBucket? {
+    buckets[keyPath]
+  }
 }
 
 @MainActor
 package final class SelectionCacheEntry {
   package let key: SelectionCacheKey
   package let valueType: Any.Type
-  private let strongSelection: AnyObject?
+  private var strongSelection: AnyObject?
   private weak var weakSelection: AnyObject?
 
-  package var selection: AnyObject? { strongSelection ?? weakSelection }
+  package var selection: AnyObject? { weakSelection }
 
   package init(
     key: SelectionCacheKey,
     valueType: Any.Type,
-    selection: AnyObject,
-    retainStrongly: Bool
+    selection: AnyObject
   ) {
     self.key = key
     self.valueType = valueType
-    self.strongSelection = retainStrongly ? selection : nil
     self.weakSelection = selection
+  }
+
+  /// Keeps the selection alive on behalf of a tracked read that has not been
+  /// notified yet.
+  package func retainSelection() {
+    strongSelection = weakSelection
+  }
+
+  package func releaseSelection() {
+    strongSelection = nil
   }
 }
 
-/// SelectionCache retains key-path identities strongly and explicit semantic
-/// closure identities weakly. Keyless closures are never cached.
+/// SelectionCache gives a selection one identity per owner-local call site,
+/// signature, semantic ID and value type while that selection is alive.
 ///
 /// Invariants:
-/// - identity includes owner-local call site, signature, semantic ID and value type
-/// - key-path selections stay alive for the lifetime of the owner
+/// - every entry references its selection weakly; an external handle always
+///   keeps the identity alive
+/// - a key-path selection is additionally retained by its entry from a tracked
+///   read until the notification that consumes it, so a transient SwiftUI body
+///   read (`store.select(\.count).requireAlive()`) still invalidates the view
+/// - a key-path selection that is never read, or that is notified twice
+///   without being read again, is released; the owner never keeps evaluating a
+///   key path nobody can observe
 /// - semantic closure selections are reused only while an external handle lives
+/// - keyless closures are never cached
 ///
-/// Strong key-path entries support transient SwiftUI body reads. Explicit
-/// semantic IDs may be dynamic, so their entries are weak and periodically
-/// compacted instead of growing for the owner's entire lifetime.
+/// Key paths and explicit semantic IDs may both be dynamic, so released
+/// entries are periodically compacted instead of growing for the owner's
+/// entire lifetime.
 @MainActor
 package final class SelectionCache {
   private var entries: [SelectionCacheKey: SelectionCacheEntry] = [:]
@@ -289,12 +408,11 @@ package final class SelectionCache {
     valueType: Value.Type
   ) {
     compactIfNeeded()
-    entries[key] = .init(
-      key: key,
-      valueType: valueType,
-      selection: selection,
-      retainStrongly: key.semanticID == nil
-    )
+    let entry = SelectionCacheEntry(key: key, valueType: valueType, selection: selection)
+    entries[key] = entry
+    if key.semanticID == nil {
+      selection.retainWhileObserved(by: entry)
+    }
   }
 
   package var entryCount: Int { entries.count }

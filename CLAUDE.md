@@ -107,6 +107,28 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    parent effects returned after admission remain independently owned.
    Recheck dispatch cancellation before reducing queued actions and delivering
    immediate outputs; already-applied state changes are not rolled back.
+   Cancellation a reducer returns (`.cancel`, `cancelInFlight: true`, a newer
+   debounce request, a `latest` lane request) is accepted in the MainActor
+   turn of that reduction when the interpreter would reach it without awaiting
+   asynchronous work: tokens of every earlier effect are marked and their
+   MainActor-owned work is released before `send` returns, so the cancelled
+   work can no longer have an action reduced. The effect that issued the
+   request keeps its declaration order: an earlier `concatenate` sibling of a
+   `.cancel` still runs, and the cancel covers its own effect when the
+   interpreter reaches it (`merge` children have no order). A `latest` request only marks the superseded run in the turn;
+   the lane displaces it at admission and reports it as superseded. A
+   throttled subtree is accepted when its window admits it. `Store` and
+   `TestStore` share this acceptance through
+   `ReductionTurnCancellationAcceptor`; a test must receive exactly the
+   actions a production store reduces. A dispatch whose effect is cancelled
+   before it was interpreted still records the cancellation in diagnostics.
+   No suspension may separate cancellation acceptance from releasing that
+   work, with or without diagnostics. All Store effect bookkeeping, including
+   run tasks, is MainActor-isolated: `cancelEffects(identifiedBy:)` and
+   `cancelAllEffects()` complete without suspending, and `Store.deinit`
+   delivers task cancellation synchronously. Task-cancellation handlers of an
+   effect operation therefore run where cancellation is delivered, which can
+   be the main thread.
 9. Reducer `Output` is typed and ephemeral. Persisted or renderable data stays
    in `State`, and parent output lifting is explicit through `mapOutput(_:)`.
    Output-free reducers and effects may use `promoteOutput(to:)`, available
@@ -141,9 +163,17 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
 16. Closure-based `select` calls are independent by default, even at one
     call site. A stable semantic `id:` may reuse only a live handle with the
     same owner, call site, selector signature, and value type; it must cover
-    captured inputs and is weakly cached. Key-path-only selection retains
-    stable identity. Parent release invalidates tracked projection liveness
-    and optional reads on MainActor before Store deinitialization finishes.
+    captured inputs and is weakly cached. A key-path-only selection keeps one
+    identity while it is referenced, and its owner retains it from a read
+    until that read's notification plus one more; a selection that is never
+    read, or goes unread across two notifications, is released and its key
+    path is no longer evaluated. A read of liveness alone (`isAlive`) is
+    retained until the selection is deactivated, because no value change
+    notifies that reader. Selection creation never records an Observation
+    access on the parent and never traps: a selection created on a projection
+    that is no longer alive reports that through its own accessors. Parent
+    release invalidates tracked projection liveness and optional reads on
+    MainActor before Store deinitialization finishes.
 17. `IdentifiedArray` equality and hashing include stored ID-to-position mappings
     as well as ordered element values. Identity-only replacement must refresh
     root/scoped key-path, dependency, and memoized selections. Custom identity
@@ -151,11 +181,49 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
 18. `ManualTestClock.sleep(for:)` must check pre-existing task cancellation even
     for zero or negative durations, matching `StoreClock.continuous`. Uncancelled
     nonpositive sleeps must not park; cancelled sleepers must release their
-    registration and leave the clock reusable.
+    registration and leave the clock reusable. Every clock wait is bounded: a
+    wait whose event never happens throws `ManualTestClock.WaitTimeout` instead
+    of suspending the test. `advance(by:)` moves time in one jump; periodic
+    work is driven with `advance(by:inStepsOf:onceSleepersReach:)`. A wait
+    without `timeout:` uses the clock's own `waitTimeout`
+    (`ManualTestClock(waitTimeout:)`, default ten seconds). The stepped
+    advance threshold counts every suspended sleeper, and a zero duration
+    still waits once.
+19. `TestStore` records at initialization whether a Swift Testing test owns it
+    and reports deinitialization diagnostics through that framework. An
+    isolated deinitializer cannot observe `Test.current`, so the safety net
+    must not depend on it.
+20. Weakly referenced scopes and tokens remove their own registry entry from
+    a deinitializer that takes the registry lock. A reference loaded from weak
+    storage must leave the critical section before it is released; a
+    critical section may prune entries whose weak reference is already nil,
+    but it never drops a strong reference it loaded.
+21. A projection dependency key determines its change predicate. Key-path
+    selections and single scopes compare values; collection scopes compare
+    element identity in their own registry storage. Registry storage is never
+    accessed while an observer callback runs or an observer reference is
+    released.
+22. A collection scope refreshes only the rows a change can affect: the
+    changed element's row for a value change, the changed or removed
+    elements' rows for a structural change, and none when the collection
+    storage is untouched. Rows index their positions once per structural
+    change; a row of the active row family never scans the collection to
+    find or miss its element when the collection has contiguous storage.
+    Bitwise-identical elements are unchanged by definition; elements whose
+    copies differ only in padding fall back to `==`. A removed row is
+    deactivated by the pass that classifies its removal, also when a
+    callback scopes the collection again during that pass.
 
-`IdentifiedArrayTests` and `ManualTestClockTests` lock these contracts and are
-included in the focused platform runtime inventory. Run targeted local tests
-when changing them; the full release/runtime matrix remains CI-only.
+`IdentifiedArrayTests` and `ManualTestClockTests` lock contract 17 and the
+sleep rules of contract 18 and are included in the focused platform runtime
+inventory. The contracts added after them are locked by host suites that are
+not in that inventory: `ReducerCancellationAcceptanceTests`,
+`ThrottleTrailingFallbackTests`, `TestStoreReductionTurnCancellationTests`,
+`ProjectionLifetimeConsistencyTests`, `CollectionProjectionRefreshTests`,
+`EffectCancellationScopeTests`, `ManualTestClockDeadlineTests`,
+`ClockStepDeadlineTests` and `TestStoreOwnerFrameworkReportingTests`. Run
+targeted local tests when changing them; the full release/runtime matrix
+remains CI-only.
 
 Macro-first means `@InnoFlow` is the canonical feature-authoring path, while
 `InnoFlowCore` remains a deliberate compiler-plugin-free runtime and recovery
@@ -287,10 +355,28 @@ Macro identifier comparison uses logical names, independent of optional backtick
 - `case _loaded(Output)` → `Action.loadedCasePath`
 - nested `Output` enum cases → `Output.<caseName>CasePath`
 
-Output helper declarations retain the case's availability attributes and are
-emitted inside the same recursively mirrored `#if` / `#elseif` / `#else`
-structure. Mutually exclusive branches may use the same case/helper name;
-collisions in one active conditional context still diagnose.
+`Action` and `Output` helper declarations share one traversal: both copy the
+case's availability attributes (on one line, without comments or `renamed:`),
+skip a case that is unavailable everywhere, and are emitted inside the same
+recursively mirrored `#if` / `#elseif` / `#else` structure. A canonical static
+path declared in the enum body takes precedence over synthesis for every shape
+of both enums; in a narrower condition than its case it leaves the helper
+synthesized under the complement. Helpers with one name diagnose when their
+cases can be active together. Cases that redeclare each other (same name and
+argument labels, or a payload-free case of that name) never can, so each keeps
+its helper inside its own clause. A payload written `_ name: Payload` has no
+argument label and synthesizes like an unlabeled payload in both enums. A case
+made unavailable by `obsoleted:` needs `@InnoFlowCasePathIgnored`.
+
+`@InnoFlow` adds `Reducer` conformance only when the feature does not state
+it; `struct Feature: Reducer` is accepted. Under `phaseManaged: true`, a
+`.phaseMap(...)` in the child part of a composing call belongs to that child:
+every argument of `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`,
+`ForEachIdentifiedReducer` and `optionalChild`, and the arguments of
+`OptionalChildLifetime(parent:…reducer:)` other than `parent:`, in the
+`Name(...)`, `Name<...>(...)` and `Name.init(...)` spellings. The rule is
+syntactic: a child hoisted into a local constant or a combinator behind a
+typealias is still read as the feature's own phase map.
 
 Collection `id/action` routing remains special-cased as `CollectionActionPath`, while single
 unlabeled payload cases synthesize plain `CasePath`.
@@ -303,6 +389,8 @@ cannot inspect. The marker skips both synthesis and unsupported-payload diagnost
 The canonical static variable name is the syntactic manual-path signal, so typealiases and factories
 are supported without requiring the macro to resolve their semantic result type. `Output` cases never
 synthesize collection-action paths; labeled multi-payload output uses a labeled tuple payload.
+For a shape the macro synthesizes, a manual path in an extension redeclares the generated member;
+move it into the enum body, delete it, or mark the case.
 
 ## Phase-driven modeling
 
@@ -419,6 +507,14 @@ mode, expected-state closures start from the actual post-reducer state,
 unexpected actions are reduced, and `.off(showSkippedAssertions: true)` emits
 non-failing warnings.
 
+`TestStore` deadlines default to `TestStoreDefaults.effectTimeout` (one
+second). They are failure backstops, never pacing: raise them for a saturated
+or parallel run with `INNOFLOW_TESTSTORE_EFFECT_TIMEOUT=<seconds>` instead of
+editing tests. An override that is not used as written (clamped above one
+day, or not a positive number) is reported once on standard error. Repository
+test helpers scale their own deadlines with `INNOFLOW_TEST_WAIT_SCALE`, and
+every suite declares a `.timeLimit`.
+
 Use `finish()` as the terminal assertion. Exhaustive stores fail on unreceived
 actions; non-exhaustive stores drain them and their follow-up effects until
 idle. Use `assertNoBufferedActions()` only for an intermediate queue
@@ -506,9 +602,11 @@ InnoFlow/
 │   │   ├── ReducerOutputMapping.swift
 │   │   ├── Store.swift                  # main actor state owner + action queue entry point
 │   │   ├── Store+EffectDriver.swift
+│   │   ├── Store+CancellationAcceptance.swift  # reduction-turn cancellation
+│   │   ├── ReductionTurnCancellation.swift     # acceptance pass shared with TestStore
 │   │   ├── StoreOutputHub.swift         # live typed reducer-output broadcast
 │   │   ├── StoreEffectBridge.swift      # store/runtime bridge
-│   │   ├── EffectRuntime.swift          # actor runtime bookkeeping
+│   │   ├── EffectRuntime.swift          # MainActor run-task bookkeeping
 │   │   ├── StoreActionQueue.swift       # queued action drain support
 │   │   ├── ProjectionObserverRegistry.swift
 │   │   ├── StoreCaches.swift
@@ -552,6 +650,7 @@ InnoFlow/
 
 ```bash
 swift test --package-path .
+INNOFLOW_TESTSTORE_EFFECT_TIMEOUT=10 INNOFLOW_TEST_WAIT_SCALE=5 swift test --package-path . --parallel
 swift test --package-path Examples/InnoFlowSampleApp/InnoFlowSampleAppPackage --jobs 1
 xcodebuild -jobs 1 -project Examples/InnoFlowSampleApp/InnoFlowSampleApp.xcodeproj -scheme InnoFlowSampleApp -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 ./scripts/principle-gates.sh            # full suite: static gates + release builds + test runs
@@ -573,7 +672,7 @@ Do not leave the rule enforced only by prose.
 
 ### Runtime completion and result mapping
 
-The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
+A throttle window fires the newest trailing request that can still proceed: cancelling the newest request's dispatch gives the window back to the request it replaced (a bounded number of superseded requests is retained), independent of whether the cancelled effect had been interpreted. The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
 
 ### Testing dispatch ownership
 
@@ -593,4 +692,4 @@ Scheduled runs recheck their exact cancellation context before reserving capacit
 
 ### Testing diagnostics and reproducible lifetimes
 
-Canonical Testing assertions carry fileID, filePath, line and column through asynchronous and scoped paths. Explicit legacy file: calls remain supported without default-call ambiguity. Active Swift Testing records a source-located Issue; XCTest uses XCTFail at filePath/line because XCTest exposes no column parameter. Public FlowScope construction is lexical via withFlowScope only. Scenario advance requires onceSleepersReach explicitly. Dispatch effectLedger is testing-only, bounded, typed, and closes after physical completion; it never changes reducer/runtime semantics.
+A scenario or explorer clock step waits for its sleeper threshold within the store's `effectTimeout` only; an unmet threshold is a reported failure (scenario) or a `.configuration` failure (explorer), never a completed step or a reducer reproduction. Canonical Testing assertions carry fileID, filePath, line and column through asynchronous and scoped paths. Explicit legacy file: calls remain supported without default-call ambiguity. Active Swift Testing records a source-located Issue; XCTest uses XCTFail at filePath/line because XCTest exposes no column parameter. Public FlowScope construction is lexical via withFlowScope only. Scenario advance requires onceSleepersReach explicitly. Dispatch effectLedger is testing-only, bounded, typed, and closes after physical completion; it never changes reducer/runtime semantics.

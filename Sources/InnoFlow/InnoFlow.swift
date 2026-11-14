@@ -135,12 +135,16 @@ public macro InnoFlow(phaseManaged: Bool, strictPhaseTotality: Bool) =
     type: "InnoFlowMacro"
   )
 
-/// Excludes an `Action` enum case from `@InnoFlow` action-path synthesis and
-/// unsupported-payload diagnostics.
+/// Excludes an `Action` or `Output` enum case from `@InnoFlow` path synthesis
+/// and from its payload-shape diagnostics.
 ///
-/// Prefer a manually declared `<caseName>CasePath` inside `Action` when the
-/// case needs a custom path. Use this marker when no path is needed or when a
-/// manual path must live in an extension that the attached macro cannot inspect.
+/// Prefer a manually declared `<caseName>CasePath` inside the enum when the
+/// case needs a custom path (`<caseName>ActionPath` for an `id:action:` case
+/// of `Action`): a canonical static variable in the enum body replaces
+/// synthesis for that case. Use this marker when no path is needed, when a
+/// manual path must live in an extension that the attached macro cannot
+/// inspect, or when the case is unavailable in a way syntax does not show,
+/// such as `@available(swift, obsoleted:)`.
 /// The canonical static variable name is the manual-path signal, so typealiases
 /// and factory-built `CasePath` values are supported.
 @attached(peer)

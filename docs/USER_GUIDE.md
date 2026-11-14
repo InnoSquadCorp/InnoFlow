@@ -70,7 +70,8 @@ flags, cache keys, and the intentional `InnoFlowCore` recovery path, see
 
 ### Known toolchain workarounds (Swift 6.3)
 
-`Store.deinit` and `TestStore.deinit` are annotated with `@_optimize(none)` to
+`Store.deinit`, `StoreOutputHub.deinit`, `SelectedStore.deinit` and `TestStore.deinit`
+are annotated with `@_optimize(none)` to
 sidestep a Swift 6.3 release-mode SIL crash in `EarlyPerfInliner`
 ([swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173))
 that triggers when the compiler tries to inline the generic `R.Action`-typed
@@ -384,8 +385,10 @@ let rowSummary = store.select(dependingOn: \.rows, id: "row-\(rowID)") { rows in
 ```
 
 The explicit-ID cache is weak; retain the `SelectedStore` when identity must
-survive repeated view evaluations. Key-path-only `select(\.phase)` keeps its
-existing stable cache behavior.
+survive repeated view evaluations. Key-path-only `select(\.phase)` keeps one
+identity while the selection is held or still observed: the owner retains it
+from a read until that read's notification and one more, then releases it.
+See "Key-path selection lifetime" in [MIGRATION.md](../MIGRATION.md).
 
 Use `SelectedStore` for read-only projections. Keep mutable child flows on `ScopedStore`.
 
@@ -625,10 +628,13 @@ cancellation checks. If an effect needs a non-throwing probe, call
 `await context.isCancellationRequested()`; it uses the same store/runtime boundary as
 `checkCancellation()`.
 
-Store deinit and explicit effect cancellation are still cooperative. InnoFlow guarantees
-that late emissions are dropped immediately, but runtime teardown continues as best-effort
-async cleanup. Long-running work should call `checkCancellation()` around suspension points
-if it needs prompt shutdown.
+Store deinit and explicit effect cancellation are still cooperative. InnoFlow drops late
+emissions immediately and delivers task cancellation synchronously, on teardown too; what
+remains is the cooperative end of the operation itself. Long-running work should call
+`checkCancellation()` around suspension points if it needs prompt shutdown. Because
+cancellation is delivered where it is requested, a task-cancellation handler inside an
+effect can run on the main thread during `send`; it must not block on work the main
+thread is waiting to do.
 
 Operational logging stays lightweight on purpose. Use `StoreInstrumentation.osLog(...)` for a
 default log sink, `StoreInstrumentation.signpost(...)` for Instruments timelines, or fan out

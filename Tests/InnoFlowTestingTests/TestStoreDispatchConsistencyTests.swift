@@ -3,7 +3,7 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
-@Suite("TestStore dispatch consistency", .serialized)
+@Suite("TestStore dispatch consistency", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreDispatchConsistencyTests {
   @Test("receiving a descendant registers follow-up work before releasing its queue lease")

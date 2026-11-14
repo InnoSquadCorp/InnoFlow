@@ -7,7 +7,7 @@ import Foundation
 import Synchronization
 import Testing
 
-@Suite("Compiled subprocess harness cache")
+@Suite("Compiled subprocess harness cache", .timeLimit(.minutes(5)))
 struct CompiledHarnessCacheTests {
   private func key(
     name: String = "Probe",

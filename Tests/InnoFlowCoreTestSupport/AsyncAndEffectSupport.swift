@@ -46,9 +46,6 @@ func effectOperationSignature<Action: Sendable, Output: Sendable>(
   case .animation(let nested, let animation):
     return "animation(\(String(describing: animation)),nested:\(effectOperationSignature(nested)))"
 
-  case .lazyMap(let lazy):
-    return effectOperationSignature(lazy.materialize())
-
   case .optionalChild(_, let before, let after, let child, let parent):
     return
       "optionalChild(before:\(String(describing: before)),after:\(String(describing: after)),child:\(effectOperationSignature(child)),parent:\(effectOperationSignature(parent)))"
@@ -128,6 +125,67 @@ package func waitForEmissionCount<R: Reducer>(
   }
 }
 
+/// Environment variable that scales the wall-clock deadlines of the shared
+/// wait helpers, for example `INNOFLOW_TEST_WAIT_SCALE=5`.
+let testWaitScaleEnvironmentKey = "INNOFLOW_TEST_WAIT_SCALE"
+
+/// The largest scale the environment can request. Beyond it a deadline is
+/// meaningless as a failure report, and the bound keeps `Duration * Double`
+/// and the deadline instants computed from it far from overflow.
+let maximumTestWaitScale: Double = 1_000
+
+/// Multiplier for the wall-clock deadlines of the shared wait helpers, read
+/// once from `INNOFLOW_TEST_WAIT_SCALE`. Deadlines are failure backstops: a
+/// passing wait returns on its event, so scaling only matters on a saturated
+/// machine, where a parallel run can starve a correct test past its deadline.
+let testWaitScale: Double = resolveTestWaitScale(
+  rawValue: ProcessInfo.processInfo.environment[testWaitScaleEnvironmentKey],
+  diagnose: { message in
+    try? FileHandle.standardError.write(contentsOf: Data("\(message)\n".utf8))
+  }
+)
+
+/// Resolves a raw `INNOFLOW_TEST_WAIT_SCALE` value to a multiplier in
+/// `1...maximumTestWaitScale`.
+///
+/// Whitespace around the value is ignored and an empty value counts as unset.
+/// A value that is not a number of at least one leaves deadlines unscaled, and
+/// a larger value than the maximum is clamped; `diagnose` receives one message
+/// in both cases so the run does not silently use another scale.
+func resolveTestWaitScale(rawValue: String?, diagnose: (String) -> Void) -> Double {
+  guard let rawValue else { return 1 }
+  let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+  guard trimmed.isEmpty == false else { return 1 }
+  // `scale >= 1` is false for NaN as well as for values below one.
+  guard let scale = Double(trimmed), scale >= 1 else {
+    diagnose(
+      """
+      InnoFlow tests: ignoring \(testWaitScaleEnvironmentKey)="\(rawValue)": expected a \
+      number of at least 1 such as 5. Wait deadlines are not scaled.
+      """
+    )
+    return 1
+  }
+  guard scale <= maximumTestWaitScale else {
+    diagnose(
+      """
+      InnoFlow tests: \(testWaitScaleEnvironmentKey)="\(rawValue)" exceeds the largest \
+      supported scale. Wait deadlines are scaled by \(maximumTestWaitScale) instead.
+      """
+    )
+    return maximumTestWaitScale
+  }
+  return scale
+}
+
+func scaledTestDeadline(_ timeout: Duration) -> Duration {
+  scaledTestDeadline(timeout, scale: testWaitScale)
+}
+
+func scaledTestDeadline(_ timeout: Duration, scale: Double) -> Duration {
+  scale == 1 ? timeout : timeout * scale
+}
+
 func drainAsyncWork(iterations: Int = 128) async {
   for _ in 0..<iterations {
     await Task.yield()
@@ -142,7 +200,7 @@ func waitUntil(
   condition: @escaping @MainActor () -> Bool
 ) async -> Bool {
   let clock = ContinuousClock()
-  let deadline = clock.now.advanced(by: timeout)
+  let deadline = clock.now.advanced(by: scaledTestDeadline(timeout))
 
   while clock.now < deadline {
     if condition() {
@@ -161,7 +219,7 @@ func waitUntilAsync(
   condition: @escaping @Sendable () async -> Bool
 ) async -> Bool {
   let clock = ContinuousClock()
-  let deadline = clock.now.advanced(by: timeout)
+  let deadline = clock.now.advanced(by: scaledTestDeadline(timeout))
 
   while clock.now < deadline {
     if await condition() {

@@ -5,7 +5,7 @@
 import SwiftSyntaxMacrosTestSupport
 import Testing
 
-@Suite("Strict PhaseMap totality macro")
+@Suite("Strict PhaseMap totality macro", .timeLimit(.minutes(5)))
 struct StrictPhaseTotalityMacroTests {
   @Test("strict phase totality promotes an unreferenced phase to an error")
   func strictTotalityRejectsUnreferencedPhase() {

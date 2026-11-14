@@ -128,6 +128,12 @@ tag, run and confirm the following in CI (not a local release matrix):
    remains separate from the ongoing five-product compatibility check.
    A minor or patch release must have no unexplained breakage. A major release
    may return a nonzero result only when every public migration is documented.
+   The digester also reports `package`-access declarations, which no consumer
+   can use. Those diagnostics are listed one by one in
+   `docs/contracts/api-breakage-allowlist.json`; `scripts/check-api-breakage-allowlist.py`
+   accepts an entry only when the baseline source shows a `package`
+   declaration for it, so a `public` declaration cannot be listed. The list is
+   bound to one baseline: empty it when `STABLE_VERSION` moves.
    The 6.0.0 classification is recorded in
    [docs/API_BREAKAGE_6_0.md](docs/API_BREAKAGE_6_0.md).
 8. Thread and address sanitizer package tests, each with `--jobs 1 --no-parallel`.

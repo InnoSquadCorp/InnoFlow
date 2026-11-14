@@ -10,10 +10,16 @@ checker = root / 'scripts/check-testing-contracts.py'
 paths = ['Sources/InnoFlowTesting', 'Sources/InnoFlowCore/FlowScope.swift', 'Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift', 'Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift']
 mutations = [
     ('source-column', 'Sources/InnoFlowTesting/TestStore+Public.swift', 'column: UInt = #column', 'column: UInt = 1'),
-    ('test-framework-routing', 'Sources/InnoFlowTesting/TestStore+Assertions.swift', 'if Test.current != nil', 'if false'),
+    ('test-framework-routing', 'Sources/InnoFlowTesting/TestStore+Assertions.swift', 'if TestStoreReportingContext.reportsThroughSwiftTesting', 'if false'),
+    ('deinit-owner-framework', 'Sources/InnoFlowTesting/TestStore.swift', 'TestStoreReportingContext.$ownerUsesSwiftTesting.withValue(ownerUsesSwiftTesting)', 'TestStoreReportingContext.$ownerUsesSwiftTesting.withValue(false)'),
     ('scope-construction', 'Sources/InnoFlowCore/FlowScope.swift', 'fileprivate init()', 'public init()'),
     ('selection-fixed-sleep', 'Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift', None, '\n// Task.sleep(for: .milliseconds(20))\n'),
     ('scenario-threshold', 'Sources/InnoFlowTesting/TestStoreScenario.swift', 'onceSleepersReach count: Int,', 'onceSleepersReach count: Int = 1,'),
+    ('scenario-store-deadline', 'Sources/InnoFlowTesting/TestStoreScenario.swift', 'timeout: store.effectTimeout', 'timeout: ManualTestClock.defaultWaitTimeout'),
+    ('scenario-reports-miss', 'Sources/InnoFlowTesting/TestStoreScenario.swift', 'store.issueReporter(', 'ignore('),
+    ('explorer-store-deadline', 'Sources/InnoFlowTesting/TestStoreExplorer.swift', 'clock.waitForSleepers(atLeast: sleepers, timeout: store.effectTimeout)', 'clock.waitForSleepers(atLeast: sleepers)'),
+    ('teststore-reduction-turn-acceptance', 'Sources/InnoFlowTesting/TestStore+EffectDriver.swift', 'extension TestStore: ReductionTurnCancellationAcceptor', 'extension TestStore'),
+    ('teststore-effect-start-site', 'Sources/InnoFlowTesting/TestStore+Exhaustivity.swift', 'context: reductionTurnContext(', 'context: nextEffectContext('),
 ]
 with tempfile.TemporaryDirectory(prefix='innoflow-testing-contracts-') as directory:
     target = Path(directory)

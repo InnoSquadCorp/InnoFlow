@@ -29,9 +29,13 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   private var cachedValue: Value {
     get {
       access(keyPath: cachedValueKeyPath)
+      noteTrackedRead()
       return storedCachedValue
     }
-    set { withMutation(keyPath: cachedValueKeyPath) { storedCachedValue = newValue } }
+    set {
+      withMutation(keyPath: cachedValueKeyPath) { storedCachedValue = newValue }
+      noteObserversNotified()
+    }
   }
   @ObservationIgnored private weak var parentObject: AnyObject?
   @ObservationIgnored private let sourceIsAlive: @MainActor () -> Bool
@@ -43,10 +47,114 @@ public final class SelectedStore<Value: Equatable & Sendable> {
     \SelectedStore<Value>.isActive
   private var isActive: Bool {
     get {
+      // Registers the liveness tracker only. A reader that also reads the
+      // value re-arms retention there; a reader of liveness alone goes
+      // through ``isAlive``, which retains until the terminal notification.
       access(keyPath: isActiveKeyPath)
       return storedIsActive
     }
-    set { withMutation(keyPath: isActiveKeyPath) { storedIsActive = newValue } }
+    set {
+      withMutation(keyPath: isActiveKeyPath) { storedIsActive = newValue }
+      // Deactivation is terminal: no later notification will arrive to end a
+      // grace period, so retention ends with this one.
+      noteObserversNotified(isTerminal: !newValue)
+    }
+  }
+
+  /// Where this selection stands relative to Observation's one-shot tracking.
+  ///
+  /// A reader that tracked this selection can only be notified through the
+  /// selection itself, so the owner must keep it alive from a tracked read
+  /// until the next notification. A notification consumes every tracker; a
+  /// reader that is still interested reads again and re-arms retention.
+  private enum ObservationPhase {
+    /// Never read, or released after going unread across two notifications.
+    case unobserved
+    /// Read since the last notification: a tracker may be registered.
+    case observed
+    /// Notified and not read since: no tracker exists. Retention is kept for
+    /// one more notification so a view that re-reads keeps the same handle.
+    case notified
+  }
+
+  @ObservationIgnored private var observationPhase: ObservationPhase = .unobserved
+  /// Set by a read of liveness alone. Such a reader's tracker is registered
+  /// on liveness only: a value change never fires it, so it stays armed until
+  /// the selection is deactivated and retention must last that long.
+  @ObservationIgnored private var awaitsTerminalNotification = false
+  @ObservationIgnored private weak var observationRetainer: SelectionCacheEntry?
+  @ObservationIgnored private var unregisterFromParent: (@MainActor () -> Void)?
+
+  private var needsRetention: Bool {
+    observationPhase != .unobserved || awaitsTerminalNotification
+  }
+
+  private func updateRetention() {
+    if needsRetention {
+      observationRetainer?.retainSelection()
+    } else {
+      observationRetainer?.releaseSelection()
+    }
+  }
+
+  private func noteTrackedRead() {
+    guard observationPhase != .observed else { return }
+    observationPhase = .observed
+    updateRetention()
+  }
+
+  private func noteLivenessOnlyRead() {
+    guard !awaitsTerminalNotification, storedIsActive else { return }
+    awaitsTerminalNotification = true
+    updateRetention()
+  }
+
+  private func noteObserversNotified(isTerminal: Bool = false) {
+    if isTerminal {
+      // Deactivation fires every tracker, liveness included, and no later
+      // notification can arrive.
+      observationPhase = .unobserved
+      awaitsTerminalNotification = false
+    } else {
+      switch observationPhase {
+      case .unobserved:
+        break
+      case .observed:
+        observationPhase = .notified
+      case .notified:
+        observationPhase = .unobserved
+      }
+    }
+    updateRetention()
+  }
+
+  /// Lets the owner's selection cache keep this selection alive while a
+  /// tracked read may still be waiting for its notification.
+  package func retainWhileObserved(by retainer: SelectionCacheEntry) {
+    observationRetainer = retainer
+    updateRetention()
+  }
+
+  /// Whether the owner would currently keep this selection alive without an
+  /// external reference.
+  package var isRetainedForObservation: Bool {
+    observationRetainer != nil && needsRetention
+  }
+
+  /// Installs the hook that removes this selection from its parent's
+  /// projection registry when it is deallocated.
+  package func onDeinit(_ unregister: @escaping @MainActor () -> Void) {
+    unregisterFromParent = unregister
+  }
+
+  // A released selection must leave its dependency bucket immediately: the
+  // bucket would otherwise keep evaluating the selection's key path against
+  // states the caller no longer vouches for. `@_optimize(none)` works around
+  // the Swift 6.3 EarlyPerfInliner crash on generic isolated deinitializers
+  // (swiftlang/swift#88173; see Store.deinit).
+  @_optimize(none)
+  isolated deinit {
+    unregisterFromParent?()
   }
 
   /// Whether this selection is still backed by a live source projection.
@@ -57,6 +165,14 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// can consult this before using ``SelectedStore/requireAlive(file:line:)`` or read
   /// ``optionalValue`` when a dead selection should be treated as absence.
   public var isAlive: Bool {
+    let isAlive = livenessForRead
+    noteLivenessOnlyRead()
+    return isAlive
+  }
+
+  /// Liveness as part of a read that goes on to the value: the value read
+  /// decides retention.
+  private var livenessForRead: Bool {
     parentObject != nil && sourceIsAlive() && isActive
   }
 
@@ -69,7 +185,7 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// precondition, use ``SelectedStore/requireAlive(file:line:)`` instead — it returns `Value`
   /// directly and crashes loudly on a released parent.
   public var optionalValue: Value? {
-    guard isAlive else { return nil }
+    guard livenessForRead else { return nil }
     return cachedValue
   }
 
@@ -134,7 +250,9 @@ public final class SelectedStore<Value: Equatable & Sendable> {
 
 extension SelectedStore: ProjectionObserver {
   package func refreshFromParentStore() -> Bool {
-    guard isActive else { return false }
+    // Internal bookkeeping reads the stored values directly: a refresh is not
+    // an observation and must neither register a tracker nor re-arm retention.
+    guard storedIsActive else { return false }
     guard parentObject != nil, sourceIsAlive() else {
       isActive = false
       return true
@@ -143,7 +261,7 @@ extension SelectedStore: ProjectionObserver {
       isActive = false
       return true
     }
-    if nextValue != cachedValue {
+    if nextValue != storedCachedValue {
       cachedValue = nextValue
       return true
     }
@@ -264,6 +382,10 @@ extension Store {
       selectionCache.store(selectedStore, for: cacheKey, valueType: Value.self)
     }
     registerProjectionObserver(selectedStore, registration: registration)
+    let observerID = ObjectIdentifier(selectedStore)
+    selectedStore.onDeinit { [weak self] in
+      self?.unregisterProjectionObserver(observerID)
+    }
     return selectedStore
   }
 
@@ -279,7 +401,7 @@ extension Store {
         callsite: callsite,
         signature: .keyPath(keyPath as AnyKeyPath)
       ),
-      initialValue: state[keyPath: keyPath],
+      initialValue: untrackedState[keyPath: keyPath],
       registration: selectionDependencyRegistrations(
         selectionDependencyRegistration(keyPath)
       ),
@@ -312,7 +434,7 @@ extension Store {
           semanticID: $0
         )
       },
-      initialValue: transform(state[keyPath: dependency]),
+      initialValue: transform(untrackedState[keyPath: dependency]),
       registration: selectionDependencyRegistrations(
         selectionDependencyRegistration(dependency)
       ),
@@ -357,7 +479,7 @@ extension Store {
           semanticID: $0
         )
       },
-      initialValue: transform(repeat state[keyPath: each dependencies]),
+      initialValue: transform(repeat untrackedState[keyPath: each dependencies]),
       registration: selectionDependencyRegistrations(fromArray: registrations),
       valueResolver: { [weak self] in
         guard let self else { return nil }
@@ -382,7 +504,7 @@ extension Store {
           semanticID: $0
         )
       },
-      initialValue: selector(state),
+      initialValue: selector(untrackedState),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
         guard let self else { return nil }
@@ -416,7 +538,7 @@ extension Store {
           semanticID: $0
         )
       },
-      initialValue: selector(state),
+      initialValue: selector(untrackedState),
       registration: registration,
       valueResolver: { [weak self] in
         guard let self else { return nil }
@@ -479,6 +601,10 @@ extension ScopedStore {
       selectionCache.store(selectedStore, for: cacheKey, valueType: Value.self)
     }
     observerRegistry.register(selectedStore, registration: registration)
+    let observerID = ObjectIdentifier(selectedStore)
+    selectedStore.onDeinit { [weak observerRegistry] in
+      observerRegistry?.unregister(observerID)
+    }
     return selectedStore
   }
 
@@ -494,7 +620,7 @@ extension ScopedStore {
         callsite: callsite,
         signature: .keyPath(keyPath as AnyKeyPath)
       ),
-      initialValue: state[keyPath: keyPath],
+      initialValue: untrackedState[keyPath: keyPath],
       registration: selectionDependencyRegistrations(
         selectionDependencyRegistration(keyPath)
       ),
@@ -524,7 +650,7 @@ extension ScopedStore {
           semanticID: $0
         )
       },
-      initialValue: transform(state[keyPath: dependency]),
+      initialValue: transform(untrackedState[keyPath: dependency]),
       registration: selectionDependencyRegistrations(
         selectionDependencyRegistration(dependency)
       ),
@@ -570,7 +696,7 @@ extension ScopedStore {
           semanticID: $0
         )
       },
-      initialValue: transform(repeat state[keyPath: each dependencies]),
+      initialValue: transform(repeat untrackedState[keyPath: each dependencies]),
       registration: selectionDependencyRegistrations(fromArray: registrations),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
@@ -595,7 +721,7 @@ extension ScopedStore {
           semanticID: $0
         )
       },
-      initialValue: selector(state),
+      initialValue: selector(untrackedState),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
@@ -629,7 +755,7 @@ extension ScopedStore {
           semanticID: $0
         )
       },
-      initialValue: selector(state),
+      initialValue: selector(untrackedState),
       registration: registration,
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }

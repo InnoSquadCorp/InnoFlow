@@ -6,7 +6,7 @@ import os
 
 @testable import InnoFlowCoreTestSupport
 
-@Suite("Dispatch diagnostics")
+@Suite("Dispatch diagnostics", .timeLimit(.minutes(5)))
 @MainActor
 struct DispatchDiagnosticsTests {
   @Test("root and descendant lifecycle records share one dispatch identity")

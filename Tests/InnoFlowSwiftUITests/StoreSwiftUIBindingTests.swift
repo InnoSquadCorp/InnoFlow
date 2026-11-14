@@ -27,7 +27,7 @@ private struct SwiftUIBindingFeature: Reducer {
   }
 }
 
-@Suite("Store.binding SwiftUI integration", .serialized)
+@Suite("Store.binding SwiftUI integration", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct StoreSwiftUIBindingTests {
 

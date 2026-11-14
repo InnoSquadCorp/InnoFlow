@@ -4,7 +4,7 @@ import InnoFlowTesting
 import Testing
 import os
 
-@Suite("Reducer output")
+@Suite("Reducer output", .timeLimit(.minutes(5)))
 @MainActor
 struct ReducerOutputTests {
   @Test("Store publishes typed output after state mutation")

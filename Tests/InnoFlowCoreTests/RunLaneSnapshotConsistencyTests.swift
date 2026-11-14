@@ -23,7 +23,7 @@ private actor LaneSnapshotGate {
 }
 
 @MainActor
-@Suite("Payload-free run lane snapshots")
+@Suite("Payload-free run lane snapshots", .timeLimit(.minutes(5)))
 struct RunLaneSnapshotConsistencyTests {
   @Test func snapshotContainsOnlyOpaqueIdentityAndAdmissionMetadata() async {
     let scheduler = EffectRunScheduler()

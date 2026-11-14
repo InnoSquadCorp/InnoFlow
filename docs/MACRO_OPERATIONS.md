@@ -25,35 +25,143 @@ Macro diagnostics, external compile contracts and warnings-as-errors remain
 blocking. Do not widen the range or change the minimum compiler merely to make
 an update pass. Follow [`RELEASING.md`](../RELEASING.md).
 
-## Output Case Paths
+## Generated Case Paths
 
-When an `@InnoFlow` feature declares a nested `Output` enum, the macro attaches
-an internal output-path macro that synthesizes public canonical case paths for
-supported no-payload, single-payload, labeled, and multi-payload cases. Optional
-payload extraction preserves `.some(nil)` so a matched nil is not confused with
-a case mismatch. Generic feature context is retained in each path.
+`@InnoFlow` attaches an internal path macro to the nested `Action` enum and,
+when the feature declares one, to the nested `Output` enum. Both walk their
+cases through one shared traversal, so conditional compilation, availability,
+manual paths, `@InnoFlowCasePathIgnored`, and name collisions mean the same
+thing for both enums. They differ only in which payload shapes they turn into
+a helper.
 
-Generated helpers preserve the case declaration's availability attributes.
+| Case shape | `Action` | `Output` |
+| --- | --- | --- |
+| `case done` | no helper | `doneCasePath` (`CasePath<Self, Void>`) |
+| `case child(Payload)` or `case child(_ name: Payload)` | `childCasePath` | `childCasePath` |
+| `case todo(id: ID, action: Payload)` | `todoActionPath` (`CollectionActionPath`) | `todoCasePath` over the labeled tuple |
+| `case selected(id: ID)` | warning, no helper | `selectedCasePath` |
+| any other multi-payload case | warning, no helper | `CasePath` over a tuple that keeps the labels |
+
+A payload written `_ name: Payload` has no argument label. The local name only
+documents the payload, so the case synthesizes exactly like the unlabeled
+spelling, as a single payload and inside a multi-payload tuple.
+`Output` never receives `CollectionActionPath`; collection routing remains
+Action-only. Optional `Output` payload extraction preserves `.some(nil)` so a
+matched nil is not confused with a case mismatch; an optional `Action` payload
+still synthesizes and warns. Generic feature context is retained in each path.
+Duplicate payload labels produce a diagnostic instead of unstable generated
+API. Helper names strip exactly one leading underscore from the case name.
+
+### Conditional compilation and name collisions
+
 Cases nested in conditional compilation are traversed recursively and their
 helpers remain inside a mirrored `#if` / `#elseif` / `#else` structure, so a
-platform-only payload type never leaks into another platform's compile. The
-collision check treats mutually exclusive branches independently while still
-diagnosing duplicates that can coexist in one active branch.
+platform-only payload type never leaks into another platform's compile.
 
-An existing canonical static path suppresses synthesis only where that manual
-declaration is active. If the declaration is guarded by a user flag, the macro
-emits the canonical helper under the complementary condition so both flag-on
-and flag-off consumers retain the same API without compiling duplicate active
-members. `@InnoFlowCasePathIgnored` remains the explicit opt-out.
+Two helpers with the same name are an error when they can exist in one
+compiler configuration, for example `case child(A)` next to `case _child(B)`,
+or the same two cases under conditions that can hold together. The same check
+covers a helper whose name is already taken by a static function, a nested
+type, or a case. Mutually exclusive branches are independent.
 
-Conditional output analysis preserves the Boolean meaning of `!`, `&&`, `||`,
-and nested parentheses. Branch overlap and coverage are checked with a bounded
+Cases that redeclare each other are never a collision. The compiler rejects
+an enum in which two cases with the same name and the same argument labels are
+active together, and it rejects a payload-free case next to any same-named
+case. Such cases can therefore sit in separate conditional clauses that the
+macro cannot prove exclusive, for instance two unrelated flags, and each
+helper is emitted inside its own mirrored clause without a diagnostic.
+Same-named cases with different argument labels can coexist, so their helpers
+still collide.
+
+### Manual paths
+
+A canonical static variable declared in the enum body is the author's manual
+path and takes precedence over synthesis for every shape in both enums:
+`static let <name>CasePath` or `static var <name>CasePath`, and
+`<name>ActionPath` for the `id:action:` shape of `Action`. The macro compares
+the name only. It cannot resolve the member's type, so aliases and
+factory-built paths work, and normal type checking still validates every use.
+
+- Where the manual declaration is active, the macro synthesizes nothing for
+  that case and reports nothing: no collision, and no unsupported-shape
+  warning for a shape it would not have synthesized anyway.
+- If the manual declaration sits in a narrower condition than the case, for
+  example behind a user flag, the macro emits the canonical helper under the
+  complementary condition. Flag-on and flag-off consumers keep the same API
+  and no configuration compiles two active members.
+- A manual path declared in an extension is invisible to an attached macro.
+  Next to a shape the macro synthesizes it redeclares the generated member and
+  the compiler reports `invalid redeclaration`. Move the path into the enum
+  body, delete it, or mark the case `@InnoFlowCasePathIgnored`.
+
+`@InnoFlowCasePathIgnored` remains the explicit opt-out. It skips synthesis
+and every shape diagnostic for the case. A conditional
+`@InnoFlowCasePathIgnored` attribute is a branch-scoped exclusion and is never
+copied onto a generated property.
+
+### Availability
+
+Availability is never weakened to make a helper compile. A helper carries the
+`@available` attributes of its case: introduced versions, deprecation,
+messages, platform restrictions, and conditional attributes inside `#if`.
+Three adjustments keep the copy valid:
+
+- `renamed:` is dropped. A case-level rename targets an enum constructor, not
+  a `CasePath`. An attribute that says nothing but `renamed:` is not copied at
+  all.
+- The copy is rendered on one line without comments. Trivia belongs to the
+  layout of the case declaration; carried into generated source, a line
+  comment could swallow the token that follows it.
+- Conditional `@available` attributes are filtered and preserved
+  independently of other conditional attributes.
+
+A case that is unavailable everywhere, `@available(*, unavailable)`, has no
+generated path: nothing may reference it. When that attribute is itself
+conditional, the helper is generated only under the complement of its
+condition.
+
+A platform- or environment-specific `unavailable` restriction is different.
+The attribute is copied verbatim, so the helper exists and is itself
+unavailable wherever its case is. The compiler, not a `#if` approximation in
+the macro, resolves inheritance and more specific overrides such as an iOS
+restriction combined with a Mac Catalyst introduction. For example,
+`@available(macOSApplicationExtension, unavailable)` is copied to the helper:
+a normal macOS application keeps it, while a consumer compiled with
+`-application-extension` receives the compiler's intended availability error
+when it uses that helper. The external compile contract tests both sides. The
+enum and its other paths still compile, and using an unavailable case where
+prohibited remains a compiler error.
+
+Only a top-level `unavailable` availability argument suppresses a helper.
+Occurrences inside `message:` or `renamed:` strings are documentation, not a
+compiler restriction. The classifier reads SwiftSyntax availability argument
+nodes structurally—platform/version restrictions, keyword tokens, and labeled
+arguments are not inferred by splitting or searching rendered source text.
+
+`obsoleted:` is the limit of this approach. Whether an `obsoleted:` version
+makes a case unavailable depends on the deployment target or language mode,
+which a syntax macro cannot evaluate, so the attribute is copied like any
+other. A case obsoleted for a Swift language version, such as
+`@available(swift, obsoleted: 5.0)`, is then unavailable to its own helper and
+the expansion fails with `'<case>' is unavailable`. Mark a case that
+`obsoleted:` makes unavailable with `@InnoFlowCasePathIgnored`. With the
+pinned Swift 6.3 toolchain a platform obsoletion such as
+`@available(macOS, obsoleted: 14.0)` still compiles, because the helper is
+obsolete together with its case; do not rely on that for a case nothing can
+use any more.
+
+### Conditional analysis model
+
+Conditional analysis preserves the Boolean meaning of `!`, `&&`, `||`, and
+nested parentheses. Branch overlap and coverage are checked with a bounded
 internal expression model rather than leading-character or whole-string
-comparison. The model knows that positive `os(...)` and `arch(...)` predicates
-name a single active value, and it compares lower/upper intervals for
-`swift(...)` and `compiler(...)` predicates, including negated bounds. Other
-predicates such as `targetEnvironment(...)` remain opaque atoms because the
-compiler may activate them together with an OS or architecture condition.
+comparison. The model knows that positive `os(...)`, `arch(...)`, and
+`targetEnvironment(...)` predicates each name a single active value, and it
+compares lower/upper intervals for `swift(...)` and `compiler(...)`
+predicates, including negated bounds. Predicates of different kinds stay
+independent of each other, because the compiler may activate a target
+environment together with an OS or architecture condition; every other
+predicate, including a user flag, is an opaque atom.
 Expressions that exceed the bounded analysis are handled conservatively so
 synthesis never silently introduces a possible collision. External consumer
 fixtures compile every non-empty combination of three feature flags in
@@ -68,39 +176,39 @@ configuration; all combinations and negative controls still run. The separate
 application-extension check retains its global compiler flag and isolated build
 tree so extension-safety validation still includes the dependency graph.
 
-Availability is never weakened to make a helper compile. Introduced,
-deprecated, and conditional `@available` attributes are preserved on generated
-helpers. A case carrying a normal platform `unavailable` restriction cannot
-safely participate in a stored initializer on that compiler branch, so the
-macro emits its case path only in the complement of those conditions. An
-unconditionally unavailable case therefore has no generated path, while a
-macOS-unavailable case can still expose one on iOS, tvOS, watchOS, and visionOS.
+Expansion snapshots for both enums, the shared-rule parity tests, and the
+compile-level consumer fixtures, including user-flag on/off builds, are
+required whenever this synthesis changes.
 
-Application-extension domains are different: for example,
-`@available(macOSApplicationExtension, unavailable)` is copied to the generated
-helper rather than suppressing it. A normal macOS application therefore keeps
-the helper, while a consumer compiled with `-application-extension` receives
-the compiler's intended availability error when it tries to use that helper.
-The external compile contract tests both sides. The enum and its other paths
-still compile, and using any unavailable case where prohibited remains a
-compiler error. Apply `@InnoFlowCasePathIgnored` as documentation when authoring
-such a case if omission should be explicit at the declaration site.
+## Phase Maps Inside a Phase-Managed Body
 
-Only a top-level `unavailable` availability argument suppresses a helper.
-Occurrences inside `message:` or `renamed:` strings are documentation, not a
-compiler restriction. The classifier reads SwiftSyntax availability argument
-nodes structurally—platform/version restrictions, keyword tokens, and labeled
-arguments are not inferred by splitting or searching rendered source text.
-Conditional `@InnoFlowCasePathIgnored` attributes are
-treated as branch-scoped exclusions and are not copied onto generated
-properties; conditional `@available` attributes are filtered and preserved
-independently.
+`@InnoFlow(phaseManaged: true)` wraps `body` in `Self.phaseMap` and rejects a
+`body` that already applies a phase map in the feature's own domain. A child
+reducer may own a phase of its own, so a `.phaseMap(...)` written in the child
+part of a composing call is not the feature's:
 
-Duplicate labels or local name collisions produce diagnostics instead of
-unstable generated API. Output never receives `CollectionActionPath`;
-collection routing remains Action-only. Expansion snapshots and external
-compile fixtures, including user-flag on/off builds, are required whenever this
-synthesis changes.
+- every argument of `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer`, and
+  `ForEachIdentifiedReducer`;
+- every argument of `parent.optionalChild(...)`; its receiver stays in the
+  feature's domain;
+- the arguments of `OptionalChildLifetime(parent:state:action:instanceID:reducer:)`
+  other than `parent:`, which is the feature's domain exactly like the
+  receiver of `optionalChild`.
+
+The type may be written `Scope(...)`, `Scope<...>(...)`, `Scope.init(...)`, or
+with a module qualifier. This is a syntax rule: the macro recognizes the
+composing call by the name written at the call site and the child by its
+position in that call. It does not follow values or types, so two spellings
+are still read as the feature's own phase map and rejected:
+
+- a child reducer hoisted into a local constant inside `body`, such as
+  `let child = Child().phaseMap(Child.phaseMap)`;
+- a combinator reached through a typealias, such as
+  `typealias ChildScope = Scope<State, Action, Child>`.
+
+Write the child's `.phaseMap(...)` inside the combinator's arguments, or build
+the child reducer outside `body`, for example in a property or function the
+`body` calls.
 
 ## What Macro-First Guarantees
 

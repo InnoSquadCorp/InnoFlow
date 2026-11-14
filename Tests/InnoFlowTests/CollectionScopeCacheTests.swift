@@ -7,7 +7,7 @@ import Testing
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-@Suite("Collection Scope Cache Tests", .serialized)
+@Suite("Collection Scope Cache Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct CollectionScopeCacheTests {
   private typealias RowStore =

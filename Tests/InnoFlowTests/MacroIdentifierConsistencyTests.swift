@@ -8,7 +8,7 @@ import Testing
 /// These are compiler consumers, not expansion-only snapshots. Keep the raw
 /// enum control beside the macro consumers to distinguish language support
 /// from generated-source failures on each supported Swift toolchain.
-@Suite("Macro identifier consistency")
+@Suite("Macro identifier consistency", .timeLimit(.minutes(5)))
 struct MacroIdentifierConsistencyTests {
   @Test("the original enum accepts the same keyword and raw identifier spellings")
   func originalEnumControl() {

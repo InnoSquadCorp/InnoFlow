@@ -5,7 +5,7 @@
 import SwiftSyntaxMacrosTestSupport
 import Testing
 
-@Suite("Typed explicit reduce migration")
+@Suite("Typed explicit reduce migration", .timeLimit(.minutes(5)))
 struct ExplicitReduceMigrationMacroTests {
   @Test("legacy EffectTask repair retains its effect type and promotes Output")
   func legacyEffectTaskRepair() {

@@ -1,6 +1,6 @@
 import Foundation
 public import InnoFlowCore
-import os
+import Synchronization
 
 /// Why a testing dispatch or one of its effect runs accepted cancellation.
 public enum TestEffectCancellationCause: Sendable, Equatable {
@@ -37,7 +37,7 @@ package final class TestEffectLedgerStorage: Sendable {
     var isFinished = false
   }
   private let capacity: Int
-  private let state = OSAllocatedUnfairLock(initialState: State())
+  private let state = Mutex(State())
 
   package init(capacity: Int = 256) {
     self.capacity = max(1, capacity)
@@ -69,7 +69,7 @@ package final class TestEffectLedgerStorage: Sendable {
 /// Active dispatch lookup without retaining the TestStore across completion.
 /// Completion removes a ledger synchronously, including off-MainActor exits.
 package final class TestEffectLedgerRegistry: Sendable {
-  private let storage = OSAllocatedUnfairLock(initialState: [DispatchID: TestEffectLedgerStorage]())
+  private let storage = Mutex([DispatchID: TestEffectLedgerStorage]())
   package func insert(_ ledger: TestEffectLedgerStorage, for id: DispatchID) {
     storage.withLock { $0[id] = ledger }
   }

@@ -5,7 +5,7 @@ import Testing
 
 @testable import InnoFlowCoreTestSupport
 
-@Suite("Effect run admission")
+@Suite("Effect run admission", .timeLimit(.minutes(5)))
 @MainActor
 struct EffectRunSchedulerTests {
   @Test("serial policy preserves admission order and dispatch finish")

@@ -92,7 +92,7 @@ private func reconciliationReducer() -> Reduce<ReconciliationState, Reconciliati
   func finish() async { if let testing { await testing.finish() } }
 }
 
-@Suite("Collection reconciliation boundaries")
+@Suite("Collection reconciliation boundaries", .timeLimit(.minutes(5)))
 @MainActor struct CollectionReconciliationBoundaryTests {
   @Test(arguments: [false, true], [1, 32, 128, 512, 1_000])
   func denseOwnersPreserveLifetimeAcrossActions(testing: Bool, count: Int) async {

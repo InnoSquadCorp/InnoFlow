@@ -20,17 +20,18 @@ extension Store: EffectDriver {
     operation: @escaping @MainActor @Sendable () async -> Void
   ) -> Task<Void, Never> {
     let token = UUID()
-    let gate = RunStartGate()
     let bridge = effectBridge
     let flowTaskTracker = context?.flowTaskTracker
     let flowTaskActivity = flowTaskTracker?.beginActivity()
+    // The task body is MainActor-isolated and this method runs on the
+    // MainActor without suspending, so the body cannot start before the
+    // registration below. No start gate is needed to order the two.
     let task = Task { @MainActor [weak flowTaskTracker] in
       defer {
         if let flowTaskActivity {
           flowTaskTracker?.endActivity(flowTaskActivity)
         }
       }
-      await gate.wait()
       defer {
         bridge.finishCompositeTask(token: token)
       }
@@ -47,9 +48,6 @@ extension Store: EffectDriver {
     )
     if let flowTaskActivity {
       flowTaskTracker?.attach(task, to: flowTaskActivity)
-    }
-    Task {
-      await gate.open()
     }
     return task
   }
@@ -123,14 +121,14 @@ extension Store: EffectDriver {
     priority: TaskPriority?,
     operation: @escaping @concurrent @Sendable (Send<R.Action>, EffectContext) async -> Void,
     context: EffectExecutionContext?
-  ) async -> Task<Void, Never> {
+  ) -> Task<Void, Never> {
     let context = context?.frozenForExecution()
     let sequence = context?.sequence ?? 0
     let token = UUID()
-    let gate = RunStartGate()
     let runEvent = makeRunEvent(token: token, context: context)
 
     let runtime = effectBridge.runtime
+    let liveness = EffectRunLiveness()
     let instrumentation = self.instrumentation
     let clock = self.clock
     let lifetime = self.lifetime
@@ -142,25 +140,16 @@ extension Store: EffectDriver {
           flowTaskTracker?.endActivity(flowTaskActivity)
         }
       }
-      await gate.wait()
-      do {
-        if lifetime.isReleased || context?.shouldProceed == false {
-          throw CancellationError()
-        }
-        guard
-          await runtime.canStartOperation(
-            token: token,
-            ids: context?.cancellationIDs ?? [],
-            sequence: sequence
-          )
-        else {
-          throw CancellationError()
-        }
-      } catch {
+      guard
+        !Task.isCancelled,
+        !lifetime.isReleased,
+        liveness.isActive,
+        context?.shouldProceed != false
+      else {
         // Run was cancelled before it could start. We never fired `didStartRun`,
         // so we deliberately do not fire `didFinishRun` either — the
         // start/finish pair stays balanced.
-        await runtime.finish(token: token)
+        runtime.finish(token: token)
         return
       }
 
@@ -185,33 +174,35 @@ extension Store: EffectDriver {
           return
         }
 
-        switch await runtime.emissionDecision(
-          token: token,
-          ids: context?.cancellationIDs ?? [],
-          sequence: sequence
-        ) {
-        case .allow:
-          break
-
-        case .drop(let reason):
-          instrumentation.didDropAction(
-            .init(
-              action: action,
-              reason: reason,
-              cancellationID: context?.cancellationID,
-              sequence: sequence,
-              dispatchID: context?.dispatchID
-            )
-          )
-          return
-        }
-
+        // The emission decision and the delivery it authorizes happen in one
+        // MainActor turn: no cancellation can be accepted between them.
         await MainActor.run {
           guard let self else {
             instrumentation.didDropAction(
               .init(
                 action: action,
                 reason: .storeReleased,
+                cancellationID: context?.cancellationID,
+                sequence: sequence,
+                dispatchID: context?.dispatchID
+              )
+            )
+            return
+          }
+
+          switch runtime.emissionDecision(
+            token: token,
+            ids: context?.cancellationIDs ?? [],
+            sequence: sequence
+          ) {
+          case .allow:
+            break
+
+          case .drop(let reason):
+            instrumentation.didDropAction(
+              .init(
+                action: action,
+                reason: reason,
                 cancellationID: context?.cancellationID,
                 sequence: sequence,
                 dispatchID: context?.dispatchID
@@ -234,15 +225,17 @@ extension Store: EffectDriver {
         }
       }
 
+      // Every cancellation source is readable without leaving the run's task:
+      // accepted cancellation marks the frozen context and retires liveness
+      // before it cancels the task.
       let checkCancellation: @Sendable () async throws -> Void = {
-        if lifetime.isReleased || context?.shouldProceed == false {
+        if Task.isCancelled
+          || lifetime.isReleased
+          || !liveness.isActive
+          || context?.shouldProceed == false
+        {
           throw CancellationError()
         }
-        try await runtime.checkCancellation(
-          token: token,
-          ids: context?.cancellationIDs ?? [],
-          sequence: sequence
-        )
       }
 
       let effectContext = EffectContext(
@@ -292,19 +285,21 @@ extension Store: EffectDriver {
       )
 
       await operation(send, effectContext)
-      await runtime.finish(token: token)
+      runtime.finish(token: token)
       if !runFailedBox.isSet {
         instrumentation.didFinishRun(runEvent)
       }
     }
 
-    await runtime.registerAndStart(
+    // Registered in the MainActor turn that created the task: cancellation
+    // accepted from now on finds the run, and none could be accepted earlier.
+    runtime.register(
       token: token,
       ids: context?.cancellationIDs ?? [],
       sequence: sequence,
       context: context,
       task: task,
-      gate: gate
+      liveness: liveness
     )
     if let flowTaskActivity {
       flowTaskTracker?.attach(task, to: flowTaskActivity)
@@ -370,7 +365,7 @@ extension Store: EffectDriver {
     }
 
     if case .latest = policy {
-      await cancelInFlightEffects(id: id, context: context)
+      cancelInFlightEffects(id: id, context: context)
     }
 
     if case .queued = ticket.admission,
@@ -404,7 +399,7 @@ extension Store: EffectDriver {
         on: context
       ).frozenForExecution()
       guard
-        let run = await self?.startRun(
+        let run = self?.startRun(
           priority: priority,
           operation: operation,
           context: runContext
@@ -425,24 +420,12 @@ extension Store: EffectDriver {
     return task
   }
 
-  package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
-    let sequence = effectBridge.markCancelled(id: id, upTo: context?.sequence)
-    recordCancellation(id: id, sequence: sequence, dispatchID: context?.dispatchID)
-    if diagnostics != nil {
-      let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
-      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
-    }
-    await effectBridge.cancelEffects(id: id, upTo: sequence)
+  package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) {
+    applyCancellation(.all(id), context: context)
   }
 
-  package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
-    let sequence = effectBridge.markCancelledInFlight(id: id, upTo: context?.sequence)
-    recordCancellation(id: id, sequence: sequence, dispatchID: context?.dispatchID)
-    if diagnostics != nil {
-      let targets = await effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
-      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
-    }
-    await effectBridge.cancelInFlightEffects(id: id, upTo: sequence)
+  package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) {
+    applyCancellation(.inFlight(id), context: context)
   }
 
   package func shouldProceed(context: EffectExecutionContext?) -> Bool {
@@ -462,7 +445,7 @@ extension Store: EffectDriver {
         ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async -> Task<Void, Never>? {
-    await cancelInFlightEffects(id: id, context: context)
+    cancelInFlightEffects(id: id, context: context)
     guard shouldProceed(context: context) else { return nil }
     guard let generation = effectBridge.beginDebounce(scope) else { return nil }
     let clock = self.clock
@@ -559,7 +542,7 @@ extension Store: EffectDriver {
               self.throttleState.finishState(for: id, generation: generation)
             }
           }
-          guard let pending = self.throttleState.pending(for: id) else { return nil }
+          guard let pending = self.throttleState.pendingToFire(for: id) else { return nil }
           guard self.shouldProceed(context: pending.context) else { return nil }
           return pending
         }
@@ -603,36 +586,24 @@ extension Store: EffectDriver {
   package func runConcurrently(
     _ children: [ReducerEffect<R.Action, R.Output>],
     context: EffectExecutionContext?,
-    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
-    if awaited {
+    let bridge = effectBridge
+    startCompositeTask(context: context) {
       await withTaskGroup(of: Void.self) { group in
         for child in children {
           group.addTask {
-            await recurse(child, context, true)
+            guard !Task.isCancelled else { return }
+            guard await MainActor.run(body: { bridge.shouldProceed(context: context) }) else {
+              return
+            }
+            await recurse(child, context, false)
           }
         }
         await group.waitForAll()
-      }
-    } else {
-      let bridge = effectBridge
-      startCompositeTask(context: context) {
-        await withTaskGroup(of: Void.self) { group in
-          for child in children {
-            group.addTask {
-              guard !Task.isCancelled else { return }
-              guard await MainActor.run(body: { bridge.shouldProceed(context: context) }) else {
-                return
-              }
-              await recurse(child, context, false)
-            }
-          }
-          await group.waitForAll()
-        }
       }
     }
   }
@@ -640,24 +611,17 @@ extension Store: EffectDriver {
   package func runSequentially(
     _ children: [ReducerEffect<R.Action, R.Output>],
     context: EffectExecutionContext?,
-    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
-    if awaited {
+    let bridge = effectBridge
+    startCompositeTask(context: context) {
       for child in children {
+        guard !Task.isCancelled else { return }
+        guard bridge.shouldProceed(context: context) else { return }
         await recurse(child, context, true)
-      }
-    } else {
-      let bridge = effectBridge
-      startCompositeTask(context: context) {
-        for child in children {
-          guard !Task.isCancelled else { return }
-          guard bridge.shouldProceed(context: context) else { return }
-          await recurse(child, context, true)
-        }
       }
     }
   }

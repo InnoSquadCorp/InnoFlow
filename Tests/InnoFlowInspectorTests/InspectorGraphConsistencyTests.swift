@@ -2,7 +2,7 @@ import InnoFlowCore
 import InnoFlowInspector
 import Testing
 
-@Suite("Inspector graph is display-only")
+@Suite("Inspector graph is display-only", .timeLimit(.minutes(5)))
 struct InspectorGraphConsistencyTests {
   private enum Phase: Hashable, Sendable { case idle, loading, complete }
   @Test func currentPhaseAndTopologyArePreserved() {

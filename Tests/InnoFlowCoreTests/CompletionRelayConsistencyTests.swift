@@ -2,7 +2,7 @@ import Foundation
 import InnoFlowCore
 import Testing
 
-@Suite("Runtime-owned completion subscriptions")
+@Suite("Runtime-owned completion subscriptions", .timeLimit(.minutes(5)))
 struct CompletionRelayConsistencyTests {
   @Test("completion owns a discarded tracker and releases it exactly once")
   func retainedUntilCompletion() {

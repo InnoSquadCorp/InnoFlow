@@ -26,7 +26,7 @@ private struct PerformanceObservationFeature: Reducer {
 }
 
 @MainActor
-@Suite("Measured fast path semantic controls")
+@Suite("Measured fast path semantic controls", .timeLimit(.minutes(5)))
 struct PerformanceSemanticsConsistencyTests {
   @Test func thousandRowScopesNotifyOnlyTheChangedRowIncludingRearmedObservers() {
     let store = Store(reducer: PerformanceObservationFeature(), initialState: .init())
