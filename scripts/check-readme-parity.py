@@ -24,6 +24,27 @@ CRITICAL = ('InnoFlowCore', 'InnoFlowSwiftUI', 'InnoFlowInspector', 'InnoFlowTes
             'VoiceOver', 'Dynamic Type', 'accessibilityIdentifier', 'STABLE_VERSION',
             '6.3+', '18+', '15+', '11+', '2+', '603.0.0', '605.0.0', '604.0.0', '28',
             '18.5', '11.5', '2.5', 'OS 27')
+RELEASE_SECTION = re.compile(r'^## ([0-9]+\.[0-9]+\.[0-9]+) Release$', re.M)
+
+
+def version_key(version):
+    return tuple(int(part) for part in version.split('.'))
+
+
+def release_target(root, stable):
+    """Return the version the READMEs install: the newest RELEASE_NOTES.md section.
+
+    Between releases it equals STABLE_VERSION. A prepared candidate names its
+    target there first, as scripts/check-release-sync.sh reads it, while
+    STABLE_VERSION keeps the published release until publication.
+    """
+    match = RELEASE_SECTION.search((root / 'RELEASE_NOTES.md').read_text())
+    if match is None:
+        raise ValueError('RELEASE_NOTES.md names no release target')
+    target = match.group(1)
+    if version_key(target) < version_key(stable):
+        raise ValueError('RELEASE_NOTES.md release target is older than STABLE_VERSION')
+    return target
 
 
 def verify(root):
@@ -34,6 +55,7 @@ def verify(root):
     fences = re.findall(r'^```swift\n(.*?)^```', english, re.M | re.S)
     links = re.findall(r'\]\(([^)]+)\)', english)
     stable = (root / 'STABLE_VERSION').read_text().strip()
+    target = release_target(root, stable)
     for file in READMES:
         source = (root / file).read_text()
         if '\n\n' + SWITCHER + '\n\n' not in source:
@@ -43,8 +65,10 @@ def verify(root):
             raise ValueError(file + ': switcher must immediately follow badges')
         if len(re.findall(r'^## ', source, re.M)) != 10:
             raise ValueError(file + ': entry section coverage changed')
-        if f'## InnoFlow {stable}\n' not in source or f'from: "{stable}"' not in source:
-            raise ValueError(file + ': stable installation/version drift')
+        if f'## InnoFlow {target}\n' not in source or f'from: "{target}"' not in source:
+            raise ValueError(file + ': release installation/version drift')
+        if f'(https://github.com/InnoSquadCorp/InnoFlow/tree/{stable})' not in source:
+            raise ValueError(file + ': published stable source link drift')
         if re.findall(r'^```swift\n(.*?)^```', source, re.M | re.S) != fences:
             raise ValueError(file + ': Swift examples differ from compiled English source')
         if re.findall(r'\]\(([^)]+)\)', source) != links:

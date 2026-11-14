@@ -2,15 +2,20 @@
 
 This file tracks release-to-release migration guidance when behavior, defaults, or artifact contracts change in a way that users must react to.
 
-The published stable release is **6.0.2**. The entries below describe changes in
-their respective tags; 6.0.0 and 6.0.1 tags do not have published GitHub releases.
+The published stable release is **6.0.2**. **6.1.0** is a prepared release
+candidate that is not tagged or published yet. The entries below describe
+changes in their respective tags; 6.0.0 and 6.0.1 tags do not have published
+GitHub releases.
 The current development skill fixture now validates exact 6.0.2. Its
 [fresh consumer evidence](skills/validation.md) is separate from the historical
 6.0.0 receipt retained in the 6.0.1 and 6.0.2 tags.
 
-## Unreleased
+## 6.1.0
 
-These notes describe changes after 6.0.2 that are not in a published release.
+These notes describe the upgrade from 6.0.2 to the 6.1.0 release candidate;
+until 6.1.0 is tagged and published they describe unreleased development. No
+public API is removed, but the behavior changes below can require test or
+source updates.
 
 ### Key-path selection lifetime
 

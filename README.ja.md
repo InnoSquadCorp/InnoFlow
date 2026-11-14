@@ -6,21 +6,21 @@
 
 SwiftUI を中心に、ビジネス・ドメインの状態遷移を扱う単方向状態管理フレームワークです。Reducer、Store、決定的なテストから始め、機能に必要なときにオーケストレーションを加えてください。
 
-## InnoFlow 6.0.2
+## InnoFlow 6.1.0
 
-この README は **2026-10-08** に `1176de1e4783b638c03a9334f43cc49378957148` から公開された **6.0.2 API** を説明します。[バージョン別ソース](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [リリースノート](RELEASE_NOTES.md) · [移行](MIGRATION.md)。
+この README は、まだタグ付け・公開されていない **6.1.0 リリース候補** を説明します。公開済みの安定版は引き続き、**2026-10-08** に `1176de1e4783b638c03a9334f43cc49378957148` から公開された **6.0.2** です。[6.0.2 のソース](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [リリースノート](RELEASE_NOTES.md) · [移行](MIGRATION.md)。
 
-開発ブランチには後続の CI、テスト構成、検証ツール、文書変更があります。この更新時点の `Sources/` は 6.0.2 と同一で、後続のツール変更は未公開です。開発の `STABLE_VERSION` は 6.0.2、変更不可のタグには当時の候補メタデータが残ります。ホストされた DocC はデプロイされたリビジョンを説明するため、導入版の確認にはタグのソースを使ってください。七つの README は同じ入門内容を扱い、詳細ガイドは英語です。
+6.1.0 は `ManualTestClock` の待機に期限を設け、reducer が返すキャンセルの適用時点、キーパス selection の存続期間、実行される throttle リクエスト、`@InnoFlow` が合成する case path を変更します。アップグレード前に移行ガイドを読んでください。公開が確認されるまで `STABLE_VERSION` は 6.0.2 のままです。ホストされた DocC はデプロイされたリビジョンを説明するため、導入版の確認にはタグのソースを使ってください。七つの README は同じ入門内容を扱い、詳細ガイドは英語です。
 
 ## インストール
 
 Swift **6.3+**、Swift **6 言語モード**が必要です。最低対応版は iOS **18+**、macOS **15+**、tvOS **18+**、watchOS **11+**、visionOS **2+**。SwiftSyntax は `>=603.0.0, <605.0.0`、リポジトリのロックは 604.0.0 です。対象に合う Xcode/SDK を選んでください。宣言された最低対応版は、すべての旧ランタイムでの実行検証を意味しません。
 
-パッケージを追加し、製品を明示的に選びます。`from:` は将来の互換版も許可するため、実際の `Package.resolved` を確認してください。このリリースを再現する場合は `exact: "6.0.2"` を使います。
+パッケージを追加し、製品を明示的に選びます。`from:` は将来の互換版も許可するため、実際の `Package.resolved` を確認してください。このリリースを再現する場合は `exact: "6.1.0"` を使います。
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.1.0")
 ]
 ```
 

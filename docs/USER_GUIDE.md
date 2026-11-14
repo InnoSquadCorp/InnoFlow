@@ -1,8 +1,8 @@
 # InnoFlow user guide
 
-> Current API guide for published 6.0.2. Start with the [README](../README.md)
-> or [documentation index](DOCUMENTATION.md). Later CI/tooling changes in this
-> checkout are unreleased; `Sources/` matches the 6.0.2 tag at this refresh.
+> Current API guide for the 6.1.0 release candidate; 6.0.2 remains the published
+> stable release until 6.1.0 publication is verified. Start with the
+> [README](../README.md) or [documentation index](DOCUMENTATION.md).
 > Code fences are either complete declarations, context-dependent excerpts,
 > or explicitly historical fragments. The [review ledger](contracts/doc-swift-fence-review.tsv)
 > binds each to compilation/runtime/manifest checks; parsing alone is not a typecheck.
@@ -17,12 +17,13 @@ Keep state and actions explicit; a simple `@InnoFlow` body declares
 policies for a counter, form, or ordinary request.
 
 Follow the counter and deterministic test below, then add concepts only when
-that feature needs them. This documentation describes the published
-[6.0.2 stable release](https://github.com/InnoSquadCorp/InnoFlow/releases/tag/6.0.2).
+that feature needs them. This documentation describes the 6.1.0 release
+candidate; the published stable release is still
+[6.0.2](https://github.com/InnoSquadCorp/InnoFlow/releases/tag/6.0.2).
 
 ## Installation
 
-InnoFlow 6.0.2 requires a Swift 6.3 or newer toolchain and compiles all package
+InnoFlow 6.1.0 requires a Swift 6.3 or newer toolchain and compiles all package
 targets in Swift 6 language mode. The canonical sample and DocC workflow use
 the same toolchain contract.
 
@@ -30,7 +31,7 @@ the same toolchain contract.
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.1.0")
 ]
 ```
 
@@ -160,7 +161,7 @@ struct CounterView: View {
 
 ## Composition Surface
 
-InnoFlow 6.0.2 uses a small composition surface instead of multiple authoring styles.
+InnoFlow 6.1.0 uses a small composition surface instead of multiple authoring styles.
 
 ### `Reduce`
 

@@ -435,10 +435,14 @@ begin
   abort "[doc-copyable] Phase test evidence invalid: #{test_result.fetch("failures").join(", ")}" unless
     test_result.fetch("failures").empty?
 
+  # The documented install version is the release target: the newest
+  # RELEASE_NOTES.md section, as in check-readme-parity.py and check-release-sync.sh.
+  release_target = File.read(File.join(root, "RELEASE_NOTES.md"))[/^## (\d+\.\d+\.\d+) Release$/, 1]
+  abort "[doc-copyable] RELEASE_NOTES.md names no release target" unless release_target
   install_files = %w[docs/USER_GUIDE.md README.md README.ko.md README.es.md README.de.md README.zh-Hans.md README.ja.md README.ru.md]
   install_files.each do |relative|
     fragments = {
-      dependency: "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      dependency: "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       targets: "59e63b72f151296d6324852f77d759567b8dbabeefd73d738a577fe0518ff204",
     }.transform_values do |digest|
       matches = selected.fetch(relative).select { |sha, _source| sha == digest }
@@ -467,7 +471,7 @@ begin
     target_names = package.fetch("targets").map { |target| target.fetch("name") }
     abort "[doc-copyable] #{relative} install targets drifted" unless
       target_names.sort == %w[YourAppTests YourDomain YourSwiftUIApp]
-    abort "[doc-copyable] #{relative} install version drifted" unless output.include?("6.0.2")
+    abort "[doc-copyable] #{relative} install version drifted" unless output.include?(%("#{release_target}"))
   end
   puts "[doc-copyable] Compiled #{examples.length} external targets from #{examples.values.flatten(1).uniq.length} distinct exact Swift fences (#{examples.values.sum(&:length)} uses)"
   puts "[doc-copyable] Parsed #{install_files.length} installation manifests from #{install_files.length * 2} exact Swift fences"

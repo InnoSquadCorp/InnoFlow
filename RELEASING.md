@@ -51,12 +51,14 @@ This document defines the minimum release quality bar for InnoFlow.
 
 Current stable public release: `6.0.2` (published on GitHub Releases, 2026-10-08)
 
-Release target: `6.0.2` (published; tag commit `1176de1e4783b638c03a9334f43cc49378957148`)
+Release target: `6.1.0` (candidate prepared 2026-11-14; not tagged or published)
 
-[Release Gate run 37826649872](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37826649872)
-completed the exact-SHA validation, evidence and publication gates. The
-post-publication development branch promotes the stable API baseline to 6.0.2.
-The historical candidate procedure below does not alter the immutable release tag.
+6.0.2's [Release Gate run 37826649872](https://github.com/InnoSquadCorp/InnoFlow/actions/runs/37826649872)
+completed the exact-SHA validation, evidence and publication gates at tag commit
+`1176de1e4783b638c03a9334f43cc49378957148`. The post-publication development
+branch promotes the stable API baseline to 6.0.2. The historical candidate
+procedure below does not alter the immutable release tag. 6.1.0 has none of
+that evidence yet and needs its own run of every step below.
 
 ## Current and historical release state
 
@@ -65,6 +67,17 @@ maintenance. For the next release, record a new target version, candidate branch
 and immutable SHA, then align installation snippets and release metadata with
 that target. Retain the currently published stable marker until publication.
 Tag creation and GitHub Release publication remain separate gates.
+
+The next target is 6.1.0. Its changelog section, migration section, release
+notes, the seven README installation snippets, the user guide and this file
+name 6.1.0, while `STABLE_VERSION` stays 6.0.2. `scripts/check-readme-parity.py`
+takes the target from the newest `RELEASE_NOTES.md` section, as
+`scripts/check-release-sync.sh` does, and still requires every README to link
+the published stable source and name its publication date and tag commit.
+After publication, promote `STABLE_VERSION`, that README provenance (also
+pinned in `scripts/check-readme-parity.py`) and the published wording together
+in one development commit, and empty `docs/contracts/api-breakage-allowlist.json`
+for the new baseline.
 
 The next two paragraphs record the earlier 6.0 release attempts. Their dates,
 SHAs and failures are historical evidence, not pending instructions.
@@ -87,7 +100,7 @@ checks candidate metadata only; it neither proves publication nor creates a tag.
 
 ## Stable release readiness
 
-The 6.0.2 release tag must be exactly `6.0.2`; do not create or document a `v6.0.2`
+The 6.1.0 release tag must be exactly `6.1.0`; do not create or document a `v6.1.0`
 tag. A release is publish-ready only after its exact tag triggers a successful
 GitHub Actions `Release Gate`.
 
@@ -173,22 +186,22 @@ before the tag existed would have invalidated that frozen snapshot. Publication
 has since completed; development metadata now records 6.0.2. Do not rewrite the
 release tag or interpret its prior-stable marker as the current release state.
 
-The following exact `6.0.2` commands describe the historical tag gate. For a new
-release, substitute its reviewed numeric version; never rerun them as an
-instruction to recreate the published 6.0.2 tag.
+The following exact commands are the tag gate for the 6.1.0 candidate. For a
+later release, substitute its reviewed numeric version; never use them to
+recreate the published 6.0.2 tag.
 
 After separate authorization to create the exact candidate tag,
 release-tag enforcement must also pass:
 
 ```bash
-INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=6.0.2 scripts/check-release-sync.sh
+INNOFLOW_REQUIRE_RELEASE_TAG=1 INNOFLOW_RELEASE_VERSION=6.1.0 scripts/check-release-sync.sh
 ```
 
-That command intentionally requires the exact local tag `6.0.2` to point at
+That command intentionally requires the exact local tag `6.1.0` to point at
 the checked-out commit and `STABLE_VERSION` to remain earlier than the target
 in the tagged candidate. In GitHub Actions, the triggering `GITHUB_REF_NAME` is authoritative
 and must match the staged version. The gate must not normalize or accept
-`v6.0.2`. The command is expected to fail while the candidate is deliberately
+`v6.1.0`. The command is expected to fail while the candidate is deliberately
 untagged.
 
 ## Release Checklist
