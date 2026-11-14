@@ -1,10 +1,10 @@
 import Foundation
-import os
+import Synchronization
 
 /// Process-local, monotonic identity for a root dispatch and its descendants.
 /// It is correlation metadata, never a persisted/domain or cross-process ID.
 public struct DispatchID: Hashable, Sendable, CustomStringConvertible {
-  private static let counter = OSAllocatedUnfairLock(initialState: UInt64(0))
+  private static let counter = Mutex(UInt64(0))
   public let rawValue: UInt64
 
   public init() {

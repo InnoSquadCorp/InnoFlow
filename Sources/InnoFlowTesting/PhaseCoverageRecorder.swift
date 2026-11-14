@@ -1,6 +1,6 @@
 import Foundation
 @_exported public import InnoFlowCore
-import os
+import Synchronization
 
 /// A declared source/target edge for one `On` declaration. Trigger IDs are
 /// zero-based declaration indices, independent of action payloads and labels.
@@ -73,12 +73,12 @@ public final class PhaseCoverageRecorder<
   private let identity: String
   private let keyPath: any WritableKeyPath<State, Phase> & Sendable
   private let expected: Set<PhaseCoverageTransition<Phase>>
-  private let storage: OSAllocatedUnfairLock<Storage>
+  private let storage: Mutex<Storage>
 
   public init(_ map: PhaseMap<State, Action, Phase>) {
     identity = map.observationID
     keyPath = map.phaseKeyPath
-    storage = .init(initialState: Storage())
+    storage = Mutex(Storage())
     expected = Set(
       map.rules.flatMap { rule in
         rule.transitions.flatMap { transition in
@@ -151,7 +151,7 @@ extension PhaseCoverageRecorder: PhaseMapRuntimeObserver {
 /// One synchronous reduction's diagnostic buffer; no production payload log.
 package final class TestStorePhaseObservation: PhaseMapRuntimeObserver, Sendable {
   private let coverage: (any PhaseMapRuntimeObserver)?
-  private let messages = OSAllocatedUnfairLock(initialState: [String]())
+  private let messages = Mutex([String]())
   package init(coverage: (any PhaseMapRuntimeObserver)?) { self.coverage = coverage }
   package var violations: [String] { messages.withLock { $0 } }
   package func violation(_ message: String) { messages.withLock { $0.append(message) } }
@@ -168,7 +168,7 @@ extension TestStore {
     initialState: R.State,
     phaseCoverage: PhaseCoverageRecorder<R.State, R.Action, Phase>,
     clock: ManualTestClock? = nil,
-    effectTimeout: Duration = .seconds(1),
+    effectTimeout: Duration = TestStoreDefaults.effectTimeout,
     diffLineLimit: Int? = nil
   ) {
     self.init(
@@ -182,7 +182,7 @@ extension TestStore {
     initialState: R.State? = nil,
     phaseCoverage: PhaseCoverageRecorder<R.State, R.Action, Phase>,
     clock: ManualTestClock? = nil,
-    effectTimeout: Duration = .seconds(1),
+    effectTimeout: Duration = TestStoreDefaults.effectTimeout,
     diffLineLimit: Int? = nil
   ) where R.State: DefaultInitializable {
     self.init(

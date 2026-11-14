@@ -349,9 +349,12 @@ run lane.
 
 Manual time removes scheduling guesses. Wait for a registered sleeper before
 advancing; do not insert a fixed sleep to give the effect time to start.
-However, `ManualTestClock` registration waits and plain scenario advances have no
-built-in deadline. This test-only helper adds a two-second wall-clock watchdog to
-cooperative operations. The timer is a failure bound, not the feature's clock.
+`ManualTestClock` registration waits are bounded: they throw
+`ManualTestClock.WaitTimeout` after the clock's wait deadline (ten seconds unless
+the clock was created with `ManualTestClock(waitTimeout:)`), and a scenario
+advance fails within the store's effect timeout. This test-only helper adds a
+shorter two-second wall-clock watchdog to cooperative operations. The timer is a
+failure bound, not the feature's clock.
 
 ```swift
 enum SearchTutorialTimeout: Error { case expired }
@@ -609,8 +612,8 @@ noncooperative effect within budget, further attempts stop.
 
 `result.scenarioSource(reducerType: "ManagedSearchFeature")` produces copyable
 scenario code for an equivalently configured fresh store and clock. A scenario
-executes recorded steps, not new random choices. Keep the watchdog when running
-copied plain clock advances. The faulty-client run above discovers and
+executes recorded steps, not new random choices. The watchdog is optional when
+running copied plain clock advances: they are bounded by the clock itself. The faulty-client run above discovers and
 replay-validates the invariant failure.
 All four steps remain necessary because the state-aware generator requires a query,
 submission, and time advance before receiving a result. A successful bounded search

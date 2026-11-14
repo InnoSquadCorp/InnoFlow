@@ -57,11 +57,19 @@ extension TestStore: EffectDriver {
   }
 
   package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
+    // The reduction turn released every earlier sequence; the request's own
+    // sequence is completed here, in declaration order.
+    _ = context?.cancellationScope?.consumeAcceptedCancellation(.all(id))
     let sequence = markCancelled(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
+    // An in-flight request never covers its own sequence, so a request the
+    // reduction turn accepted has nothing left to apply.
+    if context?.cancellationScope?.consumeAcceptedCancellation(.inFlight(id)) == true {
+      return
+    }
     let sequence = markCancelledInFlight(id: id, upTo: context?.sequence)
     cancelEffectsSynchronously(identifiedBy: id, upTo: sequence)
   }
@@ -171,7 +179,7 @@ extension TestStore: EffectDriver {
               self.throttleState.finishState(for: id, generation: generation)
             }
           }
-          guard let pending = self.throttleState.pending(for: id) else { return nil }
+          guard let pending = self.throttleState.pendingToFire(for: id) else { return nil }
           guard self.shouldProceed(context: pending.context) else { return nil }
           return pending
         }
@@ -229,84 +237,98 @@ extension TestStore: EffectDriver {
   package func runConcurrently(
     _ children: [ReducerEffect<R.Action, R.Output>],
     context: EffectExecutionContext?,
-    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
-    if awaited {
-      await withTaskGroup(of: Void.self) { group in
-        for child in children {
-          group.addTask {
-            await recurse(child, context, true)
-          }
+    for child in children {
+      let token = UUID()
+      beginFinishActivity(.composite, token: token, context: context)
+      let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
+      let task = Task { @MainActor [weak self] in
+        defer {
+          dispatchActivity?.finish()
+          self?.finishTrackedRunTask(token: token)
         }
-        await group.waitForAll()
+        guard self != nil else { return }
+        await recurse(child, context, false)
       }
-    } else {
-      for child in children {
-        let token = UUID()
-        beginFinishActivity(.composite, token: token, context: context)
-        let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
-        let task = Task { @MainActor [weak self] in
-          defer {
-            dispatchActivity?.finish()
-            self?.finishTrackedRunTask(token: token)
-          }
-          guard self != nil else { return }
-          await recurse(child, context, false)
-        }
-        // Track unawaited concurrent children so cancelAllEffectsSynchronously
-        // can reach them. Without this, fire-and-forget Tasks here would
-        // outlive their owning TestStore drain and break the assertion that
-        // cancellation reliably winds the entire effect tree down — a
-        // divergence from the Store path that this commit closes.
-        dispatchActivity?.attach(task)
-        trackEffectTask(token: token, task: task, context: context)
-      }
+      // Track unawaited concurrent children so cancelAllEffectsSynchronously
+      // can reach them. Without this, fire-and-forget Tasks here would
+      // outlive their owning TestStore drain and break the assertion that
+      // cancellation reliably winds the entire effect tree down.
+      dispatchActivity?.attach(task)
+      trackEffectTask(token: token, task: task, context: context)
     }
   }
 
   package func runSequentially(
     _ children: [ReducerEffect<R.Action, R.Output>],
     context: EffectExecutionContext?,
-    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
-    if awaited {
+    let token = UUID()
+    beginFinishActivity(.composite, token: token, context: context)
+    let startGate = TestStoreRunStartGate()
+    let endpoint = makeRunEndpoint()
+    let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
+    let task = Task { @MainActor in
+      defer {
+        dispatchActivity?.finish()
+        endpoint.finishTrackedTask(token: token)
+      }
+      guard await startGate.wait() else {
+        return
+      }
       for child in children {
+        guard !Task.isCancelled else { break }
+        guard endpoint.isTaskActive(token: token) else { break }
+        guard endpoint.shouldProceed(context: context) else { break }
         await recurse(child, context, true)
       }
-    } else {
-      let token = UUID()
-      beginFinishActivity(.composite, token: token, context: context)
-      let startGate = TestStoreRunStartGate()
-      let endpoint = makeRunEndpoint()
-      let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
-      let task = Task { @MainActor in
-        defer {
-          dispatchActivity?.finish()
-          endpoint.finishTrackedTask(token: token)
-        }
-        guard await startGate.wait() else {
-          return
-        }
-        for child in children {
-          guard !Task.isCancelled else { break }
-          guard endpoint.isTaskActive(token: token) else { break }
-          guard endpoint.shouldProceed(context: context) else { break }
-          await recurse(child, context, true)
-        }
-      }
-      dispatchActivity?.attach(task)
-      trackEffectTask(token: token, task: task, context: context)
-      Task { @MainActor in
-        await startGate.open()
-      }
     }
+    dispatchActivity?.attach(task)
+    trackEffectTask(token: token, task: task, context: context)
+    Task { @MainActor in
+      await startGate.open()
+    }
+  }
+}
+
+extension TestStore: ReductionTurnCancellationAcceptor {
+  /// Applies reducer-returned cancellation in the turn of the reduction that
+  /// returned it, exactly as `Store` does, so an action a production store
+  /// would drop is not received by a test.
+  package func acceptInReductionTurn(
+    _ request: EffectCancellationRequest,
+    context: EffectExecutionContext
+  ) {
+    guard let scope = context.cancellationScope else { return }
+    let boundary = markCancelledInFlight(id: request.id, upTo: context.sequence)
+    cancelEffectsSynchronously(identifiedBy: request.id, upTo: boundary)
+    scope.recordAcceptedCancellation(request)
+  }
+
+  package func markSupersededInReductionTurn(id: AnyEffectID, context: EffectExecutionContext) {
+    markCancelledInFlight(id: id, upTo: context.sequence)
+  }
+
+  /// The context for the effect a reduction just returned, with the
+  /// cancellation that effect requests already accepted.
+  package func reductionTurnContext(
+    for effect: ReducerEffect<R.Action, R.Output>,
+    location: TestStoreSourceLocation,
+    flowTaskTracker: FlowTaskTracker? = nil
+  ) -> EffectExecutionContext {
+    let context = nextEffectContext(
+      for: effect, location: location, flowTaskTracker: flowTaskTracker)
+    if effect.mayRequestCancellation {
+      acceptSynchronousCancellations(in: effect, context: context)
+    }
+    return context
   }
 }

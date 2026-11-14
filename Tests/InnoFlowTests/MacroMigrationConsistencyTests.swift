@@ -5,7 +5,7 @@
 import InnoFlow
 import Testing
 
-@Suite("Macro migration consumers")
+@Suite("Macro migration consumers", .timeLimit(.minutes(5)))
 struct MacroMigrationConsistencyTests {
   @Test("Swift.Never retains the explicit output-free contract")
   func moduleQualifiedNeverCompiles() {

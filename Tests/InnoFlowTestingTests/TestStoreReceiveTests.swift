@@ -10,7 +10,7 @@ import os
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-@Suite("TestStore Receive Tests", .serialized)
+@Suite("TestStore Receive Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreReceiveTests {
   @Test("Exact receive keeps buffered zero-timeout behavior")

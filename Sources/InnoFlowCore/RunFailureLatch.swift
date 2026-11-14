@@ -1,5 +1,5 @@
 import Foundation
-import os
+import Synchronization
 
 /// Single-write latch that records whether an effect run's `reportError` hook
 /// fired during its lifetime. The Store driver consults the latch after the
@@ -12,7 +12,7 @@ import os
 /// "first-error-wins" contract is documented exactly once, at this type, and
 /// is not silently reused for unrelated invariants.
 package final class RunFailureLatch: Sendable {
-  private let storage = OSAllocatedUnfairLock(initialState: false)
+  private let storage = Mutex(false)
 
   package init() {}
 

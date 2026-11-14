@@ -1,8 +1,8 @@
 # InnoFlow user guide
 
-> Current API guide for published 6.0.2. Start with the [README](../README.md)
-> or [documentation index](DOCUMENTATION.md). Later CI/tooling changes in this
-> checkout are unreleased; `Sources/` matches the 6.0.2 tag at this refresh.
+> Current API guide for the 6.1.0 release candidate; 6.0.2 remains the published
+> stable release until 6.1.0 publication is verified. Start with the
+> [README](../README.md) or [documentation index](DOCUMENTATION.md).
 > Code fences are either complete declarations, context-dependent excerpts,
 > or explicitly historical fragments. The [review ledger](contracts/doc-swift-fence-review.tsv)
 > binds each to compilation/runtime/manifest checks; parsing alone is not a typecheck.
@@ -17,12 +17,13 @@ Keep state and actions explicit; a simple `@InnoFlow` body declares
 policies for a counter, form, or ordinary request.
 
 Follow the counter and deterministic test below, then add concepts only when
-that feature needs them. This documentation describes the published
-[6.0.2 stable release](https://github.com/InnoSquadCorp/InnoFlow/releases/tag/6.0.2).
+that feature needs them. This documentation describes the 6.1.0 release
+candidate; the published stable release is still
+[6.0.2](https://github.com/InnoSquadCorp/InnoFlow/releases/tag/6.0.2).
 
 ## Installation
 
-InnoFlow 6.0.2 requires a Swift 6.3 or newer toolchain and compiles all package
+InnoFlow 6.1.0 requires a Swift 6.3 or newer toolchain and compiles all package
 targets in Swift 6 language mode. The canonical sample and DocC workflow use
 the same toolchain contract.
 
@@ -30,7 +31,7 @@ the same toolchain contract.
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.1.0")
 ]
 ```
 
@@ -70,7 +71,8 @@ flags, cache keys, and the intentional `InnoFlowCore` recovery path, see
 
 ### Known toolchain workarounds (Swift 6.3)
 
-`Store.deinit` and `TestStore.deinit` are annotated with `@_optimize(none)` to
+`Store.deinit`, `StoreOutputHub.deinit`, `SelectedStore.deinit` and `TestStore.deinit`
+are annotated with `@_optimize(none)` to
 sidestep a Swift 6.3 release-mode SIL crash in `EarlyPerfInliner`
 ([swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173))
 that triggers when the compiler tries to inline the generic `R.Action`-typed
@@ -159,7 +161,7 @@ struct CounterView: View {
 
 ## Composition Surface
 
-InnoFlow 6.0.2 uses a small composition surface instead of multiple authoring styles.
+InnoFlow 6.1.0 uses a small composition surface instead of multiple authoring styles.
 
 ### `Reduce`
 
@@ -384,8 +386,10 @@ let rowSummary = store.select(dependingOn: \.rows, id: "row-\(rowID)") { rows in
 ```
 
 The explicit-ID cache is weak; retain the `SelectedStore` when identity must
-survive repeated view evaluations. Key-path-only `select(\.phase)` keeps its
-existing stable cache behavior.
+survive repeated view evaluations. Key-path-only `select(\.phase)` keeps one
+identity while the selection is held or still observed: the owner retains it
+from a read until that read's notification and one more, then releases it.
+See "Key-path selection lifetime" in [MIGRATION.md](../MIGRATION.md).
 
 Use `SelectedStore` for read-only projections. Keep mutable child flows on `ScopedStore`.
 
@@ -625,10 +629,13 @@ cancellation checks. If an effect needs a non-throwing probe, call
 `await context.isCancellationRequested()`; it uses the same store/runtime boundary as
 `checkCancellation()`.
 
-Store deinit and explicit effect cancellation are still cooperative. InnoFlow guarantees
-that late emissions are dropped immediately, but runtime teardown continues as best-effort
-async cleanup. Long-running work should call `checkCancellation()` around suspension points
-if it needs prompt shutdown.
+Store deinit and explicit effect cancellation are still cooperative. InnoFlow drops late
+emissions immediately and delivers task cancellation synchronously, on teardown too; what
+remains is the cooperative end of the operation itself. Long-running work should call
+`checkCancellation()` around suspension points if it needs prompt shutdown. Because
+cancellation is delivered where it is requested, a task-cancellation handler inside an
+effect can run on the main thread during `send`; it must not block on work the main
+thread is waiting to do.
 
 Operational logging stays lightweight on purpose. Use `StoreInstrumentation.osLog(...)` for a
 default log sink, `StoreInstrumentation.signpost(...)` for Instruments timelines, or fan out

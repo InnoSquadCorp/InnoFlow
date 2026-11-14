@@ -15,7 +15,7 @@ import os
 
 // MARK: - EffectTask Tests
 
-@Suite("EffectTask Tests", .serialized)
+@Suite("EffectTask Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct EffectTaskTests {
 
@@ -57,28 +57,6 @@ struct EffectTaskTests {
 
     #expect(effect.potentialCancellationIDs == [outer, debounced, throttled])
     #expect(EffectTask<Int>.send(1).potentialCancellationIDs.isEmpty)
-  }
-
-  @Test("potentialCancellationIDs materializes lazy subtrees on access")
-  func potentialCancellationIDsLazySubtree() {
-    let lazyID = AnyEffectID(StaticEffectID("ids.lazy"))
-    let lazy = EffectTask<Int>(
-      operation: .lazyMap(
-        .init {
-          EffectTask.run { _ in }.cancellable("ids.lazy")
-        })
-    )
-
-    #expect(lazy.potentialCancellationIDs == [lazyID])
-
-    // A composed tree containing the lazy node must surface the same ids
-    // through the access-time walk.
-    let composed = EffectTask<Int>.merge(
-      lazy,
-      EffectTask.run { _ in }.cancellable("ids.outer")
-    )
-    let outer = AnyEffectID(StaticEffectID("ids.outer"))
-    #expect(composed.potentialCancellationIDs == [lazyID, outer])
   }
 
   @Test("EffectTask.none does not emit follow-up actions")

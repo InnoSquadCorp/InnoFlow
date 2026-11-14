@@ -6,7 +6,7 @@ import InnoFlow
 import InnoFlowTesting
 import Testing
 
-@Suite("Output case paths")
+@Suite("Output case paths", .timeLimit(.minutes(5)))
 @MainActor
 struct OutputCasePathTests {
   @Test("generated output paths round-trip supported payload shapes")

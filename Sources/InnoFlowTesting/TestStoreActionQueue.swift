@@ -4,7 +4,7 @@
 
 import Foundation
 import InnoFlowCore
-import os
+import Synchronization
 
 package let testStoreActionQueueRetainedStorageBudget = 64 * 1024
 
@@ -16,7 +16,7 @@ private final class ActionQueueWaiterResolution: Sendable {
     case timedOut
   }
 
-  private let state = OSAllocatedUnfairLock(initialState: State.pending)
+  private let state = Mutex(State.pending)
 
   var isCancellationClaimed: Bool {
     state.withLock { $0 == .cancelled }

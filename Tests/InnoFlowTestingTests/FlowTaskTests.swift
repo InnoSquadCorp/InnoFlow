@@ -3,7 +3,7 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
-@Suite("FlowTask dispatch lifetime")
+@Suite("FlowTask dispatch lifetime", .timeLimit(.minutes(5)))
 @MainActor
 struct FlowTaskTests {
   @Test("finish waits for descendant effects and their follow-up actions")

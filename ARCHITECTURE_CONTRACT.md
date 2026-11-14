@@ -17,13 +17,17 @@ This document captures the stable framework guarantees that should not drift wit
 - Composition happens through `Reduce`, `CombineReducers`, `Scope`, `IfLet`, `IfCaseLet`, and `ForEachReducer`.
 - Binding remains explicit through `@BindableField`, and SwiftUI bindings use projected key paths such as `\.$field`.
 - `Store.preview(...)` and `#Preview` are the canonical preview entry points.
-- `@InnoFlow` synthesizes action paths only for unlabeled single payloads and
-  `id:action:` collection routes. Unsupported labeled or multi-payload cases
-  warn unless `Action` declares the canonical `<caseName>CasePath` itself or
-  the case carries `@InnoFlowCasePathIgnored`. The explicit marker suppresses
-  both synthesis and unsupported-payload diagnostics for that case. The
-  canonical static variable name is the syntactic manual-path signal, including
-  when its value is expressed through a typealias or factory.
+- `@InnoFlow` synthesizes action paths only for unlabeled single payloads
+  (including a payload written `_ name: Payload`) and `id:action:` collection
+  routes. Unsupported labeled or multi-payload cases warn unless `Action`
+  declares the canonical `<caseName>CasePath` itself or the case carries
+  `@InnoFlowCasePathIgnored`. The explicit marker suppresses both synthesis
+  and unsupported-payload diagnostics for that case. The canonical static
+  variable name is the syntactic manual-path signal, including when its value
+  is expressed through a typealias or factory. A canonical manual path
+  declared in the enum body takes precedence over synthesis for every case
+  shape of `Action` and `Output`; one declared in an extension is invisible
+  to the macro and redeclares a synthesized member.
 
 ## Selection and derived state
 
@@ -169,7 +173,73 @@ expose the same tiered read contract:
   handle reuse at a matching call site, selector signature and value type;
   the ID must include captured inputs that affect the result. The ID cache
   holds handles weakly and compacts dead entries. Key-path-only selections
-  retain their stable, strongly cached identity.
+  keep one identity per owner, call site and key path while that selection is
+  alive. Their cache entry is weak too; in addition the owner retains a
+  key-path selection from a tracked read until the notification that consumes
+  it, so a transient view-body read is still invalidated, and for one further
+  notification so a reader that reads again keeps the same handle. A key-path
+  selection that is never read, or that passes two notifications unread, is
+  released, and a released selection leaves its dependency bucket at once, so
+  the owner stops evaluating its key path. A read of liveness alone
+  (`isAlive`) registers a tracker that no value change fires, so it is
+  retained until the selection is deactivated. The selection cannot tell a
+  tracked read from an untracked one: any read starts the retention above.
+  Key paths must therefore be valid for every state reachable while a reader
+  holds the selection or the owner still retains it.
+- A dependency bucket's change predicate is determined by its key. Key-path
+  selections and single scopes compare values; collection scopes compare
+  element identity in storage of their own, so neither can replace the
+  other's comparison on the same key path.
+- A collection scope refreshes the rows a state change can affect. A value
+  change refreshes that element's row; a structural change (ids, order or
+  count) lets the rows resolve their new positions once, together, and then
+  refreshes only the rows whose element changed or was removed; an action
+  that leaves the collection's storage untouched refreshes no row. Elements
+  whose stored bytes are identical are treated as unchanged without calling
+  `==`, so an element that did not change is not reported as changed even if
+  its `==` is irreflexive (for example a `Double` NaN). The byte comparison
+  is a shortcut, not a guarantee of speed: copies of an element type with
+  padding and a non-trivial member can differ in padding bytes, and such
+  elements fall back to `==`. A collection that exposes no contiguous
+  storage is compared element by element and refreshes every row on a
+  structural change. A removed row is deactivated by the pass that
+  classifies the removal, also when an observation callback scopes the
+  collection again in the middle of that pass. Rows of a row family that a
+  later scope over the same key path superseded stay correct but resolve
+  their element by scanning.
+- Creating a selection seeds its snapshot without recording an Observation
+  access on the parent, so a view that selects one value does not depend on
+  the whole parent state.
+- A reducer-returned `.cancel`, a `cancelInFlight: true` replacement, a
+  newer debounce request and a `latest` lane request are accepted in the
+  MainActor turn of the reduction that returned them, whenever the
+  interpreter would reach them without awaiting asynchronous work. From that
+  turn on work of every earlier effect that they cancel or replace cannot
+  have an action reduced, pending scheduled requests for the identifier are
+  released, and only delivery of task cancellation to running operations
+  remains outstanding. The effect that issued the request is interpreted in
+  declaration order: an earlier `concatenate` sibling of a `.cancel` still
+  runs, and the cancel covers its own effect when the interpreter reaches it
+  (`merge` children run concurrently and have no order among themselves). A
+  cancellation placed after asynchronous work in a `concatenate` is accepted
+  when that work completes. For a `latest` request the turn only marks the
+  superseded run so it can no longer emit; the lane displaces and releases
+  it, and reports it as superseded, when it admits the replacement. A
+  throttled subtree is the exception: whether it runs depends on its window,
+  so cancellation inside it is accepted when the interpreter admits it.
+  `Store` and `TestStore` share this acceptance, so a test receives exactly
+  the actions a production store reduces.
+- A run's task-cancellation handlers (`withTaskCancellationHandler`,
+  `AsyncStream` termination) execute where cancellation is delivered, which
+  can be the main thread inside `send`, `cancelEffects` or `Store.deinit`.
+  They must not block on work the main thread is waiting to do.
+- Store effect bookkeeping is MainActor-isolated end to end. Run tasks are
+  registered in the turn that creates them, the emission decision and the
+  delivery it authorizes share one MainActor turn, and cancellation marks
+  tokens, cancels tasks and returns lane capacity in one synchronous step.
+  `cancelEffects(identifiedBy:)` and `cancelAllEffects()` keep their `async`
+  signatures and do not suspend. A run reads its own cancellation state
+  without leaving its task.
 - Repeated `Store.scope(state:action:)` calls reuse a live `ScopedStore` only
   when source location, state key path, child types, and the opaque `CasePath`
   identity token all match. The parent cache holds the projection weakly, so
@@ -239,7 +309,7 @@ children, and derived `SelectedStore` projections.
   cancellation emits neither terminal action.
 - `Reducer.onChange(of:perform:)` observes one narrow equatable state slice
   after the base reducer. It merges the returned effect only on a value change.
-- Cancellation is cooperative. Runtime teardown continues as best-effort async cleanup.
+- Cancellation is cooperative. The runtime delivers task cancellation synchronously, including on Store teardown; only the cooperative end of user operations remains outstanding.
 - `EffectTask.concatenate` rechecks both task cancellation and the effect-sequence boundary before every child, including inside nested concatenations. Once cancellation is accepted, no remaining child starts.
 - Every throttle window owns one generation-scoped drain through its original deadline, including leading-only windows with no pending value. This bounds per-ID scope/window state, lets a later trailing request reuse the same deadline, and makes the active window visible to TestStore terminal verification without delaying leading-only effect ordering.
 - A reused trailing-throttle drain adopts the latest pending effect sequence
@@ -279,11 +349,11 @@ for that tree; it does not cancel work started by another send. Cancellation
 remains cooperative inside user operations.
 
 Reaching the first `await` inside an effect's operation requires scheduler
-turns — the outer `Task`, the `EffectWalker`, and `driver.startRun` each cross
-an actor boundary before the operation body runs. The number of scheduler turns
-required is not stable across Swift optimization levels: release-mode WMO
-eliminates some scheduling boundaries that debug keeps, but the remaining
-actor hops still need turns.
+turns — the root interpreter `Task`, the run `Task` it starts, and the hop
+from the MainActor to the operation's concurrent executor. The number of
+scheduler turns required is not stable across Swift optimization levels:
+release-mode WMO eliminates some scheduling boundaries that debug keeps, but
+the remaining hops still need turns.
 
 **Tests must therefore poll for observable conditions, not fixed yield counts.**
 A bounded poll like `for _ in 0..<200 { if condition { break }; await Task.yield() }`

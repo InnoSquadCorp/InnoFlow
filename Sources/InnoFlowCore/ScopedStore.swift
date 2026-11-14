@@ -53,20 +53,35 @@ extension Store {
   }
 
   fileprivate func collectionProjectionRegistration<CollectionState>(
-    collection: KeyPath<R.State, CollectionState>
+    collection: KeyPath<R.State, CollectionState>,
+    elementID: AnyHashable
   ) -> ProjectionObserverRegistration<R.State>
   where
     CollectionState: RandomAccessCollection,
     CollectionState.Element: Equatable & Identifiable
   {
-    .dependency(
-      .keyPath(collection as AnyKeyPath),
-      hasChanged: { previousState, nextState in
-        collectionSnapshotChanged(
-          previousState[keyPath: collection],
-          nextState[keyPath: collection]
-        )
-      }
+    let anyKeyPath = collection as AnyKeyPath
+    return .collectionElement(
+      .init(
+        collection: anyKeyPath,
+        elementID: elementID,
+        change: { previousState, nextState in
+          collectionProjectionChange(
+            from: previousState[keyPath: collection],
+            to: nextState[keyPath: collection]
+          )
+        },
+        prepareStructuralRefresh: { [weak collectionScopeCache] previousState, nextState in
+          // Every row resolves its element through a cached offset. After a
+          // structural change those offsets are stale for all of them; index
+          // the new collection once so each row still resolves in O(1)
+          // instead of scanning the collection on its own.
+          collectionScopeCache?.activeBucket(for: anyKeyPath)?.reindex(
+            from: previousState[keyPath: collection],
+            to: nextState[keyPath: collection]
+          )
+        }
+      )
     )
   }
 
@@ -183,7 +198,10 @@ extension Store {
         },
         stableID: elementID,
         failureKind: .collectionEntryRemoved,
-        observerRegistration: collectionProjectionRegistration(collection: collection),
+        observerRegistration: collectionProjectionRegistration(
+          collection: collection,
+          elementID: elementID
+        ),
         onDeactivation: { [weak bucket] store in
           bucket?.removeStore(store, for: elementID)
         },
@@ -195,15 +213,13 @@ extension Store {
       stores.append(scopedStore)
     }
 
-    var staleIDs: [AnyHashable] = []
-    for (elementID, offsetBox) in bucket.offsetsByID where offsetBox.revision != bucket.revision {
-      staleIDs.append(elementID)
-    }
-    for elementID in staleIDs {
-      bucket.offsetsByID.removeValue(forKey: elementID)
-      bucket.storesByID.removeValue(forKey: elementID)
-    }
-
+    // A row whose element is gone keeps its outdated box and its place in
+    // the cache: the projection registry deactivates it when it classifies
+    // the change that removed the element, and deactivation is what removes
+    // it here. Dropping it now would hide it from that pass when this call
+    // runs between a reduction and the registry's refresh (an observation
+    // callback that scopes the collection again), leaving a removed row
+    // alive with its last value.
     collectionScopeCache.store(bucket, for: anyKeyPath)
     return stores
   }
@@ -252,15 +268,20 @@ where
 {
   let collectionState = state[keyPath: collection]
 
-  if let bucket,
-    offsetBox.revision == bucket.revision,
-    let candidate = scopedCollectionElement(
+  if let bucket, offsetBox.revision == bucket.revision {
+    if offsetBox.offset == CollectionScopeOffsetBox.absent {
+      // The current revision indexed this collection and found no element
+      // with this id.
+      return nil
+    }
+    if let candidate = scopedCollectionElement(
       in: collectionState,
       at: offsetBox.offset
     ),
-    candidate.id == id
-  {
-    return candidate
+      candidate.id == id
+    {
+      return candidate
+    }
   }
 
   for (offset, candidate) in collectionState.enumerated() where candidate.id == id {
@@ -290,23 +311,66 @@ where CollectionState: RandomAccessCollection {
   return collection[index]
 }
 
-private func collectionSnapshotChanged<CollectionState>(
-  _ previousCollection: CollectionState,
-  _ nextCollection: CollectionState
-) -> Bool
+/// Classifies how a collection differs between two snapshots for its rows.
+///
+/// Rows are identified by `Identifiable.id`, so a change is structural when
+/// ids, their order or the count differ, and otherwise limited to the
+/// elements whose value changed.
+private func collectionProjectionChange<CollectionState>(
+  from previousCollection: CollectionState,
+  to nextCollection: CollectionState
+) -> ProjectionCollectionChange
 where
   CollectionState: RandomAccessCollection,
   CollectionState.Element: Equatable & Identifiable
 {
-  guard previousCollection.count == nextCollection.count else { return true }
-
-  for (previousElement, nextElement) in zip(previousCollection, nextCollection) {
-    guard previousElement.id == nextElement.id, previousElement == nextElement else {
-      return true
+  let contiguousChange = previousCollection.withContiguousStorageIfAvailable { previous in
+    nextCollection.withContiguousStorageIfAvailable { next in
+      contiguousCollectionProjectionChange(from: previous, to: next)
     }
   }
+  if case .some(.some(let change)) = contiguousChange {
+    return change
+  }
 
-  return false
+  guard previousCollection.count == nextCollection.count else { return .structure }
+  var changedElementIDs: [AnyHashable] = []
+  for (previousElement, nextElement) in zip(previousCollection, nextCollection) {
+    guard previousElement.id == nextElement.id else { return .structure }
+    if previousElement != nextElement {
+      changedElementIDs.append(AnyHashable(nextElement.id))
+    }
+  }
+  return changedElementIDs.isEmpty ? .none : .elements(changedElementIDs)
+}
+
+/// The contiguous-storage form of ``collectionProjectionChange(from:to:)``.
+///
+/// A state copy shares its collection storage until the reducer mutates it,
+/// so an action that never touches the collection is recognized without
+/// looking at an element. When the storage did change, elements whose bytes
+/// are identical are skipped (see ``projectionElementsAreBitwiseEqual``) and
+/// only the remaining ones pay for an `id` and `==` comparison.
+private func contiguousCollectionProjectionChange<Element: Equatable & Identifiable>(
+  from previous: UnsafeBufferPointer<Element>,
+  to next: UnsafeBufferPointer<Element>
+) -> ProjectionCollectionChange {
+  guard previous.count == next.count else { return .structure }
+  if previous.baseAddress == next.baseAddress {
+    return .none
+  }
+
+  var changedElementIDs: [AnyHashable] = []
+  for offset in 0..<next.count
+  where !projectionElementsAreBitwiseEqual(previous, offset, next, offset) {
+    let previousElement = previous[offset]
+    let nextElement = next[offset]
+    guard previousElement.id == nextElement.id else { return .structure }
+    if previousElement != nextElement {
+      changedElementIDs.append(AnyHashable(nextElement.id))
+    }
+  }
+  return changedElementIDs.isEmpty ? .none : .elements(changedElementIDs)
 }
 
 /// A read-only projection of parent store state with action forwarding.
@@ -374,6 +438,21 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
       return cachedState
     }
     return cachedState
+  }
+
+  /// The last snapshot, without registering an Observation access and
+  /// without a liveness check.
+  ///
+  /// Creating a selection reads the projection to seed its snapshot. That
+  /// read must not make the caller's tracking scope depend on the whole
+  /// projection, and it must not trap: a view body can be evaluated once
+  /// more after its row was removed, and a selection is no longer cached
+  /// past the notification that deactivated it. A selection created on a
+  /// projection that is no longer alive reports that through its own
+  /// accessors — `optionalValue` is `nil`, `requireAlive()` traps — which is
+  /// where the caller's lifecycle policy is stated.
+  package var untrackedState: ChildState {
+    storedCachedState
   }
 
   /// Whether this projection is still backed by a live parent store.

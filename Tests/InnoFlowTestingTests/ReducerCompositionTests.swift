@@ -11,7 +11,7 @@ import Testing
 /// These tests pin the documented semantics — declaration-order cumulative
 /// mutation, effect merging, action routing, and the missing-child policies —
 /// at the reducer level, independent of any specific feature fixture.
-@Suite("Reducer Composition")
+@Suite("Reducer Composition", .timeLimit(.minutes(5)))
 struct ReducerCompositionTests {
 
   // MARK: - Fixtures

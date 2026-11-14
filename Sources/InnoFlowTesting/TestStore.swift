@@ -55,6 +55,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let outputQueue = ActionQueue<R.Output>()
   package let finishActivity = TestStoreFinishActivity()
   package let effectLedgers = TestEffectLedgerRegistry()
+  /// Whether a Swift Testing test created this store. Captured at
+  /// initialization because the deinitializer cannot observe `Test.current`.
+  package let ownerUsesSwiftTesting = TestStoreReportingContext.isSwiftTestingCurrent
   package var issueReporter: (String, TestStoreSourceLocation) -> Void = {
     testStoreAssertionFailure($0, location: $1)
   }
@@ -109,7 +112,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     reducer: R,
     initialState: R.State,
     clock: ManualTestClock? = nil,
-    effectTimeout: Duration = .seconds(1),
+    effectTimeout: Duration = TestStoreDefaults.effectTimeout,
     diffLineLimit: Int? = nil
   ) {
     self.reducer = reducer
@@ -126,7 +129,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     reducer: R,
     initialState: R.State? = nil,
     clock: ManualTestClock? = nil,
-    effectTimeout: Duration = .seconds(1),
+    effectTimeout: Duration = TestStoreDefaults.effectTimeout,
     diffLineLimit: Int? = nil
   ) where R.State: DefaultInitializable {
     self.init(
@@ -165,11 +168,17 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     finishActivity.noteProgress()
 
     guard let diagnostic else { return }
-    switch diagnostic.severity {
-    case .failure:
-      failureReporter(diagnostic.message, diagnostic.location)
-    case .warning:
-      warningReporter(diagnostic.message, diagnostic.location)
+    // Task-local values are cleared inside an isolated deinitializer, so the
+    // reporters cannot see the test that owns this store. Restore the owning
+    // framework for the duration of the report; otherwise the safety net
+    // falls through to XCTest and is silently dropped by Swift Testing.
+    TestStoreReportingContext.$ownerUsesSwiftTesting.withValue(ownerUsesSwiftTesting) {
+      switch diagnostic.severity {
+      case .failure:
+        failureReporter(diagnostic.message, diagnostic.location)
+      case .warning:
+        warningReporter(diagnostic.message, diagnostic.location)
+      }
     }
   }
 

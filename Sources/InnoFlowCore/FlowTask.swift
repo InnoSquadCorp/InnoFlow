@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import os
+import Synchronization
 
 package protocol FlowTaskOutputCapturing: Sendable {
   func yield<Value: Sendable>(_ value: Value) -> StoreOutputYieldDisposition
@@ -172,7 +172,7 @@ package final class FlowTaskCompletion: Sendable {
     var observers: [UUID: @Sendable () -> Void] = [:]
   }
 
-  private let state = OSAllocatedUnfairLock(initialState: State())
+  private let state = Mutex(State())
 
   package init() {}
 
@@ -230,7 +230,7 @@ package final class FlowTaskTracker: Sendable {
     var isFinished = false
   }
 
-  private let state = OSAllocatedUnfairLock(initialState: State())
+  private let state = Mutex(State())
   private let outputCapture: (any FlowTaskOutputCapturing)?
   package let dispatchID: DispatchID
   private let onFinish: (@Sendable (DispatchID) -> Void)?
@@ -298,15 +298,39 @@ package final class FlowTaskTracker: Sendable {
     }
   }
 
+  /// Drops entries whose scope is gone and returns strong references to the
+  /// rest. Each weak reference is loaded exactly once and the result must be
+  /// carried out of the critical section by the caller.
+  private static func pruneReleasedScopes(_ state: inout State) -> [EffectCancellationScope] {
+    var liveScopes: [EffectCancellationScope] = []
+    liveScopes.reserveCapacity(state.cancellationScopes.count)
+    var releasedIDs: [UUID] = []
+    for (registrationID, entry) in state.cancellationScopes {
+      if let scope = entry.value {
+        liveScopes.append(scope)
+      } else {
+        releasedIDs.append(registrationID)
+      }
+    }
+    for registrationID in releasedIDs {
+      state.cancellationScopes.removeValue(forKey: registrationID)
+    }
+    return liveScopes
+  }
+
   package func registerCancellationScope(_ scope: EffectCancellationScope) {
     let registrationID = UUID()
-    let shouldCancel = state.withLock { state in
-      guard !state.activities.isEmpty else { return true }
-      state.cancellationScopes = state.cancellationScopes.filter { $0.value.value != nil }
+    // Scopes loaded while pruning leave the critical section before they are
+    // released: releasing the last reference runs a deinitializer that takes
+    // the scope registry's lock, which must not nest inside this one.
+    let registration = state.withLock {
+      state -> (shouldCancel: Bool, liveScopes: [EffectCancellationScope]) in
+      guard !state.activities.isEmpty else { return (true, []) }
+      let liveScopes = Self.pruneReleasedScopes(&state)
       state.cancellationScopes[registrationID] = WeakCancellationScope(value: scope)
-      return state.isCancelled
+      return (state.isCancelled, liveScopes)
     }
-    if shouldCancel {
+    if registration.shouldCancel {
       scope.cancelAll()
     }
   }
@@ -376,8 +400,7 @@ package final class FlowTaskTracker: Sendable {
           return ([], [], [:], false)
         }
         state.isCancelled = true
-        let liveScopes = state.cancellationScopes.compactMap(\.value.value)
-        state.cancellationScopes = state.cancellationScopes.filter { $0.value.value != nil }
+        let liveScopes = Self.pruneReleasedScopes(&state)
         let sharedCompletions = state.sharedCompletions
         state.sharedCompletions.removeAll(keepingCapacity: false)
         return (Array(state.tasks.values), liveScopes, sharedCompletions, true)

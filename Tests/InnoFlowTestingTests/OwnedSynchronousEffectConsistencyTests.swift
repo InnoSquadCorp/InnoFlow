@@ -136,7 +136,7 @@ private final class SynchronousStoreReference {
   weak var store: Store<SynchronousFeature>?
 }
 
-@Suite("Owned synchronous effects", .serialized)
+@Suite("Owned synchronous effects", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct OwnedSynchronousEffectConsistencyTests {
   @Test(arguments: [false, true])

@@ -3,10 +3,10 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import os
+import Synchronization
 
 package final class StoreLifetimeToken: Sendable {
-  private let released = OSAllocatedUnfairLock(initialState: false)
+  private let released = Mutex(false)
 
   package init() {}
 

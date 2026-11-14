@@ -6,7 +6,7 @@ import Testing
 
 @testable import InnoFlowCore
 
-@Suite("Store action queue", .serialized)
+@Suite("Store action queue", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct StoreActionQueueTests {
   @Test("Sequential reentry compacts consumed storage without changing FIFO order")

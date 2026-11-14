@@ -4,7 +4,7 @@ import InnoFlowTesting
 import Testing
 
 /// Public-host regressions intentionally also compile against the pre-fix revision.
-@Suite("Runtime completion and result consistency")
+@Suite("Runtime completion and result consistency", .timeLimit(.minutes(5)))
 @MainActor
 struct RuntimeConsistencyTests {
   @Test(

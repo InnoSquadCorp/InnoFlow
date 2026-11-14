@@ -258,22 +258,117 @@ extension InnoFlowMacro {
     }
   }
 
+  /// Reducer types whose initializer arguments run in a child's state/action
+  /// domain. A `.phaseMap(...)` inside them belongs to that child reducer,
+  /// not to the phase-managed feature whose `body` is being inspected.
+  private static let childDomainReducerTypes: Set<String> = [
+    "Scope", "IfLet", "IfCaseLet", "ForEachReducer", "ForEachIdentifiedReducer",
+  ]
+
   private static func containsPhaseMapCall(in node: some SyntaxProtocol) -> Bool {
     containsPhaseMapCall(in: Syntax(node))
   }
 
+  /// Whether `body` applies a phase map in the feature's own domain.
+  ///
+  /// Any `.phaseMap(...)` call counts, except one written inside the child
+  /// part of a call that composes a child reducer: a child may own a phase
+  /// of its own and apply its map where it is composed.
+  ///
+  /// This is a syntax pass. It recognizes the composing call by the name
+  /// written at the call site and the child by its position in that call, so
+  /// a child reducer hoisted into a local constant, or a combinator reached
+  /// through a typealias, is still read as the feature's own domain. Write
+  /// the child's `.phaseMap(...)` inside the combinator's arguments, or build
+  /// the child reducer outside `body` (see `docs/MACRO_OPERATIONS.md`).
   private static func containsPhaseMapCall(in node: Syntax) -> Bool {
-    if let call = node.as(FunctionCallExprSyntax.self),
-      let memberAccess = call.calledExpression.as(MemberAccessExprSyntax.self),
-      logicalIdentifier(memberAccess.declName.baseName) == "phaseMap"
-    {
-      return true
+    if let call = node.as(FunctionCallExprSyntax.self) {
+      if let memberAccess = call.calledExpression.as(MemberAccessExprSyntax.self),
+        logicalIdentifier(memberAccess.declName.baseName) == "phaseMap"
+      {
+        return true
+      }
+      if let ownDomain = ownDomainExpressions(inChildComposingCall: call) {
+        return ownDomain.contains { containsPhaseMapCall(in: Syntax($0)) }
+      }
     }
 
     for child in node.children(viewMode: .sourceAccurate) where containsPhaseMapCall(in: child) {
       return true
     }
     return false
+  }
+
+  /// The expressions of a child-composing call that still run in the
+  /// feature's own domain, or `nil` when `call` does not compose a child.
+  ///
+  /// - `Scope`, `IfLet`, `IfCaseLet`, `ForEachReducer` and
+  ///   `ForEachIdentifiedReducer` take only child-domain arguments.
+  /// - `parent.optionalChild(...)` keeps its receiver in the feature's
+  ///   domain, for example `Reduce { ... }.phaseMap(map).optionalChild(...)`.
+  /// - `OptionalChildLifetime(parent:state:action:instanceID:reducer:)` is
+  ///   the same composition spelled as an initializer: `parent:` is the
+  ///   feature's domain and `reducer:` is the child's.
+  ///
+  /// A type may be written `Name(...)`, `Name<...>(...)`, `Name.init(...)`
+  /// or with a module qualifier.
+  private static func ownDomainExpressions(
+    inChildComposingCall call: FunctionCallExprSyntax
+  ) -> [ExprSyntax]? {
+    var callee = call.calledExpression
+    if let specialization = callee.as(GenericSpecializationExprSyntax.self) {
+      callee = specialization.expression
+    }
+
+    let name: String?
+    var receiver: ExprSyntax?
+    if let reference = callee.as(DeclReferenceExprSyntax.self) {
+      name = logicalIdentifier(reference.baseName)
+    } else if let memberAccess = callee.as(MemberAccessExprSyntax.self) {
+      if memberAccess.declName.baseName.tokenKind == .keyword(.`init`) {
+        name = memberAccess.base.flatMap(rightmostTypeName)
+      } else {
+        name = logicalIdentifier(memberAccess.declName.baseName)
+        receiver = memberAccess.base
+      }
+    } else {
+      name = nil
+    }
+    guard let name else { return nil }
+
+    // Whatever stands left of the call is outside the child's arguments.
+    var ownDomain = receiver.map { [$0] } ?? []
+    switch name {
+    case "optionalChild":
+      return ownDomain
+    case "OptionalChildLifetime":
+      ownDomain.append(
+        contentsOf: call.arguments
+          .filter { $0.label.map(logicalIdentifier) == "parent" }
+          .map(\.expression)
+      )
+      return ownDomain
+    case _ where childDomainReducerTypes.contains(name):
+      return ownDomain
+    default:
+      return nil
+    }
+  }
+
+  /// The rightmost name of a type written as an expression: `Scope`,
+  /// `Scope<...>`, `Module.Scope`.
+  private static func rightmostTypeName(of expression: ExprSyntax) -> String? {
+    var expression = expression
+    if let specialization = expression.as(GenericSpecializationExprSyntax.self) {
+      expression = specialization.expression
+    }
+    if let reference = expression.as(DeclReferenceExprSyntax.self) {
+      return logicalIdentifier(reference.baseName)
+    }
+    if let memberAccess = expression.as(MemberAccessExprSyntax.self) {
+      return logicalIdentifier(memberAccess.declName.baseName)
+    }
+    return nil
   }
 }
 

@@ -86,7 +86,6 @@ package struct EffectWalker<D: EffectDriver> {
         await driver.runConcurrently(
           children,
           context: context,
-          awaited: false,
           recurse: recurse
         )
       }
@@ -103,7 +102,6 @@ package struct EffectWalker<D: EffectDriver> {
         await driver.runSequentially(
           children,
           context: context,
-          awaited: false,
           recurse: recurse
         )
       }
@@ -153,13 +151,6 @@ package struct EffectWalker<D: EffectDriver> {
       await walk(
         nested,
         context: .withAnimation(animation, on: context),
-        awaited: awaited
-      )
-
-    case .lazyMap(let lazyMapped):
-      await walk(
-        lazyMapped.materialize(),
-        context: context,
         awaited: awaited
       )
 

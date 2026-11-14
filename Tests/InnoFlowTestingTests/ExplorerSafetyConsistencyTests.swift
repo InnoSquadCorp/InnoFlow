@@ -2,6 +2,8 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
+@testable import InnoFlowCoreTestSupport
+
 private struct ExplorerClockSafety: Reducer {
   struct State: Equatable, Sendable { var count = 0 }
   enum Action: Equatable, Sendable { case noop }
@@ -54,7 +56,7 @@ private struct ExplorerUncooperative: Reducer {
     }
   }
 }
-@MainActor @Suite("Explorer replay safety")
+@MainActor @Suite("Explorer replay safety", .timeLimit(.minutes(5)))
 struct ExplorerSafetyConsistencyTests {
   @Test func missingClockIsConfigurationFailure() async {
     var factories = 0
@@ -90,8 +92,9 @@ struct ExplorerSafetyConsistencyTests {
         let store = TestStore(
           reducer: ExplorerUncooperative(gate: gate), initialState: .init(),
           // The receive barrier and cleanup share this budget. Ten milliseconds
-          // can cancel before physical work starts under parallel test load.
-          effectTimeout: .seconds(1))
+          // can cancel before physical work starts under parallel test load,
+          // and a saturated run needs the suite's wait scale on top.
+          effectTimeout: scaledTestDeadline(.seconds(1)))
         store.addInvariant("stop at started") { $0.step != 2 }
         return store
       },

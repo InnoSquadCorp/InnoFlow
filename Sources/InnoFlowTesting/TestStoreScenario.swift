@@ -62,6 +62,17 @@ public struct TestStoreScenarioStep<R: Reducer>: Sendable where R.State: Equatab
     }
   }
 
+  /// Advances `clock` by `duration` once at least `count` sleepers are
+  /// suspended on it.
+  ///
+  /// The wait for the sleeper threshold is bounded by the store's effect
+  /// timeout — the same budget as `receive` and `finish` — not by the clock's
+  /// own wait deadline, and a threshold that is already met needs no budget.
+  /// When the threshold is not met in time, the step reports a test failure
+  /// through the store at the scenario's most recent assertion call site,
+  /// leaves the clock where it was, and the scenario continues with its next
+  /// step like after any other failed assertion. Cancelling the scenario while
+  /// the step waits stops it without a failure.
   public static func advance(
     _ clock: ManualTestClock,
     by duration: Duration,
@@ -70,14 +81,24 @@ public struct TestStoreScenarioStep<R: Reducer>: Sendable where R.State: Equatab
   ) -> Self {
     .init(
       label ?? "advance \(duration)",
-      cancellationAwareOperation: { _ in
+      cancellationAwareOperation: { store in
         guard Task.isCancelled == false else { return .cancelled }
         do {
-          try await clock.advance(by: duration, onceSleepersReach: count)
+          try await clock.advance(
+            by: duration,
+            onceSleepersReach: count,
+            timeout: store.effectTimeout
+          )
         } catch is CancellationError {
           return .cancelled
         } catch {
-          return Task.isCancelled ? .cancelled : .completed
+          guard Task.isCancelled == false else { return .cancelled }
+          // The step has no call site of its own, so the failure is attributed
+          // to the latest assertion the test made on this store.
+          store.issueReporter(
+            "Scenario clock advance failed; the clock was not advanced.\n\n\(error)",
+            store.terminalVerificationSource ?? .init()
+          )
         }
         return Task.isCancelled ? .cancelled : .completed
       })

@@ -23,6 +23,15 @@ public final class Store<R: Reducer> {
     return storedState
   }
 
+  /// The current state without registering an Observation access.
+  ///
+  /// Creating a projection reads state to seed its snapshot. That read is an
+  /// implementation detail: recording it would make a view that selects a
+  /// single value depend on every state change until its next evaluation.
+  package var untrackedState: R.State {
+    storedState
+  }
+
   private let reducer: R
   package let clock: StoreClock
   package let instrumentation: StoreInstrumentation<R.Action>
@@ -146,30 +155,20 @@ public final class Store<R: Reducer> {
     outputHub.stream(bufferingPolicy: bufferingPolicy)
   }
 
-  /// Cancels effects associated with an identifier and waits for cancellation bookkeeping.
+  /// Cancels effects associated with an identifier.
+  ///
+  /// Cancellation is complete when this method returns: the cancelled effects
+  /// can no longer emit actions, their tasks have been cancelled, and pending
+  /// scheduled requests have returned their lane capacity. The method remains
+  /// `async` for source compatibility; it does not suspend.
   public func cancelEffects<ID: Hashable & Sendable>(identifiedBy id: EffectID<ID>) async {
-    let erasedID = AnyEffectID(id)
-    let sequence = effectBridge.markCancelled(id: erasedID)
-    recordCancellation(id: erasedID, sequence: sequence)
-    if diagnostics != nil {
-      let targets = await effectBridge.cancellationTargetDispatchIDs(
-        id: erasedID,
-        upTo: sequence
-      )
-      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
-    }
-    await effectBridge.cancelEffects(id: erasedID, upTo: sequence)
+    acceptCancellation(.all(AnyEffectID(id)), context: nil)
   }
 
-  /// Cancels every running effect and waits for cancellation bookkeeping.
+  /// Cancels every running effect. Like ``cancelEffects(identifiedBy:)``,
+  /// cancellation is complete on return and the method does not suspend.
   public func cancelAllEffects() async {
-    let sequence = effectBridge.markCancelledAll()
-    recordCancellation(id: nil, sequence: sequence)
-    if diagnostics != nil {
-      let targets = await effectBridge.cancellationTargetDispatchIDs(upTo: sequence)
-      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: false)
-    }
-    await effectBridge.cancelAllEffects(upTo: sequence)
+    acceptCancellationOfAllEffects()
   }
 
   // NOTE: `@_optimize(none)` is intentional. The SIL `EarlyPerfInliner` under
@@ -215,6 +214,11 @@ public final class Store<R: Reducer> {
         potentialCancellationIDs: effect.potentialCancellationIDs,
         flowTaskTracker: flowTaskTracker
       )
+      // Cancellation the reducer just requested takes effect in this turn;
+      // the interpreter task below finds it already applied.
+      if effect.mayRequestCancellation {
+        acceptSynchronousCancellations(in: effect, context: context)
+      }
     }
     executeEffect(effect, context: context)
   }
@@ -253,6 +257,7 @@ public final class Store<R: Reducer> {
         // Keep the root interpreter unawaited so its frame never owns Store
         // across user or delayed work. Every concrete descendant registers
         // its own FlowTask activity before this walk returns.
+        context.cancellationScope?.beginInterpretation()
         await self.walkEffect(effect, context: context, awaited: false)
       }
       rootEffectInterpreterTail = task
@@ -372,6 +377,10 @@ public final class Store<R: Reducer> {
     observerRegistry.register(observer, registration: registration)
   }
 
+  package func unregisterProjectionObserver(_ observerID: ObjectIdentifier) {
+    observerRegistry.unregister(observerID)
+  }
+
   package var scopedObserverRefreshCount: UInt64 {
     observerRegistry.statsSnapshot.refreshPassCount
   }
@@ -382,7 +391,7 @@ public final class Store<R: Reducer> {
 
   package var effectRuntimeMetrics: EffectRuntime<R.Action>.MetricsSnapshot {
     get async {
-      await effectBridge.runtime.metricsSnapshot()
+      effectBridge.runtime.metricsSnapshot()
     }
   }
 

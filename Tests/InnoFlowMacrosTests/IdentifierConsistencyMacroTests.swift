@@ -13,7 +13,7 @@ import Testing
   import InnoFlowMacros
 #endif
 
-@Suite("Macro logical identifier diagnostics")
+@Suite("Macro logical identifier diagnostics", .timeLimit(.minutes(5)))
 struct IdentifierConsistencyMacroTests {
   @Test(
     "phase declarations and references normalize independently",

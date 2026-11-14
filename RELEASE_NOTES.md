@@ -1,5 +1,41 @@
 # InnoFlow Release Notes
 
+## 6.1.0 Release
+
+Release candidate prepared on **2026-11-14**. It is not tagged or published:
+6.0.2 remains the published stable release until this candidate's main CI,
+28-check Release Preflight, evidence producer and verify-only Release Gate
+succeed and its publication is separately approved.
+
+This minor release adds public testing API and changes documented runtime
+behavior. Against 6.0.2 the API digester reports no public breakage; its
+package-access diagnostics are listed one by one in
+`docs/contracts/api-breakage-allowlist.json`.
+
+- Cancellation a reducer returns (`.cancel`, `cancelInFlight: true`, a newer
+  debounce or `latest` lane request) takes effect in the MainActor turn of
+  that reduction for the work of every earlier effect, and `TestStore` applies
+  the same rule. Cancellation is delivered synchronously, so a
+  task-cancellation handler can run on the main thread.
+- Key-path selections are released once no caller holds or reads them,
+  instead of living as long as their owner.
+- A throttle window fires the newest trailing request that can still proceed,
+  and a collection scope refreshes only the rows a change can affect.
+- `@InnoFlow` accepts a feature that states `Reducer` conformance and
+  synthesizes case paths for `_ name: Payload` payloads and cases inside `#if`.
+  A manual path declared in the enum body takes precedence; one declared in an
+  extension for a newly synthesized shape now redeclares the generated member.
+- `ManualTestClock` waits are bounded (`ManualTestClock(waitTimeout:)`,
+  `ManualTestClock.WaitTimeout`), `advance(by:inStepsOf:onceSleepersReach:)`
+  drives periodic work, `INNOFLOW_TESTSTORE_EFFECT_TIMEOUT` raises the
+  `TestStore` deadline, and a scenario clock step reports an unmet sleeper
+  threshold as a failure.
+
+See the [changelog](CHANGELOG.md) for every change and read the
+[migration notes](MIGRATION.md) before upgrading. Kotlin/Android and
+TypeScript/React packages keep independent versions and release gates; they
+are not part of this release.
+
 ## 6.0.2 Release
 
 Published on **2026-10-08** from tag commit

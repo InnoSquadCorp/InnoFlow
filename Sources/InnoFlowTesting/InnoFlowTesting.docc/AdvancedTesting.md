@@ -51,7 +51,9 @@ cannot make live network data, wall-clock reads or unsynchronized racing effects
 deterministic. Inject deterministic dependencies, advance a fresh manual clock
 with an explicit sleeper threshold, and receive the result before generating
 choices that depend on it. `elapsedTime` includes only explicit successful
-clock advances. Clock registration waits have the store's finite timeout. A threshold already
+clock advances. Clock registration waits have the store's finite timeout, and
+only that one: the manual clock's own wait deadline does not take part, so an
+unmet threshold is always the same configuration failure. A threshold already
 satisfied when checked, including zero sleepers, succeeds even with a zero
 budget. The subsequent logical-time advance is not raced against that timeout.
 

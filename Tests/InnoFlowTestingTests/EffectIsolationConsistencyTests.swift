@@ -60,7 +60,7 @@ private func isolationConsistencyReducer()
 }
 
 @MainActor
-@Suite("Explicit effect operation isolation")
+@Suite("Explicit effect operation isolation", .timeLimit(.minutes(5)))
 struct EffectIsolationConsistencyTests {
   @Test(arguments: [false, true])
   func operationFactoriesExecuteOffMainQueue(useTestStore: Bool) async {

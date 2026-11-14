@@ -181,7 +181,7 @@ private struct CancelledSequenceErrorFeature: Reducer {
   }
 }
 
-@Suite("EffectTask.run(sequence:) error handling", .serialized)
+@Suite("EffectTask.run(sequence:) error handling", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct EffectTaskRunSequenceErrorTests {
 
@@ -337,7 +337,7 @@ struct EffectTaskRunSequenceErrorTests {
   }
 }
 
-@Suite("TestStore EffectTask.run(sequence:) error handling", .serialized)
+@Suite("TestStore EffectTask.run(sequence:) error handling", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreRunSequenceErrorTests {
 
@@ -597,7 +597,7 @@ private struct LateReportAfterCancellationFeature: Reducer {
   }
 }
 
-@Suite("EffectContext.reportError first-error-wins contract", .serialized)
+@Suite("EffectContext.reportError first-error-wins contract", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct ReportErrorFirstWinsTests {
 

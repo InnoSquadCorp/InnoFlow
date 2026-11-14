@@ -61,7 +61,7 @@ private struct MetricsFeature: Reducer {
   }
 }
 
-@Suite("StoreInstrumentation metrics collector", .serialized)
+@Suite("StoreInstrumentation metrics collector", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct StoreInstrumentationMetricsTests {
 

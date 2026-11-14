@@ -269,7 +269,7 @@ extension InnoFlowMacro {
     }
   }
 
-  private struct OutputConditionalContext {
+  struct OutputConditionalContext {
     private var expression: OutputBooleanExpression = .alwaysTrue
 
     func entering(clause: IfConfigClauseSyntax, priorConditions: [String]) -> Self {
@@ -308,21 +308,78 @@ extension InnoFlowMacro {
     }
   }
 
-  private struct OutputNameTable {
-    private var contextsByName: [String: [OutputConditionalContext]] = [:]
+  /// The part of an enum case declaration the compiler compares to decide
+  /// whether two cases redeclare each other: the base name and, for a case
+  /// with a payload, its argument labels.
+  struct CaseDeclarationName {
+    private let baseName: String
+    /// `nil` for a case without a payload.
+    private let argumentLabels: [String]?
 
-    mutating func insert(_ name: String, context: OutputConditionalContext) {
-      contextsByName[name, default: []].append(context)
+    init(_ element: EnumCaseElementSyntax) {
+      baseName = InnoFlowMacro.logicalIdentifier(element.name)
+      if let parameters = element.parameterClause?.parameters, !parameters.isEmpty {
+        argumentLabels = parameters.map { parameter in
+          parameter.firstName.map(InnoFlowMacro.logicalIdentifier) ?? "_"
+        }
+      } else {
+        argumentLabels = nil
+      }
+    }
+
+    /// Whether the compiler rejects an enum in which both cases are active.
+    /// A payload-free case redeclares every same-named case; two cases with
+    /// payloads redeclare each other when their argument labels match.
+    func redeclares(_ other: Self) -> Bool {
+      guard baseName == other.baseName else { return false }
+      guard let argumentLabels, let otherLabels = other.argumentLabels else { return true }
+      return argumentLabels == otherLabels
+    }
+  }
+
+  struct OutputNameTable {
+    private struct Entry {
+      let context: OutputConditionalContext
+      /// The case a generated helper was synthesized from; `nil` for members
+      /// the author declared and for generated identity markers.
+      let sourceCase: CaseDeclarationName?
+    }
+
+    private var entriesByName: [String: [Entry]] = [:]
+
+    mutating func insert(
+      _ name: String,
+      context: OutputConditionalContext,
+      sourceCase: CaseDeclarationName? = nil
+    ) {
+      entriesByName[name, default: []].append(.init(context: context, sourceCase: sourceCase))
     }
 
     func contains(_ name: String, overlapping context: OutputConditionalContext) -> Bool {
-      contextsByName[name]?.contains { $0.overlaps(context) } == true
+      entriesByName[name]?.contains { $0.context.overlaps(context) } == true
+    }
+
+    /// Whether `name` is taken, under conditions that overlap `context`, by
+    /// anything that can exist next to the helper of `sourceCase`. The helper
+    /// of a case that redeclares `sourceCase` does not count: the compiler
+    /// never accepts both cases in one configuration, so their helpers never
+    /// meet either.
+    func contains(
+      _ name: String,
+      overlapping context: OutputConditionalContext,
+      coexistingWith sourceCase: CaseDeclarationName
+    ) -> Bool {
+      entriesByName[name]?.contains { entry in
+        guard entry.context.overlaps(context) else { return false }
+        guard let other = entry.sourceCase else { return true }
+        return !other.redeclares(sourceCase)
+      } == true
     }
 
     func contexts(_ name: String, overlapping context: OutputConditionalContext)
       -> [OutputConditionalContext]
     {
-      contextsByName[name]?.filter { $0.overlaps(context) } ?? []
+      entriesByName[name]?.map(\.context).filter { $0.overlaps(context) } ?? []
     }
   }
 
@@ -342,27 +399,120 @@ extension InnoFlowMacro {
     let existingNames = outputExistingMemberNames(in: outputEnum)
     let manualPathNames = outputManualPathNames(in: outputEnum)
     var seenGeneratedNames = OutputNameTable()
-    return synthesizedOutputPathSources(
+    return synthesizedConditionalCasePathSources(
       in: outputEnum.memberBlock.members,
-      conditionalContext: .init(),
-      accessPrefix: accessPrefix,
-      requiresComputedProperty: requiresComputedProperty,
-      existingNames: existingNames,
-      manualPathNames: manualPathNames,
-      seenGeneratedNames: &seenGeneratedNames,
-      context: context
-    ).map(DeclSyntax.init(stringLiteral:))
+      conditionalContext: .init()
+    ) { site in
+      synthesizedOutputElementSources(
+        at: site,
+        accessPrefix: accessPrefix,
+        requiresComputedProperty: requiresComputedProperty,
+        existingNames: existingNames,
+        manualPathNames: manualPathNames,
+        seenGeneratedNames: &seenGeneratedNames,
+        context: context
+      )
+    }.map(DeclSyntax.init(stringLiteral:))
   }
 
-  private static func synthesizedOutputPathSources(
-    in members: MemberBlockItemListSyntax,
-    conditionalContext: OutputConditionalContext,
-    accessPrefix: String,
-    requiresComputedProperty: Bool,
+  /// One enum case element together with everything its declaration site
+  /// contributes to path synthesis: the compiler conditions that enclose it,
+  /// the availability to mirror, and the conditions under which the case is
+  /// unavailable or explicitly ignored.
+  struct CasePathElementSite {
+    let element: EnumCaseElementSyntax
+    let conditionalContext: OutputConditionalContext
+    let availabilityPrefix: String
+    let unavailableContexts: [OutputConditionalContext]
+    let ignoredContexts: [OutputConditionalContext]
+  }
+
+  /// The compiler conditions in which a path member is generated, after
+  /// removing the conditions where the case is unavailable, ignored, or
+  /// already covered by a manual path.
+  struct CasePathGenerationScope {
+    let generationContext: OutputConditionalContext
+    let exclusionContexts: [OutputConditionalContext]
+
+    /// Wraps generated declarations so they exist only outside the excluded
+    /// conditions.
+    func wrapping(_ source: [String]) -> [String] {
+      guard !exclusionContexts.isEmpty else { return source }
+      let exclusionCondition =
+        exclusionContexts
+        .map(\.conditionSource)
+        .map { "(\($0))" }
+        .joined(separator: " || ")
+      return ["#if !(\(exclusionCondition))\n\(source.joined(separator: "\n"))\n#endif"]
+    }
+  }
+
+  /// Returns `nil` when no compiler condition remains in which the member
+  /// should exist.
+  static func casePathGenerationScope(
+    at site: CasePathElementSite,
+    manualContexts: [OutputConditionalContext]
+  ) -> CasePathGenerationScope? {
+    let conditionalContext = site.conditionalContext
+    let exclusionContexts =
+      manualContexts
+      + (site.unavailableContexts + site.ignoredContexts).filter {
+        $0.overlaps(conditionalContext)
+      }
+    if exclusionContexts.contains(where: { conditionalContext.isCovered(by: $0) }) {
+      return nil
+    }
+    let generationContext = conditionalContext.excluding(exclusionContexts)
+    guard generationContext.isSatisfiable else { return nil }
+    return .init(generationContext: generationContext, exclusionContexts: exclusionContexts)
+  }
+
+  /// Reserves `memberName` for the helper of `element` in `generationContext`.
+  ///
+  /// Returns `false`, reserving nothing, when the name is already taken in a
+  /// compiler configuration where this helper would also exist: by a member
+  /// the author declared that is not a manual path, or by the helper of a
+  /// case that can be active together with `element`. Two cases the compiler
+  /// treats as redeclarations of each other are never active together, so
+  /// each keeps its helper inside its own mirrored clause.
+  static func reserveGeneratedCasePathName(
+    _ memberName: String,
+    for element: EnumCaseElementSyntax,
+    in generationContext: OutputConditionalContext,
     existingNames: OutputNameTable,
     manualPathNames: OutputNameTable,
-    seenGeneratedNames: inout OutputNameTable,
-    context: some MacroExpansionContext
+    seenGeneratedNames: inout OutputNameTable
+  ) -> Bool {
+    let sourceCase = CaseDeclarationName(element)
+    // `generationContext` already excludes the conditions of a manual path,
+    // so a static variable of this name never meets the helper. Other kinds
+    // of members (a case, a static function, a nested type) do.
+    let collidesWithDeclaredMember =
+      existingNames.contains(memberName, overlapping: generationContext)
+      && !manualPathNames.contains(memberName, overlapping: generationContext)
+    guard
+      !collidesWithDeclaredMember,
+      !seenGeneratedNames.contains(
+        memberName,
+        overlapping: generationContext,
+        coexistingWith: sourceCase
+      )
+    else { return false }
+    seenGeneratedNames.insert(memberName, context: generationContext, sourceCase: sourceCase)
+    return true
+  }
+
+  /// Walks enum members and asks `synthesizeElement` for the declarations of
+  /// every case element, recreating the enclosing `#if` / `#elseif` / `#else`
+  /// structure around whatever it returns.
+  ///
+  /// `Action` and `Output` path synthesis share this traversal so conditional
+  /// compilation, availability and `@InnoFlowCasePathIgnored` behave the same
+  /// for both.
+  static func synthesizedConditionalCasePathSources(
+    in members: MemberBlockItemListSyntax,
+    conditionalContext: OutputConditionalContext,
+    synthesizeElement: (CasePathElementSite) -> [String]
   ) -> [String] {
     var declarations: [String] = []
     for member in members {
@@ -378,59 +528,17 @@ extension InnoFlowMacro {
           conditionalContext: conditionalContext
         )
         for element in enumCaseDecl.elements {
-          let memberName = "\(generatedPathBaseName(from: element.name))CasePath"
-          let manualContexts = manualPathNames.contexts(
-            memberName,
-            overlapping: conditionalContext
+          declarations.append(
+            contentsOf: synthesizeElement(
+              .init(
+                element: element,
+                conditionalContext: conditionalContext,
+                availabilityPrefix: availabilityPrefix,
+                unavailableContexts: unavailableContexts,
+                ignoredContexts: ignoredContexts
+              )
+            )
           )
-          let exclusionContexts =
-            manualContexts
-            + (unavailableContexts + ignoredContexts).filter {
-              $0.overlaps(conditionalContext)
-            }
-          if exclusionContexts.contains(where: { conditionalContext.isCovered(by: $0) }) {
-            continue
-          }
-          let generationContext = conditionalContext.excluding(exclusionContexts)
-          guard generationContext.isSatisfiable else { continue }
-
-          guard
-            !diagnoseOutputPathCollision(
-              memberName: memberName,
-              element: element,
-              conditionalContext: generationContext,
-              existingNames: existingNames,
-              manualPathNames: manualPathNames,
-              seenGeneratedNames: &seenGeneratedNames,
-              context: context
-            )
-          else { continue }
-
-          guard
-            let source = synthesizedOutputPathSource(
-              for: element,
-              memberName: memberName,
-              availabilityPrefix: availabilityPrefix,
-              conditionalContext: generationContext,
-              accessPrefix: accessPrefix,
-              requiresComputedProperty: requiresComputedProperty,
-              existingNames: existingNames,
-              seenGeneratedNames: &seenGeneratedNames,
-              context: context
-            )
-          else { continue }
-          if exclusionContexts.isEmpty {
-            declarations.append(contentsOf: source)
-          } else {
-            let exclusionCondition =
-              exclusionContexts
-              .map(\.conditionSource)
-              .map { "(\($0))" }
-              .joined(separator: " || ")
-            declarations.append(
-              "#if !(\(exclusionCondition))\n\(source.joined(separator: "\n"))\n#endif"
-            )
-          }
         }
         continue
       }
@@ -447,15 +555,10 @@ extension InnoFlowMacro {
         let clauseMembers = clause.elements?.as(MemberBlockItemListSyntax.self)
         let clauseDeclarations =
           clauseMembers.map {
-            synthesizedOutputPathSources(
+            synthesizedConditionalCasePathSources(
               in: $0,
               conditionalContext: clauseContext,
-              accessPrefix: accessPrefix,
-              requiresComputedProperty: requiresComputedProperty,
-              existingNames: existingNames,
-              manualPathNames: manualPathNames,
-              seenGeneratedNames: &seenGeneratedNames,
-              context: context
+              synthesizeElement: synthesizeElement
             )
           } ?? []
         hasGeneratedMember = hasGeneratedMember || !clauseDeclarations.isEmpty
@@ -478,6 +581,61 @@ extension InnoFlowMacro {
     return declarations
   }
 
+  private static func synthesizedOutputElementSources(
+    at site: CasePathElementSite,
+    accessPrefix: String,
+    requiresComputedProperty: Bool,
+    existingNames: OutputNameTable,
+    manualPathNames: OutputNameTable,
+    seenGeneratedNames: inout OutputNameTable,
+    context: some MacroExpansionContext
+  ) -> [String] {
+    let element = site.element
+    let memberName = "\(generatedPathBaseName(from: element.name))CasePath"
+    guard
+      let scope = casePathGenerationScope(
+        at: site,
+        manualContexts: manualPathNames.contexts(
+          memberName,
+          overlapping: site.conditionalContext
+        )
+      )
+    else { return [] }
+
+    guard
+      reserveGeneratedCasePathName(
+        memberName,
+        for: element,
+        in: scope.generationContext,
+        existingNames: existingNames,
+        manualPathNames: manualPathNames,
+        seenGeneratedNames: &seenGeneratedNames
+      )
+    else {
+      context.diagnose(
+        Diagnostic(
+          node: Syntax(element.name),
+          message: InnoFlowOutputPathsMessage.collision(memberName: memberName))
+      )
+      return []
+    }
+
+    guard
+      let source = synthesizedOutputPathSource(
+        for: element,
+        memberName: memberName,
+        availabilityPrefix: site.availabilityPrefix,
+        conditionalContext: scope.generationContext,
+        accessPrefix: accessPrefix,
+        requiresComputedProperty: requiresComputedProperty,
+        existingNames: existingNames,
+        seenGeneratedNames: &seenGeneratedNames,
+        context: context
+      )
+    else { return [] }
+    return scope.wrapping(source)
+  }
+
   private static func synthesizedOutputPathSource(
     for element: EnumCaseElementSyntax,
     memberName: String,
@@ -493,7 +651,10 @@ extension InnoFlowMacro {
     let caseSource = identifierSource(element.name)
     let parameters = Array(element.parameterClause?.parameters ?? [])
 
-    if parameters.contains(where: { $0.secondName != nil }) {
+    // `_ name: Payload` only documents the payload: the case is constructed
+    // and matched without an argument label, exactly like `Payload` alone.
+    // Any other pair of names is not a declaration the compiler accepts.
+    if parameters.contains(where: { $0.secondName != nil && $0.firstName?.text != "_" }) {
       context.diagnose(
         Diagnostic(
           node: Syntax(element.name),
@@ -608,7 +769,7 @@ extension InnoFlowMacro {
     return identifierSource(name, asArgumentLabel: asArgumentLabel)
   }
 
-  private static func outputExistingMemberNames(in outputEnum: EnumDeclSyntax) -> OutputNameTable {
+  static func outputExistingMemberNames(in outputEnum: EnumDeclSyntax) -> OutputNameTable {
     var names = OutputNameTable()
     collectOutputNames(
       in: outputEnum.memberBlock.members,
@@ -619,7 +780,7 @@ extension InnoFlowMacro {
     return names
   }
 
-  private static func outputManualPathNames(in outputEnum: EnumDeclSyntax) -> OutputNameTable {
+  static func outputManualPathNames(in outputEnum: EnumDeclSyntax) -> OutputNameTable {
     var names = OutputNameTable()
     collectOutputNames(
       in: outputEnum.memberBlock.members,
@@ -703,8 +864,10 @@ extension InnoFlowMacro {
     var sources: [String] = []
     for element in attributes {
       if let attribute = element.as(AttributeSyntax.self) {
-        if outputAttributeName(attribute) == "available" {
-          sources.append(outputHelperAvailability(attribute).trimmedDescription)
+        if outputAttributeName(attribute) == "available",
+          let helperAttribute = outputHelperAvailability(attribute)
+        {
+          sources.append(outputSingleLineSource(of: helperAttribute))
         }
         continue
       }
@@ -733,19 +896,51 @@ extension InnoFlowMacro {
   /// A case-level rename targets an enum constructor, not a CasePath. Keep
   /// deprecation/availability/message metadata, but do not teach the compiler
   /// to replace a path use with a value or constructor of a different type.
-  private static func outputHelperAvailability(_ attribute: AttributeSyntax) -> AttributeSyntax {
+  ///
+  /// Returns `nil` when the rename was all the attribute said: what remains
+  /// names a platform without restricting it, which the compiler rejects.
+  private static func outputHelperAvailability(_ attribute: AttributeSyntax) -> AttributeSyntax? {
     guard case .availability(let arguments)? = attribute.arguments else { return attribute }
     var retained = arguments.filter { argument in
       guard case .availabilityLabeledArgument(let labeled) = argument.argument else { return true }
       return logicalIdentifier(labeled.label) != "renamed"
     }
     guard retained.count != arguments.count else { return attribute }
+    guard retained.count > 1 else { return nil }
     if let last = retained.indices.last {
       retained[last].trailingComma = nil
     }
     var copy = attribute
     copy.arguments = .availability(retained)
     return copy
+  }
+
+  /// Renders a copied attribute on one line, without comments.
+  ///
+  /// Trivia is the layout of the case declaration, not part of the
+  /// attribute. Carried into generated source it can change what the source
+  /// means: once an argument is dropped, a line comment that stood before it
+  /// swallows the closing parenthesis. Tokens the author separated stay
+  /// separated by one space; none is added before a comma or inside the
+  /// parentheses.
+  private static func outputSingleLineSource(of attribute: AttributeSyntax) -> String {
+    var source = ""
+    var previous: TokenSyntax?
+    for token in attribute.tokens(viewMode: .sourceAccurate) {
+      if let previous {
+        let wasSeparated = !previous.trailingTrivia.isEmpty || !token.leadingTrivia.isEmpty
+        let hugsItsNeighbor =
+          previous.tokenKind == .leftParen
+          || token.tokenKind == .rightParen
+          || token.tokenKind == .comma
+        if wasSeparated && !hugsItsNeighbor {
+          source += " "
+        }
+      }
+      source += token.text
+      previous = token
+    }
+    return source
   }
 
   private static func outputAttributeContexts(
@@ -969,31 +1164,6 @@ extension InnoFlowMacro {
       }
       return false
     }
-  }
-
-  private static func diagnoseOutputPathCollision(
-    memberName: String,
-    element: EnumCaseElementSyntax,
-    conditionalContext: OutputConditionalContext,
-    existingNames: OutputNameTable,
-    manualPathNames: OutputNameTable,
-    seenGeneratedNames: inout OutputNameTable,
-    context: some MacroExpansionContext
-  ) -> Bool {
-    guard
-      (existingNames.contains(memberName, overlapping: conditionalContext)
-        && !manualPathNames.contains(memberName, overlapping: conditionalContext))
-        || seenGeneratedNames.contains(memberName, overlapping: conditionalContext)
-    else {
-      seenGeneratedNames.insert(memberName, context: conditionalContext)
-      return false
-    }
-    context.diagnose(
-      Diagnostic(
-        node: Syntax(element.name),
-        message: InnoFlowOutputPathsMessage.collision(memberName: memberName))
-    )
-    return true
   }
 
   private static func outputIdentityMarkerName(

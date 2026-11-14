@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import os
+import Synchronization
 
 /// Payload-free lifecycle classification for one dispatch diagnostic record.
 public enum DispatchDiagnosticKind: Sendable, Equatable {
@@ -66,7 +66,7 @@ public final class StoreDiagnostics: Sendable {
   }
 
   public let capacity: Int
-  private let state = OSAllocatedUnfairLock(initialState: State())
+  private let state = Mutex(State())
 
   public init(capacity: Int = 256) {
     precondition(capacity >= 0, "StoreDiagnostics capacity must be non-negative")

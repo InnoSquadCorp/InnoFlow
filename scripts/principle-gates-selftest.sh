@@ -483,8 +483,18 @@ run_api_compatibility_mode_tests() (
   assert_failure "$tmp_root/scripts/check-api-compatibility.sh"
 
   # Current default must follow STABLE_VERSION, not an old hard-coded 6.0.0.
+  mkdir -p "$tmp_root/Sources"
+  printf '%s\n' \
+    'package protocol Driver {' \
+    '  func run(awaited: Bool)' \
+    '}' \
+    '' \
+    'public struct Store {' \
+    '  public func send() {}' \
+    '}' >"$tmp_root/Sources/Runtime.swift"
+  git -C "$tmp_root" add Sources/Runtime.swift
   git -C "$tmp_root" -c user.name=Selftest -c user.email=selftest@invalid.example \
-    commit --allow-empty -qm fixture
+    commit -qm fixture
   git -C "$tmp_root" tag 6.0.0
   git -C "$tmp_root" tag 6.0.2
   mkdir "$tmp_root/bin"
@@ -497,6 +507,32 @@ EOF
   assert_success env PATH="$tmp_root/bin:$PATH" \
     INNOFLOW_SELFTEST_API_COMMAND="$tmp_root/api-command" "$tmp_root/scripts/check-api-compatibility.sh"
   assert_success grep -Fx 'package diagnose-api-breaking-changes 6.0.2 --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting InnoFlowInspector' "$tmp_root/api-command"
+
+  # A reviewed allowlist reaches the digester only for diagnostics whose
+  # declaration is package-access in the baseline source.
+  cp "$SCRIPT_DIR/check-api-breakage-allowlist.py" "$tmp_root/scripts/"
+  mkdir -p "$tmp_root/docs/contracts"
+  write_api_breakage_allowlist() {
+    printf '%s\n' \
+      "{\"schema\": 1, \"baseline\": \"$1\", \"entries\": [{" \
+      "  \"message\": \"API breakage: func $2 has been removed\"," \
+      '  "source": "Sources/Runtime.swift",' \
+      "  \"declaration\": \"$3\"," \
+      '  "reason": "selftest"' \
+      '}]}' >"$tmp_root/docs/contracts/api-breakage-allowlist.json"
+  }
+  write_api_breakage_allowlist 6.0.2 'Driver.run(awaited:)' 'package protocol Driver'
+  assert_success env PATH="$tmp_root/bin:$PATH" \
+    INNOFLOW_SELFTEST_API_COMMAND="$tmp_root/api-command" "$tmp_root/scripts/check-api-compatibility.sh"
+  assert_success grep -Eq '^package diagnose-api-breaking-changes --breakage-allowlist-path [^ ]+ 6\.0\.2 --products ' "$tmp_root/api-command"
+  write_api_breakage_allowlist 6.0.2 'Store.send()' 'public func send()'
+  assert_failure env PATH="$tmp_root/bin:$PATH" \
+    INNOFLOW_SELFTEST_API_COMMAND="$tmp_root/api-command" "$tmp_root/scripts/check-api-compatibility.sh"
+  write_api_breakage_allowlist 6.0.0 'Driver.run(awaited:)' 'package protocol Driver'
+  assert_failure env PATH="$tmp_root/bin:$PATH" \
+    INNOFLOW_SELFTEST_API_COMMAND="$tmp_root/api-command" "$tmp_root/scripts/check-api-compatibility.sh"
+  rm "$tmp_root/docs/contracts/api-breakage-allowlist.json"
+
   git -C "$tmp_root" tag -d 6.0.2 >/dev/null
   assert_failure "$tmp_root/scripts/check-api-compatibility.sh"
 

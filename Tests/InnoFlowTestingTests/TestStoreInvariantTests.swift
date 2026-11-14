@@ -4,7 +4,7 @@ import InnoFlowTesting
 import Testing
 import os
 
-@Suite("TestStore invariants")
+@Suite("TestStore invariants", .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreInvariantTests {
   @Test("direct send and received effect actions each check once")
@@ -92,7 +92,7 @@ struct TestStoreInvariantTests {
   }
 }
 
-@Suite("TestStore scenarios")
+@Suite("TestStore scenarios", .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreScenarioTests {
   @Test("same seed and typed steps reproduce the same semantic result")

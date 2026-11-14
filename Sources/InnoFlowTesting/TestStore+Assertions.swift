@@ -53,6 +53,31 @@ extension EffectOrigin {
   }
 }
 
+/// Carries the owning test framework into contexts that cannot see task-local
+/// values.
+///
+/// An isolated deinitializer runs with task-locals cleared, so `Test.current`
+/// is `nil` there even when the store belongs to a Swift Testing test. The
+/// store records which framework created it and re-establishes that fact
+/// around diagnostics it reports while deinitializing.
+package enum TestStoreReportingContext {
+  @TaskLocal package static var ownerUsesSwiftTesting = false
+
+  /// Whether a Swift Testing test is running in the current task.
+  package static var isSwiftTestingCurrent: Bool {
+    #if canImport(Testing)
+      return Test.current != nil
+    #else
+      return false
+    #endif
+  }
+
+  /// Whether a diagnostic must be recorded as a Swift Testing issue.
+  package static var reportsThroughSwiftTesting: Bool {
+    isSwiftTestingCurrent || ownerUsesSwiftTesting
+  }
+}
+
 func testStoreAssertionFailure(_ message: String, location: TestStoreSourceLocation) {
   #if DEBUG
     print(
@@ -60,7 +85,7 @@ func testStoreAssertionFailure(_ message: String, location: TestStoreSourceLocat
     )
   #endif
   #if canImport(Testing)
-    if Test.current != nil {
+    if TestStoreReportingContext.reportsThroughSwiftTesting {
       Issue.record(
         TestStoreAssertionIssue(message: message), sourceLocation: location.testingLocation)
       return
@@ -75,7 +100,7 @@ func testStoreAssertionFailure(_ message: String, location: TestStoreSourceLocat
 
 func testStoreAssertionWarning(_ message: String, location: TestStoreSourceLocation) {
   #if canImport(Testing)
-    if Test.current != nil {
+    if TestStoreReportingContext.reportsThroughSwiftTesting {
       Issue.record(
         Comment(rawValue: message), severity: .warning, sourceLocation: location.testingLocation)
       return

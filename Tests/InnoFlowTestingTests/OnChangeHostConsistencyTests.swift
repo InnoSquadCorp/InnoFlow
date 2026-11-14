@@ -36,7 +36,7 @@ private func onChangeHostReducer(baseFirst: Bool) -> some Reducer<
 }
 
 @MainActor
-@Suite("OnChange concurrent host parity")
+@Suite("OnChange concurrent host parity", .timeLimit(.minutes(5)))
 struct OnChangeHostConsistencyTests {
   @Test(arguments: [true, false])
   func effectsFollowCompletionInBothHosts(baseFirst: Bool) async throws {

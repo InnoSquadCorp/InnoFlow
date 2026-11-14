@@ -14,7 +14,7 @@ import Testing
   import InnoFlowMacros
 #endif
 
-@Suite("Conditional macro consistency")
+@Suite("Conditional macro consistency", .timeLimit(.minutes(5)))
 struct ConditionalMacroConsistencyTests {
   @Test("equivalent OS spellings still overlap", arguments: ["os(OSX)", "os( macOS )"])
   func equivalentOSConditionsCollide(secondCondition: String) throws {

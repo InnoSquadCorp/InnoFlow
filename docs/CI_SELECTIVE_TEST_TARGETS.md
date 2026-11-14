@@ -13,14 +13,14 @@ Debug/Release 및 Xcode runtime 호환성은 실제 테스트와 고정 toolchai
 
 | 실행 target | Swift 6.4 선언 수 | 범위 |
 |---|---:|---|
-| InnoFlowCoreTests | 131 | Core 런타임, phase, observation, collection |
-| InnoFlowTestingTests | 379 | TestStore, clock, ledger, consistency |
+| InnoFlowCoreTests | 173 | Core 런타임, phase, observation, collection |
+| InnoFlowTestingTests | 416 | TestStore, clock, ledger, consistency |
 | InnoFlowSwiftUITests | 11 | 독립 binding과 presentation |
-| InnoFlowSwiftUIIntegrationTests | 214 | authoring·SwiftUI·Testing 통합, preview, scope, animation |
+| InnoFlowSwiftUIIntegrationTests | 213 | authoring·SwiftUI·Testing 통합, preview, scope, animation |
 | InnoFlowInspectorTests | 3 | Inspector graph |
-| InnoFlowTests | 167 | authoring, 외부 compile 계약, script 계약, finish, baseline |
-| InnoFlowMacrosTests | 89 | 기존 macro expansion 계약 |
-| 합계 | 994 | Swift 6.3에서는 compiler 조건에 따라 991 |
+| InnoFlowTests | 176 | authoring, 외부 compile 계약, script 계약, finish, baseline |
+| InnoFlowMacrosTests | 110 | 기존 macro expansion 계약 |
+| 합계 | 1102 | Swift 6.3에서는 compiler 조건에 따라 1099 |
 
 이 표는 Swift Testing 선언 수다. 기존 XCTest reporting 계약 2개도
 InnoFlowTestingTests에 보존하며 전체 및 Testing 선택 실행에서 함께 실행한다.
@@ -40,8 +40,8 @@ support target은 `InnoFlowCoreTestSupport`, `InnoFlowAuthoringTestSupport`,
 | 변경 제품 | 실행 target | 선언 수 |
 |---|---|---:|
 | InnoFlowInspector | InnoFlowInspectorTests | 3 |
-| InnoFlowSwiftUI | InnoFlowSwiftUITests, InnoFlowSwiftUIIntegrationTests, InnoFlowTests | 392 |
-| InnoFlowTesting | InnoFlowTestingTests, InnoFlowSwiftUIIntegrationTests, InnoFlowTests | 760 |
+| InnoFlowSwiftUI | InnoFlowSwiftUITests, InnoFlowSwiftUIIntegrationTests, InnoFlowTests | 400 |
+| InnoFlowTesting | InnoFlowTestingTests, InnoFlowSwiftUIIntegrationTests, InnoFlowTests | 805 |
 
 Core, facade, Macros, fixture, tests, manifest, resources, 문서 또는 여러 제품이 섞인
 변경은 전체 테스트로 돌아간다. main, release-validation, merge queue, manual 실행도
@@ -69,13 +69,15 @@ SwiftSyntax inventory는 실행 target 7개와 support target 4개를 모두 검
 원래 994개 semantic ID와 compiler 조건을 유지하고 소스 digest를 갱신한다.
 기존 runtime 347개 ID도 유지하며 suite별 module 소유권과 discovery/filter를 함께
 검증한다. 분리된 module에 추가된 consistency test도 inventory에서 누락될 수 없다.
+6.1.0 후보는 `ProjectionLifetimeConsistencyTests`의 결정적 선언 13개를 더해 runtime
+ID가 360개다. 벽시계 측정은 consistency suite에 두지 않고 host 전용 suite로 둔다.
 
 Swift 6.4의 실제 전체 Debug 실행은 7개 결과를 출력한다. full-principle의 예상
 구성은 Debug 7 + Release 7 + isolated timing 1이다. 기존 Swift 6.3의 단일 실행기
 계약은 유지하며 분리 후 실제 Swift 6.3 전체 실행은 정확한 head의 고정 hosted CI에서 확인한다.
 기존 SwiftSyntax compatibility matrix에는 Inspector private package를 생성·실행하는
 검증을 추가하여 full PR에서도 manifest 도구와 선택 경로를 두 고정 컴파일러로 확인한다.
-이 단계는 Inspector 3개와 AST 도구의 검증이며 Swift 6.3 전체 991개 runtime 검증을
+이 단계는 Inspector 3개와 AST 도구의 검증이며 Swift 6.3 전체 1099개 runtime 검증을
 대신하지 않는다. 두 matrix의 새 단계 성공도 main/Dependabot 재사용 증거에 고정한다.
 기존 TSAN/ASAN 필터의 동일한 53개 ID는 6/33/14개로 나뉜 3개 결과를 출력하므로
 증거의 정확한 실행기 수만 1에서 3으로 맞춘다. 53개 min/max, suite/filter,

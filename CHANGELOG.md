@@ -7,6 +7,9 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 
 ## [Unreleased]
 
+Kotlin/Android and TypeScript/React packages. They have their own versions and
+`kotlin/v*` / `npm/v*` release gates and are not part of a Swift package tag.
+
 ### Added
 
 - Kotlin/Android `1.0.0` packages for the core runtime, KSP `@InnoFlow`
@@ -49,6 +52,189 @@ adapted for the release workflow in [RELEASING.md](RELEASING.md).
 - A separate Multiplatform CI workflow gates Kotlin ABI and Maven artifacts,
   Android lint/APK assembly, npm package/type manifests, and platform-specific
   consumer builds alongside the existing Swift workflow.
+
+## [6.1.0] - 2026-11-14
+
+### Added
+
+- `ManualTestClock` waits are bounded and throw `ManualTestClock.WaitTimeout`
+  naming what was awaited and what the clock observed, instead of suspending
+  a test whose effect never sleeps. A call without `timeout:` uses the
+  clock's own `waitTimeout`: `ManualTestClock.defaultWaitTimeout` (ten
+  seconds), or the value given to the new `ManualTestClock(waitTimeout:)`.
+  Each wait has an overload with an explicit `timeout:`.
+- `ManualTestClock.advance(by:inStepsOf:onceSleepersReach:)` (and its
+  `timeout:` overload) drives periodic effects deterministically. The count
+  is a threshold for the whole clock: pass the total number of sleepers that
+  must be parked before time may move. A zero duration still waits for the
+  threshold once. `advance(by:)` keeps its single-jump behavior.
+- `TestStoreDefaults.effectTimeout` is the default `TestStore` deadline. It
+  stays one second and can be raised for a whole process with
+  `INNOFLOW_TESTSTORE_EFFECT_TIMEOUT=<seconds>`, so a saturated machine or a
+  parallel run does not fail correct tests on a one-second backstop.
+  Whitespace around the value is ignored and an empty value counts as unset.
+  A value above one day is clamped to one day, and a value that is not a
+  positive number keeps the one-second default; either way the process says
+  so once on standard error instead of trapping or silently using another
+  deadline.
+- `@InnoFlow` accepts a feature that states `Reducer` conformance itself.
+- `Action` path synthesis follows the declaration site like `Output`: cases
+  inside `#if`, cases carrying `@available`, and payloads written
+  `_ name: Payload` synthesize paths; a case that is unavailable everywhere
+  synthesizes none.
+- `Output` payloads written `_ name: Payload` synthesize like unlabeled
+  payloads, alone and inside a multi-payload tuple. They previously warned
+  (`OutputPathUnsupportedLocalBinding`) and produced no path.
+
+### Changed
+
+- Effect bookkeeping for run tasks moved from a separate actor onto the
+  MainActor, next to the rest of the Store's effect state. Cancellation is
+  now one synchronous step, an emission needs one MainActor hop instead of an
+  actor hop plus a MainActor hop, `checkCancellation()` and
+  `isCancellationRequested()` no longer leave the run's task, and
+  `Store.deinit` cancels in-flight tasks synchronously. On the local
+  benchmark a run effect that emits one action dropped from 143 µs to 117 µs
+  and a `cancelInFlight` replacement from 199 µs to 162 µs.
+- Removed the start gates in front of `Store` run and composite tasks, the
+  unused deferred-mapping effect operation, and the driver branches for
+  awaited composition that the interpreter never selected. `TestStore` keeps
+  its own start gate.
+- A canonical `static let`/`static var` `<name>CasePath` (or `<name>ActionPath`
+  for an `id:action:` case) declared in the `Action` body now takes precedence
+  over synthesis for every case shape, as it already did for `Output`. It was a
+  `LeadingUnderscoreCollision` error next to a synthesizable case. A manual path
+  in a narrower `#if` than its case leaves the helper synthesized under the
+  complementary condition.
+- Cases that redeclare each other (same name and argument labels, or a
+  payload-free case of that name) may sit in separate conditional clauses the
+  macro cannot prove exclusive; each helper is emitted inside its own clause
+  instead of reporting a collision. Differently named cases, and same-named
+  cases with different argument labels, still collide when both can be active.
+- A throttle window fires the newest trailing request that can still proceed.
+  When the newest request's dispatch is cancelled, the window falls back to
+  the request it replaced (up to eight superseded requests are retained)
+  instead of firing nothing. Before, the outcome depended on whether the
+  cancelled dispatch's effect had been interpreted yet.
+- A collection scope now refreshes only the rows a change can affect instead
+  of every row on any change, and rows resolve their positions once per
+  structural change instead of each scanning the collection. On the local
+  benchmark with 1,000 retained rows, one row update dropped from 4.0 ms to
+  0.06 ms and a structural change from 297 ms to about 1 ms. Elements whose
+  stored bytes are identical are treated as unchanged without calling `==`.
+  The measurement uses a padding-free element; an element type with padding
+  and a non-trivial member usually falls back to `==` for every element and
+  gains less.
+- `IdentifiedArray` implements `withContiguousStorageIfAvailable`.
+- Locks use `Synchronization.Mutex` instead of `OSAllocatedUnfairLock`. The
+  mutex is stored inline, so a dispatch no longer allocates a lock, and the
+  runtime no longer depends on the `os` module for synchronization.
+- The `OSLog` and signpost adapters of `StoreInstrumentation`,
+  `PhaseMapDiagnostics` and `PhaseValidationDiagnostics` are compiled only
+  where `OSLog` can be imported. Nothing changes on Apple platforms; the rest
+  of `InnoFlowCore` no longer references Apple-only modules. A build on a
+  non-Apple platform has not been run yet.
+
+- Every test suite carries a `.timeLimit`, so a test that waits on an event
+  that never happens fails instead of occupying its job until it is killed.
+  The shared test wait helpers scale their deadlines with
+  `INNOFLOW_TEST_WAIT_SCALE`. The scale ignores surrounding whitespace and is
+  clamped to 1000.
+- The focused platform runtime inventory also runs
+  `ProjectionLifetimeConsistencyTests` (13 deterministic selection-lifetime
+  tests) on every simulator runtime; it now holds 360 test identifiers. The
+  wall-clock check of selection release cost moved to the host-only
+  `ProjectionReleaseScalingTests`.
+- `scripts/check-api-compatibility.sh` accepts a reviewed allowlist
+  (`docs/contracts/api-breakage-allowlist.json`) for diagnostics about
+  package-access declarations, which the API digester reports although no
+  consumer can reach them. The validator proves from the baseline source that
+  every listed declaration is package-access, and the list is bound to one
+  baseline.
+
+### Fixed
+
+- Never release a scope or token reference inside a cancellation registry
+  lock. A registry scan that raced a release on another thread could run the
+  deinitializer inside the lock and abort with a recursive `os_unfair_lock`.
+- Accept reducer-returned cancellation in the reduction turn. A `.cancel`,
+  a `cancelInFlight: true` replacement, a newer debounce request or a
+  `latest` lane request used to take effect only when the root interpreter
+  task ran, so an action the cancelled or replaced work had already queued
+  for the MainActor could still be reduced. The turn releases the work of
+  earlier effects only; the effect that issued the request is still
+  interpreted in declaration order, so an earlier `concatenate` sibling of a
+  `.cancel` runs before that cancel covers its own effect. A cancel that follows a
+  sibling its own effect already cancelled is accepted in the turn as well.
+- `TestStore` accepts reducer-returned cancellation in the reduction turn
+  exactly like `Store`, so a test no longer receives an action that a
+  production store drops.
+- Record `cancellationRequested` in `StoreDiagnostics` for a dispatch whose
+  effect is cancelled or replaced before it was interpreted.
+- Release pending scheduled requests in the same turn as cancellation
+  acceptance. With `StoreDiagnostics` enabled, `cancelEffects(identifiedBy:)`
+  and `cancelAllEffects()` suspended between marking cancellation and
+  returning lane capacity.
+- Give collection scopes their own dependency key. A key-path selection
+  registered after `scope(collection:action:)` on the same key path inherited
+  the collection's element-identity comparison and missed identity-only
+  `IdentifiedArray` replacements.
+- Stop retaining key-path selections for the owner's whole lifetime. The owner
+  now keeps a key-path selection from a tracked read until its notification
+  (plus one more), releases selections that are never read, and removes a
+  released selection from its dependency bucket immediately. A selection
+  that was never read costs nothing after it is dropped; one that was read is
+  released after two further value changes. A selection read only for
+  liveness (`isAlive`) is kept until it is deactivated, because no value
+  change notifies that reader. Releasing a selection removes it from its
+  dependency bucket in place, so releasing many selections of one dependency
+  stays linear.
+- Deactivate a removed collection row also when an observation callback
+  scopes the collection again while the change is being classified, and
+  compare each row with its own element in that case.
+- Selecting on a `ScopedStore` whose element was removed no longer hits a
+  debug assertion; the new selection reports absence through
+  `optionalValue` and traps in `requireAlive()`.
+- Seed selections from an untracked read so creating one inside a view body
+  no longer makes that view depend on the whole parent state.
+- Never access projection registry storage while an observer callback runs.
+  An always-refresh observer that registered another observer during a pass
+  trapped with an exclusivity violation.
+- Report `TestStore` deinitialization diagnostics under Swift Testing. The
+  isolated deinitializer cannot see `Test.current`, so an omitted `finish()`
+  fell through to XCTest and was silently dropped.
+- Do not treat a child reducer's `.phaseMap(...)` inside `Scope`, `IfLet`,
+  `IfCaseLet`, `ForEachReducer`, `ForEachIdentifiedReducer`, `optionalChild`, or
+  the non-`parent:` arguments of `OptionalChildLifetime(parent:state:action:instanceID:reducer:)`
+  as the phase-managed feature's own phase map, including the `Name.init(...)`
+  spelling. A child hoisted into a local constant or a combinator behind a
+  typealias is still read as the feature's own.
+- Copied `@available` attributes no longer carry comments or line breaks (a
+  line comment before a dropped `renamed:` swallowed the closing parenthesis),
+  and an attribute that only renames is no longer copied as `@available(*)`.
+- A `TestStoreScenario` `advance` step whose sleeper threshold is never met
+  now records a test failure and leaves the clock untouched. It used to wait
+  ten seconds, report the step as completed and record nothing. The wait is
+  bounded by the store's effect timeout, like `receive` and `finish`.
+- `TestStoreExplorer` bounds a clock registration wait by the store's effect
+  timeout alone. An unmet threshold is always a `.configuration` failure; with
+  a store timeout above ten seconds it was reported as a reducer diagnostic
+  and replayed.
+- `ManualTestClock.WaitTimeout.description` no longer contains runs of
+  source-indentation spaces.
+
+### Notes
+
+- `SelectedStore.deinit` carries the `@_optimize(none)` workaround for
+  swiftlang/swift#88173, like the store deinitializers; see
+  `docs/SWIFT_TOOLCHAIN_TRACKING.md`.
+- Because cancellation is delivered synchronously, a task-cancellation
+  handler inside an effect operation can now run on the main thread during
+  `send`, `cancelEffects` or `Store.deinit`. A handler that blocks on work the
+  main thread is waiting to do deadlocks.
+- A manual case path declared in an *extension* next to a newly synthesized
+  shape (`_ name: Payload`, or a case inside `#if`) redeclares the generated
+  member. See `MIGRATION.md`.
 
 ## [6.0.2] - 2026-10-07
 

@@ -2,7 +2,7 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
-@Suite("Reducer.onChange")
+@Suite("Reducer.onChange", .timeLimit(.minutes(5)))
 @MainActor
 struct ReducerOnChangeTests {
   @Test("emits an effect only when the selected value changes")
