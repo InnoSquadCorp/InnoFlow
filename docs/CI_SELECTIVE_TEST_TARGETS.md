@@ -69,6 +69,8 @@ SwiftSyntax inventory는 실행 target 7개와 support target 4개를 모두 검
 원래 994개 semantic ID와 compiler 조건을 유지하고 소스 digest를 갱신한다.
 기존 runtime 347개 ID도 유지하며 suite별 module 소유권과 discovery/filter를 함께
 검증한다. 분리된 module에 추가된 consistency test도 inventory에서 누락될 수 없다.
+6.1.0 후보는 `ProjectionLifetimeConsistencyTests`의 결정적 선언 13개를 더해 runtime
+ID가 360개다. 벽시계 측정은 consistency suite에 두지 않고 host 전용 suite로 둔다.
 
 Swift 6.4의 실제 전체 Debug 실행은 7개 결과를 출력한다. full-principle의 예상
 구성은 Debug 7 + Release 7 + isolated timing 1이다. 기존 Swift 6.3의 단일 실행기

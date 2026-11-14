@@ -140,6 +140,11 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   The shared test wait helpers scale their deadlines with
   `INNOFLOW_TEST_WAIT_SCALE`. The scale ignores surrounding whitespace and is
   clamped to 1000.
+- The focused platform runtime inventory also runs
+  `ProjectionLifetimeConsistencyTests` (13 deterministic selection-lifetime
+  tests) on every simulator runtime; it now holds 360 test identifiers. The
+  wall-clock check of selection release cost moved to the host-only
+  `ProjectionReleaseScalingTests`.
 - `scripts/check-api-compatibility.sh` accepts a reviewed allowlist
   (`docs/contracts/api-breakage-allowlist.json`) for diagnostics about
   package-access declarations, which the API digester reports although no

@@ -32,9 +32,10 @@
     "Tests/InnoFlowCoreTests/PhaseMapDiagnosticsAdaptersTests.swift": "01f4e6798002315c41df222ae7b1e8892b1b135576866118a563d5b11e5b9c7d",
     "Tests/InnoFlowCoreTests/PhaseMapPerfTests.swift": "4a1c83ac301ed4c55e8748c3be8eb4fedc6531c72a4d99cf9e1c325abf3e223d",
     "Tests/InnoFlowCoreTests/PhaseValidationReducerDiagnosticsTests.swift": "6f81c43cd73c73a6b51bb1b3f7489d41d5b51c78e8b66b2ff106a1014fd7c339",
-    "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift": "a28d3e3a4399f204039bfc4d0f3fa81d11b52a730d13f71857b72087d50cf66b",
+    "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift": "25235d138ad1af4ed5a146181b7487284b2d06c9772e5722ea247bd16ad5ae0c",
     "Tests/InnoFlowCoreTests/ProjectionObserverRegistryPerfTests.swift": "5d5b8d4d67266c0e06bd76eb86522ededa022e361a2887441bc36242a9b69faa",
     "Tests/InnoFlowCoreTests/ProjectionRegistrationBoundaryTests.swift": "af0de33dc011a489094e0ea59bfbb642fda8d0501a66840deb74d03e75841b73",
+    "Tests/InnoFlowCoreTests/ProjectionReleaseScalingTests.swift": "f2824201b30660b6c985e6feee59b3a34a3084a689c524fd8f367fd53ffa6bd8",
     "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "9ef0cccc5c06d3eb7c6f852464d1e271f2f091cabe0564b44ede650a7c6d916d",
     "Tests/InnoFlowCoreTests/ReducerCompositionPerfTests.swift": "24efa0ec44f6b760bd382fe71d4df54107d2294271431107f85e2ea25d2e1abb",
     "Tests/InnoFlowCoreTests/RunLaneSnapshotConsistencyTests.swift": "e66c242be821db94376435d588b1ed891be1d3b0693d70b8e4fa3bf165cc708b",
@@ -1108,7 +1109,7 @@
       "displayName": "An always-refresh callback may register another observer during the pass",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/alwaysRefreshCallbackMayRegisterAnotherObserver()",
-      "line": 327,
+      "line": 301,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1117,7 +1118,7 @@
       "displayName": "Dynamic key-path selections created at one call site do not accumulate",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/dynamicKeyPathSelectionsDoNotAccumulate()",
-      "line": 292,
+      "line": 266,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1153,7 +1154,7 @@
       "displayName": "A read selection is released once two notifications pass without another read",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/readSelectionIsReleasedAfterTwoUnreadNotifications()",
-      "line": 270,
+      "line": 244,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1163,15 +1164,6 @@
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/releasedSelectionKeyPathIsNotEvaluated()",
       "line": 147,
-      "target": "InnoFlowCoreTests"
-    },
-    {
-      "attribute": "@Test(\"Releasing selections that share one dependency costs time linear in their number\")",
-      "conditionalContexts": [],
-      "displayName": "Releasing selections that share one dependency costs time linear in their number",
-      "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
-      "identifier": "ProjectionLifetimeConsistencyTests/releasingSelectionsOfOneDependencyIsLinear()",
-      "line": 240,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1198,7 +1190,7 @@
       "displayName": "A scoped store releases an unread key-path selection with its last handle",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/scopedStoreReleasesUnreadKeyPathSelection()",
-      "line": 306,
+      "line": 280,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1225,7 +1217,7 @@
       "displayName": "Removing one observer leaves the other dependencies of its buckets intact",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/unregisterRemovesOnlyTheRequestedObserver()",
-      "line": 347,
+      "line": 321,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1253,6 +1245,15 @@
       "file": "Tests/InnoFlowCoreTests/ProjectionRegistrationBoundaryTests.swift",
       "identifier": "ProjectionRegistrationBoundaryTests/latePackageRegistrationPreservesOldAndNewSnapshots(kind:changed:)",
       "line": 42,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"Releasing selections that share one dependency costs time linear in their number\")",
+      "conditionalContexts": [],
+      "displayName": "Releasing selections that share one dependency costs time linear in their number",
+      "file": "Tests/InnoFlowCoreTests/ProjectionReleaseScalingTests.swift",
+      "identifier": "ProjectionReleaseScalingTests/releasingSelectionsOfOneDependencyIsLinear()",
+      "line": 34,
       "target": "InnoFlowCoreTests"
     },
     {

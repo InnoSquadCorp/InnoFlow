@@ -237,35 +237,9 @@ struct ProjectionLifetimeConsistencyTests {
     #expect(notificationCount.withLock { $0 } == 1)
   }
 
-  @Test("Releasing selections that share one dependency costs time linear in their number")
-  func releasingSelectionsOfOneDependencyIsLinear() async {
-    func secondsToRelease(_ count: Int) -> Double {
-      let store = Store(reducer: LifetimeFeature(), initialState: .init())
-      var held = (0..<count).map { _ in store.select(dependingOn: \.count) { $0 } }
-      let elapsed = ContinuousClock().measure { held.removeAll() }
-      return Double(elapsed.components.seconds)
-        + Double(elapsed.components.attoseconds) / 1e18
-    }
-    // Every measurement runs on the MainActor without suspending, so the
-    // sizes stay small and the test yields between measurements: tests that
-    // run in the same process must not be starved past their own deadlines.
-    func best(_ count: Int) async -> Double {
-      var best = Double.infinity
-      for _ in 0..<3 {
-        best = min(best, secondsToRelease(count))
-        await Task.yield()
-      }
-      return best
-    }
-    _ = secondsToRelease(200)
-
-    // Four times the selections: about 4x when each release is O(1), about
-    // 16x when each release copies the whole shared bucket.
-    let small = await best(750)
-    let large = await best(3_000)
-
-    #expect(large < small * 9)
-  }
+  // The release cost of many selections is a wall-clock measurement, so it
+  // lives in the host-only `ProjectionReleaseScalingTests`: this suite runs on
+  // every platform runtime and holds deterministic assertions only.
 
   @Test("A read selection is released once two notifications pass without another read")
   func readSelectionIsReleasedAfterTwoUnreadNotifications() {

@@ -215,11 +215,15 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
     callback scopes the collection again during that pass.
 
 `IdentifiedArrayTests` and `ManualTestClockTests` lock contract 17 and the
-sleep rules of contract 18 and are included in the focused platform runtime
-inventory. The contracts added after them are locked by host suites that are
-not in that inventory: `ReducerCancellationAcceptanceTests`,
+sleep rules of contract 18, and `ProjectionLifetimeConsistencyTests` locks the
+selection rules of contracts 16 and 21; all three are in the focused platform
+runtime inventory. Every suite named `…ConsistencyTests` must be in that
+inventory (`scripts/validate-focused-runtime-result.py` rejects an unreviewed
+one at simulator discovery), so keep wall-clock measurements out of them. The
+other contracts added after them are locked by host suites that are not in
+that inventory: `ReducerCancellationAcceptanceTests`,
 `ThrottleTrailingFallbackTests`, `TestStoreReductionTurnCancellationTests`,
-`ProjectionLifetimeConsistencyTests`, `CollectionProjectionRefreshTests`,
+`ProjectionReleaseScalingTests`, `CollectionProjectionRefreshTests`,
 `EffectCancellationScopeTests`, `ManualTestClockDeadlineTests`,
 `ClockStepDeadlineTests` and `TestStoreOwnerFrameworkReportingTests`. Run
 targeted local tests when changing them; the full release/runtime matrix

@@ -240,6 +240,7 @@ begin
     OwnedSynchronousEffectConsistencyTests
     PerformanceSemanticsConsistencyTests
     PhaseExplorationConsistencyTests
+    ProjectionLifetimeConsistencyTests
     ProjectionRegistrationBoundaryTests
     RunLaneSnapshotConsistencyTests
     RuntimeConsistencyTests
