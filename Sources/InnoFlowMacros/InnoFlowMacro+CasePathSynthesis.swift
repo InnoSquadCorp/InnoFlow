@@ -121,31 +121,42 @@ extension InnoFlowMacro {
       return []
     }
 
+    // The shape warnings below keep the reach they had before synthesis
+    // followed the declaration site: cases declared directly in the enum
+    // body and, for an optional payload, one written without a local name.
+    // A case inside `#if` or a `_ name:` payload compiled without a warning
+    // then, and a new warning breaks builds that treat warnings as errors.
+    let reportsShapeWarnings = !site.isInConditionalCompilationBlock
+
     let pathDeclaration: (type: String, embed: String, extract: String)
     switch shape {
     case .labeledPayload(let label):
-      context.diagnose(
-        Diagnostic(
-          node: Syntax(element.name),
-          message: InnoFlowActionPathsMessage.labeledPayloadNote(
-            caseName: caseName,
-            label: label,
-            actionPathBaseName: actionPathBaseName
+      if reportsShapeWarnings {
+        context.diagnose(
+          Diagnostic(
+            node: Syntax(element.name),
+            message: InnoFlowActionPathsMessage.labeledPayloadNote(
+              caseName: caseName,
+              label: label,
+              actionPathBaseName: actionPathBaseName
+            )
           )
         )
-      )
+      }
       return []
 
     case .multiplePayloads:
-      context.diagnose(
-        Diagnostic(
-          node: Syntax(element.name),
-          message: InnoFlowActionPathsMessage.multiPayloadNote(
-            caseName: caseName,
-            actionPathBaseName: actionPathBaseName
+      if reportsShapeWarnings {
+        context.diagnose(
+          Diagnostic(
+            node: Syntax(element.name),
+            message: InnoFlowActionPathsMessage.multiPayloadNote(
+              caseName: caseName,
+              actionPathBaseName: actionPathBaseName
+            )
           )
         )
-      )
+      }
       return []
 
     case .singlePayload(let parameter):
@@ -154,7 +165,7 @@ extension InnoFlowMacro {
       // the outer extraction optional around the optional payload. `.case(nil)`
       // therefore extracts as `.some(nil)`, which is rarely what feature
       // authors intend.
-      if isOptionalPayloadType(parameter.type) {
+      if reportsShapeWarnings, parameter.secondName == nil, isOptionalPayloadType(parameter.type) {
         context.diagnose(
           Diagnostic(
             node: Syntax(element.name),

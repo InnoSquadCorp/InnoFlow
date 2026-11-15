@@ -27,14 +27,21 @@ package protocol ReductionTurnCancellationAcceptor: AnyObject {
     context: EffectExecutionContext
   )
 
-  /// Marks every effect sequence issued before `context`'s own as superseded
-  /// under `id`, so its work can no longer have an action reduced.
+  /// The policy of the run lane currently open under `id`, if any.
   ///
-  /// Used for a `latest` lane request. Only the marking happens here: the
-  /// lane itself displaces and releases the superseded run when it admits
-  /// the replacement, which is what reports it as superseded rather than
-  /// cancelled.
-  func markSupersededInReductionTurn(id: AnyEffectID, context: EffectExecutionContext)
+  /// A lane with another policy rejects a `latest` request, which then
+  /// replaces nothing; the pass must not accept anything for such a request.
+  func runLaneKind(for id: AnyEffectID) -> EffectExecutionPolicy.Kind?
+
+  /// Accepts a `latest` lane request that its lane will admit, for every
+  /// effect sequence issued before `context`'s own, exactly as admitting it
+  /// would: the lane's earlier requests are displaced and reported as
+  /// superseded, and every other effect under `id` is released and recorded.
+  ///
+  /// The acceptance is complete in this turn, like `cancelInFlight: true`, so
+  /// nothing is left half-cancelled when the request itself never reaches
+  /// admission (its dispatch is cancelled before the interpreter runs).
+  func acceptLatestReplacementInReductionTurn(id: AnyEffectID, context: EffectExecutionContext)
 }
 
 extension ReductionTurnCancellationAcceptor {
@@ -50,12 +57,8 @@ extension ReductionTurnCancellationAcceptor {
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
   ) {
-    var cancelledBySelf: Set<AnyEffectID> = []
-    _ = acceptSynchronousCancellations(
-      in: effect,
-      context: context,
-      cancelledBySelf: &cancelledBySelf
-    )
+    var turn = ReductionTurnState()
+    _ = acceptSynchronousCancellations(in: effect, context: context, turn: &turn)
   }
 
   /// - Returns: `true` when the subtree completes without asynchronous work,
@@ -63,14 +66,14 @@ extension ReductionTurnCancellationAcceptor {
   private func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext,
-    cancelledBySelf: inout Set<AnyEffectID>
+    turn: inout ReductionTurnState
   ) -> Bool {
     /// Whether the interpreter will still admit work in `context` once it has
     /// applied the cancellations this tree issued before reaching it.
     func proceeds(_ context: EffectExecutionContext) -> Bool {
       guard context.shouldProceed else { return false }
-      return cancelledBySelf.isEmpty
-        || !context.cancellationIDs.contains(where: cancelledBySelf.contains)
+      return turn.cancelledBySelf.isEmpty
+        || !context.cancellationIDs.contains(where: turn.cancelledBySelf.contains)
     }
 
     switch effect.operation {
@@ -84,22 +87,28 @@ extension ReductionTurnCancellationAcceptor {
 
     case .scheduledRun(let id, let policy, _, _, _):
       guard proceeds(context) else { return true }
-      if case .latest = policy {
-        // A `latest` request supersedes its predecessors when it is
-        // returned, not when the lane eventually admits it. The lane rejects
-        // a request whose own context is already cancelled, and such a
-        // request replaces nothing.
-        let scheduledContext = EffectExecutionContext.withCancellation(id, on: context)
-        if proceeds(scheduledContext) {
-          markSupersededInReductionTurn(id: id, context: scheduledContext)
-        }
+      let scheduledContext = EffectExecutionContext.withCancellation(id, on: context)
+      // The lane this request meets at admission: one already open, or one an
+      // earlier request of this same tree opens on the way.
+      let laneKind = turn.openedLanes[id] ?? runLaneKind(for: id)
+      if case .latest = policy.kind, proceeds(scheduledContext),
+        laneKind == nil || laneKind == .latest
+      {
+        // A `latest` request supersedes its predecessors when it is returned,
+        // not when the lane eventually admits it. The lane rejects a request
+        // whose own context is already cancelled, or one that meets a lane
+        // with another policy; such a request replaces nothing.
+        acceptLatestReplacementInReductionTurn(id: id, context: scheduledContext)
+      }
+      if laneKind == nil, proceeds(scheduledContext) {
+        turn.openedLanes[id] = policy.kind
       }
       return false
 
     case .cancel(let id):
       guard proceeds(context) else { return true }
       acceptInReductionTurn(.all(id), context: context)
-      cancelledBySelf.insert(id)
+      turn.cancelledBySelf.insert(id)
       return true
 
     case .cancellable(let nested, let id, let cancelInFlight):
@@ -110,7 +119,7 @@ extension ReductionTurnCancellationAcceptor {
       return acceptSynchronousCancellations(
         in: nested,
         context: .withCancellation(id, on: context),
-        cancelledBySelf: &cancelledBySelf
+        turn: &turn
       )
 
     case .debounce(_, let id, _):
@@ -125,7 +134,7 @@ extension ReductionTurnCancellationAcceptor {
       var completesSynchronously = true
       for child in children {
         let childCompletes = acceptSynchronousCancellations(
-          in: child, context: context, cancelledBySelf: &cancelledBySelf)
+          in: child, context: context, turn: &turn)
         completesSynchronously = completesSynchronously && childCompletes
       }
       return completesSynchronously
@@ -135,7 +144,7 @@ extension ReductionTurnCancellationAcceptor {
         guard proceeds(context) else { return true }
         guard
           acceptSynchronousCancellations(
-            in: child, context: context, cancelledBySelf: &cancelledBySelf)
+            in: child, context: context, turn: &turn)
         else {
           return false
         }
@@ -144,17 +153,25 @@ extension ReductionTurnCancellationAcceptor {
 
     case .animation(let nested, _):
       return acceptSynchronousCancellations(
-        in: nested, context: context, cancelledBySelf: &cancelledBySelf)
+        in: nested, context: context, turn: &turn)
 
     case .owned(let owner, let nested):
       return acceptSynchronousCancellations(
         in: nested,
         context: .withOwner(owner, on: context),
-        cancelledBySelf: &cancelledBySelf
+        turn: &turn
       )
 
     case .optionalChild, .lifetimeScope:
       preconditionFailure("Child lifetime metadata must be prepared synchronously after reduction")
     }
   }
+}
+
+/// What one reduction-turn pass has simulated so far.
+private struct ReductionTurnState {
+  /// IDs this tree cancelled on the way; the interpreter skips their work.
+  var cancelledBySelf: Set<AnyEffectID> = []
+  /// Run lanes this tree opens before a later request of it is admitted.
+  var openedLanes: [AnyEffectID: EffectExecutionPolicy.Kind] = [:]
 }

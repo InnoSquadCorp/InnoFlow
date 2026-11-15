@@ -118,7 +118,10 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     self.reducer = reducer
     self.state = initialState
     self.manualClock = clock
-    self.effectTimeout = effectTimeout
+    // A deadline is a failure backstop; one far beyond a day cannot be
+    // represented by every wait that sleeps on it, so it is clamped like
+    // `INNOFLOW_TESTSTORE_EFFECT_TIMEOUT`.
+    self.effectTimeout = min(effectTimeout, TestStoreDefaults.maximumEffectTimeout)
     self.diffLineLimit = resolveDiffLineLimit(
       explicit: diffLineLimit,
       environment: ProcessInfo.processInfo.environment

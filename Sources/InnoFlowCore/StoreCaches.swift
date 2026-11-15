@@ -182,9 +182,25 @@ package final class CollectionScopeCacheBucket {
   package var storesByID: [AnyHashable: AnyObject] = [:]
   package var offsetsByID: [AnyHashable: CollectionScopeOffsetBox] = [:]
   package var revision: UInt64 = 0
+  /// Elements that a row family this one replaced had indexed and this one
+  /// has no row for. A row of the replaced family can still be alive — the
+  /// collection may be scoped with another action path between a reduction
+  /// and the registry's refresh — and only this family is reindexed, so the
+  /// next structural change reports these elements for the registry to
+  /// refresh, which deactivates such a row when its element is gone.
+  package private(set) var supersededElementIDs: Set<AnyHashable> = []
 
   package init(signature: CollectionScopeCacheSignature) {
     self.signature = signature
+  }
+
+  /// Takes over the elements `replaced` indexed that this family has no row
+  /// for, so the next structural change can report them.
+  package func adoptElements(of replaced: CollectionScopeCacheBucket) {
+    var elementIDs = replaced.supersededElementIDs
+    elementIDs.formUnion(replaced.offsetsByID.keys)
+    elementIDs.subtract(offsetsByID.keys)
+    supersededElementIDs.formUnion(elementIDs)
   }
 
   package func removeStore(_ store: AnyObject, for id: AnyHashable) {
@@ -211,15 +227,23 @@ package final class CollectionScopeCacheBucket {
   where CollectionState.Element: Equatable & Identifiable {
     let previousRevision = revision
     revision &+= 1
-    guard !offsetsByID.isEmpty else { return [] }
+    // Reported once: a row of the replaced family that is still alive is
+    // refreshed by this pass, and every later change reaches it through this
+    // family's own rows.
+    let supersededElementIDs = self.supersededElementIDs
+    self.supersededElementIDs.removeAll()
+    guard !offsetsByID.isEmpty || !supersededElementIDs.isEmpty else { return [] }
 
     let affected = previousCollection.withContiguousStorageIfAvailable { previous in
       nextCollection.withContiguousStorageIfAvailable { next -> [AnyHashable] in
-        var affectedElementIDs: [AnyHashable] = []
+        var affectedElementIDs = Array(supersededElementIDs)
         for offset in 0..<next.count {
           let element = next[offset]
           let elementID = AnyHashable(element.id)
-          guard let offsetBox = offsetsByID[elementID] else { continue }
+          // A later duplicate of an id keeps the first occurrence's offset,
+          // which is the element its row resolves.
+          guard let offsetBox = offsetsByID[elementID], offsetBox.revision != revision
+          else { continue }
 
           // The box still holds the element's offset in the previous
           // collection when it was indexed by the previous revision — unless
@@ -255,7 +279,8 @@ package final class CollectionScopeCacheBucket {
     }
 
     for (offset, element) in nextCollection.enumerated() {
-      guard let offsetBox = offsetsByID[AnyHashable(element.id)] else { continue }
+      guard let offsetBox = offsetsByID[AnyHashable(element.id)], offsetBox.revision != revision
+      else { continue }
       offsetBox.offset = offset
       offsetBox.revision = revision
     }
@@ -316,6 +341,9 @@ package final class CollectionScopeCache {
   }
 
   package func store(_ bucket: CollectionScopeCacheBucket, for keyPath: AnyKeyPath) {
+    if let replaced = buckets[keyPath], replaced !== bucket {
+      bucket.adoptElements(of: replaced)
+    }
     buckets[keyPath] = bucket
   }
 
@@ -368,7 +396,9 @@ package final class SelectionCacheEntry {
 ///   without being read again, is released; the owner never keeps evaluating a
 ///   key path nobody can observe
 /// - semantic closure selections are reused only while an external handle lives
-/// - keyless closures are never cached
+/// - keyless closures are never cached; because no entry retains a closure
+///   selection, creating one records a read of the owner's state, so a reader
+///   that keeps no handle is notified through the owner instead
 ///
 /// Key paths and explicit semantic IDs may both be dynamic, so released
 /// entries are periodically compacted instead of growing for the owner's

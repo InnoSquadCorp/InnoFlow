@@ -52,6 +52,15 @@ still synthesizes and warns. Generic feature context is retained in each path.
 Duplicate payload labels produce a diagnostic instead of unstable generated
 API. Helper names strip exactly one leading underscore from the case name.
 
+The `Action` shape warnings (labeled payload, other multi-payload case,
+optional payload) cover the declarations they covered before synthesis
+followed the declaration site: cases declared directly in the enum body, and
+for the optional-payload warning a payload without a local name. A case
+inside `#if` synthesizes when its shape is supported and is silent when it is
+not, and `case select(_ index: Int?)` synthesizes without a warning. Those
+declarations compiled without a warning before; a new warning would break
+builds that treat warnings as errors.
+
 ### Conditional compilation and name collisions
 
 Cases nested in conditional compilation are traversed recursively and their
@@ -111,7 +120,9 @@ Three adjustments keep the copy valid:
   all.
 - The copy is rendered on one line without comments. Trivia belongs to the
   layout of the case declaration; carried into generated source, a line
-  comment could swallow the token that follows it.
+  comment could swallow the token that follows it. A string literal is copied
+  exactly, so a multi-line `message:` keeps the line breaks and indentation
+  it cannot parse without.
 - Conditional `@available` attributes are filtered and preserved
   independently of other conditional attributes.
 
@@ -158,7 +169,11 @@ internal expression model rather than leading-character or whole-string
 comparison. The model knows that positive `os(...)`, `arch(...)`, and
 `targetEnvironment(...)` predicates each name a single active value, and it
 compares lower/upper intervals for `swift(...)` and `compiler(...)`
-predicates, including negated bounds. Predicates of different kinds stay
+predicates, including negated bounds. Spellings the compiler activates
+together are one predicate, not two exclusive values: `os(OSX)` and
+`os(macOS)`, `os(xrOS)` and `os(visionOS)`, and `targetEnvironment(macabi)`
+and `targetEnvironment(macCatalyst)`. A generated exclusion condition uses the
+second spelling of each pair. Predicates of different kinds stay
 independent of each other, because the compiler may activate a target
 environment together with an OS or architecture condition; every other
 predicate, including a user flag, is an opaque atom.

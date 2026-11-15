@@ -101,7 +101,8 @@ public actor ManualTestClock {
   /// The deadline is a failure backstop on wall-clock time, never pacing: a
   /// wait resumes on its event, and the deadline only elapses when that event
   /// never happens. Shorten it to make a test that is expected to time out
-  /// fail fast; lengthen it for a saturated machine.
+  /// fail fast; lengthen it for a saturated machine. A deadline above one day
+  /// is clamped to one day, the bound `TestStore` deadlines use.
   public init(now: Instant = ContinuousClock().now, waitTimeout: Duration) {
     self.current = now
     self.waitTimeout = waitTimeout
@@ -488,10 +489,13 @@ public actor ManualTestClock {
     // hang, which manual time cannot express. The wait cancels it on every
     // exit, so a satisfied or cancelled wait leaves no sleeping task behind.
     activeWaitDeadlineCount += 1
+    // Clamped like `TestStore`'s deadline: `Task.sleep` cannot represent a
+    // duration far beyond a day and would trap or return at once.
+    let boundedTimeout = min(timeout, TestStoreDefaults.maximumEffectTimeout)
     let deadline = Task { [weak self] in
       let elapsed: Bool
       do {
-        try await Task.sleep(for: timeout)
+        try await Task.sleep(for: boundedTimeout)
         elapsed = true
       } catch {
         elapsed = false

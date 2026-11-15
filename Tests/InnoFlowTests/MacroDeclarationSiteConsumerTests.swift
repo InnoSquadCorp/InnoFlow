@@ -172,6 +172,69 @@ struct RepeatedCaseNameFeature {
   }
 }
 
+/// Deprecates a case of each enum with a multi-line message. Copying the
+/// attribute without the literal's line breaks made both generated helpers
+/// fail to compile.
+@InnoFlow
+struct MultilineMessageFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {}
+
+  enum Action: Equatable, Sendable {
+    case plain(DeclarationSiteChild.Action)
+    @available(
+      *, deprecated,
+      message: """
+        Use plain instead.
+          Indentation and line breaks belong to the message.
+        """
+    )
+    case legacy(DeclarationSiteChild.Action)
+  }
+
+  enum Output: Equatable, Sendable {
+    case finished
+    @available(
+      *, deprecated,
+      message: """
+        Use finished instead.
+        """
+    )
+    case legacyFinished
+  }
+
+  var body: some Reducer<State, Action, Output> {
+    Reduce { _, _ in .none }
+  }
+}
+
+/// Declarations the macro accepted without a warning before its synthesis
+/// followed the declaration site: unsupported shapes inside `#if`, in active
+/// and inactive clauses, and an optional payload with a local name. The
+/// supported shapes among them now have paths, still without a warning; CI
+/// compiles this file with warnings treated as errors.
+@InnoFlow
+struct WarningFreeCompatibilityFeature {
+  struct State: Equatable, Sendable, DefaultInitializable {}
+
+  enum Action: Equatable, Sendable {
+    case go
+    case select(_ index: Int?)
+    #if canImport(Swift)
+      case log(message: String)
+      case trace(Int, String)
+      case maybe(Int?)
+    #endif
+    #if INNOFLOW_UNDEFINED_COMPATIBILITY_CONDITION
+      case hidden(label: Int)
+      case hiddenPair(Int, String)
+    #endif
+  }
+
+  var body: some Reducer<State, Action, Never> {
+    Reduce { _, _ in .none }
+  }
+}
+
 /// Owns its phase through `phaseManaged` while composing a child that applies
 /// a phase map of its own.
 @InnoFlow(phaseManaged: true)
@@ -258,6 +321,8 @@ struct DeclarationSiteOptionalParent {
 private protocol DeprecatedPathExercise {
   static func legacyPathRoundTrips() -> Bool
   static func previousPathRoundTrips() -> Bool
+  static func multilineActionPathRoundTrips() -> Bool
+  static func multilineOutputPathRoundTrips() -> Bool
 }
 
 private enum LegacyPathExercise: DeprecatedPathExercise {
@@ -271,6 +336,19 @@ private enum LegacyPathExercise: DeprecatedPathExercise {
   static func previousPathRoundTrips() -> Bool {
     let path = DeclarationSiteFeature.Action.previousCasePath
     return path.extract(path.embed(.finish)) == .finish
+  }
+
+  @available(*, deprecated, message: "Exercises a deprecated path on purpose")
+  static func multilineActionPathRoundTrips() -> Bool {
+    let path = MultilineMessageFeature.Action.legacyCasePath
+    return path.extract(path.embed(.finish)) == .finish
+      && path.extract(.plain(.finish)) == nil
+  }
+
+  @available(*, deprecated, message: "Exercises a deprecated path on purpose")
+  static func multilineOutputPathRoundTrips() -> Bool {
+    let path = MultilineMessageFeature.Output.legacyFinishedCasePath
+    return path.embed(()) == .legacyFinished && path.extract(.finished) == nil
   }
 }
 
@@ -320,6 +398,30 @@ struct MacroDeclarationSiteConsumerTests {
     // the path carries no availability of its own.
     let path = DeclarationSiteFeature.Action.renamedOnlyCasePath
     #expect(path.extract(path.embed(.finish)) == .finish)
+  }
+
+  @Test("A multi-line deprecation message leaves working Action and Output paths")
+  func multilineMessageKeepsPaths() {
+    let exercise: any DeprecatedPathExercise.Type = LegacyPathExercise.self
+    let actionRoundTrips = exercise.multilineActionPathRoundTrips()
+    let outputRoundTrips = exercise.multilineOutputPathRoundTrips()
+    #expect(actionRoundTrips)
+    #expect(outputRoundTrips)
+  }
+
+  @Test("Declarations that compiled without a warning keep compiling without one")
+  func warningFreeCompatibilityDeclarationsHavePaths() {
+    typealias Action = WarningFreeCompatibilityFeature.Action
+
+    let select: CasePath<Action, Int?> = Action.selectCasePath
+    #expect(select.embed(4) == .select(4))
+    #expect(select.extract(.select(nil)) == .some(nil))
+    #expect(select.extract(.go) == nil)
+
+    let maybe: CasePath<Action, Int?> = Action.maybeCasePath
+    #expect(maybe.embed(nil) == .maybe(nil))
+    #expect(maybe.extract(.maybe(5)) == .some(5))
+    #expect(maybe.extract(.select(5)) == nil)
   }
 
   @Test("Manual Action paths replace synthesis; an inactive one leaves it in place")

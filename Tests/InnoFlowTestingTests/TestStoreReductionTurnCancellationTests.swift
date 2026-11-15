@@ -74,6 +74,9 @@ private struct ParkedWorkFeature: Reducer {
     case resetThenContinue
     case continued
     case search(Int)
+    case searchAfterNotice(Int)
+    case searching(Int)
+    case serial(Int)
     case result(Int)
   }
 
@@ -108,6 +111,32 @@ private struct ParkedWorkFeature: Reducer {
         gate.markStarted(query)
         await gate.waitUntilReleased(query)
         await send(.result(query))
+      }
+
+    case .searchAfterNotice(let query):
+      // The lane request comes after a synchronous sibling, so the lane does
+      // not admit it in the reduction turn: only the turn's own acceptance
+      // keeps the replaced run from being received.
+      let gate = gate
+      return .concatenate(
+        .send(.searching(query)),
+        .run(id: workID, policy: .latest) { send, _ in
+          gate.markStarted(query)
+          await gate.waitUntilReleased(query)
+          await send(.result(query))
+        }
+      )
+
+    case .searching(let query):
+      state.log.append("searching-\(query)")
+      return .none
+
+    case .serial(let index):
+      let gate = gate
+      return .run(id: workID, policy: .serial(maxPending: 4)) { send, _ in
+        gate.markStarted(index)
+        await gate.waitUntilReleased(index)
+        await send(.result(index))
       }
 
     case .result(let query):
@@ -168,6 +197,53 @@ struct TestStoreReductionTurnCancellationTests {
     await store.receive(.result(2)) {
       $0.log = ["result-2"]
     }
+    await store.finish()
+  }
+
+  @Test("A latest request behind a synchronous sibling drops the emission of the run it replaces")
+  func latestLaneRequestAfterSiblingDropsParkedEmission() async {
+    let gate = ParkGate()
+    let store = TestStore(reducer: ParkedWorkFeature(gate: gate), initialState: .init())
+
+    await store.send(.searchAfterNotice(1))
+    await store.receive(.searching(1)) {
+      $0.log = ["searching-1"]
+    }
+    await waitUntil { gate.hasStarted(1) }
+    releaseAndHoldMainActor { gate.release(1) }
+    // Exhaustive: receiving `.result(1)` anywhere below fails the test.
+    await store.send(.searchAfterNotice(2))
+    await store.receive(.searching(2)) {
+      $0.log = ["searching-1", "searching-2"]
+    }
+    await waitUntil { gate.hasStarted(2) }
+    gate.release(2)
+    await store.receive(.result(2)) {
+      $0.log = ["searching-1", "searching-2", "result-2"]
+    }
+    await store.finish()
+  }
+
+  @Test("A latest request a serial lane rejects leaves that lane's work to be received")
+  func latestRequestRejectedBySerialLaneLeavesItRunning() async {
+    let gate = ParkGate()
+    let store = TestStore(reducer: ParkedWorkFeature(gate: gate), initialState: .init())
+
+    await store.send(.serial(1))
+    await waitUntil { gate.hasStarted(1) }
+    await store.send(.serial(2))
+    // The serial lane rejects the `latest` request, which replaces nothing.
+    await store.send(.search(9))
+    gate.release(1)
+    await store.receive(.result(1)) {
+      $0.log = ["result-1"]
+    }
+    await waitUntil { gate.hasStarted(2) }
+    gate.release(2)
+    await store.receive(.result(2)) {
+      $0.log = ["result-1", "result-2"]
+    }
+    #expect(gate.hasStarted(9) == false)
     await store.finish()
   }
 }

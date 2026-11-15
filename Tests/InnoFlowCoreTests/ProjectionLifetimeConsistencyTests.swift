@@ -185,6 +185,94 @@ struct ProjectionLifetimeConsistencyTests {
     #expect(notificationCount.withLock { $0 } == 1)
   }
 
+  /// Closure-based selections have no owner-side retention: nothing keeps one
+  /// alive after the body that created it returns. Creating one inside a
+  /// tracked read therefore records the parent read, so the reader is still
+  /// notified when the state it derives from changes.
+  enum ClosureSelectionKind: CaseIterable, Sendable {
+    case dependingOn, dependingOnWithID, dependingOnAll, selector, memoizedSelector
+  }
+
+  @Test(
+    "A closure selection created and read in a tracked body notifies its reader",
+    arguments: ClosureSelectionKind.allCases
+  )
+  func transientClosureSelectionNotifiesItsReader(kind: ClosureSelectionKind) {
+    let store = Store(reducer: LifetimeFeature(), initialState: .init())
+    let notificationCount = OSAllocatedUnfairLock(initialState: 0)
+
+    withObservationTracking {
+      // The caller keeps no handle, as in a SwiftUI body.
+      let value: Int
+      switch kind {
+      case .dependingOn:
+        value = store.select(dependingOn: \.count) { $0 * 2 }.requireAlive()
+      case .dependingOnWithID:
+        value = store.select(dependingOn: \.count, id: "doubled") { $0 * 2 }.requireAlive()
+      case .dependingOnAll:
+        value = store.select(dependingOnAll: \.count, \.unrelated) { count, _ in count * 2 }
+          .requireAlive()
+      case .selector:
+        value = store.select { $0.count * 2 }.requireAlive()
+      case .memoizedSelector:
+        value = store.select(memoize: true) { $0.count * 2 }.requireAlive()
+      }
+      #expect(value == 0)
+    } onChange: {
+      notificationCount.withLock { $0 += 1 }
+    }
+    store.send(.increment)
+    #expect(notificationCount.withLock { $0 } == 1)
+  }
+
+  @Test("A closure selection created on a collection row in a tracked body notifies its reader")
+  func transientRowClosureSelectionNotifiesItsReader() {
+    let rows = [LifetimeRow(primary: 1, alternate: 10, title: "first")]
+    let store = Store(
+      reducer: LifetimeFeature(),
+      initialState: .init(rows: IdentifiedArray(uniqueElements: rows, id: { $0.primary }))
+    )
+    let row = store.scope(collection: \.rows, action: lifetimeRowPath)[0]
+    let notificationCount = OSAllocatedUnfairLock(initialState: 0)
+
+    withObservationTracking {
+      _ = row.select(dependingOn: \.alternate) { $0 + 1 }.requireAlive()
+    } onChange: {
+      notificationCount.withLock { $0 += 1 }
+    }
+    let changed = [LifetimeRow(primary: 1, alternate: 11, title: "first")]
+    store.send(.replaceRows(IdentifiedArray(uniqueElements: changed, id: { $0.primary })))
+    #expect(notificationCount.withLock { $0 } == 1)
+    withExtendedLifetime(row) {}
+  }
+
+  @Test("A body that creates a closure selection re-renders after every change it shows")
+  func deferredBodyWithTransientClosureSelectionReRenders() {
+    let store = Store(reducer: LifetimeFeature(), initialState: .init())
+    let invalidated = OSAllocatedUnfairLock(initialState: false)
+    var rendered: [Int] = []
+
+    // Like a SwiftUI body: evaluated, then evaluated again only after an
+    // invalidation, holding no handle between evaluations.
+    func render() {
+      withObservationTracking {
+        rendered.append(store.select { $0.count * 10 }.requireAlive())
+      } onChange: {
+        invalidated.withLock { $0 = true }
+      }
+    }
+    render()
+    for _ in 0..<5 {
+      store.send(.increment)
+      let needsRender = invalidated.withLock { flag in
+        defer { flag = false }
+        return flag
+      }
+      if needsRender { render() }
+    }
+    #expect(rendered == [0, 10, 20, 30, 40, 50])
+  }
+
   @Test("A read selection keeps its identity for a reader that reads again after a notification")
   func rereadAfterNotificationKeepsIdentity() {
     let store = Store(reducer: LifetimeFeature(), initialState: .init())

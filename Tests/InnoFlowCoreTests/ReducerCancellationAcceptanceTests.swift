@@ -324,6 +324,106 @@ private struct LatestLaneFeature: Reducer {
   }
 }
 
+/// Starts work under an ID and, in a merged sibling reached without awaiting,
+/// cancels that ID: the dispatch's own `.cancel` releases its own work.
+private struct SelfCancelFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var marks = 0
+  }
+
+  enum Action: Sendable {
+    case go(Int)
+    case mark
+  }
+
+  let gate: EmissionGate
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .go(let index):
+      let gate = gate
+      return .merge(
+        EffectTask<Action>.run { _ in
+          gate.markStarted(index)
+          await gate.waitUntilReleased(index)
+        }
+        .cancellable(workID),
+        .concatenate(.send(.mark), .send(.mark), .cancel(workID))
+      )
+
+    case .mark:
+      state.marks += 1
+      return .none
+    }
+  }
+}
+
+/// One lane ID used with different policies by different actions.
+private struct MixedPolicyFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: Sendable {
+    case serial(Int)
+    case latest(Int)
+    case dropWhileRunning(Int)
+    case result(Int)
+    case admission(String)
+  }
+
+  let gate: EmissionGate
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    let gate = gate
+    switch action {
+    case .serial(let index):
+      return .run(id: workID, policy: .serial(maxPending: 4)) { send, _ in
+        gate.markStarted(index)
+        await gate.waitUntilReleased(index)
+        await send(.result(index))
+      }
+
+    case .latest(let index):
+      return .run(
+        id: workID, policy: .latest,
+        onAdmission: { .admission("latest-\(index):\(admissionLabel($0))") },
+        { send, _ in
+          gate.markStarted(index)
+          await gate.waitUntilReleased(index)
+          await send(.result(index))
+        }
+      )
+
+    case .dropWhileRunning(let index):
+      return .run(
+        id: workID, policy: .dropWhileRunning,
+        onAdmission: { .admission("drop-\(index):\(admissionLabel($0))") },
+        { send, _ in
+          gate.markStarted(index)
+          await gate.waitUntilReleased(index)
+          await send(.result(index))
+        }
+      )
+
+    case .result(let index):
+      state.log.append("result-\(index)")
+      return .none
+
+    case .admission(let label):
+      state.log.append(label)
+      return .none
+    }
+  }
+}
+
+private func admissionLabel(_ admission: EffectAdmission) -> String {
+  switch admission {
+  case .rejected: "rejected"
+  default: "\(admission)"
+  }
+}
+
 @MainActor
 @Suite(
   "Reducer-returned cancellation is accepted in the reduction turn", .serialized,
@@ -379,6 +479,163 @@ struct ReducerCancellationAcceptanceTests {
     #expect(store.state.results == [2])
   }
 
+  @Test(
+    "A request a lane with another policy rejects leaves that lane's work running",
+    arguments: ["latest", "dropWhileRunning"])
+  func requestRejectedByLaneWithAnotherPolicyLeavesItRunning(policy: String) async {
+    let gate = EmissionGate()
+    let store = Store(reducer: MixedPolicyFeature(gate: gate), initialState: .init())
+
+    store.send(.serial(1))
+    await waitUntil { gate.hasStarted(1) }
+    store.send(.serial(2))
+    store.send(policy == "latest" ? .latest(9) : .dropWhileRunning(9))
+    let rejection = policy == "latest" ? "latest-9:rejected" : "drop-9:rejected"
+    await waitUntil { store.state.log == [rejection] }
+
+    gate.release(1)
+    await waitUntil { gate.hasStarted(2) }
+    gate.release(2)
+    await waitUntil { store.state.log.count == 3 }
+    #expect(store.state.log == [rejection, "result-1", "result-2"])
+    #expect(gate.hasStarted(9) == false)
+  }
+
+  @Test("A latest replacement cancelled before interpretation still releases its predecessor")
+  func latestReplacementCancelledBeforeInterpretationReleasesPredecessor() async {
+    let gate = EmissionGate()
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: LatestLaneFeature(gate: gate), initialState: .init(), diagnostics: diagnostics)
+
+    let first = store.send(.search(1))
+    await waitUntil { gate.hasStarted(1) }
+    // Returned and cancelled in one MainActor turn: the replacement's effect is
+    // never interpreted, but the reducer did return a `latest` request.
+    store.send(.search(2)).cancel()
+    gate.release(1)
+    await first.finish()
+    await settle()
+
+    #expect(store.state.results == [])
+    #expect(gate.hasStarted(2) == false)
+    let records = diagnostics.snapshot().records
+    let firstDispatch = records.first { $0.kind == .submitted }?.dispatchID
+    #expect(firstDispatch != nil)
+    #expect(
+      records.contains { $0.dispatchID == firstDispatch && $0.kind == .cancellationRequested })
+    #expect(
+      records.contains { $0.dispatchID == firstDispatch && $0.kind == .admission(.superseded) })
+  }
+
+  // A `latest` request accepted in its reduction turn displaces the lane at
+  // once. Lane identity (docs/RUN_LANE_SNAPSHOTS.md) is stable through the
+  // replacement while the lane is live; a closed lane reopens as a new one.
+  @Test("A latest replacement accepted in its reduction turn keeps the lane's identity")
+  func latestReplacementKeepsLaneIdentity() async {
+    let gate = EmissionGate()
+    let store = Store(reducer: LatestLaneFeature(gate: gate), initialState: .init())
+
+    let first = store.send(.search(1))
+    await waitUntil { gate.hasStarted(1) }
+    let lane = store.runLaneSnapshots().first?.id
+    #expect(lane != nil)
+
+    let second = store.send(.search(2))
+    await waitUntil { gate.hasStarted(2) }
+    let snapshots = store.runLaneSnapshots()
+    #expect(snapshots.count == 1)
+    #expect(snapshots.first?.id == lane)
+
+    gate.release(1)
+    gate.release(2)
+    await first.finish()
+    await second.finish()
+    #expect(store.state.results == [2])
+  }
+
+  @Test("A replacement superseded before admission hands the lane's identity to the newer one")
+  func supersededReplacementHandsLaneIdentityOn() async {
+    let gate = EmissionGate()
+    let store = Store(reducer: LatestLaneFeature(gate: gate), initialState: .init())
+
+    let first = store.send(.search(1))
+    await waitUntil { gate.hasStarted(1) }
+    let lane = store.runLaneSnapshots().first?.id
+    #expect(lane != nil)
+
+    // One MainActor turn: the second replacement is superseded by the third
+    // before the lane could admit it.
+    let second = store.send(.search(2))
+    let third = store.send(.search(3))
+    await waitUntil { gate.hasStarted(3) }
+    let snapshots = store.runLaneSnapshots()
+    #expect(snapshots.count == 1)
+    #expect(snapshots.first?.id == lane)
+    #expect(gate.hasStarted(2) == false)
+
+    gate.release(1)
+    gate.release(3)
+    await first.finish()
+    await second.finish()
+    await third.finish()
+    #expect(store.state.results == [3])
+  }
+
+  @Test("A lane whose replacement was cancelled before admission reopens as a new lane")
+  func laneReopenedAfterCancelledReplacementIsNew() async {
+    let gate = EmissionGate()
+    let store = Store(reducer: LatestLaneFeature(gate: gate), initialState: .init())
+
+    let first = store.send(.search(1))
+    await waitUntil { gate.hasStarted(1) }
+    let closedLane = store.runLaneSnapshots().first?.id
+    #expect(closedLane != nil)
+
+    // The replacement displaces the lane in its reduction turn, but its
+    // dispatch is cancelled before the lane admits it: the lane is closed.
+    store.send(.search(2)).cancel()
+    gate.release(1)
+    await first.finish()
+    #expect(store.runLaneSnapshots().isEmpty)
+
+    let third = store.send(.search(3))
+    await waitUntil { gate.hasStarted(3) }
+    let reopenedLane = store.runLaneSnapshots().first?.id
+    #expect(reopenedLane != nil)
+    #expect(reopenedLane != closedLane)
+
+    gate.release(3)
+    await third.finish()
+    #expect(store.state.results == [3])
+  }
+
+  @Test("A dispatch whose own cancel releases its own work records the cancellation")
+  func ownCancelOfOwnWorkRecordsCancellation() async {
+    // `merge` children are unordered, so cover several interleavings; every
+    // one of them must record the request for the dispatch that issued it.
+    for index in 0..<6 {
+      let gate = EmissionGate()
+      let diagnostics = StoreDiagnostics(capacity: 64)
+      let store = Store(
+        reducer: SelfCancelFeature(gate: gate), initialState: .init(),
+        diagnostics: diagnostics)
+
+      let dispatch = store.send(.go(index))
+      await settle()
+      gate.release(index)
+      await dispatch.finish()
+
+      let records = diagnostics.snapshot().records
+      let dispatchID = records.first { $0.kind == .submitted }?.dispatchID
+      #expect(dispatchID != nil)
+      #expect(
+        records.contains { $0.dispatchID == dispatchID && $0.kind == .cancellationRequested },
+        "iteration \(index)")
+      #expect(store.state.marks == 2)
+    }
+  }
+
   @Test("A dispatch replaced before its effect was interpreted records the cancellation")
   func dispatchReplacedInTheSameTurnRecordsCancellation() async {
     let gate = EmissionGate()
@@ -392,6 +649,10 @@ struct ReducerCancellationAcceptanceTests {
     let replaced = store.send(.search(1))
     store.send(.search(2))
     await waitUntil { gate.hasStarted(2) }
+    // The replaced run must never start. Its gate ignores cancellation, so
+    // open it before waiting: a run that did start then finishes and fails
+    // the expectation below instead of keeping `finish()` waiting forever.
+    gate.release(1)
     await replaced.finish()
 
     let records = diagnostics.snapshot().records

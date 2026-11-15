@@ -21,7 +21,7 @@
     "Tests/InnoFlowCoreTestSupport/CoreFixtures.swift": "5b13286ed778b0e2bc8f9fca70b699b21b1276edabb96ac523a862e893953136",
     "Tests/InnoFlowCoreTestSupport/EffectInstrumentationWitness.swift": "0914d12a12e556e819224395e3c454174ab808d5ce316812549797eefac3f951",
     "Tests/InnoFlowCoreTests/ActionPathIdentityTests.swift": "466519a11ff2e2560ff87a1b5c2c16468c1efcea21a17ea26521abe9e9257dee",
-    "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift": "a4d9b17351f641748e1901d599af0d9728b3c49a12e64758deb9ae45bbc513fa",
+    "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift": "76659bda2ca3631346e26142090a93ea13d51525ff54af69c584e1a084a31e66",
     "Tests/InnoFlowCoreTests/CompletionRelayConsistencyTests.swift": "33f09c88171a71b7251f49950e00c3633546520f232f8993ea5e1bb4b6aa50ab",
     "Tests/InnoFlowCoreTests/DiagnosticsRingConsistencyTests.swift": "0605f6ac5c7e57e96a7d2d74b9887851cd2f0d2652a75a63976b5a4d6e7c548e",
     "Tests/InnoFlowCoreTests/EffectCancellationScopeTests.swift": "d3f90d0130b9c88ac55280293353bb4220e0719934501e91948dd06647ae80c5",
@@ -32,11 +32,11 @@
     "Tests/InnoFlowCoreTests/PhaseMapDiagnosticsAdaptersTests.swift": "01f4e6798002315c41df222ae7b1e8892b1b135576866118a563d5b11e5b9c7d",
     "Tests/InnoFlowCoreTests/PhaseMapPerfTests.swift": "4a1c83ac301ed4c55e8748c3be8eb4fedc6531c72a4d99cf9e1c325abf3e223d",
     "Tests/InnoFlowCoreTests/PhaseValidationReducerDiagnosticsTests.swift": "6f81c43cd73c73a6b51bb1b3f7489d41d5b51c78e8b66b2ff106a1014fd7c339",
-    "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift": "25235d138ad1af4ed5a146181b7487284b2d06c9772e5722ea247bd16ad5ae0c",
+    "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift": "7be593b974dc561ccb81bfe1fbe35521078ad879aead87c645e78c9c6cedb3b5",
     "Tests/InnoFlowCoreTests/ProjectionObserverRegistryPerfTests.swift": "5d5b8d4d67266c0e06bd76eb86522ededa022e361a2887441bc36242a9b69faa",
     "Tests/InnoFlowCoreTests/ProjectionRegistrationBoundaryTests.swift": "af0de33dc011a489094e0ea59bfbb642fda8d0501a66840deb74d03e75841b73",
     "Tests/InnoFlowCoreTests/ProjectionReleaseScalingTests.swift": "f2824201b30660b6c985e6feee59b3a34a3084a689c524fd8f367fd53ffa6bd8",
-    "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "9ef0cccc5c06d3eb7c6f852464d1e271f2f091cabe0564b44ede650a7c6d916d",
+    "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "4171d8a32d88373c8a43016bcdbb28022ea4e8df84ec051ffd85cbd12664c7da",
     "Tests/InnoFlowCoreTests/ReducerCompositionPerfTests.swift": "24efa0ec44f6b760bd382fe71d4df54107d2294271431107f85e2ea25d2e1abb",
     "Tests/InnoFlowCoreTests/RunLaneSnapshotConsistencyTests.swift": "e66c242be821db94376435d588b1ed891be1d3b0693d70b8e4fa3bf165cc708b",
     "Tests/InnoFlowCoreTests/SnapshotBoundaryConsistencyTests.swift": "aee8ab7d6bf54ec3e837c43c21f32efe53e6e447de395c067540388ea5145b12",
@@ -46,9 +46,9 @@
     "Tests/InnoFlowCoreTests/ThrottleTrailingFallbackTests.swift": "1ffcfcd383e83c361820deb4ac35852b0aba31ac7cdd7325541cac5b64beddf8",
     "Tests/InnoFlowCoreTests/ViewDispatchLifetimeConsistencyTests.swift": "b394bd9f9742e86e56d861aea705bdc29410713cdcb589e48cde5b095c9366eb",
     "Tests/InnoFlowInspectorTests/InspectorGraphConsistencyTests.swift": "d148769d0ff1f9f00fb48fe7881f0e1b9f9ec942d5270eab52ba5bb2188dd19d",
-    "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift": "0b96f6eca79bb16c31d5f60bb60bbc5a44f363934e13330f9005731a338997c9",
-    "Tests/InnoFlowMacrosTests/CasePathDeclarationSiteParityTests.swift": "d2bffcf662ecf7f0915201dff1516d1253f95957e0ec172e1f0f32c7f2263677",
-    "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift": "7663bad32fe869a59fd5d9cdd794421d9c3a557c18d4069fc2f94ce329d8de0b",
+    "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift": "ae10e2fa7f31b42a43664e48827b4f39cea2d3383ea80bc53f472086f1925457",
+    "Tests/InnoFlowMacrosTests/CasePathDeclarationSiteParityTests.swift": "d3aa5c1fba1323620db05e65b918639179b5d58b131922cce8482b212558ec05",
+    "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift": "919fa1183ea9b3b624e777fd285f33b41fd81167d17dda347207c167d3bc722c",
     "Tests/InnoFlowMacrosTests/ExplicitReduceMigrationMacroTests.swift": "7e3b67b076784587e2f978398adb5c8df2100d2e8b1532de23800b7ba0e2ffd3",
     "Tests/InnoFlowMacrosTests/IdentifierConsistencyMacroTests.swift": "38e8482f83d1df8be8a6d25fbd0869e5819d1fe9cb793eedbc39b8d9f7f18dd7",
     "Tests/InnoFlowMacrosTests/InnoFlowBindableFieldDiagnosticsTests.swift": "8179e81b124dac02691d5d646449120c2c59e2aee617ddfcc217cdc7b4812640",
@@ -67,7 +67,7 @@
     "Tests/InnoFlowSwiftUITests/StorePresentationTests.swift": "b3a2a50cc9066f01862f015a9fd830fa9fb848ea327e611990124764a5404eb0",
     "Tests/InnoFlowSwiftUITests/StoreSwiftUIBindingTests.swift": "bf2638238ecbcd23717fa55dcc5e7a9f5848576820994dd6107d4f845418a06a",
     "Tests/InnoFlowTestingTestSupport/TimingScenarioSupport.swift": "9e629462abe2cdb039970faf85f4e2d75aaccbba750f5783f1821f5805f88c84",
-    "Tests/InnoFlowTestingTests/ClockStepDeadlineTests.swift": "9dabfc3a16ae9bff8ef18c1a4cbd79dc5e085b0c308aeecb2c49bb9d38a6b641",
+    "Tests/InnoFlowTestingTests/ClockStepDeadlineTests.swift": "94ea2ed6da15b886bd009d147fa2a884bb3ef0853dc362ce2af9fda6238855cd",
     "Tests/InnoFlowTestingTests/CollectionLifetimeConsistencyTests.swift": "b7d723ad575aed41a8c53fb88dd1a8db08a699b27dc496cf84f38925982b52e0",
     "Tests/InnoFlowTestingTests/CollectionMultiScopeReconciliationTests.swift": "d9b63a1f2eebf881b8f425e386b5a83c5e238b2c3da22307d10a7e31cb9382f4",
     "Tests/InnoFlowTestingTests/CollectionReconciliationBoundaryTests.swift": "8ec4a8f939effc4381a4c26c80676028846eb759bd62d0d3da7d62b541451c5b",
@@ -80,7 +80,7 @@
     "Tests/InnoFlowTestingTests/ExplorerFirstDiagnosticConsistencyTests.swift": "8fe30098a8408275c5a8d9f5d1dd0e3736d97494cf4be4f88996600b62c71acb",
     "Tests/InnoFlowTestingTests/ExplorerSafetyConsistencyTests.swift": "115e16b0dd35ef2c0aa388a2e3854f48c244af5ee35a0e0055fccb984d65b877",
     "Tests/InnoFlowTestingTests/FlowTaskCancellationBoundaryTests.swift": "6147c0e3b782f1ab9075950da119e6535928de1eb12156e8aea5f84f971286fc",
-    "Tests/InnoFlowTestingTests/FlowTaskTests.swift": "87dc234380e63584c86ac0c1c32b510112dc32e25e9582c4fe377135f2a8c6c8",
+    "Tests/InnoFlowTestingTests/FlowTaskTests.swift": "b3efe88e9ed3d7e9f4df508ce26989d33d6cbefefb3122c8d8b9d021afccadd0",
     "Tests/InnoFlowTestingTests/ManualTestClockDeadlineTests.swift": "610baad34d59c10b0da5b16590d052f105cd5a7ba505a864f16c9a2f7617293e",
     "Tests/InnoFlowTestingTests/ManualTestClockTests.swift": "6ae36b405a709cb89ef73a67fa35a4303c1d803622e3f616cac79b22054df654",
     "Tests/InnoFlowTestingTests/OnChangeHostConsistencyTests.swift": "25e4841746bc78a84853c2727ff94e921dab00c88d3773e18edee0bb74a87835",
@@ -102,7 +102,7 @@
     "Tests/InnoFlowTestingTests/TestStoreOutputMatchingTests.swift": "5815c7f359392c0ab531f85a6020b5a057e5b95e74e671cbdbacd3f5096de3ca",
     "Tests/InnoFlowTestingTests/TestStoreOwnerFrameworkReportingTests.swift": "5bb16c055a57e8765b88098ddc8552aadccb855d695ae8249e463ca4c44ad47e",
     "Tests/InnoFlowTestingTests/TestStoreReceiveTests.swift": "2af4db1f3e74b53363180387d2073fc6f7df68f7688c0a7df90665a5fd41d893",
-    "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift": "78a531cf247ebc0631bb9c23a0336d4762d6eb072ab56fdfd8150692e54adc3b",
+    "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift": "b1697f242caac4e77bc9a3e5929974dc3be06b47d18f7fc3dc625bdb4955c0c1",
     "Tests/InnoFlowTestingTests/TestStoreTerminalVerificationTests.swift": "b9d83d71170257dde1a62e0f6d135791846beab3eeb79bd5ddd4bd69172ac4db",
     "Tests/InnoFlowTestingTests/TestWaitScaleTests.swift": "3eef94677a232f49a8aac699703ffc3fb41b542a314a49810448b263111f0606",
     "Tests/InnoFlowTestingTests/TestingLocationConsistencyTests.swift": "c1e567af5968687209c6cab1157fe9d7ca114a87935945244cd134a1e2866fee",
@@ -116,13 +116,13 @@
     "Tests/InnoFlowTests/EffectTimingRecorderTests.swift": "5ee63b191b12e2c33ff083ca9573de25e5be6b97a9e8fa422b34b6c707ea377b",
     "Tests/InnoFlowTests/EffectTimingTrendScriptTests.swift": "8f13449f06bbf7627cc472c6b38fd91f209e3273ac916baeee8d03e223a01a3f",
     "Tests/InnoFlowTests/ForEachIdentifiedReducerTests.swift": "a0c66001e80a6d555030f067b1c307d09b839faa13671c7e358e48b0291ecf00",
-    "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift": "658b5aaa9022e6c2c0e53208bc722e84b31f0961369715a5f058f76ad6c5d675",
+    "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift": "5c6cf7f28d578f4a1d7f3b171585ddc808b09b92e15693006f5fd1440e938740",
     "Tests/InnoFlowTests/MacroIdentifierConsistencyTests.swift": "e6bc3f5ec0a0edad95d95cb0f01005c13982593a19fbc0e2863539e53ac7f85a",
     "Tests/InnoFlowTests/MacroMigrationConsistencyTests.swift": "ed0fa430b7516c5461943bae5245201fdd8923c0316b3bf303998ca847d3d339",
     "Tests/InnoFlowTests/OutputCasePathTests.swift": "dafb8c5ed4fd694d20cf712f9663f1ec13761d9338d0b4c107e7b107b9b44cf6",
     "Tests/InnoFlowTests/OutputPromotionTests.swift": "9bdf4b38af8ac92af28ae34b421237d6f699af54154462bf72ddf3872ac27c62",
     "Tests/InnoFlowTests/ReducerCompositionPerfComparisonScriptTests.swift": "a902fd81edaf194a20b96f71f136f11dcaba572544f6fedbbda3bb1809cc5fbf",
-    "Tests/InnoFlowTests/ReducerOutputTests.swift": "f3bb0e20ad3937bbb2dd10b6bc389fb39209eca5f3bf37c6211fa0eb3928cae0",
+    "Tests/InnoFlowTests/ReducerOutputTests.swift": "5f8c1e3868b71f195c96abf1b5a60f8ca909e24f5177083ebfe6fccda7fe09b1",
     "Tests/InnoFlowTests/SingleScopeCacheTests.swift": "a27e969a6c53f6c04c695f4b62b655f29d9db0585036d38eaf00f5cd401e2426",
     "Tests/InnoFlowTests/SubprocessContractTests.swift": "a08e8a1239e7fc3d108313071c4e39e1b807f9404960fdacb5adb8c767a12697",
     "Tests/InnoFlowTests/Support/CompiledHarnessCache.swift": "1d0fb071fabc4f06a61544bf7536edd6761421c046762c86abb134e03df87c98",
@@ -209,7 +209,7 @@
       "displayName": "Elements with identical bytes are unchanged without consulting their equality",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/bitwiseIdenticalElementsSkipEquality()",
-      "line": 370,
+      "line": 413,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -218,7 +218,16 @@
       "displayName": "Removing many elements at once deactivates exactly those rows",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/bulkRemovalDeactivatesExactlyTheRemovedRows()",
-      "line": 249,
+      "line": 261,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A row whose id is duplicated shows its first occurrence across structural changes\")",
+      "conditionalContexts": [],
+      "displayName": "A row whose id is duplicated shows its first occurrence across structural changes",
+      "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
+      "identifier": "CollectionProjectionRefreshTests/duplicatedIDRowFollowsItsFirstOccurrence()",
+      "line": 444,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -227,7 +236,7 @@
       "displayName": "IdentifiedArray exposes its elements as contiguous storage",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/identifiedArrayExposesContiguousStorage()",
-      "line": 393,
+      "line": 460,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -236,7 +245,7 @@
       "displayName": "Rows that only moved are not notified and resolve their element at its new position",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/movedRowsKeepResolvingTheirElement()",
-      "line": 265,
+      "line": 277,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -245,7 +254,7 @@
       "displayName": "A collection without contiguous storage refreshes and deactivates rows correctly",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/nonContiguousCollectionKeepsRowsCorrect()",
-      "line": 402,
+      "line": 469,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -254,7 +263,7 @@
       "displayName": "Removing an element deactivates its row and leaves the other rows unevaluated",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/removalRefreshesOnlyTheRemovedRow()",
-      "line": 230,
+      "line": 242,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -263,7 +272,7 @@
       "displayName": "Control: a removed row is deactivated",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/removedRowIsDeactivated()",
-      "line": 298,
+      "line": 310,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -272,7 +281,7 @@
       "displayName": "Selecting on a removed row at the same call site reports absence instead of trapping",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/reselectingOnARemovedRowReportsAbsence()",
-      "line": 356,
+      "line": 399,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -281,7 +290,7 @@
       "displayName": "Scoping inside the refresh pass does not compare a moved row with another element",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/scopingInsideTheRefreshPassComparesEachRowWithItsOwnElement()",
-      "line": 332,
+      "line": 375,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -290,7 +299,16 @@
       "displayName": "Scoping the collection again inside the refresh pass still deactivates a removed row",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/scopingInsideTheRefreshPassStillDeactivatesTheRemovedRow()",
-      "line": 309,
+      "line": 321,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"Scoping the collection through another action path inside the refresh pass still deactivates a removed row\"\n  )",
+      "conditionalContexts": [],
+      "displayName": "Scoping the collection through another action path inside the refresh pass still deactivates a removed row",
+      "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
+      "identifier": "CollectionProjectionRefreshTests/scopingWithAnotherPathInsideTheRefreshPassDeactivatesTheRemovedRow()",
+      "line": 344,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -299,7 +317,7 @@
       "displayName": "An action that never touches the collection evaluates no row",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/unrelatedActionEvaluatesNoRow()",
-      "line": 214,
+      "line": 226,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -308,7 +326,7 @@
       "displayName": "A value change that coincides with a structural change still reaches its row",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/valueChangeDuringStructuralChangeReachesItsRow()",
-      "line": 283,
+      "line": 295,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -317,7 +335,7 @@
       "displayName": "A value change evaluates and notifies only the row that changed",
       "file": "Tests/InnoFlowCoreTests/CollectionProjectionRefreshTests.swift",
       "identifier": "CollectionProjectionRefreshTests/valueChangeRefreshesOnlyTheChangedRow()",
-      "line": 198,
+      "line": 210,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1109,7 +1127,16 @@
       "displayName": "An always-refresh callback may register another observer during the pass",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/alwaysRefreshCallbackMayRegisterAnotherObserver()",
-      "line": 301,
+      "line": 389,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A body that creates a closure selection re-renders after every change it shows\")",
+      "conditionalContexts": [],
+      "displayName": "A body that creates a closure selection re-renders after every change it shows",
+      "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
+      "identifier": "ProjectionLifetimeConsistencyTests/deferredBodyWithTransientClosureSelectionReRenders()",
+      "line": 249,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1118,7 +1145,7 @@
       "displayName": "Dynamic key-path selections created at one call site do not accumulate",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/dynamicKeyPathSelectionsDoNotAccumulate()",
-      "line": 266,
+      "line": 354,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1145,7 +1172,7 @@
       "displayName": "A selection read only for liveness is still notified when its owner is released",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/livenessOnlyReadIsNotifiedWhenTheOwnerIsReleased()",
-      "line": 219,
+      "line": 307,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1154,7 +1181,7 @@
       "displayName": "A read selection is released once two notifications pass without another read",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/readSelectionIsReleasedAfterTwoUnreadNotifications()",
-      "line": 244,
+      "line": 332,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1172,7 +1199,7 @@
       "displayName": "A read selection keeps its identity for a reader that reads again after a notification",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/rereadAfterNotificationKeepsIdentity()",
-      "line": 188,
+      "line": 276,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1190,7 +1217,25 @@
       "displayName": "A scoped store releases an unread key-path selection with its last handle",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/scopedStoreReleasesUnreadKeyPathSelection()",
-      "line": 280,
+      "line": 368,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A closure selection created and read in a tracked body notifies its reader\",\n    arguments: ClosureSelectionKind.allCases\n  )",
+      "conditionalContexts": [],
+      "displayName": "A closure selection created and read in a tracked body notifies its reader",
+      "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
+      "identifier": "ProjectionLifetimeConsistencyTests/transientClosureSelectionNotifiesItsReader(kind:)",
+      "line": 196,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A closure selection created on a collection row in a tracked body notifies its reader\")",
+      "conditionalContexts": [],
+      "displayName": "A closure selection created on a collection row in a tracked body notifies its reader",
+      "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
+      "identifier": "ProjectionLifetimeConsistencyTests/transientRowClosureSelectionNotifiesItsReader()",
+      "line": 228,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1217,7 +1262,7 @@
       "displayName": "Removing one observer leaves the other dependencies of its buckets intact",
       "file": "Tests/InnoFlowCoreTests/ProjectionLifetimeConsistencyTests.swift",
       "identifier": "ProjectionLifetimeConsistencyTests/unregisterRemovesOnlyTheRequestedObserver()",
-      "line": 321,
+      "line": 409,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1262,7 +1307,7 @@
       "displayName": "A cancel that follows a sibling its own effect cancelled is still accepted in the turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelAfterSkippedSiblingDropsQueuedEmission()",
-      "line": 350,
+      "line": 450,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1271,7 +1316,7 @@
       "displayName": "cancelInFlight replacement drops the predecessor's queued emission",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelInFlightReplacementDropsPredecessorEmission()",
-      "line": 451,
+      "line": 712,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1280,7 +1325,7 @@
       "displayName": "A cancel does not pre-empt an earlier concatenated sibling of the effect that returned it",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelKeepsEarlierSiblingOfItsOwnEffect(action:)",
-      "line": 334,
+      "line": 434,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1289,7 +1334,7 @@
       "displayName": "A newer debounce request supersedes a predecessor whose timer already expired",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/debounceReplacementSupersedesExpiredPredecessorTimer()",
-      "line": 469,
+      "line": 730,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1298,7 +1343,16 @@
       "displayName": "A dispatch replaced before its effect was interpreted records the cancellation",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/dispatchReplacedInTheSameTurnRecordsCancellation()",
-      "line": 382,
+      "line": 639,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A lane whose replacement was cancelled before admission reopens as a new lane\")",
+      "conditionalContexts": [],
+      "displayName": "A lane whose replacement was cancelled before admission reopens as a new lane",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/laneReopenedAfterCancelledReplacementIsNew()",
+      "line": 585,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1307,7 +1361,25 @@
       "displayName": "A latest lane request drops the emission of the run it replaces",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestLaneReplacementDropsPredecessorEmission()",
-      "line": 364,
+      "line": 464,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A latest replacement cancelled before interpretation still releases its predecessor\")",
+      "conditionalContexts": [],
+      "displayName": "A latest replacement cancelled before interpretation still releases its predecessor",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/latestReplacementCancelledBeforeInterpretationReleasesPredecessor()",
+      "line": 504,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A latest replacement accepted in its reduction turn keeps the lane's identity\")",
+      "conditionalContexts": [],
+      "displayName": "A latest replacement accepted in its reduction turn keeps the lane's identity",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/latestReplacementKeepsLaneIdentity()",
+      "line": 534,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1316,7 +1388,16 @@
       "displayName": "A cancel leading a concatenation is accepted before its later siblings are delivered",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/leadingCancelInConcatenationDropsQueuedEmission()",
-      "line": 437,
+      "line": 698,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A dispatch whose own cancel releases its own work records the cancellation\")",
+      "conditionalContexts": [],
+      "displayName": "A dispatch whose own cancel releases its own work records the cancellation",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/ownCancelOfOwnWorkRecordsCancellation()",
+      "line": 613,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1325,7 +1406,7 @@
       "displayName": "A reducer-returned cancel drops an emission already queued for MainActor",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/reducerReturnedCancelDropsQueuedEmission()",
-      "line": 423,
+      "line": 684,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1334,7 +1415,16 @@
       "displayName": "A reducer-returned cancel returns pending lane capacity before send returns",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/reducerReturnedCancelReleasesPendingLaneRequestsSynchronously(diagnosticsEnabled:)",
-      "line": 501,
+      "line": 762,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A request a lane with another policy rejects leaves that lane's work running\",\n    arguments: [\"latest\", \"dropWhileRunning\"])",
+      "conditionalContexts": [],
+      "displayName": "A request a lane with another policy rejects leaves that lane's work running",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/requestRejectedByLaneWithAnotherPolicyLeavesItRunning(policy:)",
+      "line": 482,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1343,7 +1433,7 @@
       "displayName": "Control: the store-level cancel API drops an emission already queued for MainActor",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/storeLevelCancelDropsQueuedEmission()",
-      "line": 409,
+      "line": 670,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1352,7 +1442,16 @@
       "displayName": "The store-level cancel API releases pending lane capacity before its first suspension",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/storeLevelCancelReleasesPendingLaneRequestsBeforeSuspending(diagnosticsEnabled:)",
-      "line": 533,
+      "line": 794,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A replacement superseded before admission hands the lane's identity to the newer one\")",
+      "conditionalContexts": [],
+      "displayName": "A replacement superseded before admission hands the lane's identity to the newer one",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/supersededReplacementHandsLaneIdentityOn()",
+      "line": 557,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1754,7 +1853,7 @@
       "displayName": "Generated Action paths mirror availability and skip unavailable cases",
       "file": "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift",
       "identifier": "ActionPathShapeMacroTests/actionPathsMirrorAvailability()",
-      "line": 345,
+      "line": 415,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1763,7 +1862,7 @@
       "displayName": "A child reducer may apply its own phase map inside a phase-managed parent",
       "file": "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift",
       "identifier": "ActionPathShapeMacroTests/childPhaseMapInsideScopeIsNotTheParentsPhaseMap()",
-      "line": 442,
+      "line": 512,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1772,7 +1871,7 @@
       "displayName": "A phase map inside a child-domain argument is not the feature's own",
       "file": "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift",
       "identifier": "ActionPathShapeMacroTests/childPhaseMapIsNotTheFeaturesOwn(composition:)",
-      "line": 621,
+      "line": 691,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1794,12 +1893,21 @@
       "target": "InnoFlowMacrosTests"
     },
     {
+      "attribute": "@Test(\"An optional payload with a local name synthesizes without a warning\")",
+      "conditionalContexts": [],
+      "displayName": "An optional payload with a local name synthesizes without a warning",
+      "file": "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift",
+      "identifier": "ActionPathShapeMacroTests/optionalPayloadWithLocalNameDoesNotWarn()",
+      "line": 394,
+      "target": "InnoFlowMacrosTests"
+    },
+    {
       "attribute": "@Test(\n    \"A phase map in the feature's own domain is still diagnosed\",\n    arguments: [\n      \"OWN\",\n      \"OWN.optionalChild(state: \\\\.optional, action: Action.childCasePath, instanceID: \\\\.id, reducer: CHILD)\",\n      \"OptionalChildLifetime(parent: OWN, state: \\\\.optional, action: Action.childCasePath, instanceID: { $0.id }, reducer: CHILD)\",\n      \"OptionalChildLifetime.init(parent: OWN, state: \\\\.optional, action: Action.childCasePath, instanceID: { $0.id }, reducer: CHILD)\",\n      \"OptionalChildLifetime(parent: CombineReducers { OWN }, state: \\\\.optional, action: Action.childCasePath, instanceID: { $0.id }, reducer: Child())\",\n      \"CombineReducers { OWN; Scope.init(state: \\\\.child, action: Action.childCasePath, reducer: CHILD) }\",\n      \"Scope.init(state: \\\\.child, action: Action.childCasePath, reducer: CHILD).phaseMap(Self.phaseMap)\",\n      \"IfLet(state: \\\\.optional, action: Action.childCasePath, reducer: Child()).phaseMap(Self.phaseMap)\",\n    ])",
       "conditionalContexts": [],
       "displayName": "A phase map in the feature's own domain is still diagnosed",
       "file": "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift",
       "identifier": "ActionPathShapeMacroTests/ownDomainPhaseMapIsStillDiagnosed(composition:)",
-      "line": 655,
+      "line": 725,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1808,7 +1916,7 @@
       "displayName": "A phase map applied to the receiver of a child-domain combinator is still the parent's",
       "file": "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift",
       "identifier": "ActionPathShapeMacroTests/phaseMapOnCombinatorReceiverIsStillDiagnosed()",
-      "line": 531,
+      "line": 601,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1826,7 +1934,16 @@
       "displayName": "A feature that states Reducer conformance itself receives no extension",
       "file": "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift",
       "identifier": "ActionPathShapeMacroTests/statedReducerConformanceReceivesNoExtension()",
-      "line": 403,
+      "line": 473,
+      "target": "InnoFlowMacrosTests"
+    },
+    {
+      "attribute": "@Test(\"Unsupported Action shapes inside #if stay silent; in the enum body they still warn\")",
+      "conditionalContexts": [],
+      "displayName": "Unsupported Action shapes inside #if stay silent; in the enum body they still warn",
+      "file": "Tests/InnoFlowMacrosTests/ActionPathShapeMacroTests.swift",
+      "identifier": "ActionPathShapeMacroTests/unsupportedShapesInsideIfConfigStaySilent()",
+      "line": 350,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1875,12 +1992,30 @@
       "target": "InnoFlowMacrosTests"
     },
     {
+      "attribute": "@Test(\n    \"a manual path under another spelling of the case's condition replaces the helper\",\n    arguments: zip(\n      [\"os(visionOS)\", \"os(xrOS)\", \"targetEnvironment(macCatalyst)\", \"targetEnvironment(macabi)\"],\n      [\"os(xrOS)\", \"os(visionOS)\", \"targetEnvironment(macabi)\", \"targetEnvironment(macCatalyst)\"]\n    ))",
+      "conditionalContexts": [],
+      "displayName": "a manual path under another spelling of the case's condition replaces the helper",
+      "file": "Tests/InnoFlowMacrosTests/CasePathDeclarationSiteParityTests.swift",
+      "identifier": "CasePathDeclarationSiteParityTests/manualPathUnderAnAliasedConditionTakesPrecedence(caseCondition:pathCondition:)",
+      "line": 260,
+      "target": "InnoFlowMacrosTests"
+    },
+    {
+      "attribute": "@Test(\"a multi-line availability message is copied exactly\", arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "a multi-line availability message is copied exactly",
+      "file": "Tests/InnoFlowMacrosTests/CasePathDeclarationSiteParityTests.swift",
+      "identifier": "CasePathDeclarationSiteParityTests/multilineAvailabilityMessageIsCopiedExactly(output:)",
+      "line": 226,
+      "target": "InnoFlowMacrosTests"
+    },
+    {
       "attribute": "@Test(\"An Output payload with a local name and no label synthesizes like an unlabeled one\")",
       "conditionalContexts": [],
       "displayName": "An Output payload with a local name and no label synthesizes like an unlabeled one",
       "file": "Tests/InnoFlowMacrosTests/CasePathDeclarationSiteParityTests.swift",
       "identifier": "CasePathDeclarationSiteParityTests/outputLocalPayloadNamesSynthesizeLikeUnlabeledPayloads()",
-      "line": 243,
+      "line": 311,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1907,7 +2042,7 @@
       "displayName": "an availability attribute that only renames is not copied",
       "file": "Tests/InnoFlowMacrosTests/CasePathDeclarationSiteParityTests.swift",
       "identifier": "CasePathDeclarationSiteParityTests/renameOnlyAvailabilityIsNotCopied(output:)",
-      "line": 223,
+      "line": 291,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1917,6 +2052,24 @@
       "file": "Tests/InnoFlowMacrosTests/CasePathDeclarationSiteParityTests.swift",
       "identifier": "CasePathDeclarationSiteParityTests/sameCaseNameInSeparateConditionsIsNotACollision(output:)",
       "line": 91,
+      "target": "InnoFlowMacrosTests"
+    },
+    {
+      "attribute": "@Test(\n    \"a spelling and the negation of its alias stay exclusive\",\n    arguments: zip(\n      [\"os(visionOS)\", \"targetEnvironment(macCatalyst)\"],\n      [\"os(xrOS)\", \"targetEnvironment(macabi)\"]))",
+      "conditionalContexts": [],
+      "displayName": "a spelling and the negation of its alias stay exclusive",
+      "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+      "identifier": "ConditionalMacroConsistencyTests/aliasAndNegatedSpellingDoNotCollide(condition:alias:)",
+      "line": 83,
+      "target": "InnoFlowMacrosTests"
+    },
+    {
+      "attribute": "@Test(\n    \"spellings the compiler activates together still overlap\",\n    arguments: zip(\n      [\"os(visionOS)\", \"targetEnvironment(macCatalyst)\"],\n      [\"os(xrOS)\", \"targetEnvironment(macabi)\"]))",
+      "conditionalContexts": [],
+      "displayName": "spellings the compiler activates together still overlap",
+      "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
+      "identifier": "ConditionalMacroConsistencyTests/aliasedConditionsCollide(condition:alias:)",
+      "line": 60,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1943,7 +2096,7 @@
       "displayName": "an inactive rule cannot hide a missing active phase",
       "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
       "identifier": "ConditionalMacroConsistencyTests/inactiveRulesDoNotCountAsCoverage()",
-      "line": 94,
+      "line": 143,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1952,7 +2105,7 @@
       "displayName": "nested conditional phase coverage succeeds in either active branch",
       "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
       "identifier": "ConditionalMacroConsistencyTests/nestedConditionalCoverage(targetOS:)",
-      "line": 112,
+      "line": 161,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1961,7 +2114,7 @@
       "displayName": "helper availability retains deprecation without a constructor rename",
       "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
       "identifier": "ConditionalMacroConsistencyTests/outputRenameDoesNotRetargetAPath()",
-      "line": 57,
+      "line": 106,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1970,7 +2123,7 @@
       "displayName": "strict totality checks active conditional cases only",
       "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
       "identifier": "ConditionalMacroConsistencyTests/phaseCasesFollowTheCompilerConfiguration()",
-      "line": 76,
+      "line": 125,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -1979,7 +2132,7 @@
       "displayName": "unknown build configuration is an explicit strict failure",
       "file": "Tests/InnoFlowMacrosTests/ConditionalMacroConsistencyTests.swift",
       "identifier": "ConditionalMacroConsistencyTests/unknownConfigurationIsNotAPass()",
-      "line": 145,
+      "line": 194,
       "target": "InnoFlowMacrosTests"
     },
     {
@@ -4742,7 +4895,16 @@
       "displayName": "An unmet explorer threshold is a configuration failure decided by the store deadline",
       "file": "Tests/InnoFlowTestingTests/ClockStepDeadlineTests.swift",
       "identifier": "ClockStepDeadlineTests/explorerClassifiesUnmetThresholdAsConfiguration()",
-      "line": 111,
+      "line": 134,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"A scenario that starts with an unmet advance reports the failure at the running test\")",
+      "conditionalContexts": [],
+      "displayName": "A scenario that starts with an unmet advance reports the failure at the running test",
+      "file": "Tests/InnoFlowTestingTests/ClockStepDeadlineTests.swift",
+      "identifier": "ClockStepDeadlineTests/scenarioAdvanceAsFirstStepReportsAtRunningTest()",
+      "line": 88,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -4760,7 +4922,7 @@
       "displayName": "A scenario advance whose threshold is already met ignores a zero store deadline",
       "file": "Tests/InnoFlowTestingTests/ClockStepDeadlineTests.swift",
       "identifier": "ClockStepDeadlineTests/scenarioAdvanceWithMetThresholdNeedsNoBudget()",
-      "line": 88,
+      "line": 111,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8117,7 +8279,25 @@
       "displayName": "A latest lane request drops the emission of the run it replaces",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/latestLaneReplacementDropsParkedEmission()",
-      "line": 157,
+      "line": 186,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"A latest request behind a synchronous sibling drops the emission of the run it replaces\")",
+      "conditionalContexts": [],
+      "displayName": "A latest request behind a synchronous sibling drops the emission of the run it replaces",
+      "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
+      "identifier": "TestStoreReductionTurnCancellationTests/latestLaneRequestAfterSiblingDropsParkedEmission()",
+      "line": 203,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"A latest request a serial lane rejects leaves that lane's work to be received\")",
+      "conditionalContexts": [],
+      "displayName": "A latest request a serial lane rejects leaves that lane's work to be received",
+      "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
+      "identifier": "TestStoreReductionTurnCancellationTests/latestRequestRejectedBySerialLaneLeavesItRunning()",
+      "line": 227,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8126,7 +8306,7 @@
       "displayName": "A cancel leading a concatenation drops the emission a Store would drop",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/leadingCancelInConcatenationDropsParkedEmission()",
-      "line": 139,
+      "line": 168,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9208,7 +9388,7 @@
       "displayName": "A commented or rename-only availability attribute still yields a working path",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/availabilityLayoutDoesNotBreakThePath()",
-      "line": 313,
+      "line": 391,
       "target": "InnoFlowTests"
     },
     {
@@ -9217,7 +9397,7 @@
       "displayName": "Conditional and locally named Action cases have working paths",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/conditionalAndLocallyNamedCasesHavePaths()",
-      "line": 287,
+      "line": 365,
       "target": "InnoFlowTests"
     },
     {
@@ -9226,7 +9406,7 @@
       "displayName": "A deprecated Action case keeps a path that carries the same deprecation",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/deprecatedCaseKeepsItsPath()",
-      "line": 304,
+      "line": 382,
       "target": "InnoFlowTests"
     },
     {
@@ -9235,7 +9415,16 @@
       "displayName": "Manual Action paths replace synthesis; an inactive one leaves it in place",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/manualActionPathsReplaceSynthesis()",
-      "line": 325,
+      "line": 427,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(\"A multi-line deprecation message leaves working Action and Output paths\")",
+      "conditionalContexts": [],
+      "displayName": "A multi-line deprecation message leaves working Action and Output paths",
+      "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
+      "identifier": "MacroDeclarationSiteConsumerTests/multilineMessageKeepsPaths()",
+      "line": 403,
       "target": "InnoFlowTests"
     },
     {
@@ -9244,7 +9433,7 @@
       "displayName": "The OptionalChildLifetime initializer keeps parent and child phase maps apart",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/optionalChildInitializerKeepsPhaseMapsApart()",
-      "line": 388,
+      "line": 490,
       "target": "InnoFlowTests"
     },
     {
@@ -9253,7 +9442,7 @@
       "displayName": "Output payloads with a local name synthesize like unlabeled payloads",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/outputLocalPayloadNamesHavePaths()",
-      "line": 357,
+      "line": 459,
       "target": "InnoFlowTests"
     },
     {
@@ -9262,7 +9451,7 @@
       "displayName": "Parent and child each apply their own phase map",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/parentAndChildApplyTheirOwnPhaseMaps()",
-      "line": 375,
+      "line": 477,
       "target": "InnoFlowTests"
     },
     {
@@ -9271,7 +9460,7 @@
       "displayName": "One case name repeated across conditions has a path in the active one",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/repeatedCaseNameHasAPathInTheActiveCondition()",
-      "line": 345,
+      "line": 447,
       "target": "InnoFlowTests"
     },
     {
@@ -9280,7 +9469,16 @@
       "displayName": "A feature that states Reducer conformance itself still reduces through its body",
       "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
       "identifier": "MacroDeclarationSiteConsumerTests/statedConformanceFeatureReduces()",
-      "line": 280,
+      "line": 358,
+      "target": "InnoFlowTests"
+    },
+    {
+      "attribute": "@Test(\"Declarations that compiled without a warning keep compiling without one\")",
+      "conditionalContexts": [],
+      "displayName": "Declarations that compiled without a warning keep compiling without one",
+      "file": "Tests/InnoFlowTests/MacroDeclarationSiteConsumerTests.swift",
+      "identifier": "MacroDeclarationSiteConsumerTests/warningFreeCompatibilityDeclarationsHavePaths()",
+      "line": 412,
       "target": "InnoFlowTests"
     },
     {

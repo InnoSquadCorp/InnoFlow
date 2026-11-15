@@ -172,9 +172,13 @@ extension Store {
 
       let offsetBox =
         bucket.offsetsByID[elementID]
-        ?? CollectionScopeOffsetBox(offset: offset, revision: bucket.revision)
-      offsetBox.offset = offset
-      offsetBox.revision = bucket.revision
+        ?? CollectionScopeOffsetBox(offset: offset, revision: bucket.revision &- 1)
+      // A duplicate id resolves its first occurrence, like the linear
+      // fallback; a later occurrence must not move the shared offset.
+      if offsetBox.revision != bucket.revision {
+        offsetBox.offset = offset
+        offsetBox.revision = bucket.revision
+      }
       bucket.offsetsByID[elementID] = offsetBox
 
       if let cached = bucket.storesByID[elementID]
@@ -443,9 +447,12 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   /// The last snapshot, without registering an Observation access and
   /// without a liveness check.
   ///
-  /// Creating a selection reads the projection to seed its snapshot. That
-  /// read must not make the caller's tracking scope depend on the whole
-  /// projection, and it must not trap: a view body can be evaluated once
+  /// Creating a key-path selection reads the projection to seed its
+  /// snapshot. That read must not make the caller's tracking scope depend on
+  /// the whole projection (the owner retains the selection for its reader
+  /// instead; a closure-based selection seeds from ``cachedState``, which
+  /// records the read without a liveness check, because nothing retains it
+  /// after the reading body), and it must not trap: a view body can be evaluated once
   /// more after its row was removed, and a selection is no longer cached
   /// past the notification that deactivated it. A selection created on a
   /// projection that is no longer alive reports that through its own

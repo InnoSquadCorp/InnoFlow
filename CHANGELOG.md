@@ -62,7 +62,8 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   a test whose effect never sleeps. A call without `timeout:` uses the
   clock's own `waitTimeout`: `ManualTestClock.defaultWaitTimeout` (ten
   seconds), or the value given to the new `ManualTestClock(waitTimeout:)`.
-  Each wait has an overload with an explicit `timeout:`.
+  Each wait has an overload with an explicit `timeout:`. A deadline above one
+  day is clamped to one day.
 - `ManualTestClock.advance(by:inStepsOf:onceSleepersReach:)` (and its
   `timeout:` overload) drives periodic effects deterministically. The count
   is a threshold for the whole clock: pass the total number of sleepers that
@@ -76,12 +77,23 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   A value above one day is clamped to one day, and a value that is not a
   positive number keeps the one-second default; either way the process says
   so once on standard error instead of trapping or silently using another
-  deadline.
+  deadline. `TestStoreDefaults.effectTimeoutEnvironmentKey` names the
+  variable. An explicit `TestStore(effectTimeout:)` above one day is clamped
+  the same way; in 6.0.x an extreme value such as `.seconds(Int64.max)`
+  trapped at the first wait.
 - `@InnoFlow` accepts a feature that states `Reducer` conformance itself.
 - `Action` path synthesis follows the declaration site like `Output`: cases
   inside `#if`, cases carrying `@available`, and payloads written
   `_ name: Payload` synthesize paths; a case that is unavailable everywhere
-  synthesizes none.
+  synthesizes none. Cases that redeclare each other in separate `#if`
+  clauses each keep their helper inside their own clause. A copied
+  `@available` drops `renamed:`, which names the case's constructor, and keeps
+  every string literal exactly, including a multi-line `message:`.
+  `os(xrOS)` and `os(visionOS)`, and `targetEnvironment(macabi)` and
+  `targetEnvironment(macCatalyst)`, are the same condition. The macro adds no
+  warning for a declaration 6.0.x accepted without one: an unsupported case
+  shape inside `#if` is still skipped silently, and a `_ name: T?` payload is
+  synthesized without the optional-payload warning.
 - `Output` payloads written `_ name: Payload` synthesize like unlabeled
   payloads, alone and inside a multi-payload tuple. They previously warned
   (`OutputPathUnsupportedLocalBinding`) and produced no path.
@@ -102,18 +114,14 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   its own start gate.
 - A canonical `static let`/`static var` `<name>CasePath` (or `<name>ActionPath`
   for an `id:action:` case) declared in the `Action` body now takes precedence
-  over synthesis for every case shape, as it already did for `Output`. It was a
-  `LeadingUnderscoreCollision` error next to a synthesizable case. A manual path
-  in a narrower `#if` than its case leaves the helper synthesized under the
-  complementary condition.
-- Cases that redeclare each other (same name and argument labels, or a
-  payload-free case of that name) may sit in separate conditional clauses the
-  macro cannot prove exclusive; each helper is emitted inside its own clause
-  instead of reporting a collision. Differently named cases, and same-named
-  cases with different argument labels, still collide when both can be active.
+  over synthesis for every case shape, as it already did for `Output`. 6.0.x
+  rejected such a path next to a synthesizable case as a collision with the
+  generated one. A manual path in a narrower `#if` than its case leaves the
+  helper synthesized under the complementary condition.
 - A throttle window fires the newest trailing request that can still proceed.
   When the newest request's dispatch is cancelled, the window falls back to
-  the request it replaced (up to eight superseded requests are retained)
+  the request it replaced (the window keeps the newest request and up to
+  seven it replaced)
   instead of firing nothing. Before, the outcome depended on whether the
   cancelled dispatch's effect had been interpreted yet.
 - A collection scope now refreshes only the rows a change can affect instead
@@ -139,18 +147,24 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   that never happens fails instead of occupying its job until it is killed.
   The shared test wait helpers scale their deadlines with
   `INNOFLOW_TEST_WAIT_SCALE`. The scale ignores surrounding whitespace and is
-  clamped to 1000.
+  clamped to 1000. `scripts/check-testing-contracts.py` enforces the time
+  limit for every `@Suite` in the package's test targets.
 - The focused platform runtime inventory also runs
-  `ProjectionLifetimeConsistencyTests` (13 deterministic selection-lifetime
-  tests) on every simulator runtime; it now holds 360 test identifiers. The
+  `ProjectionLifetimeConsistencyTests` (16 deterministic selection-lifetime
+  tests) on every simulator runtime; it now holds 363 test identifiers. The
   wall-clock check of selection release cost moved to the host-only
   `ProjectionReleaseScalingTests`.
 - `scripts/check-api-compatibility.sh` accepts a reviewed allowlist
   (`docs/contracts/api-breakage-allowlist.json`) for diagnostics about
   package-access declarations, which the API digester reports although no
-  consumer can reach them. The validator proves from the baseline source that
-  every listed declaration is package-access, and the list is bound to one
+  consumer can reach them. The validator binds each message's kind,
+  qualified name and argument labels to the cited baseline `package`
+  declaration or a type enclosing it, so neither a `public` declaration nor
+  an unrelated `package` one can be listed, and the list is bound to one
   baseline.
+- README parity requires every `from:` and `exact:` pin in the seven READMEs
+  to name the release target, and the documented install manifest check
+  compares the dependency's lower bound exactly.
 
 ### Fixed
 
@@ -165,12 +179,15 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   earlier effects only; the effect that issued the request is still
   interpreted in declaration order, so an earlier `concatenate` sibling of a
   `.cancel` runs before that cancel covers its own effect. A cancel that follows a
-  sibling its own effect already cancelled is accepted in the turn as well.
-- `TestStore` accepts reducer-returned cancellation in the reduction turn
-  exactly like `Store`, so a test no longer receives an action that a
-  production store drops.
-- Record `cancellationRequested` in `StoreDiagnostics` for a dispatch whose
-  effect is cancelled or replaced before it was interpreted.
+  sibling its own effect already cancelled is accepted in the turn as well. A
+  `latest` request that its lane will admit is accepted completely in the
+  turn: the run it replaces is reported as superseded and released even when
+  the replacing dispatch is cancelled before its effect runs. Until the lane
+  admits the replacement, `runLaneSnapshots()` does not list it; the
+  replacement keeps the lane's identity. A `latest` request that a lane with
+  another policy rejects replaces nothing.
+  `TestStore` applies the same rules, so a test receives exactly the actions
+  a production store reduces.
 - Release pending scheduled requests in the same turn as cancellation
   acceptance. With `StoreDiagnostics` enabled, `cancelEffects(identifiedBy:)`
   and `cancelAllEffects()` suspended between marking cancellation and
@@ -189,14 +206,14 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   change notifies that reader. Releasing a selection removes it from its
   dependency bucket in place, so releasing many selections of one dependency
   stays linear.
-- Deactivate a removed collection row also when an observation callback
-  scopes the collection again while the change is being classified, and
-  compare each row with its own element in that case.
-- Selecting on a `ScopedStore` whose element was removed no longer hits a
-  debug assertion; the new selection reports absence through
-  `optionalValue` and traps in `requireAlive()`.
-- Seed selections from an untracked read so creating one inside a view body
-  no longer makes that view depend on the whole parent state.
+- Selecting on a `ScopedStore` whose collection element was removed returns a
+  new selection that is not alive — `optionalValue` is `nil` and
+  `requireAlive()` traps — instead of the cached, deactivated handle.
+- Creating a key-path selection no longer records a read of the whole parent
+  state, so a view that creates one in its body depends only on that
+  selection. A closure-based selection still records that read, as in 6.0.x:
+  nothing keeps it alive after the body returns, and the read is what
+  notifies such a view.
 - Never access projection registry storage while an observer callback runs.
   An always-refresh observer that registered another observer during a pass
   trapped with an exclusivity violation.
@@ -209,19 +226,12 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   as the phase-managed feature's own phase map, including the `Name.init(...)`
   spelling. A child hoisted into a local constant or a combinator behind a
   typealias is still read as the feature's own.
-- Copied `@available` attributes no longer carry comments or line breaks (a
-  line comment before a dropped `renamed:` swallowed the closing parenthesis),
-  and an attribute that only renames is no longer copied as `@available(*)`.
 - A `TestStoreScenario` `advance` step whose sleeper threshold is never met
-  now records a test failure and leaves the clock untouched. It used to wait
-  ten seconds, report the step as completed and record nothing. The wait is
-  bounded by the store's effect timeout, like `receive` and `finish`.
-- `TestStoreExplorer` bounds a clock registration wait by the store's effect
-  timeout alone. An unmet threshold is always a `.configuration` failure; with
-  a store timeout above ten seconds it was reported as a reducer diagnostic
-  and replayed.
-- `ManualTestClock.WaitTimeout.description` no longer contains runs of
-  source-indentation spaces.
+  records a test failure after the store's effect timeout, like `receive` and
+  `finish`, and leaves the clock untouched. In 6.0.x the step waited until the
+  test was cancelled or hit its time limit. The failure is reported at the
+  scenario's latest assertion on the store, or at the running Swift Testing
+  test when the scenario starts with that step.
 
 ### Notes
 

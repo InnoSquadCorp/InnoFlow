@@ -220,6 +220,74 @@ struct CasePathDeclarationSiteParityTests {
     #endif
   }
 
+  // A string literal is a value, not layout: a multi-line `message:` keeps the
+  // line breaks and indentation it cannot parse without. Only the trivia
+  // between the attribute's own tokens is dropped.
+  @Test("a multi-line availability message is copied exactly", arguments: [false, true])
+  func multilineAvailabilityMessageIsCopiedExactly(output: Bool) throws {
+    #if canImport(InnoFlowMacros)
+      let result = try paths(
+        #"""
+        enum Paths {
+          case current(Int)
+          @available(*, deprecated,  // dropped with the layout
+            message: """
+              Use current instead.
+                // part of the message
+              """)
+          case previous(Int)
+        }
+        """#,
+        output: output
+      )
+      #expect(result.diagnostics.isEmpty)
+      #expect(result.parses)
+      #expect(
+        result.source.contains(
+          #"""
+          @available(*, deprecated, message: """
+                Use current instead.
+                  // part of the message
+                """)
+          static let previousCasePath
+          """#))
+      #expect(!result.source.contains("dropped with the layout"))
+    #endif
+  }
+
+  // The compiler activates `xrOS` together with `visionOS`, and `macabi` is
+  // the former name of `macCatalyst`: each pair is one condition.
+  @Test(
+    "a manual path under another spelling of the case's condition replaces the helper",
+    arguments: zip(
+      ["os(visionOS)", "os(xrOS)", "targetEnvironment(macCatalyst)", "targetEnvironment(macabi)"],
+      ["os(xrOS)", "os(visionOS)", "targetEnvironment(macabi)", "targetEnvironment(macCatalyst)"]
+    ))
+  func manualPathUnderAnAliasedConditionTakesPrecedence(
+    caseCondition: String,
+    pathCondition: String
+  ) throws {
+    #if canImport(InnoFlowMacros)
+      for output in [false, true] {
+        let result = try paths(
+          """
+          enum Paths {
+            #if \(caseCondition)
+              case spatial(Int)
+            #endif
+            #if \(pathCondition)
+              static let spatialCasePath = makePath()
+            #endif
+          }
+          """,
+          output: output
+        )
+        #expect(result.diagnostics.isEmpty)
+        #expect(result.source.isEmpty)
+      }
+    #endif
+  }
+
   @Test("an availability attribute that only renames is not copied", arguments: [false, true])
   func renameOnlyAvailabilityIsNotCopied(output: Bool) throws {
     #if canImport(InnoFlowMacros)

@@ -82,6 +82,30 @@ class ReadmeParityTests(unittest.TestCase):
                 PARITY.verify(root)
         self.assertGreaterEqual(PARITY.version_key(target_version), PARITY.version_key(stable))
 
+    def test_every_version_pin_names_the_release_target(self):
+        # The heading and the shared install fence can stay current while a
+        # translation still pins another release in prose; every pin counts.
+        _, target_version = current_versions()
+        stale = '6.0.2' if target_version != '6.0.2' else '6.0.1'
+        package = '.package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", '
+        for file, old, new in (
+            ('README.ko.md', f'exact: "{target_version}"', f'exact: "{stale}"'),
+            ('README.ja.md', f'exact: "{target_version}"', f'exact:"{stale}"'),
+            ('README.de.md', None, f'\n`{package}from: "{stale}")`\n'),
+            ('README.es.md', None, f'\n`{package}.exact("{stale}"))`\n'),
+            ('README.ru.md', None, f'\n`{package}from: "{target_version}.1")`\n'),
+        ):
+            with self.subTest(file=file, pin=new.strip()), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                copy_parity_inputs(root)
+                path = root / file
+                source = path.read_text()
+                if old is not None:
+                    self.assertIn(old, source)
+                path.write_text(source + new if old is None else source.replace(old, new))
+                with self.assertRaisesRegex(ValueError, 'release installation/version drift'):
+                    PARITY.verify(root)
+
     def test_every_readme_must_link_the_published_stable_source(self):
         stable, _ = current_versions()
         with tempfile.TemporaryDirectory() as temporary:

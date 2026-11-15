@@ -42,9 +42,21 @@ extension InnoFlowMacro {
         let compact = source.filter { !$0.isWhitespace }
         let predicatePrefixes = ["os(", "arch(", "targetEnvironment(", "swift(", "compiler("]
         let atom = predicatePrefixes.contains(where: compact.hasPrefix) ? compact : source
-        self = .atom(atom == "os(OSX)" ? "os(macOS)" : atom)
+        self = .atom(Self.canonicalPredicateSpellings[atom] ?? atom)
       }
     }
+
+    /// Spellings the compiler activates together, keyed by the alias. `OSX`
+    /// and `macOS` name one platform, the compiler sets both `xrOS` and
+    /// `visionOS` for visionOS, and `macabi` is the former name of the
+    /// `macCatalyst` environment. One atom per platform keeps the rule that a
+    /// positive `os(...)` or `targetEnvironment(...)` names a single active
+    /// value from treating one platform as two mutually exclusive ones.
+    private static let canonicalPredicateSpellings = [
+      "os(OSX)": "os(macOS)",
+      "os(xrOS)": "os(visionOS)",
+      "targetEnvironment(macabi)": "targetEnvironment(macCatalyst)",
+    ]
 
     static func && (lhs: Self, rhs: Self) -> Self {
       switch (lhs, rhs) {
@@ -422,6 +434,10 @@ extension InnoFlowMacro {
   struct CasePathElementSite {
     let element: EnumCaseElementSyntax
     let conditionalContext: OutputConditionalContext
+    /// Whether the case is declared inside an `#if` clause rather than
+    /// directly in the enum body. Any clause counts, also one that is always
+    /// true or inactive in every configuration.
+    let isInConditionalCompilationBlock: Bool
     let availabilityPrefix: String
     let unavailableContexts: [OutputConditionalContext]
     let ignoredContexts: [OutputConditionalContext]
@@ -512,6 +528,7 @@ extension InnoFlowMacro {
   static func synthesizedConditionalCasePathSources(
     in members: MemberBlockItemListSyntax,
     conditionalContext: OutputConditionalContext,
+    isInConditionalCompilationBlock: Bool = false,
     synthesizeElement: (CasePathElementSite) -> [String]
   ) -> [String] {
     var declarations: [String] = []
@@ -533,6 +550,7 @@ extension InnoFlowMacro {
               .init(
                 element: element,
                 conditionalContext: conditionalContext,
+                isInConditionalCompilationBlock: isInConditionalCompilationBlock,
                 availabilityPrefix: availabilityPrefix,
                 unavailableContexts: unavailableContexts,
                 ignoredContexts: ignoredContexts
@@ -558,6 +576,7 @@ extension InnoFlowMacro {
             synthesizedConditionalCasePathSources(
               in: $0,
               conditionalContext: clauseContext,
+              isInConditionalCompilationBlock: true,
               synthesizeElement: synthesizeElement
             )
           } ?? []
@@ -917,29 +936,56 @@ extension InnoFlowMacro {
 
   /// Renders a copied attribute on one line, without comments.
   ///
-  /// Trivia is the layout of the case declaration, not part of the
-  /// attribute. Carried into generated source it can change what the source
-  /// means: once an argument is dropped, a line comment that stood before it
-  /// swallows the closing parenthesis. Tokens the author separated stay
-  /// separated by one space; none is added before a comma or inside the
-  /// parentheses.
+  /// Trivia between the attribute's tokens is the layout of the case
+  /// declaration, not part of the attribute. Carried into generated source it
+  /// can change what the source means: once an argument is dropped, a line
+  /// comment that stood before it swallows the closing parenthesis. Tokens the
+  /// author separated stay separated by one space; none is added before a
+  /// comma or inside the parentheses.
+  ///
+  /// A string literal is a single value, not layout. Its source is copied
+  /// exactly: the line breaks and indentation of a multi-line literal are
+  /// trivia of the literal's own tokens, and the literal does not parse
+  /// without them.
   private static func outputSingleLineSource(of attribute: AttributeSyntax) -> String {
     var source = ""
     var previous: TokenSyntax?
-    for token in attribute.tokens(viewMode: .sourceAccurate) {
+
+    func append(_ text: String, first: TokenSyntax, last: TokenSyntax) {
       if let previous {
-        let wasSeparated = !previous.trailingTrivia.isEmpty || !token.leadingTrivia.isEmpty
+        let wasSeparated = !previous.trailingTrivia.isEmpty || !first.leadingTrivia.isEmpty
         let hugsItsNeighbor =
           previous.tokenKind == .leftParen
-          || token.tokenKind == .rightParen
-          || token.tokenKind == .comma
+          || first.tokenKind == .rightParen
+          || first.tokenKind == .comma
         if wasSeparated && !hugsItsNeighbor {
           source += " "
         }
       }
-      source += token.text
-      previous = token
+      source += text
+      previous = last
     }
+
+    func render(_ node: Syntax) {
+      if let token = node.as(TokenSyntax.self) {
+        append(token.text, first: token, last: token)
+        return
+      }
+      let isStringLiteral =
+        node.is(StringLiteralExprSyntax.self) || node.is(SimpleStringLiteralExprSyntax.self)
+      if isStringLiteral,
+        let first = node.firstToken(viewMode: .sourceAccurate),
+        let last = node.lastToken(viewMode: .sourceAccurate)
+      {
+        append(node.trimmedDescription, first: first, last: last)
+        return
+      }
+      for child in node.children(viewMode: .sourceAccurate) {
+        render(child)
+      }
+    }
+
+    render(Syntax(attribute))
     return source
   }
 

@@ -141,6 +141,18 @@ private let refreshRowPath = CollectionActionPath<
   }
 )
 
+/// The same routing as `refreshRowPath` with its own identity: scoping the
+/// collection through it replaces the cached row family.
+private let otherRefreshRowPath = CollectionActionPath<
+  RefreshFeature.Action, Int, RefreshFeature.RowAction
+>(
+  embed: { .row(id: $0, action: $1) },
+  extract: {
+    guard case .row(let id, let action) = $0 else { return nil }
+    return (id, action)
+  }
+)
+
 private let measurementPath = CollectionActionPath<
   RefreshFeature.Action, Int, RefreshFeature.RowAction
 >(
@@ -329,6 +341,37 @@ struct CollectionProjectionRefreshTests {
     withExtendedLifetime(count) {}
   }
 
+  @Test(
+    "Scoping the collection through another action path inside the refresh pass still deactivates a removed row"
+  )
+  func scopingWithAnotherPathInsideTheRefreshPassDeactivatesTheRemovedRow() {
+    let store = makeStore()
+    let rows = store.scope(collection: \.rows, action: refreshRowPath)
+    let count = store.select(dependingOn: \.rows) { $0.count }
+    withObservationTracking {
+      _ = count.optionalValue
+    } onChange: {
+      // A new row family replaces `rows`' family before the rows are
+      // classified; only the new family is reindexed by this pass.
+      MainActor.assumeIsolated {
+        _ = store.scope(collection: \.rows, action: otherRefreshRowPath)
+      }
+    }
+
+    store.send(.remove(1))
+
+    #expect(rows[1].isAlive == false)
+    #expect(rows[1].optionalState == nil)
+    #expect(rows.filter(\.isAlive).map { $0.state.id } == [0, 2, 3, 4, 5])
+
+    // Later changes keep reaching the rows of the replaced family.
+    store.send(.row(id: 3, action: .increment))
+    #expect(rows[3].optionalState?.value == 1)
+    store.send(.remove(2))
+    #expect(rows[2].isAlive == false)
+    withExtendedLifetime(count) {}
+  }
+
   @Test("Scoping inside the refresh pass does not compare a moved row with another element")
   func scopingInsideTheRefreshPassComparesEachRowWithItsOwnElement() {
     let store = makeStore()
@@ -380,14 +423,38 @@ struct CollectionProjectionRefreshTests {
       notified.withLock { $0 = true }
     }
 
-    // A fresh array with the same bytes. `nan != nan`, so equality alone
-    // would report the third row as changed on every such replacement.
+    // A fresh buffer with the same bytes. `Array(measurements)` would share
+    // the original storage and take the identical-storage shortcut before
+    // any element is compared. `nan != nan`, so equality alone would report
+    // the third row as changed on every such replacement.
+    let fresh = measurements.map { $0 }
+    fresh.withUnsafeBufferPointer { freshBuffer in
+      measurements.withUnsafeBufferPointer { originalBuffer in
+        #expect(freshBuffer.baseAddress != originalBuffer.baseAddress)
+      }
+    }
     measurementEqualityChecks.withLock { $0 = 0 }
-    store.send(.replaceMeasurements(Array(measurements)))
+    store.send(.replaceMeasurements(fresh))
 
     #expect(measurementEqualityChecks.withLock { $0 } == 0)
     #expect(notified.withLock { $0 } == false)
     #expect(rows.allSatisfy { $0.isAlive })
+  }
+
+  @Test("A row whose id is duplicated shows its first occurrence across structural changes")
+  func duplicatedIDRowFollowsItsFirstOccurrence() {
+    let store = makeStore()
+    // Duplicate ids are not valid input, but they must not leave a row
+    // showing an element the collection no longer contains.
+    store.send(.replaceLoose([LooseRow(id: 1, value: 0), LooseRow(id: 1, value: 5)]))
+    let rows = store.scope(collection: \.loose, action: looseRowPath)
+    #expect(rows.count == 2)
+    #expect(rows[0] === rows[1])
+    #expect(rows[0].optionalState?.value == 0)
+
+    store.send(.replaceLoose([LooseRow(id: 1, value: 5)]))
+
+    #expect(rows[0].optionalState?.value == 5)
   }
 
   @Test("IdentifiedArray exposes its elements as contiguous storage")

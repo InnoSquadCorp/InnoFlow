@@ -456,7 +456,7 @@ extension TestStore {
     }
     sections.append(guidance)
 
-    let source = terminalVerificationSource ?? .init()
+    let source = terminalVerificationSource ?? .unattributed()
     return TestStoreTerminalVerificationDiagnostic(
       severity: severity,
       message: sections.joined(separator: "\n\n"),

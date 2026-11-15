@@ -313,8 +313,19 @@ extension TestStore: ReductionTurnCancellationAcceptor {
     scope.recordAcceptedCancellation(request)
   }
 
-  package func markSupersededInReductionTurn(id: AnyEffectID, context: EffectExecutionContext) {
-    markCancelledInFlight(id: id, upTo: context.sequence)
+  package func runLaneKind(for id: AnyEffectID) -> EffectExecutionPolicy.Kind? {
+    runScheduler.laneKind(for: id)
+  }
+
+  package func acceptLatestReplacementInReductionTurn(
+    id: AnyEffectID,
+    context: EffectExecutionContext
+  ) {
+    guard context.cancellationScope != nil else { return }
+    // The same order `Store` uses: the lane's requests are displaced and
+    // reported as superseded, then everything else under `id` is released.
+    runScheduler.displaceLatestLane(id: id, successor: context)
+    acceptInReductionTurn(.inFlight(id), context: context)
   }
 
   /// The context for the effect a reduction just returned, with the

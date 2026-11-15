@@ -2,6 +2,8 @@
 """Check current README language coverage, navigation, code and critical contracts.
 
 This checks reviewable structure and identifiers, not natural-language quality.
+Every version a README pins with `from:`, `exact:` or `.exact(...)`, in prose or
+in code, must be the release target.
 """
 import argparse
 import json
@@ -25,6 +27,8 @@ CRITICAL = ('InnoFlowCore', 'InnoFlowSwiftUI', 'InnoFlowInspector', 'InnoFlowTes
             '6.3+', '18+', '15+', '11+', '2+', '603.0.0', '605.0.0', '604.0.0', '28',
             '18.5', '11.5', '2.5', 'OS 27')
 RELEASE_SECTION = re.compile(r'^## ([0-9]+\.[0-9]+\.[0-9]+) Release$', re.M)
+# A SwiftPM version requirement: `from: "x.y.z"`, `exact: "x.y.z"` or `.exact("x.y.z")`.
+VERSION_PIN = re.compile(r'(?:\b(?:from|exact)\s*:|\.exact\s*\()\s*"([0-9][^"\n]*)"')
 
 
 def version_key(version):
@@ -67,6 +71,10 @@ def verify(root):
             raise ValueError(file + ': entry section coverage changed')
         if f'## InnoFlow {target}\n' not in source or f'from: "{target}"' not in source:
             raise ValueError(file + ': release installation/version drift')
+        stale = sorted({pin for pin in VERSION_PIN.findall(source) if pin != target})
+        if stale:
+            raise ValueError(f'{file}: release installation/version drift: pins '
+                             f'{", ".join(stale)} instead of {target}')
         if f'(https://github.com/InnoSquadCorp/InnoFlow/tree/{stable})' not in source:
             raise ValueError(file + ': published stable source link drift')
         if re.findall(r'^```swift\n(.*?)^```', source, re.M | re.S) != fences:

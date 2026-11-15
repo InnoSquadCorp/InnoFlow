@@ -9,12 +9,18 @@ package import InnoFlowCore
 #endif
 
 /// The complete user call site, passed as one value through assertion stepping
-/// and asynchronous effect origins. This never records a framework call site.
+/// and asynchronous effect origins. This never records a framework call site;
+/// where no user call site exists, ``unattributed()`` names the running test.
 package struct TestStoreSourceLocation: Sendable {
   package let fileID: StaticString
   package let filePath: StaticString
   package let line: UInt
   package let column: UInt
+  #if canImport(Testing)
+    /// The running test's declaration, used instead of the static fields when
+    /// a failure has no user call site of its own.
+    private var runningTestLocation: SourceLocation?
+  #endif
 
   package init(
     fileID: StaticString = #fileID,
@@ -33,9 +39,33 @@ package struct TestStoreSourceLocation: Sendable {
       fileID: origin.fileID, filePath: origin.file, line: origin.line, column: origin.column)
   }
 
+  /// A location for a failure that no user call site led to, such as a
+  /// scenario step that has no call-site parameters and runs before any
+  /// assertion on its store. Swift Testing attributes it to the running test;
+  /// XCTest, which exposes no running test location, keeps the static fields.
+  package static func unattributed(
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    line: UInt = #line,
+    column: UInt = #column
+  ) -> Self {
+    var location = Self(fileID: fileID, filePath: filePath, line: line, column: column)
+    #if canImport(Testing)
+      location.runningTestLocation = Test.current?.sourceLocation
+    #endif
+    return location
+  }
+
   #if canImport(Testing)
+    /// Where Swift Testing records an issue reported at this location.
+    package var testingFileIDAndLine: (fileID: String, line: Int) {
+      let location = testingLocation
+      return (location.fileID, location.line)
+    }
+
     var testingLocation: SourceLocation {
-      SourceLocation(
+      if let runningTestLocation { return runningTestLocation }
+      return SourceLocation(
         fileID: fileID.description,
         filePath: filePath.description,
         line: Int(clamping: line),

@@ -434,7 +434,7 @@ extension Store {
           semanticID: $0
         )
       },
-      initialValue: transform(untrackedState[keyPath: dependency]),
+      initialValue: transform(state[keyPath: dependency]),
       registration: selectionDependencyRegistrations(
         selectionDependencyRegistration(dependency)
       ),
@@ -479,7 +479,7 @@ extension Store {
           semanticID: $0
         )
       },
-      initialValue: transform(repeat untrackedState[keyPath: each dependencies]),
+      initialValue: transform(repeat state[keyPath: each dependencies]),
       registration: selectionDependencyRegistrations(fromArray: registrations),
       valueResolver: { [weak self] in
         guard let self else { return nil }
@@ -504,7 +504,7 @@ extension Store {
           semanticID: $0
         )
       },
-      initialValue: selector(untrackedState),
+      initialValue: selector(state),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
         guard let self else { return nil }
@@ -538,7 +538,7 @@ extension Store {
           semanticID: $0
         )
       },
-      initialValue: selector(untrackedState),
+      initialValue: selector(state),
       registration: registration,
       valueResolver: { [weak self] in
         guard let self else { return nil }
@@ -650,7 +650,7 @@ extension ScopedStore {
           semanticID: $0
         )
       },
-      initialValue: transform(untrackedState[keyPath: dependency]),
+      initialValue: transform(cachedState[keyPath: dependency]),
       registration: selectionDependencyRegistrations(
         selectionDependencyRegistration(dependency)
       ),
@@ -696,7 +696,7 @@ extension ScopedStore {
           semanticID: $0
         )
       },
-      initialValue: transform(repeat untrackedState[keyPath: each dependencies]),
+      initialValue: transform(repeat cachedState[keyPath: each dependencies]),
       registration: selectionDependencyRegistrations(fromArray: registrations),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
@@ -721,7 +721,7 @@ extension ScopedStore {
           semanticID: $0
         )
       },
-      initialValue: selector(untrackedState),
+      initialValue: selector(cachedState),
       registration: alwaysRefreshSelectionRegistration(callsite: callsite),
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }
@@ -755,7 +755,7 @@ extension ScopedStore {
           semanticID: $0
         )
       },
-      initialValue: selector(untrackedState),
+      initialValue: selector(cachedState),
       registration: registration,
       valueResolver: { [weak self] in
         guard let self, self.isActive else { return nil }

@@ -85,6 +85,29 @@ struct ClockStepDeadlineTests {
     #expect(result.completedStepCount == 3)
   }
 
+  @Test("A scenario that starts with an unmet advance reports the failure at the running test")
+  func scenarioAdvanceAsFirstStepReportsAtRunningTest() async {
+    let clock = ManualTestClock(waitTimeout: Self.clockDeadline)
+    let store = TestStore(
+      reducer: NeverSleeps(), initialState: .init(),
+      clock: clock, effectTimeout: Self.storeDeadline)
+    var locations: [(fileID: String, line: Int)] = []
+    store.issueReporter = { _, location in locations.append(location.testingFileIDAndLine) }
+    let scenario = TestStoreScenario<NeverSleeps>(
+      steps: [.advance(clock, by: .seconds(1), onceSleepersReach: 1), .finish()]
+    )
+
+    _ = await scenario.run(on: store)
+
+    // No assertion on the store precedes the step, so the running test is the
+    // only user location; a line inside InnoFlowTesting would be wrong.
+    #expect(locations.count == 1)
+    let runningTest = Test.current?.sourceLocation
+    #expect(locations.first?.fileID == runningTest?.fileID)
+    #expect(locations.first?.line == runningTest?.line)
+    #expect(locations.first?.fileID == #fileID)
+  }
+
   @Test("A scenario advance whose threshold is already met ignores a zero store deadline")
   func scenarioAdvanceWithMetThresholdNeedsNoBudget() async throws {
     let clock = ManualTestClock(waitTimeout: Self.clockDeadline)

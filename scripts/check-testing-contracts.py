@@ -82,8 +82,53 @@ starts = sum(
 if starts:
     failures.append('TestStore must start reducer effects through reductionTurnContext(for:)')
 
+
+def attribute_arguments(source, index):
+    """Top-level arguments of the attribute argument clause at `index`; None if unterminated."""
+    while index < len(source) and source[index] in ' \t':
+        index += 1
+    if index >= len(source) or source[index] != '(':
+        return []
+    arguments, depth, start, position = [], 0, index + 1, index
+    while position < len(source):
+        character = source[position]
+        if character == '"':
+            position += 1
+            while position < len(source) and source[position] != '"':
+                position += 2 if source[position] == '\\' else 1
+        elif character in '([{':
+            depth += 1
+        elif character in ')]}':
+            depth -= 1
+            if depth == 0:
+                return arguments + [source[start:position].strip()]
+        elif character == ',' and depth == 1:
+            arguments.append(source[start:position].strip())
+            start = position + 1
+        position += 1
+    return None
+
+
+# Every Swift Testing suite of the package test targets bounds its run time.
+# Tests/Fixtures holds consumer packages, which are not package suites.
+suites = 0
+for directory in sorted(path for path in (root / 'Tests').iterdir() if path.is_dir() and path.name != 'Fixtures'):
+    for path in sorted(directory.rglob('*.swift')):
+        source = path.read_text()
+        for match in re.finditer(r'@Suite\b', source):
+            if '//' in source[source.rfind('\n', 0, match.start()) + 1:match.start()]:
+                continue
+            suites += 1
+            arguments = attribute_arguments(source, match.end())
+            if arguments is None or not any(argument.startswith('.timeLimit(') for argument in arguments):
+                line = source.count('\n', 0, match.start()) + 1
+                failures.append(f'{path.relative_to(root)}:{line}: @Suite must declare a .timeLimit trait')
+if not suites:
+    failures.append('No @Suite attribute found under Tests/<Target>; the time-limit check would be vacuous')
+
 if failures:
     for failure in failures:
         print('FAIL:', failure)
     sys.exit(1)
-print('PASS: testing source locations, framework routing, lexical scope, and deterministic waits')
+print(f'PASS: testing source locations, framework routing, lexical scope, deterministic waits, '
+      f'and time limits of {suites} suites')

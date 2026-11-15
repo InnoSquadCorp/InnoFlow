@@ -51,6 +51,13 @@ What to check:
   selection that is not alive: `optionalValue` is `nil` and `requireAlive()`
   traps. In 6.0.x the same call site returned the cached, deactivated handle.
 
+Closure-based selections — `select(dependingOn:)`, `select(dependingOnAll:)`
+and `select { … }`, with or without `id:` — keep the 6.0.x behavior: the owner
+does not retain one for its reader, so creating one during a tracked read
+records a read of the owner's state. A view that creates one in its body is
+invalidated by any state change until it holds the selection. Key-path
+selections no longer record that read.
+
 No source changes are required for selections that are held or read in a view
 body.
 
@@ -63,6 +70,13 @@ action that the cancelled or replaced work had already queued is dropped; in
 6.0.x it could still be reduced. The effect that issued the request keeps its
 declaration order, so `.concatenate(.send(a).cancellable(id), .cancel(id))`
 still delivers `a`.
+
+A `latest` request that its lane will admit is accepted completely in that
+turn: the run it replaces is reported as superseded and released, also when
+the dispatch that returned the request is cancelled before its effect runs.
+A `latest` request that a lane with another policy rejects replaces nothing,
+as in 6.0.x. `runLaneSnapshots()` does not list the lane between that turn and
+the replacement's admission; the replacement keeps the lane's identity.
 
 `TestStore` applies the same rule. A test that received an action from work
 its next `send` cancels through a composite effect (for example
@@ -82,7 +96,7 @@ When the newest trailing request of a throttle window belongs to a dispatch
 that is cancelled before the window closes, the window now fires the request
 it replaced. In 6.0.x it fired nothing if the cancelled dispatch's effect had
 already been interpreted, and the replaced request otherwise. A window
-retains up to eight superseded requests.
+keeps the newest request and up to seven it replaced.
 
 ### Case-path synthesis
 
@@ -93,6 +107,12 @@ The one source-affecting case is a manual path declared in an *extension* for
 such a case: the attached macro cannot see it, so it now redeclares the
 generated member (`invalid redeclaration of '<name>CasePath'`). Move the path
 into the enum body, delete it, or mark the case `@InnoFlowCasePathIgnored`.
+
+The macro emits no new warning for a declaration that 6.0.x accepted without
+one, so builds with warnings treated as errors keep compiling: an unsupported
+case shape inside `#if` is skipped silently as before, and a `_ name: T?`
+payload is synthesized without the optional-payload warning that an unlabeled
+`T?` payload still gets.
 
 A case made unavailable by `@available(swift, obsoleted: …)` needs
 `@InnoFlowCasePathIgnored`; the macro cannot evaluate language-mode or
@@ -112,13 +132,19 @@ A clock can carry its own bound: `ManualTestClock(waitTimeout: .seconds(2))`.
 Calls without `timeout:` use that value.
 
 `TestStoreScenarioStep.advance(_:by:onceSleepersReach:label:)` keeps its
-signature, but its wait for the sleeper threshold now uses the store's effect
-timeout (one second by default) instead of the clock's ten seconds, and an
-unmet threshold is a recorded test failure instead of a silently completed
-step. A scenario whose effect needs longer than the store deadline to reach
-its first sleep must raise that deadline (`effectTimeout:` or
-`INNOFLOW_TESTSTORE_EFFECT_TIMEOUT`). The failure is reported at the store's
-most recent assertion call site, because the step has no call-site parameters.
+signature, but its wait for the sleeper threshold is now bounded by the
+store's effect timeout (one second by default), and an unmet threshold is a
+recorded test failure. In 6.0.x the step waited until the test was cancelled
+or reached its time limit. A scenario whose effect needs longer than the
+store deadline to reach its first sleep must raise that deadline
+(`effectTimeout:` or `INNOFLOW_TESTSTORE_EFFECT_TIMEOUT`). The step has no
+call-site parameters, so the failure is reported at the store's most recent
+assertion call site, or at the running Swift Testing test when no assertion
+precedes the step.
+
+A clock wait deadline (`waitTimeout:` or `timeout:`) and a `TestStore`
+`effectTimeout:` above one day are clamped to one day. In 6.0.x an extreme
+`TestStore` deadline such as `.seconds(Int64.max)` trapped at its first wait.
 
 ## 6.0.2
 
@@ -710,7 +736,7 @@ for as long as that identity is needed. Calls from different source locations
 do not share a handle. Key-path-only selections keep one identity per call
 site and key path. In 6.0.x the owner keeps that selection for its own
 lifetime; the lifetime rules that follow 6.0.2 are described under
-"Unreleased" above.
+"6.1.0" above.
 Code that stores a closure-based `select` method itself as a function value
 must adapt to the new defaulted `id:` parameter; Swift does not apply default
 arguments when converting a method to a function value.

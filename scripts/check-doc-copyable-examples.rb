@@ -8,6 +8,7 @@ require "open3"
 require "tmpdir"
 require_relative "release-evidence-output-parser"
 require_relative "doc-example-contexts"
+require_relative "doc-install-requirement"
 
 root = File.realpath(File.expand_path("..", __dir__))
 parity, error, status = Open3.capture3("python3", File.join(__dir__, "check-readme-parity.py"), "--root", root)
@@ -471,7 +472,8 @@ begin
     target_names = package.fetch("targets").map { |target| target.fetch("name") }
     abort "[doc-copyable] #{relative} install targets drifted" unless
       target_names.sort == %w[YourAppTests YourDomain YourSwiftUIApp]
-    abort "[doc-copyable] #{relative} install version drifted" unless output.include?(%("#{release_target}"))
+    drift = DocInstallRequirement.version_drift(package, release_target)
+    abort "[doc-copyable] #{relative} install version drifted: #{drift}" if drift
   end
   puts "[doc-copyable] Compiled #{examples.length} external targets from #{examples.values.flatten(1).uniq.length} distinct exact Swift fences (#{examples.values.sum(&:length)} uses)"
   puts "[doc-copyable] Parsed #{install_files.length} installation manifests from #{install_files.length * 2} exact Swift fences"

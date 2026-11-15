@@ -54,6 +54,55 @@ struct ConditionalMacroConsistencyTests {
     #endif
   }
 
+  // The compiler activates `xrOS` together with `visionOS`, and `macabi` is
+  // the former name of `macCatalyst`. Neither pair is two platforms that
+  // exclude each other.
+  @Test(
+    "spellings the compiler activates together still overlap",
+    arguments: zip(
+      ["os(visionOS)", "targetEnvironment(macCatalyst)"],
+      ["os(xrOS)", "targetEnvironment(macabi)"]))
+  func aliasedConditionsCollide(condition: String, alias: String) throws {
+    #if canImport(InnoFlowMacros)
+      let result = try outputPaths(
+        """
+        enum Output {
+          #if \(condition)
+            case value(Int)
+          #endif
+          #if \(alias)
+            case _value(Int)
+          #endif
+        }
+        """)
+      #expect(result.diagnostics.count == 1)
+      #expect(result.diagnostics.first?.message.contains("`valueCasePath` collides") == true)
+    #endif
+  }
+
+  @Test(
+    "a spelling and the negation of its alias stay exclusive",
+    arguments: zip(
+      ["os(visionOS)", "targetEnvironment(macCatalyst)"],
+      ["os(xrOS)", "targetEnvironment(macabi)"]))
+  func aliasAndNegatedSpellingDoNotCollide(condition: String, alias: String) throws {
+    #if canImport(InnoFlowMacros)
+      let result = try outputPaths(
+        """
+        enum Output {
+          #if \(alias)
+            case value(Int)
+          #endif
+          #if !\(condition)
+            case _value(String)
+          #endif
+        }
+        """)
+      #expect(result.diagnostics.isEmpty)
+      #expect(result.source.components(separatedBy: "static let valueCasePath").count == 3)
+    #endif
+  }
+
   @Test("helper availability retains deprecation without a constructor rename")
   func outputRenameDoesNotRetargetAPath() throws {
     #if canImport(InnoFlowMacros)

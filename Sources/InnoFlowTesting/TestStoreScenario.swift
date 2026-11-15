@@ -94,10 +94,11 @@ public struct TestStoreScenarioStep<R: Reducer>: Sendable where R.State: Equatab
         } catch {
           guard Task.isCancelled == false else { return .cancelled }
           // The step has no call site of its own, so the failure is attributed
-          // to the latest assertion the test made on this store.
+          // to the latest assertion the test made on this store, or to the
+          // running test when the scenario starts with this step.
           store.issueReporter(
             "Scenario clock advance failed; the clock was not advanced.\n\n\(error)",
-            store.terminalVerificationSource ?? .init()
+            store.terminalVerificationSource ?? .unattributed()
           )
         }
         return Task.isCancelled ? .cancelled : .completed

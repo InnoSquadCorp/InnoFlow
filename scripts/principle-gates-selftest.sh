@@ -528,6 +528,11 @@ EOF
   write_api_breakage_allowlist 6.0.2 'Store.send()' 'public func send()'
   assert_failure env PATH="$tmp_root/bin:$PATH" \
     INNOFLOW_SELFTEST_API_COMMAND="$tmp_root/api-command" "$tmp_root/scripts/check-api-compatibility.sh"
+  # Another package declaration in the cited file cannot stand for a public
+  # break: it must be the named declaration or a type enclosing it.
+  write_api_breakage_allowlist 6.0.2 'Store.send()' 'package protocol Driver'
+  assert_failure env PATH="$tmp_root/bin:$PATH" \
+    INNOFLOW_SELFTEST_API_COMMAND="$tmp_root/api-command" "$tmp_root/scripts/check-api-compatibility.sh"
   write_api_breakage_allowlist 6.0.0 'Driver.run(awaited:)' 'package protocol Driver'
   assert_failure env PATH="$tmp_root/bin:$PATH" \
     INNOFLOW_SELFTEST_API_COMMAND="$tmp_root/api-command" "$tmp_root/scripts/check-api-compatibility.sh"

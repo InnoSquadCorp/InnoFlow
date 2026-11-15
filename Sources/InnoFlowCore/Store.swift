@@ -25,9 +25,13 @@ public final class Store<R: Reducer> {
 
   /// The current state without registering an Observation access.
   ///
-  /// Creating a projection reads state to seed its snapshot. That read is an
-  /// implementation detail: recording it would make a view that selects a
-  /// single value depend on every state change until its next evaluation.
+  /// Creating a key-path selection reads state to seed its snapshot. That read
+  /// is an implementation detail: recording it would make a view that selects
+  /// a single value depend on every state change until its next evaluation.
+  /// The owner keeps that selection alive for its reader instead. A
+  /// closure-based selection has no such retention, so it seeds from ``state``:
+  /// the recorded parent read is what still notifies a reader that created it
+  /// in a body and kept no handle.
   package var untrackedState: R.State {
     storedState
   }

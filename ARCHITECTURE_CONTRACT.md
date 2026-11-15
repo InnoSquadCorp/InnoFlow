@@ -204,12 +204,19 @@ expose the same tiered read contract:
   storage is compared element by element and refreshes every row on a
   structural change. A removed row is deactivated by the pass that
   classifies the removal, also when an observation callback scopes the
-  collection again in the middle of that pass. Rows of a row family that a
-  later scope over the same key path superseded stay correct but resolve
-  their element by scanning.
-- Creating a selection seeds its snapshot without recording an Observation
-  access on the parent, so a view that selects one value does not depend on
-  the whole parent state.
+  collection again in the middle of that pass, through the same or another
+  action path. Rows of a row family that a later scope over the same key path
+  superseded stay correct but resolve their element by scanning; the family
+  that replaces them reports their vanished elements at the next structural
+  change. A row whose id occurs more than once resolves its first occurrence.
+- Creating a key-path selection seeds its snapshot without recording an
+  Observation access on the parent, so a view that selects one value does
+  not depend on the whole parent state; the owner retains the selection for
+  its reader instead. A closure-based selection (`dependingOn:`,
+  `dependingOnAll:`, a selector, with or without `id:`) has no such
+  retention, so creating one during a tracked read records a read of the
+  parent's state, as in 6.0.x. A view that creates one in its body is
+  therefore invalidated by any parent change until it holds the selection.
 - A reducer-returned `.cancel`, a `cancelInFlight: true` replacement, a
   newer debounce request and a `latest` lane request are accepted in the
   MainActor turn of the reduction that returned them, whenever the
@@ -222,10 +229,13 @@ expose the same tiered read contract:
   runs, and the cancel covers its own effect when the interpreter reaches it
   (`merge` children run concurrently and have no order among themselves). A
   cancellation placed after asynchronous work in a `concatenate` is accepted
-  when that work completes. For a `latest` request the turn only marks the
-  superseded run so it can no longer emit; the lane displaces and releases
-  it, and reports it as superseded, when it admits the replacement. A
-  throttled subtree is the exception: whether it runs depends on its window,
+  when that work completes. A `latest` request that its lane will admit is
+  accepted completely in the turn, like `cancelInFlight: true`: the lane's
+  earlier request is displaced and reported as superseded, and every other
+  earlier effect under the identifier is released and recorded, even when
+  the replacing dispatch is then cancelled before its effect runs. A
+  `latest` request that a lane with another policy will reject changes
+  nothing. A throttled subtree is the exception: whether it runs depends on its window,
   so cancellation inside it is accepted when the interpreter admits it.
   `Store` and `TestStore` share this acceptance, so a test receives exactly
   the actions a production store reduces.

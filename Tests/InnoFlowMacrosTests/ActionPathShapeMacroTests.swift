@@ -342,6 +342,76 @@ struct ActionPathShapeMacroTests {
     #endif
   }
 
+  // Cases inside `#if` used to be skipped without a word. Their supported
+  // shapes now synthesize, but an unsupported shape there stays silent, in an
+  // active clause and an inactive one alike: a new warning would break a
+  // build that treats warnings as errors. The same shapes declared directly
+  // in the enum body keep their warnings.
+  @Test("Unsupported Action shapes inside #if stay silent; in the enum body they still warn")
+  func unsupportedShapesInsideIfConfigStaySilent() throws {
+    #if canImport(InnoFlowMacros)
+      let result = try actionPaths(
+        """
+        enum Action {
+          case log(message: String)
+          case pair(Int, String)
+          case maybe(Int?)
+          #if os(Linux)
+            case linuxLog(message: String)
+            case linuxPair(Int, String)
+          #elseif DEBUG
+            case debugMaybe(Int?)
+            #if FLAG
+              case flagLog(message: String)
+            #endif
+          #else
+            case releasePair(_ id: Int, _ name: String)
+          #endif
+        }
+        """)
+      #expect(result.diagnostics.map(\.node.trimmedDescription) == ["log", "pair", "maybe"])
+      #expect(
+        result.diagnostics.map(\.diagMessage.diagnosticID) == [
+          MessageID(domain: "InnoFlowMacro", id: "LabeledPayloadActionPathNote"),
+          MessageID(domain: "InnoFlowMacro", id: "MultiPayloadActionPathNote"),
+          MessageID(domain: "InnoFlowMacro", id: "OptionalPayloadActionPathNote"),
+        ])
+      #expect(result.diagnostics.allSatisfy { $0.diagMessage.severity == .warning })
+      #expect(result.parses)
+      #expect(result.source.contains("static let maybeCasePath = CasePath<Self, Int?>"))
+      #expect(
+        result.source.contains(
+          "#elseif DEBUG\nstatic let debugMaybeCasePath = CasePath<Self, Int?>"))
+      for caseName in ["log", "pair", "linuxLog", "linuxPair", "flagLog", "releasePair"] {
+        #expect(!result.source.contains("\(caseName)CasePath"))
+      }
+    #endif
+  }
+
+  // A payload written `_ name: T?` was neither synthesized nor diagnosed. It
+  // now synthesizes like `T?`; the optional-payload warning keeps covering
+  // only the spelling it always covered.
+  @Test("An optional payload with a local name synthesizes without a warning")
+  func optionalPayloadWithLocalNameDoesNotWarn() throws {
+    #if canImport(InnoFlowMacros)
+      let result = try actionPaths(
+        """
+        enum Action {
+          case select(_ index: Int?)
+          case maybe(Int?)
+        }
+        """)
+      #expect(result.diagnostics.map(\.node.trimmedDescription) == ["maybe"])
+      #expect(
+        result.diagnostics.map(\.diagMessage.diagnosticID) == [
+          MessageID(domain: "InnoFlowMacro", id: "OptionalPayloadActionPathNote")
+        ])
+      #expect(result.parses)
+      #expect(result.source.contains("static let selectCasePath = CasePath<Self, Int?>"))
+      #expect(result.source.contains("static let maybeCasePath = CasePath<Self, Int?>"))
+    #endif
+  }
+
   @Test("Generated Action paths mirror availability and skip unavailable cases")
   func actionPathsMirrorAvailability() throws {
     #if canImport(InnoFlowMacros)
@@ -684,6 +754,31 @@ struct ActionPathShapeMacroTests {
   }
 
   #if canImport(InnoFlowMacros)
+    private struct ActionPathExpansion {
+      let source: String
+      let diagnostics: [Diagnostic]
+      /// Whether every generated member is syntactically valid.
+      let parses: Bool
+    }
+
+    /// The members and diagnostics `@_InnoFlowActionPaths` produces for the
+    /// enum declared in `source`.
+    private func actionPaths(_ source: String) throws -> ActionPathExpansion {
+      let declaration = try #require(
+        Parser.parse(source: source).statements.first?.item.as(EnumDeclSyntax.self))
+      let context = BasicMacroExpansionContext()
+      let attribute = AttributeSyntax(
+        attributeName: IdentifierTypeSyntax(name: .identifier("_InnoFlowActionPaths")))
+      let members = try InnoFlowActionPathsMacro.expansion(
+        of: attribute, providingMembersOf: declaration, in: context)
+      let generated = members.map(\.description).joined(separator: "\n")
+      return ActionPathExpansion(
+        source: generated,
+        diagnostics: context.diagnostics,
+        parses: !Parser.parse(source: "enum Action {\n\(generated)\n}").hasError
+      )
+    }
+
     /// The diagnostics `@InnoFlow(phaseManaged: true)` reports for a feature
     /// whose `body` is `body`.
     private func phaseManagedDiagnostics(body: String) throws -> [Diagnostic] {

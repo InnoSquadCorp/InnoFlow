@@ -62,14 +62,21 @@ extension Store {
     }
     guard case .all(let id) = request else { return }
 
+    // Dispatches released in the reduction turn were recorded there; what is
+    // left is the work of the issuing sequence. Read it before marking: once
+    // marked, that work also matches the earlier boundary through its
+    // cancelled token and would be subtracted with the rest.
+    var ownTargets: Set<DispatchID> = []
+    if diagnostics != nil, let ownSequence = context?.sequence {
+      ownTargets = effectBridge.cancellationTargetDispatchIDs(id: id, upTo: ownSequence)
+      if ownSequence > 0 {
+        ownTargets.subtract(
+          effectBridge.cancellationTargetDispatchIDs(id: id, upTo: ownSequence - 1))
+      }
+    }
     let sequence = effectBridge.markCancelled(id: id, upTo: context?.sequence)
     if diagnostics != nil {
-      // Dispatches released in the reduction turn were recorded there.
-      var targets = effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence)
-      if sequence > 0 {
-        targets.subtract(effectBridge.cancellationTargetDispatchIDs(id: id, upTo: sequence - 1))
-      }
-      recordDiagnosticCancellations(targets, sequence: sequence, hasEffectID: true)
+      recordDiagnosticCancellations(ownTargets, sequence: sequence, hasEffectID: true)
     }
     effectBridge.cancelEffects(id: id, upTo: sequence)
   }
@@ -104,7 +111,20 @@ extension Store: ReductionTurnCancellationAcceptor {
     scope.recordAcceptedCancellation(request)
   }
 
-  package func markSupersededInReductionTurn(id: AnyEffectID, context: EffectExecutionContext) {
-    effectBridge.markCancelledInFlight(id: id, upTo: context.sequence)
+  package func runLaneKind(for id: AnyEffectID) -> EffectExecutionPolicy.Kind? {
+    effectBridge.runScheduler.laneKind(for: id)
+  }
+
+  package func acceptLatestReplacementInReductionTurn(
+    id: AnyEffectID,
+    context: EffectExecutionContext
+  ) {
+    guard context.cancellationScope != nil else { return }
+    // Admission order: the lane's own requests are displaced and reported as
+    // superseded first, then everything else under `id` is released. The
+    // interpreter's admission later consumes the recorded acceptance instead
+    // of repeating it.
+    effectBridge.runScheduler.displaceLatestLane(id: id, successor: context)
+    acceptInReductionTurn(.inFlight(id), context: context)
   }
 }

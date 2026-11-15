@@ -72,8 +72,9 @@ The next target is 6.1.0. Its changelog section, migration section, release
 notes, the seven README installation snippets, the user guide and this file
 name 6.1.0, while `STABLE_VERSION` stays 6.0.2. `scripts/check-readme-parity.py`
 takes the target from the newest `RELEASE_NOTES.md` section, as
-`scripts/check-release-sync.sh` does, and still requires every README to link
-the published stable source and name its publication date and tag commit.
+`scripts/check-release-sync.sh` does, requires every `from:` and `exact:` pin
+in the seven READMEs to name that target, and still requires every README to
+link the published stable source and name its publication date and tag commit.
 After publication, promote `STABLE_VERSION`, that README provenance (also
 pinned in `scripts/check-readme-parity.py`) and the published wording together
 in one development commit, and empty `docs/contracts/api-breakage-allowlist.json`
@@ -144,9 +145,11 @@ tag, run and confirm the following in CI (not a local release matrix):
    The digester also reports `package`-access declarations, which no consumer
    can use. Those diagnostics are listed one by one in
    `docs/contracts/api-breakage-allowlist.json`; `scripts/check-api-breakage-allowlist.py`
-   accepts an entry only when the baseline source shows a `package`
-   declaration for it, so a `public` declaration cannot be listed. The list is
-   bound to one baseline: empty it when `STABLE_VERSION` moves.
+   accepts an entry only when the cited baseline `package` declaration is the
+   declaration the message names (same kind, enclosing types and argument
+   labels) or a type on its path, so neither a `public` declaration nor an
+   unrelated `package` one can be listed. The list is bound to one baseline:
+   empty it when `STABLE_VERSION` moves.
    The 6.0.0 classification is recorded in
    [docs/API_BREAKAGE_6_0.md](docs/API_BREAKAGE_6_0.md).
 8. Thread and address sanitizer package tests, each with `--jobs 1 --no-parallel`.

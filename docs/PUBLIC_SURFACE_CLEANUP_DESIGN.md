@@ -6,7 +6,7 @@ needs the major-version review that `CLAUDE.md` requires before any code
 moves.
 
 This document is the surface pass that follows the runtime, projection,
-macro and testing corrections recorded under `[Unreleased]` in
+macro and testing corrections recorded under `[6.1.0]` in
 `CHANGELOG.md`. Those corrections kept every public signature; the behavior
 they changed is listed in `MIGRATION.md`. What remains is surface that is
 correct but larger than the model it expresses.
