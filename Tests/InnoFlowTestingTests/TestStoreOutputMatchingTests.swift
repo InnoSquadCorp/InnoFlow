@@ -2,7 +2,7 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
-@Suite("TestStore output matching")
+@Suite("TestStore output matching", .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreOutputMatchingTests {
   @Test("predicates receive non-equatable outputs and return the matched value")

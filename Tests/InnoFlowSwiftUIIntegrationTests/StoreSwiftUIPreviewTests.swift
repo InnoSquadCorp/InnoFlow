@@ -40,7 +40,7 @@ private struct PreviewFeature: Reducer {
   }
 }
 
-@Suite("Store.preview SwiftUI integration", .serialized)
+@Suite("Store.preview SwiftUI integration", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct StoreSwiftUIPreviewTests {
 

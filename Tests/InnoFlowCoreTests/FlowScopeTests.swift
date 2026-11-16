@@ -4,7 +4,7 @@ import Testing
 @testable import InnoFlowCore
 @testable import InnoFlowCoreTestSupport
 
-@Suite("FlowScope lifetime")
+@Suite("FlowScope lifetime", .timeLimit(.minutes(5)))
 @MainActor
 struct FlowScopeTests {
   @Test("normal scope exit cancels and joins unfinished dispatches")

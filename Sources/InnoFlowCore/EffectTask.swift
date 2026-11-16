@@ -199,18 +199,6 @@ public struct EffectContext: Sendable {
 /// is `Never`. Reducers that emit coordinator events use this full type so the
 /// output remains checked through composition and store delivery.
 public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
-  package struct LazyMappedEffect: Sendable {
-    private let materializeEffect: @Sendable () -> ReducerEffect<Action, Output>
-
-    package init(_ materializeEffect: @escaping @Sendable () -> ReducerEffect<Action, Output>) {
-      self.materializeEffect = materializeEffect
-    }
-
-    package func materialize() -> ReducerEffect<Action, Output> {
-      materializeEffect()
-    }
-  }
-
   package indirect enum Operation: Sendable {
     case none
     case send(Action)
@@ -255,7 +243,6 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     )
     case lifetimeScope(id: ChildLifetimeProjection, effect: ReducerEffect<Action, Output>)
     case owned(owner: ChildLifetimeOwner, effect: ReducerEffect<Action, Output>)
-    case lazyMap(LazyMappedEffect)
     /// Routes a drop event through the effect walker so reducers that do not
     /// own `Send` (e.g., `IfLet`/`IfCaseLet`) can still surface
     /// `StoreInstrumentation.didDropAction` to the host store.
@@ -265,16 +252,24 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
   package let operation: Operation
   package let containsLifetimeMetadata: Bool
 
-  /// Cancellation IDs precomputed at construction, or `nil` when the subtree
-  /// contains a `.lazyMap` node — materializing those at construction would
-  /// defeat the laziness they exist for, so lazy subtrees fall back to the
-  /// recursive walk on access.
-  private let cachedPotentialCancellationIDs: Set<AnyEffectID>?
+  /// Whether interpreting this tree can request cancellation before awaiting
+  /// asynchronous work (`.cancel`, `cancelInFlight: true`, debounce
+  /// replacement, a `latest` lane request). The runtime uses it to skip the
+  /// acceptance pass for the common trees that never cancel anything.
+  package let mayRequestCancellation: Bool
+
+  /// Cancellation identifiers that this concrete effect tree may still introduce.
+  ///
+  /// The runtime uses this finite set to retain pre-registration cancellation
+  /// state only for IDs the active interpreter can actually discover. The set
+  /// is computed once at construction; children carry their own sets, so
+  /// composing N effects costs O(N), not a fresh tree walk.
+  package let potentialCancellationIDs: Set<AnyEffectID>
 
   package init(operation: Operation) {
     self.operation = operation
     switch operation {
-    case .optionalChild, .lifetimeScope, .lazyMap:
+    case .optionalChild, .lifetimeScope:
       self.containsLifetimeMetadata = true
     case .merge(let effects), .concatenate(let effects):
       self.containsLifetimeMetadata = effects.contains { $0.containsLifetimeMetadata }
@@ -284,68 +279,30 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     default:
       self.containsLifetimeMetadata = false
     }
-    self.cachedPotentialCancellationIDs = Self.eagerPotentialCancellationIDs(of: operation)
-  }
-
-  /// Cancellation identifiers that this concrete effect tree may still introduce.
-  ///
-  /// The runtime uses this finite set to retain pre-registration cancellation
-  /// state only for IDs the active interpreter can actually discover. The set
-  /// is computed once at construction (children carry their own cached sets,
-  /// so composing N effects costs O(N), not a fresh tree walk); only subtrees
-  /// containing `.lazyMap` recompute on access.
-  package var potentialCancellationIDs: Set<AnyEffectID> {
-    cachedPotentialCancellationIDs ?? Self.walkPotentialCancellationIDs(of: operation)
-  }
-
-  /// Construction-time variant: returns `nil` as soon as a `.lazyMap` node is
-  /// involved so laziness is preserved.
-  private static func eagerPotentialCancellationIDs(
-    of operation: Operation
-  ) -> Set<AnyEffectID>? {
     switch operation {
-    case .none, .send, .output, .run, .cancel, .diagnosticDrop:
-      return []
-
-    case .scheduledRun(let id, _, _, _, _):
-      return [id]
-
+    case .cancel, .debounce:
+      self.mayRequestCancellation = true
+    case .cancellable(let effect, _, let cancelInFlight):
+      self.mayRequestCancellation = cancelInFlight || effect.mayRequestCancellation
     case .merge(let effects), .concatenate(let effects):
-      var ids: Set<AnyEffectID> = []
-      for effect in effects {
-        guard let childIDs = effect.cachedPotentialCancellationIDs else { return nil }
-        ids.formUnion(childIDs)
-      }
-      return ids
-
-    case .cancellable(let effect, let id, _),
-      .debounce(let effect, let id, _):
-      guard let childIDs = effect.cachedPotentialCancellationIDs else { return nil }
-      return childIDs.union([id])
-
-    case .throttle(let effect, let id, _, _, _):
-      guard let childIDs = effect.cachedPotentialCancellationIDs else { return nil }
-      return childIDs.union([id])
-
+      self.mayRequestCancellation = effects.contains { $0.mayRequestCancellation }
+    case .animation(let effect, _), .owned(_, let effect), .lifetimeScope(_, let effect):
+      self.mayRequestCancellation = effect.mayRequestCancellation
     case .optionalChild(_, _, _, let child, let parent):
-      guard let childIDs = child.cachedPotentialCancellationIDs,
-        let parentIDs = parent.cachedPotentialCancellationIDs
-      else { return nil }
-      return childIDs.union(parentIDs)
-
-    case .owned(let owner, let effect):
-      return effect.cachedPotentialCancellationIDs.map { $0.union([owner.cancellationID]) }
-
-    case .lifetimeScope(_, let effect), .animation(let effect, _):
-      return effect.cachedPotentialCancellationIDs
-
-    case .lazyMap:
-      return nil
+      self.mayRequestCancellation = child.mayRequestCancellation || parent.mayRequestCancellation
+    case .scheduledRun(_, let policy, _, _, _):
+      // Only a `latest` request replaces its predecessors; the other lane
+      // policies queue or reject and cancel nothing.
+      self.mayRequestCancellation = policy == .latest
+    case .none, .send, .output, .run, .throttle, .diagnosticDrop:
+      // A throttled subtree runs only when its window admits it, so it is
+      // not reachable without interpreter-time state.
+      self.mayRequestCancellation = false
     }
+    self.potentialCancellationIDs = Self.potentialCancellationIDs(of: operation)
   }
 
-  /// Access-time fallback for lazy subtrees; materializes `.lazyMap` nodes.
-  private static func walkPotentialCancellationIDs(
+  private static func potentialCancellationIDs(
     of operation: Operation
   ) -> Set<AnyEffectID> {
     switch operation {
@@ -356,9 +313,11 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
       return [id]
 
     case .merge(let effects), .concatenate(let effects):
-      return effects.reduce(into: []) { ids, effect in
+      var ids: Set<AnyEffectID> = []
+      for effect in effects {
         ids.formUnion(effect.potentialCancellationIDs)
       }
+      return ids
 
     case .cancellable(let effect, let id, _),
       .debounce(let effect, let id, _):
@@ -375,9 +334,6 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
 
     case .lifetimeScope(_, let effect), .animation(let effect, _):
       return effect.potentialCancellationIDs
-
-    case .lazyMap(let lazyMapped):
-      return lazyMapped.materialize().potentialCancellationIDs
     }
   }
 
@@ -720,21 +676,13 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
     case .cancel(let id):
       return .cancel(id)
 
-    case .lazyMap:
-      return eagerMap(transform)
-
     case .diagnosticDrop(let action, let reason):
       return .reportDrop(transform(action), reason: reason)
 
     case .run, .scheduledRun, .merge, .concatenate, .cancellable, .debounce, .throttle, .animation,
       .optionalChild, .lifetimeScope, .owned:
-      // Flatten the 1-stage map fast path: rather than wrapping the source in
-      // a `.lazyMap` (one closure allocation now + one indirect materialize
-      // on each walk), rewrite the operation tree eagerly. The work is
-      // identical to what `EffectWalker` would have done via
-      // `lazyMapped.materialize()`, just paid at construction time, so the
-      // run-time path skips a heap-allocated closure box and an extra
-      // dispatch through the `.lazyMap` case in `EffectWalker.walk`.
+      // Structural effects are rewritten eagerly, once, at composition time.
+      // The interpreter never pays for a deferred mapping layer.
       return eagerMap(transform)
     }
   }
@@ -811,21 +759,13 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
 
     case .animation(let effect, let animation):
       return effect.mapOutput(transform).applyingAnimation(animation)
-
-    case .lazyMap(let lazyMapped):
-      return lazyMapped.materialize().mapOutput(transform)
     }
   }
 
   private func eagerMap<NewAction: Sendable>(
     _ transform: @escaping @Sendable (Action) -> NewAction
   ) -> ReducerEffect<NewAction, Output> {
-    var current = self
-    while case .lazyMap(let lazyMapped) = current.operation {
-      current = lazyMapped.materialize()
-    }
-
-    switch current.operation {
+    switch operation {
     case .none:
       return .none
 
@@ -908,10 +848,6 @@ public struct ReducerEffect<Action: Sendable, Output: Sendable>: Sendable {
 
     case .diagnosticDrop(let action, let reason):
       return .reportDrop(transform(action), reason: reason)
-
-    case .lazyMap:
-      preconditionFailure(
-        "lazyMap layers must be flattened before eagerMap switches on the concrete operation")
     }
   }
 }

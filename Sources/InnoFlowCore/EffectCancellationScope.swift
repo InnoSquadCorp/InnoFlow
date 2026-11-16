@@ -3,7 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import os
+import Synchronization
 
 package struct EffectCancellationScopeMetrics: Sendable, Equatable {
   package let liveScopes: Int
@@ -27,6 +27,22 @@ package struct EffectCancellationScopeMetrics: Sendable, Equatable {
   }
 }
 
+/// A cancellation request returned by a reducer.
+///
+/// `all` cancels every effect for the identifier up to the requesting
+/// sequence; `inFlight` keeps the requesting sequence alive and cancels only
+/// its predecessors (`cancelInFlight: true`, debounce replacement).
+package enum EffectCancellationRequest: Hashable, Sendable {
+  case all(AnyEffectID)
+  case inFlight(AnyEffectID)
+
+  package var id: AnyEffectID {
+    switch self {
+    case .all(let id), .inFlight(let id): return id
+    }
+  }
+}
+
 /// A cancellation token retained only by work that is actually owned by an ID.
 ///
 /// The token keeps late emissions suppressed after the interpreter that created
@@ -37,7 +53,7 @@ package final class EffectCancellationToken: Sendable {
 
   private let registrationID: UUID
   private let scope: EffectCancellationScope
-  private let cancelled = OSAllocatedUnfairLock(initialState: false)
+  private let cancelled = Mutex(false)
 
   fileprivate init(
     id: AnyEffectID,
@@ -84,9 +100,18 @@ package final class EffectInterpreterLease: Sendable {
 /// Cancellation state for one issued Store/TestStore effect sequence.
 ///
 /// A scope keeps only live exact-ID tokens plus IDs that a still-active
-/// interpreter may discover later (for example through a concatenate sibling
-/// or lazy map). Once interpretation ends, unrelated long-running work retains
+/// interpreter may discover later (for example through a concatenate
+/// sibling). Once interpretation ends, unrelated long-running work retains
 /// no historical dynamic IDs.
+///
+/// Lock discipline: tokens and scopes are referenced weakly and remove their
+/// own entry from a deinitializer that takes the owning lock. A strong
+/// reference loaded from weak storage must therefore never be released while
+/// that lock is held — if another thread dropped the last other reference in
+/// the meantime, the release would run the deinitializer and re-enter the
+/// lock. Every lookup hands the loaded reference out of the critical section
+/// and releases it afterwards; nothing inside a critical section tests a weak
+/// reference for liveness.
 package final class EffectCancellationScope: Sendable {
   private struct WeakToken {
     weak var value: EffectCancellationToken?
@@ -99,6 +124,15 @@ package final class EffectCancellationScope: Sendable {
     var potentialCancellationIDs: Set<AnyEffectID>
     var pendingCancellationIDs: Set<AnyEffectID> = []
     var tokensByID: [AnyEffectID: WeakToken] = [:]
+    /// Requests accepted in the reduction turn, before the interpreter task
+    /// reaches the node that issued them, counted per request.
+    var acceptedCancellations: [EffectCancellationRequest: Int] = [:]
+    /// The dispatch whose effect this scope belongs to, and whether its root
+    /// interpreter has still to start. Work such a scope declares is not
+    /// registered anywhere yet, so a cancellation accepted in that gap finds
+    /// the affected dispatch here.
+    var dispatchID: DispatchID?
+    var awaitsInterpretation = true
 
     init(potentialCancellationIDs: Set<AnyEffectID>) {
       self.potentialCancellationIDs = potentialCancellationIDs
@@ -109,7 +143,7 @@ package final class EffectCancellationScope: Sendable {
 
   private let registrationID: UUID
   private let registry: EffectCancellationScopeRegistry
-  private let state: OSAllocatedUnfairLock<State>
+  private let state: Mutex<State>
 
   fileprivate init(
     sequence: UInt64,
@@ -120,8 +154,8 @@ package final class EffectCancellationScope: Sendable {
     self.sequence = sequence
     self.registrationID = registrationID
     self.registry = registry
-    self.state = OSAllocatedUnfairLock(
-      initialState: State(potentialCancellationIDs: potentialCancellationIDs)
+    self.state = Mutex(
+      State(potentialCancellationIDs: potentialCancellationIDs)
     )
   }
 
@@ -135,7 +169,6 @@ package final class EffectCancellationScope: Sendable {
         state.potentialCancellationIDs.contains(id),
         "Cancellation ID was not declared by the effect tree preflight"
       )
-      removeReleasedTokens(from: &state)
       if let token = state.tokensByID[id]?.value {
         return token
       }
@@ -161,20 +194,17 @@ package final class EffectCancellationScope: Sendable {
   }
 
   package func isCancelled(id: AnyEffectID) -> Bool {
-    state.withLock { state in
-      removeReleasedTokens(from: &state)
+    let lookup = state.withLock { state -> (isCancelled: Bool, token: EffectCancellationToken?) in
       if state.isGloballyCancelled || state.pendingCancellationIDs.contains(id) {
-        return true
+        return (true, nil)
       }
-      return state.tokensByID[id]?.value?.isCancelled == true
+      return (false, state.tokensByID[id]?.value)
     }
+    return lookup.isCancelled || lookup.token?.isCancelled == true
   }
 
   package var retainedCancellationIDCount: Int {
-    state.withLock { state in
-      removeReleasedTokens(from: &state)
-      return state.pendingCancellationIDs.count
-    }
+    state.withLock { $0.pendingCancellationIDs.count }
   }
 
   package var retainedPotentialIDCount: Int {
@@ -182,9 +212,14 @@ package final class EffectCancellationScope: Sendable {
   }
 
   package var liveExactTokenCount: Int {
+    liveTokens().count
+  }
+
+  /// Strong references to every token that is still alive. The references
+  /// leave the critical section so their release cannot re-enter the lock.
+  private func liveTokens() -> [EffectCancellationToken] {
     state.withLock { state in
-      removeReleasedTokens(from: &state)
-      return state.tokensByID.count
+      state.tokensByID.values.compactMap(\.value)
     }
   }
 
@@ -192,9 +227,48 @@ package final class EffectCancellationScope: Sendable {
     state.withLock { $0.interpreterCount }
   }
 
+  /// Names the dispatch that owns this scope's effect.
+  package func bindDispatch(_ dispatchID: DispatchID?) {
+    state.withLock { $0.dispatchID = dispatchID }
+  }
+
+  /// Marks the root interpreter as started: from here on the work this scope
+  /// owns is registered with the runtime as it is created.
+  package func beginInterpretation() {
+    state.withLock { $0.awaitsInterpretation = false }
+  }
+
+  /// The owning dispatch, while the root interpreter has not started and the
+  /// effect declares work under `id` (any work when `id` is `nil`).
+  fileprivate func uninterpretedDispatchID(declaring id: AnyEffectID?) -> DispatchID? {
+    state.withLock { state in
+      guard state.awaitsInterpretation, state.interpreterCount > 0 else { return nil }
+      if let id, !state.potentialCancellationIDs.contains(id) { return nil }
+      return state.dispatchID
+    }
+  }
+
+  /// Records a request accepted synchronously with the reduction that
+  /// returned it. The interpreter later consumes exactly one entry per node,
+  /// so acceptance and its instrumentation happen once.
+  package func recordAcceptedCancellation(_ request: EffectCancellationRequest) {
+    state.withLock { $0.acceptedCancellations[request, default: 0] += 1 }
+  }
+
+  /// Returns `true` when the request was already accepted for this sequence,
+  /// consuming that acceptance; `false` when the interpreter must accept it.
+  package func consumeAcceptedCancellation(_ request: EffectCancellationRequest) -> Bool {
+    state.withLock { state in
+      guard let count = state.acceptedCancellations[request], count > 0 else {
+        return false
+      }
+      state.acceptedCancellations[request] = count == 1 ? nil : count - 1
+      return true
+    }
+  }
+
   fileprivate func cancel(id: AnyEffectID) {
     let token = state.withLock { state -> EffectCancellationToken? in
-      removeReleasedTokens(from: &state)
       if state.interpreterCount > 0, state.potentialCancellationIDs.contains(id) {
         state.pendingCancellationIDs.insert(id)
       }
@@ -205,7 +279,6 @@ package final class EffectCancellationScope: Sendable {
 
   package func cancelAll() {
     let tokens = state.withLock { state -> [EffectCancellationToken] in
-      removeReleasedTokens(from: &state)
       state.isGloballyCancelled = true
       return state.tokensByID.values.compactMap(\.value)
     }
@@ -225,23 +298,14 @@ package final class EffectCancellationScope: Sendable {
       if state.interpreterCount == 0 {
         state.potentialCancellationIDs.removeAll(keepingCapacity: false)
         state.pendingCancellationIDs.removeAll(keepingCapacity: false)
+        state.acceptedCancellations.removeAll(keepingCapacity: false)
       }
-      removeReleasedTokens(from: &state)
     }
   }
 
   fileprivate func removeToken(id: AnyEffectID, registrationID: UUID) {
     state.withLock { state in
       guard state.tokensByID[id]?.registrationID == registrationID else { return }
-      state.tokensByID.removeValue(forKey: id)
-    }
-  }
-
-  private func removeReleasedTokens(from state: inout State) {
-    let releasedIDs = state.tokensByID.compactMap { id, token in
-      token.value == nil ? id : nil
-    }
-    for id in releasedIDs {
       state.tokensByID.removeValue(forKey: id)
     }
   }
@@ -257,7 +321,7 @@ package final class EffectCancellationScopeRegistry: Sendable {
     weak var value: EffectCancellationScope?
   }
 
-  private let scopes = OSAllocatedUnfairLock(initialState: [UUID: WeakScope]())
+  private let scopes = Mutex([UUID: WeakScope]())
 
   package init() {}
 
@@ -278,15 +342,30 @@ package final class EffectCancellationScopeRegistry: Sendable {
   }
 
   package func cancel(id: AnyEffectID, upTo sequence: UInt64) {
-    for scope in liveScopes(upTo: sequence) {
+    for scope in liveScopes() where scope.sequence <= sequence {
       scope.cancel(id: id)
     }
   }
 
   package func cancelAll(upTo sequence: UInt64) {
-    for scope in liveScopes(upTo: sequence) {
+    for scope in liveScopes() where scope.sequence <= sequence {
       scope.cancelAll()
     }
+  }
+
+  /// Dispatches at or below `sequence` whose root interpreter has not started
+  /// and whose effect declares work under `id` (any work when `id` is `nil`).
+  package func uninterpretedDispatchIDs(
+    declaring id: AnyEffectID?,
+    upTo sequence: UInt64
+  ) -> Set<DispatchID> {
+    var dispatchIDs: Set<DispatchID> = []
+    for scope in liveScopes() where scope.sequence <= sequence {
+      if let dispatchID = scope.uninterpretedDispatchID(declaring: id) {
+        dispatchIDs.insert(dispatchID)
+      }
+    }
+    return dispatchIDs
   }
 
   package var retainedCancellationIDCount: Int {
@@ -321,21 +400,13 @@ package final class EffectCancellationScopeRegistry: Sendable {
     _ = scopes.withLock { $0.removeValue(forKey: registrationID) }
   }
 
-  private func liveScopes(upTo sequence: UInt64? = nil) -> [EffectCancellationScope] {
+  /// Strong references to every scope that is still alive. A scope removes
+  /// its own entry when it is deinitialized, so the lookup never prunes; the
+  /// references leave the critical section and callers filter them outside
+  /// it, so no scope is released while the registry lock is held.
+  private func liveScopes() -> [EffectCancellationScope] {
     scopes.withLock { scopes in
-      removeReleasedScopes(from: &scopes)
-      return scopes.values.compactMap(\.value).filter { scope in
-        sequence.map { scope.sequence <= $0 } ?? true
-      }
-    }
-  }
-
-  private func removeReleasedScopes(from scopes: inout [UUID: WeakScope]) {
-    let releasedIDs = scopes.compactMap { id, scope in
-      scope.value == nil ? id : nil
-    }
-    for id in releasedIDs {
-      scopes.removeValue(forKey: id)
+      scopes.values.compactMap(\.value)
     }
   }
 }

@@ -6,21 +6,21 @@
 
 SwiftUI-orientierte unidirektionale Zustandsverwaltung für Geschäfts- und Domänenübergänge. Beginne mit Reducer, Store und deterministischen Tests; ergänze Orchestrierung, sobald dein Feature sie braucht.
 
-## InnoFlow 6.0.2
+## InnoFlow 6.1.0
 
-Diese README beschreibt die **veröffentlichte API von 6.0.2**, erschienen am **2026-10-08** aus `1176de1e4783b638c03a9334f43cc49378957148`. [Versionierter Quellcode](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [Release Notes](RELEASE_NOTES.md) · [Migration](MIGRATION.md).
+Diese README beschreibt den **Release-Kandidaten 6.1.0**, der noch nicht getaggt oder veröffentlicht ist. **6.0.2** bleibt das veröffentlichte stabile Release, erschienen am **2026-10-08** aus `1176de1e4783b638c03a9334f43cc49378957148`. [Quellcode von 6.0.2](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [Release Notes](RELEASE_NOTES.md) · [Migration](MIGRATION.md).
 
-Der Entwicklungsbranch enthält spätere Änderungen an CI, Teststruktur, Validierung und Dokumentation. Bei dieser Aktualisierung entspricht `Sources/` 6.0.2; spätere Werkzeugänderungen sind unveröffentlicht. `STABLE_VERSION` ist dort 6.0.2; der unveränderliche Tag bewahrt seine damaligen Kandidatenmetadaten. Gehostetes DocC folgt der bereitgestellten Revision; prüfe installierte Versionen anhand des Tags. Alle sieben READMEs behandeln denselben Einstieg; ausführliche Leitfäden sind auf Englisch.
+6.1.0 begrenzt Wartevorgänge von `ManualTestClock` und ändert, wann vom Reducer zurückgegebene Abbrüche wirken, wie lange Key-Path-Selektionen leben, welche Throttle-Anfrage ausgeführt wird und welche Case Paths `@InnoFlow` synthetisiert; lies vor dem Upgrade die Migrationshinweise. `STABLE_VERSION` bleibt 6.0.2, bis die Veröffentlichung bestätigt ist. Gehostetes DocC folgt der bereitgestellten Revision; prüfe installierte Versionen anhand des Tags. Alle sieben READMEs behandeln denselben Einstieg; ausführliche Leitfäden sind auf Englisch.
 
 ## Installation
 
 Swift **6.3+**, Swift-Sprachmodus **6**; iOS **18+**, macOS **15+**, tvOS **18+**, watchOS **11+**, visionOS **2+**. SwiftSyntax benötigt `>=603.0.0, <605.0.0`; die Lockdateien verwenden 604.0.0. Wähle Xcode/SDK passend zum Ziel. Deklarierte Mindestversionen beweisen keine Ausführung auf jeder älteren Runtime.
 
-Füge das Paket hinzu und wähle Produkte ausdrücklich. `from:` erlaubt spätere kompatible Versionen; prüfe die tatsächliche `Package.resolved`. Verwende `exact: "6.0.2"` zur Reproduktion dieses Releases.
+Füge das Paket hinzu und wähle Produkte ausdrücklich. `from:` erlaubt spätere kompatible Versionen; prüfe die tatsächliche `Package.resolved`. Verwende `exact: "6.1.0"` zur Reproduktion dieses Releases.
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.1.0")
 ]
 ```
 

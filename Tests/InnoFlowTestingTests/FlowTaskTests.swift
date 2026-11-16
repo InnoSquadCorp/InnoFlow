@@ -3,7 +3,7 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
-@Suite("FlowTask dispatch lifetime")
+@Suite("FlowTask dispatch lifetime", .timeLimit(.minutes(5)))
 @MainActor
 struct FlowTaskTests {
   @Test("finish waits for descendant effects and their follow-up actions")
@@ -43,7 +43,7 @@ struct FlowTaskTests {
   }
 
   @Test("cancelling the finish caller cancels the dispatch tree")
-  func finishPropagatesCallerCancellation() async {
+  func finishPropagatesCallerCancellation() async throws {
     let clock = ManualTestClock()
     let store = Store(
       reducer: FlowTaskFeature(),
@@ -51,7 +51,7 @@ struct FlowTaskTests {
     )
 
     let flowTask = store.send(.delayed(1))
-    try? await clock.waitForSleepers(atLeast: 1)
+    try await clock.waitForSleepers(atLeast: 1)
 
     let waiter = Task {
       await flowTask.finish()
@@ -66,7 +66,7 @@ struct FlowTaskTests {
   }
 
   @Test("cancelling an older dispatch preserves newer trailing throttle work")
-  func olderCancellationPreservesNewerThrottleWork() async {
+  func olderCancellationPreservesNewerThrottleWork() async throws {
     let clock = ManualTestClock()
     let store = Store(
       reducer: FlowTaskThrottleFeature(),
@@ -74,7 +74,7 @@ struct FlowTaskTests {
     )
 
     let first = store.send(.request(1))
-    try? await clock.waitForSleepers(atLeast: 1)
+    try await clock.waitForSleepers(atLeast: 1)
 
     let second = store.send(.request(2))
     for _ in 0..<200 {

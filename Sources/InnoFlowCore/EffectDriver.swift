@@ -58,7 +58,18 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
   }
 
   private var windowEndByID: [AnyEffectID: ContinuousClock.Instant] = [:]
-  private var pendingByID: [AnyEffectID: PendingTrailing] = [:]
+  /// Trailing requests of the current window, oldest first.
+  ///
+  /// The window fires the newest request that can still proceed. Requests it
+  /// supersedes are kept so that cancelling the newest request's dispatch
+  /// gives the window back to the request it replaced instead of silently
+  /// taking that request down with it: a dispatch's cancellation affects only
+  /// that dispatch. The list is bounded by ``supersededPendingLimit``.
+  private var pendingByID: [AnyEffectID: [PendingTrailing]] = [:]
+
+  /// How many trailing requests one window retains: the newest and the
+  /// requests it can fall back to. Older ones are dropped first.
+  package static var supersededPendingLimit: Int { 8 }
   private var trailingTaskByID: [AnyEffectID: Task<Void, Never>] = [:]
   private var trailingCompletionByID: [AnyEffectID: FlowTaskCompletion] = [:]
   private var generationByID: [AnyEffectID: UInt64] = [:]
@@ -82,17 +93,35 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
     requiresAwaitedCompletion: Bool = false,
     for id: AnyEffectID
   ) {
+    var requests = pendingByID[id] ?? []
     let requiresAwaitedCompletion =
-      pendingByID[id]?.requiresAwaitedCompletion == true || requiresAwaitedCompletion
-    pendingByID[id] = .init(
-      effect: effect,
-      context: context,
-      requiresAwaitedCompletion: requiresAwaitedCompletion
+      requests.contains { $0.requiresAwaitedCompletion } || requiresAwaitedCompletion
+    // A request that can no longer proceed will never fire; only requests
+    // that could still be fallen back to are worth retaining.
+    requests.removeAll { $0.context?.shouldProceed == false }
+    requests.append(
+      .init(
+        effect: effect,
+        context: context,
+        requiresAwaitedCompletion: requiresAwaitedCompletion
+      )
     )
+    if requests.count > Self.supersededPendingLimit {
+      requests.removeFirst(requests.count - Self.supersededPendingLimit)
+    }
+    pendingByID[id] = requests
   }
 
+  /// The newest trailing request stored for the window, whether or not it
+  /// can still proceed.
   package func pending(for id: AnyEffectID) -> PendingTrailing? {
-    pendingByID[id]
+    pendingByID[id]?.last
+  }
+
+  /// The trailing request the window fires when it closes: the newest one
+  /// whose context can still proceed.
+  package func pendingToFire(for id: AnyEffectID) -> PendingTrailing? {
+    pendingByID[id]?.last { $0.context?.shouldProceed ?? true }
   }
 
   package func setTrailingTask(
@@ -379,22 +408,23 @@ package protocol EffectDriver<Action, Output>: AnyObject {
 
   // MARK: - Concurrency Primitives
 
-  /// Run children concurrently (merge).
+  /// Start children concurrently (merge) without waiting for them. The
+  /// walker awaits an awaited merge itself, so a driver only ever owns the
+  /// detached form.
   func runConcurrently(
     _ children: [ReducerEffect<Action, Output>],
     context: EffectExecutionContext?,
-    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         ReducerEffect<Action, Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async
 
-  /// Run children sequentially (concatenate).
+  /// Start children sequentially (concatenate) in a driver-owned task without
+  /// waiting for it. The walker runs an awaited concatenation itself.
   func runSequentially(
     _ children: [ReducerEffect<Action, Output>],
     context: EffectExecutionContext?,
-    awaited: Bool,
     recurse:
       @escaping @MainActor @Sendable (
         ReducerEffect<Action, Output>, EffectExecutionContext?, Bool

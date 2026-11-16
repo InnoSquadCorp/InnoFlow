@@ -4,7 +4,7 @@ import InnoFlowTesting
 import Testing
 import os
 
-@Suite("Reducer output")
+@Suite("Reducer output", .timeLimit(.minutes(5)))
 @MainActor
 struct ReducerOutputTests {
   @Test("Store publishes typed output after state mutation")
@@ -263,7 +263,7 @@ struct ReducerOutputTests {
   }
 
   @Test("cancelling a dispatch tree suppresses descendant outputs")
-  func cancellationSuppressesDescendantOutputs() async {
+  func cancellationSuppressesDescendantOutputs() async throws {
     let clock = ManualTestClock()
     let store = Store(
       reducer: DelayedOutputFeature(),
@@ -272,7 +272,7 @@ struct ReducerOutputTests {
     var outputs = store.outputs().makeAsyncIterator()
 
     let flow = store.send(.start)
-    try? await clock.waitForSleepers(atLeast: 1)
+    try await clock.waitForSleepers(atLeast: 1)
     flow.cancel()
     await flow.finish()
     await clock.advance(by: .seconds(1))

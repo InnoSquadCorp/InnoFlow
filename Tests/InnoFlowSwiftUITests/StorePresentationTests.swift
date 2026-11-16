@@ -8,7 +8,7 @@ import Testing
 @testable import InnoFlowCore
 @testable import InnoFlowSwiftUI
 
-@Suite("Store presentation SwiftUI integration", .serialized)
+@Suite("Store presentation SwiftUI integration", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct StorePresentationTests {
   @Test("presentation binding reads live optional state")

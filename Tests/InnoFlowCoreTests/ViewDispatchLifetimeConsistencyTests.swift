@@ -48,7 +48,7 @@ private struct ViewLifetimeFeature: Reducer {
     }
   }
 }
-@MainActor @Suite("View dispatch lifetime bridge")
+@MainActor @Suite("View dispatch lifetime bridge", .timeLimit(.minutes(5)))
 struct ViewDispatchLifetimeConsistencyTests {
   @Test func disappearanceCancelsOnlyOwnedDispatch() async {
     let gates = [ViewLifetimeGate(), ViewLifetimeGate()]

@@ -54,7 +54,7 @@ private final class ViolationProbe: Sendable {
   }
 }
 
-@Suite("PhaseMapDiagnostics standard adapters", .serialized)
+@Suite("PhaseMapDiagnostics standard adapters", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct PhaseMapDiagnosticsAdaptersTests {
 

@@ -4,7 +4,7 @@
   "exceptions": [
     {
       "file": "docs/USER_GUIDE.md",
-      "sha256": "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      "sha256": "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       "reason": "Package.swift dependency-list fragment"
     },
     {
@@ -59,7 +59,7 @@
     },
     {
       "file": "README.md",
-      "sha256": "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      "sha256": "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       "reason": "Package.swift dependency-list fragment"
     },
     {
@@ -69,7 +69,7 @@
     },
     {
       "file": "README.ko.md",
-      "sha256": "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      "sha256": "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       "reason": "Package.swift dependency-list fragment"
     },
     {
@@ -79,7 +79,7 @@
     },
     {
       "file": "README.es.md",
-      "sha256": "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      "sha256": "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       "reason": "Package.swift dependency-list fragment"
     },
     {
@@ -89,7 +89,7 @@
     },
     {
       "file": "README.de.md",
-      "sha256": "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      "sha256": "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       "reason": "Package.swift dependency-list fragment"
     },
     {
@@ -99,7 +99,7 @@
     },
     {
       "file": "README.zh-Hans.md",
-      "sha256": "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      "sha256": "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       "reason": "Package.swift dependency-list fragment"
     },
     {
@@ -109,7 +109,7 @@
     },
     {
       "file": "README.ja.md",
-      "sha256": "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      "sha256": "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       "reason": "Package.swift dependency-list fragment"
     },
     {
@@ -119,7 +119,7 @@
     },
     {
       "file": "README.ru.md",
-      "sha256": "663fd886b8c3740f736335804b8f691ed57b00d6bb38608d613d63d42759fc84",
+      "sha256": "1dd242d1cbe348ec31f6e3217a71dcb1daf18d461c133a320c7ab35817d80527",
       "reason": "Package.swift dependency-list fragment"
     },
     {

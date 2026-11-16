@@ -109,7 +109,7 @@ private func lifetimeReducer(
     state: \.right, action: lifetimeRightPath, instanceID: { $0.instance }, reducer: child)
 }
 
-@Suite("Optional child lifetime consistency")
+@Suite("Optional child lifetime consistency", .timeLimit(.minutes(5)))
 @MainActor
 struct OptionalChildLifetimeConsistencyTests {
   @Test func sameReductionChildOutputIsSuppressedButParentOutputSurvives() async {

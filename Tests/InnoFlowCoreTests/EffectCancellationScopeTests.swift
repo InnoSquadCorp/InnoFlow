@@ -8,8 +8,46 @@ import Testing
 @testable import InnoFlowCore
 
 @MainActor
-@Suite("Effect Cancellation Scope Tests", .serialized)
+@Suite("Effect Cancellation Scope Tests", .serialized, .timeLimit(.minutes(5)))
 struct EffectCancellationScopeTests {
+  // A registry scan loads weak scope and token references while it holds a
+  // lock. If another thread drops the last strong reference at that moment,
+  // the scan's temporary reference becomes the last one, and releasing it
+  // inside the lock runs a deinitializer that takes the same lock again.
+  // This races real work: run tasks drop their contexts on background
+  // threads while the MainActor cancels.
+  @Test("Releasing scopes and tokens on other threads never re-enters a registry lock")
+  func concurrentReleaseDuringScanDoesNotReenterLocks() async {
+    let registry = EffectCancellationScopeRegistry()
+    let id = AnyEffectID(StaticEffectID("scope.reentrancy"))
+
+    await withTaskGroup(of: Void.self) { group in
+      for _ in 0..<2 {
+        group.addTask {
+          for _ in 0..<80_000 {
+            registry.cancel(id: id, upTo: .max)
+            _ = registry.liveExactTokenCount
+          }
+        }
+      }
+      for _ in 0..<6 {
+        group.addTask {
+          for sequence in 0..<30_000 {
+            let owned = registry.makeScopeAndInterpreterLease(
+              sequence: UInt64(sequence),
+              potentialCancellationIDs: [id]
+            )
+            let token = owned.scope.token(for: id)
+            _ = token.isCancelled
+            _ = owned.scope.isCancelled(id: id)
+          }
+        }
+      }
+    }
+
+    #expect(registry.liveScopeCount == 0)
+  }
+
   @Test("Cancellation before ID discovery creates a cancelled exact token")
   func cancellationBeforeIDDiscoveryStaysEffective() {
     let boundaries = EffectCancellationBoundaries()

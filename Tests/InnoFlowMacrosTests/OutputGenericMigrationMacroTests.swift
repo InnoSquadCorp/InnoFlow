@@ -6,7 +6,7 @@ import Foundation
 import SwiftSyntaxMacrosTestSupport
 import Testing
 
-@Suite("Explicit reducer output migration")
+@Suite("Explicit reducer output migration", .timeLimit(.minutes(5)))
 struct OutputGenericMigrationMacroTests {
   @Test("a missing third generic gets the actual output type", arguments: [false, true])
   func missingOutputFixIt(hasOutput: Bool) {

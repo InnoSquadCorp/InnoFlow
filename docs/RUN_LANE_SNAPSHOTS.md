@@ -11,6 +11,12 @@ action, state, or output is included. The opaque ID remains stable through seria
 promotion and latest replacement while the lane is live. Closing and recreating
 a lane creates a new identity. Equal user IDs in different Stores stay unrelated.
 
+A `latest` request is accepted in the reduction turn that returns it, so the
+run it replaces loses the lane at once. The lane is not listed again until the
+replacement is admitted, which reopens it under the same identity. When the
+replacement can no longer proceed, for example because its dispatch was
+cancelled first, the lane is closed and the next request opens a new one.
+
 These are admission snapshots. A superseded latest operation can ignore
 cancellation and remain physically active after losing its lane reservation.
 Use the StoreDiagnostics active-run aggregates for physical execution counts;

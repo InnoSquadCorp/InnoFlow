@@ -15,7 +15,7 @@ import os
 
 // MARK: - Store Scope and Selection Tests
 
-@Suite("Store Scope and Selection Tests", .serialized)
+@Suite("Store Scope and Selection Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct StoreScopeSelectionTests {
   @Test("Store initializes with explicit state")

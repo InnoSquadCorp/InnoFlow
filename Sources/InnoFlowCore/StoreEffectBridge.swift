@@ -92,11 +92,7 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
   {
     childLifetimeRegistry.prepare(effect, state: state) { id in
       let sequence = markCancelled(id: id)
-      runScheduler.cancel(id: id, upTo: sequence)
-      cancelCompositeTasks(id: id, upTo: sequence)
-      cancelDelayedState(id: id, upTo: sequence)
-      let runtime = runtime
-      Task { await runtime.cancel(id: id, upTo: sequence) }
+      cancelEffects(id: id, upTo: sequence)
     }
   }
 
@@ -308,10 +304,14 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
     throttleState.clearStates(where: shouldCancel)
   }
 
+  /// Dispatches owning work that an ID cancellation releases.
+  ///
+  /// Must be read before ``cancelEffects(id:upTo:)`` because that call
+  /// releases the tracked work.
   package func cancellationTargetDispatchIDs(
     id: AnyEffectID,
     upTo sequence: UInt64
-  ) async -> Set<DispatchID> {
+  ) -> Set<DispatchID> {
     var dispatchIDs = runScheduler.cancellationTargetDispatchIDs(id: id, upTo: sequence)
 
     if let tokens = compositeTokensByID[id] {
@@ -341,13 +341,14 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
           && (scope.sequence <= sequence || scope.shouldProceed == false)
       }
     )
-    dispatchIDs.formUnion(
-      await runtime.cancellationTargetDispatchIDs(id: id, upTo: sequence)
-    )
+    dispatchIDs.formUnion(runtime.cancellationTargetDispatchIDs(id: id, upTo: sequence))
+    // An effect returned in this MainActor turn has registered nothing yet;
+    // its declared work under `id` will be skipped all the same.
+    dispatchIDs.formUnion(boundaries.uninterpretedDispatchIDs(declaring: id, upTo: sequence))
     return dispatchIDs
   }
 
-  package func cancellationTargetDispatchIDs(upTo sequence: UInt64) async -> Set<DispatchID> {
+  package func cancellationTargetDispatchIDs(upTo sequence: UInt64) -> Set<DispatchID> {
     var dispatchIDs = runScheduler.cancellationTargetDispatchIDs(upTo: sequence)
 
     for tracked in compositeTasksByToken.values {
@@ -372,36 +373,37 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
         scope.sequence <= sequence || scope.shouldProceed == false
       }
     )
-    dispatchIDs.formUnion(await runtime.cancellationTargetDispatchIDs(upTo: sequence))
+    dispatchIDs.formUnion(runtime.cancellationTargetDispatchIDs(upTo: sequence))
+    dispatchIDs.formUnion(boundaries.uninterpretedDispatchIDs(declaring: nil, upTo: sequence))
     return dispatchIDs
   }
 
-  package func cancelEffects(id: AnyEffectID, upTo sequence: UInt64) async {
+  /// Releases every piece of work owned by an accepted ID cancellation:
+  /// pending scheduled requests, composite orchestration tasks, delayed
+  /// debounce/throttle state and run tasks.
+  ///
+  /// All of this state is MainActor-isolated, so acceptance and release are
+  /// one synchronous step. Nothing can be reduced, admitted or started
+  /// between them.
+  package func cancelEffects(id: AnyEffectID, upTo sequence: UInt64) {
     runScheduler.cancel(id: id, upTo: sequence)
     cancelCompositeTasks(id: id, upTo: sequence)
     cancelDelayedState(id: id, upTo: sequence)
-    await runtime.cancel(id: id, upTo: sequence)
+    runtime.cancel(id: id, upTo: sequence)
   }
 
-  package func cancelInFlightEffects(id: AnyEffectID, upTo sequence: UInt64) async {
-    runScheduler.cancel(id: id, upTo: sequence)
-    cancelCompositeTasks(id: id, upTo: sequence)
-    cancelDelayedState(id: id, upTo: sequence)
-    await runtime.cancelInFlight(id: id, upTo: sequence)
-  }
-
-  package func cancelAllEffects(upTo sequence: UInt64) async {
+  package func cancelAllEffects(upTo sequence: UInt64) {
     runScheduler.cancelAll(upTo: sequence)
     cancelAllCompositeTasks(upTo: sequence)
     cancelAllDelayedState(upTo: sequence)
-    await runtime.cancelAll(upTo: sequence)
+    runtime.cancelAll(upTo: sequence)
   }
 
-  /// Clears store-local timing state and triggers best-effort runtime cancellation.
+  /// Clears store-local timing state and cancels every in-flight effect task.
   ///
-  /// The owning `Store` cannot await runtime teardown from `deinit`, so this method
-  /// synchronously freezes local bookkeeping and then kicks off asynchronous
-  /// cancellation of in-flight effect tasks. The returned sequence is the release
+  /// Called from `Store.deinit`. All effect bookkeeping is MainActor-isolated,
+  /// so teardown is synchronous: cancellation has been delivered to every
+  /// tracked task when this returns. The returned sequence is the release
   /// boundary used for instrumentation and tests.
   @discardableResult
   package func shutdown() -> UInt64 {
@@ -410,10 +412,7 @@ package final class StoreEffectBridge<Action: Sendable, Output: Sendable> {
     runScheduler.cancelAll()
     cancelAllCompositeTasks()
     clearAllDelayedState()
-    let runtime = self.runtime
-    Task {
-      await runtime.cancelAll(upTo: sequence)
-    }
+    runtime.cancelAll(upTo: sequence)
     return sequence
   }
 }

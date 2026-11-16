@@ -9,6 +9,12 @@ to that tag. Later development commits change CI, test partitioning, tooling,
 skill validation and documentation; they are not another published release.
 `STABLE_VERSION` records 6.0.2 in development. Its prior-stable value in the
 immutable tag is candidate provenance, not today's release state.
+Development after that refresh also changes production sources. Those changes
+form the 6.1.0 release candidate, which is not tagged or published:
+`[6.1.0]` in the [changelog](../CHANGELOG.md) lists them and the
+[migration notes](../MIGRATION.md) describe the upgrade. The
+[public surface cleanup design](PUBLIC_SURFACE_CLEANUP_DESIGN.md) records the
+breaking changes that are proposed but not implemented.
 
 For an installed version, inspect `Package.resolved` and that exact tag's
 manifest/source. Hosted DocC follows the deployed revision and may describe

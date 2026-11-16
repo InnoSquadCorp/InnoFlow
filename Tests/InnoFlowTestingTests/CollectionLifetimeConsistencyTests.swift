@@ -260,7 +260,7 @@ enum CollectionLifetimeMutation: CaseIterable, Sendable {
   case close, replace, removeAndReenter
 }
 
-@Suite("Collection optional child lifetime consistency")
+@Suite("Collection optional child lifetime consistency", .timeLimit(.minutes(5)))
 @MainActor
 struct CollectionLifetimeConsistencyTests {
   @Test(arguments: [false, true])

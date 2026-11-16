@@ -18,7 +18,7 @@ When a workaround is removed, delete the matching row, the corresponding source 
   2. Run `swift build -c release` and `swift test -c release` — the original crash reproduces during release builds, not debug.
   3. Run `./scripts/principle-gates.sh` end-to-end on the same toolchain to make sure the wider matrix passes.
   4. If it still reproduces, restore the attribute and update this row's *Retest trigger* to the next reasonable Swift version.
-  5. If it does not reproduce, separately retest `StoreOutputHub.deinit` and `TestStore.deinit` before removing their workarounds. Remove the warning emitter only after all three release builds pass.
+  5. If it does not reproduce, separately retest `StoreOutputHub.deinit`, `SelectedStore.deinit` and `TestStore.deinit` before removing their workarounds. Remove the warning emitter only after all four release builds pass.
 
 ### `@_optimize(none)` on `StoreOutputHub.deinit`
 
@@ -26,21 +26,29 @@ When a workaround is removed, delete the matching row, the corresponding source 
 - **Symptom:** Xcode 26.6 / Swift 6.3.3 crashed with signal 11 in `EarlyPerfInliner` on this generic actor-isolated deinit during the exact-candidate CI Release build. Its stack includes `isCallerAndCalleeLayoutConstraintsCompatible`, matching the existing workaround family; this does not prove that the upstream issue has precisely the same trigger.
 - **Upstream issue:** [swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173) tracks the matching inliner crash family.
 - **Why this is the right surface:** only subscriber continuations are finished during teardown. Disabling optimization on this one non-hot deinit preserves the `@MainActor` lifetime behavior and does not weaken the rest of the optimized module.
-- **Retest trigger / steps:** when the minimum Release compiler is upgraded or the upstream issue closes, remove only this attribute in a temporary checkout, then run optimized build, Release tests, and the stream-termination regression. Restore it if the compiler still crashes. Retest the other two deinits separately before removing the warning.
+- **Retest trigger / steps:** when the minimum Release compiler is upgraded or the upstream issue closes, remove only this attribute in a temporary checkout, then run optimized build, Release tests, and the stream-termination regression. Restore it if the compiler still crashes. Retest the other deinits separately before removing the warning.
+
+### `@_optimize(none)` on `SelectedStore.deinit`
+
+- **Location:** [`Sources/InnoFlowCore/SelectedStore.swift`](../Sources/InnoFlowCore/SelectedStore.swift) (the `isolated deinit` that unregisters the selection from its parent's projection registry)
+- **Symptom:** the same `EarlyPerfInliner` crash family on a generic `@MainActor` class with an isolated deinitializer; the attribute was added together with the deinitializer.
+- **Upstream issue:** [swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173)
+- **Why this is the right surface:** unlike the store deinitializers this one can run often — once for every released selection — but its body is a single optional closure call, so the attribute costs no more than that call staying a call. Do not move more work into this deinitializer while the workaround is in place.
+- **Retest trigger / steps:** identical to `Store.deinit`: remove only this attribute in a temporary checkout, run the optimized build and Release tests, and restore it if the compiler still crashes.
 
 ### `@_optimize(none)` on `TestStore.deinit`
 
 - **Location:** [`Sources/InnoFlowTesting/TestStore.swift`](../Sources/InnoFlowTesting/TestStore.swift)
 - **Symptom:** Same SIL `EarlyPerfInliner` crash as `Store.deinit`. Mirrored attribute keeps the test runtime aligned with the production runtime.
 - **Upstream issue:** [swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173)
-- **Retest trigger / steps:** identical to `Store.deinit`. Retest all three affected deinits before removing the shared warning; one passing deinit does not prove the others are fixed.
+- **Retest trigger / steps:** identical to `Store.deinit`. Retest all four affected deinits before removing the shared warning; one passing deinit does not prove the others are fixed.
 
 ## How the principle gates surface this
 
 [`scripts/principle-gates.sh`](../scripts/principle-gates.sh) reads `swift --version`, parses major/minor, and prints
 
 ```
-[principle-gates] Warning: Swift X.Y detected; retest removing @_optimize(none) from Store, StoreOutputHub, and TestStore deinits (swiftlang/swift#88173).
+[principle-gates] Warning: Swift X.Y detected; retest removing @_optimize(none) from Store, StoreOutputHub, SelectedStore, and TestStore deinits (swiftlang/swift#88173).
 ```
 
 when the toolchain is at or above 6.4. The warning is intentionally non-blocking — the workaround stays in source until a maintainer manually verifies the upstream fix.

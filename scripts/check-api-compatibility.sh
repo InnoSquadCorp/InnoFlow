@@ -52,8 +52,25 @@ if ! git show-ref --verify --quiet "refs/tags/$BASELINE_VERSION"; then
   exit 0
 fi
 
+# The digester also reports package-access declarations, which no consumer
+# can reach. Each such diagnostic must be reviewed in the allowlist, and the
+# validator proves from the baseline source that it is not public.
+ALLOWLIST="${INNOFLOW_API_BREAKAGE_ALLOWLIST:-$ROOT_DIR/docs/contracts/api-breakage-allowlist.json}"
+allowlist_arguments=()
+if [[ -f "$ALLOWLIST" ]]; then
+  RESOLVED_ALLOWLIST="$(mktemp)"
+  trap 'rm -f "$RESOLVED_ALLOWLIST"' EXIT
+  python3 -B "$SCRIPT_DIR/check-api-breakage-allowlist.py" \
+    --root "$ROOT_DIR" --allowlist "$ALLOWLIST" \
+    --baseline "$BASELINE_VERSION" --output "$RESOLVED_ALLOWLIST"
+  if [[ -s "$RESOLVED_ALLOWLIST" ]]; then
+    allowlist_arguments=(--breakage-allowlist-path "$RESOLVED_ALLOWLIST")
+  fi
+fi
+
 echo "[api-compatibility] Comparing public products with $BASELINE_VERSION"
-swift package diagnose-api-breaking-changes "$BASELINE_VERSION" \
+swift package diagnose-api-breaking-changes \
+  ${allowlist_arguments[@]+"${allowlist_arguments[@]}"} "$BASELINE_VERSION" \
   --products InnoFlow InnoFlowCore InnoFlowSwiftUI InnoFlowTesting InnoFlowInspector
 
 echo "[api-compatibility] Public API is compatible with $BASELINE_VERSION"

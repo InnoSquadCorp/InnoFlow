@@ -271,6 +271,15 @@ extension IdentifiedArray: RandomAccessCollection {
   public subscript(position: Int) -> Element {
     elements[position]
   }
+
+  /// Exposes the backing storage to algorithms that can use a contiguous
+  /// buffer, like `Array` does. Read-only: the identity index is unaffected.
+  @inlinable
+  public func withContiguousStorageIfAvailable<R>(
+    _ body: (UnsafeBufferPointer<Element>) throws -> R
+  ) rethrows -> R? {
+    try elements.withContiguousStorageIfAvailable(body)
+  }
 }
 
 extension IdentifiedArray: Equatable where Element: Equatable {

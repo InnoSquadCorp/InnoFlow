@@ -6,21 +6,21 @@
 
 SwiftUI를 중심으로 비즈니스·도메인 상태 전이를 다루는 단방향 상태 관리 프레임워크입니다. 리듀서, Store, 결정적인 테스트로 시작하고 기능에 필요할 때 오케스트레이션을 추가하세요.
 
-## InnoFlow 6.0.2
+## InnoFlow 6.1.0
 
-이 README는 **2026-10-08**에 `1176de1e4783b638c03a9334f43cc49378957148`에서 배포된 **6.0.2 API**를 설명합니다. [버전별 소스](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [릴리스 노트](RELEASE_NOTES.md) · [마이그레이션](MIGRATION.md).
+이 README는 아직 태그·배포 전인 **6.1.0 릴리스 후보**를 설명합니다. 배포된 안정 버전은 계속 **2026-10-08**에 `1176de1e4783b638c03a9334f43cc49378957148`에서 배포된 **6.0.2**입니다. [6.0.2 소스](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [릴리스 노트](RELEASE_NOTES.md) · [마이그레이션](MIGRATION.md).
 
-개발 브랜치에는 이후 CI, 테스트 구성, 검증 도구, 문서 변경이 있습니다. 이번 갱신 시점의 `Sources/`는 6.0.2와 같으며 이후 도구 변경은 미배포 상태입니다. 개발 브랜치의 `STABLE_VERSION`은 6.0.2이고 불변 태그는 당시 후보 메타데이터를 보존합니다. 호스팅 DocC는 배포된 리비전을 따르므로 설치 버전 확인에는 태그 소스를 쓰세요. 일곱 README는 같은 입문 내용을 다루며 상세 가이드는 영어입니다.
+6.1.0은 `ManualTestClock` 대기에 기한을 두고, 리듀서가 반환한 취소가 적용되는 시점, 키패스 selection의 수명, 실행되는 스로틀 요청, `@InnoFlow`가 합성하는 케이스 경로를 바꿉니다. 업그레이드 전에 마이그레이션 문서를 읽으세요. `STABLE_VERSION`은 배포가 확인될 때까지 6.0.2입니다. 호스팅 DocC는 배포된 리비전을 따르므로 설치 버전 확인에는 태그 소스를 쓰세요. 일곱 README는 같은 입문 내용을 다루며 상세 가이드는 영어입니다.
 
 ## 설치
 
 Swift **6.3+**, Swift **6 언어 모드**가 필요합니다. 지원 하한은 iOS **18+**, macOS **15+**, tvOS **18+**, watchOS **11+**, visionOS **2+**입니다. SwiftSyntax 범위는 `>=603.0.0, <605.0.0`이며 저장소 잠금 파일은 604.0.0을 사용합니다. 대상에 맞는 Xcode/SDK를 선택하세요. 선언된 배포 하한이 모든 구형 런타임의 실행 검증을 뜻하지는 않습니다.
 
-패키지를 추가한 뒤 제품을 명시적으로 선택하세요. `from:`은 이후 호환 버전을 허용하므로 실제 `Package.resolved`를 확인해야 합니다. 이 릴리스를 재현할 때는 `exact: "6.0.2"`를 사용하세요.
+패키지를 추가한 뒤 제품을 명시적으로 선택하세요. `from:`은 이후 호환 버전을 허용하므로 실제 `Package.resolved`를 확인해야 합니다. 이 릴리스를 재현할 때는 `exact: "6.1.0"`을 사용하세요.
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.1.0")
 ]
 ```
 

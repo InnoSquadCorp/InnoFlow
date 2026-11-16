@@ -14,7 +14,7 @@ import os
 
 // MARK: - TestStore Core Tests
 
-@Suite("TestStore Core Tests", .serialized)
+@Suite("TestStore Core Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreCoreTests {
   @Test("TestStore releases completed dynamic cancellation boundaries")

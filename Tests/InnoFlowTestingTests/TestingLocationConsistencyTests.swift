@@ -9,7 +9,7 @@ import os
   import XCTest
 #endif
 
-@Suite("Testing call-site and scoped-output consistency", .serialized)
+@Suite("Testing call-site and scoped-output consistency", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestingLocationConsistencyTests {
   @Test("Swift Testing records the exact supplied four-coordinate source location")

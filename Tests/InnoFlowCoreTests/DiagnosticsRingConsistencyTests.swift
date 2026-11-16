@@ -2,7 +2,7 @@ import Foundation
 import InnoFlowCore
 import Testing
 
-@Suite("Diagnostics ring consistency")
+@Suite("Diagnostics ring consistency", .timeLimit(.minutes(5)))
 struct DiagnosticsRingConsistencyTests {
   @Test(arguments: [0, 1, 3, 32])
   func ringPreservesChronologyAndExactDiscardCount(capacity: Int) {

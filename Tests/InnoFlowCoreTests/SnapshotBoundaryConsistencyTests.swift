@@ -67,7 +67,7 @@ private func sendSnapshotAction(
   }
 }
 
-@Suite("State snapshot observable contracts")
+@Suite("State snapshot observable contracts", .timeLimit(.minutes(5)))
 @MainActor
 struct SnapshotBoundaryConsistencyTests {
   @Test(arguments: [false, true])

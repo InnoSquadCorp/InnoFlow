@@ -2,14 +2,14 @@
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-import os
+import Synchronization
 
 /// Request-local cancellation state for a scheduled run.
 ///
 /// Admission and physical execution use distinct tasks. This shared boundary
 /// suppresses late emissions even when an operation ignores task cancellation.
 package final class EffectRunCancellationState: Sendable {
-  private let storage = OSAllocatedUnfairLock(initialState: false)
+  private let storage = Mutex(false)
 
   package init() {}
 

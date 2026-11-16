@@ -53,7 +53,7 @@ private func admissionReducer(old: AdmissionGate, newer: AdmissionGate)
 }
 
 @MainActor
-@Suite("Scheduler admission consistency")
+@Suite("Scheduler admission consistency", .timeLimit(.minutes(5)))
 struct SchedulerAdmissionConsistencyTests {
   @Test(arguments: [false, true], [false, true])
   func delayedOldLatestCannotDisplaceNewer(preCancel: Bool, useTestStore: Bool) async {

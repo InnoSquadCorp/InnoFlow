@@ -22,7 +22,7 @@ private struct ObservationConsistencyFeature: Reducer {
     return .none
   }
 }
-@MainActor @Suite("Observation semantics controls")
+@MainActor @Suite("Observation semantics controls", .timeLimit(.minutes(5)))
 struct ObservationConsistencyTests {
   @Test func rootInvalidationPrecedesEachReductionExactlyOnce() {
     let events = OSAllocatedUnfairLock<[String]>(initialState: [])

@@ -11,7 +11,8 @@ import Testing
 
 @Suite(
   "Reducer composition perf comparison script",
-  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support"),
+  .timeLimit(.minutes(30))
 )
 struct ReducerCompositionPerfComparisonScriptTests {
 

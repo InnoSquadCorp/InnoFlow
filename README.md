@@ -6,21 +6,21 @@
 
 SwiftUI-first unidirectional state management for business and domain transitions. Start with a reducer, a Store and deterministic tests; adopt orchestration only when your feature needs it.
 
-## InnoFlow 6.0.2
+## InnoFlow 6.1.0
 
-This README describes the **published 6.0.2 API**, released on **2026-10-08** at `1176de1e4783b638c03a9334f43cc49378957148`. [Versioned source](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [Release notes](RELEASE_NOTES.md) · [Migration](MIGRATION.md).
+This README describes the **6.1.0 release candidate**, which is not tagged or published yet. **6.0.2** remains the published stable release, released on **2026-10-08** at `1176de1e4783b638c03a9334f43cc49378957148`. [6.0.2 source](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [Release notes](RELEASE_NOTES.md) · [Migration](MIGRATION.md).
 
-The development branch contains later CI, test organization, validation and documentation changes. At this refresh its `Sources/` matches 6.0.2; those later tooling changes are unreleased. `STABLE_VERSION` is 6.0.2 on development, while the immutable tag retains its earlier candidate metadata. Hosted DocC follows its deployment revision; use tagged source for installed-version accuracy. All seven READMEs cover the same entry-level guidance; detailed guides are in English.
+6.1.0 bounds `ManualTestClock` waits and changes when reducer-returned cancellation takes effect, how long key-path selections live, which throttle request fires and which case paths `@InnoFlow` synthesizes; read the migration notes before upgrading. `STABLE_VERSION` stays 6.0.2 until publication is verified. Hosted DocC follows its deployment revision; use tagged source for installed-version accuracy. All seven READMEs cover the same entry-level guidance; detailed guides are in English.
 
 ## Installation
 
 Swift **6.3+**, Swift **6 language mode**; iOS **18+**, macOS **15+**, tvOS **18+**, watchOS **11+**, visionOS **2+**. The SwiftSyntax requirement is `>=603.0.0, <605.0.0`; repository locks use 604.0.0. Match Xcode/SDK to your destination. Declared deployment support does not mean every legacy runtime was exercised.
 
-Add the package, then choose products explicitly. `from:` permits compatible future versions; inspect your actual `Package.resolved`. Use `exact: "6.0.2"` when reproducing this release.
+Add the package, then choose products explicitly. `from:` permits compatible future versions; inspect your actual `Package.resolved`. Use `exact: "6.1.0"` when reproducing this release.
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.1.0")
 ]
 ```
 

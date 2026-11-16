@@ -12,7 +12,7 @@ import Testing
   import InnoFlowMacros
 #endif
 
-@Suite("@InnoFlow shared-context typealias diagnostics")
+@Suite("@InnoFlow shared-context typealias diagnostics", .timeLimit(.minutes(5)))
 struct InnoFlowSharedContextDiagnosticsTests {
 
   @Test("Typealiased Action emits a note explaining which diagnostics are skipped")

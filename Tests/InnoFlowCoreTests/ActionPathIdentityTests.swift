@@ -6,7 +6,7 @@ import Testing
 
 @testable import InnoFlowCore
 
-@Suite("Action path identity")
+@Suite("Action path identity", .timeLimit(.minutes(5)))
 struct ActionPathIdentityTests {
   @Test("CasePath copies share opaque identity")
   func casePathCopiesShareIdentity() {

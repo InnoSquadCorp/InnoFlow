@@ -91,7 +91,7 @@ private struct DescriptionCountingPhase: Hashable, Sendable, CustomStringConvert
   }
 }
 
-@Suite("PhaseValidationReducer diagnostics", .serialized)
+@Suite("PhaseValidationReducer diagnostics", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct PhaseValidationReducerDiagnosticsTests {
 

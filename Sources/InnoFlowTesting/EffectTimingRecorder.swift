@@ -11,7 +11,7 @@
 
 import Foundation
 @_exported public import InnoFlowCore
-import os
+import Synchronization
 
 /// Captures `StoreInstrumentation` events with monotonic nanosecond timestamps
 /// so performance regressions in effect scheduling / completion timing can be
@@ -111,7 +111,7 @@ public actor EffectTimingRecorder {
 
   private let clock = ContinuousClock()
   private let startedAt: ContinuousClock.Instant
-  private let storage = OSAllocatedUnfairLock(initialState: StorageState())
+  private let storage = Mutex(StorageState())
 
   public init() {
     self.startedAt = ContinuousClock().now

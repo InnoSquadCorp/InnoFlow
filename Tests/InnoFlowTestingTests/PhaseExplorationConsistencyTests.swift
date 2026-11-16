@@ -4,7 +4,7 @@ import InnoFlowTesting
 import Testing
 import os
 
-@Suite("Observed phase coverage and seeded exploration")
+@Suite("Observed phase coverage and seeded exploration", .timeLimit(.minutes(5)))
 @MainActor
 struct PhaseExplorationConsistencyTests {
   @Test("coverage distinguishes accepted self transition, guarded nil and duplicate topology")
@@ -283,7 +283,7 @@ private struct ClockFixture: Reducer {
   }
 }
 
-@Suite("Explorer failure boundaries")
+@Suite("Explorer failure boundaries", .timeLimit(.minutes(5)))
 @MainActor
 struct ExplorerFailureBoundaryConsistencyTests {
   @Test("effect runtime errors are preserved with their origin")

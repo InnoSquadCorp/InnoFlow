@@ -1,0 +1,174 @@
+{
+  "schema": 1,
+  "baseline": "6.0.2",
+  "entries": [
+    {
+      "message": "API breakage: func EffectDriver.runConcurrently(_:context:awaited:recurse:) has parameter 2 type change from Swift.Bool to (InnoFlowCore.ReducerEffect<Self.Action, Self.Output>, InnoFlowCore.EffectExecutionContext?, Swift.Bool) async -> Swift.Void",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package protocol EffectDriver<Action, Output>: AnyObject",
+      "reason": "The `awaited:` parameter of the package driver protocol was always `false` and was removed."
+    },
+    {
+      "message": "API breakage: func EffectDriver.runSequentially(_:context:awaited:recurse:) has parameter 2 type change from Swift.Bool to (InnoFlowCore.ReducerEffect<Self.Action, Self.Output>, InnoFlowCore.EffectExecutionContext?, Swift.Bool) async -> Swift.Void",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package protocol EffectDriver<Action, Output>: AnyObject",
+      "reason": "The `awaited:` parameter of the package driver protocol was always `false` and was removed."
+    },
+    {
+      "message": "API breakage: class EffectRuntime has removed conformance to Actor",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.registerAndStart(token:id:sequence:context:task:gate:) has parameter 5 type change from InnoFlowCore.RunStartGate to InnoFlowCore.EffectRunLiveness",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.registerAndStart(token:ids:sequence:context:task:gate:) has parameter 5 type change from InnoFlowCore.RunStartGate to InnoFlowCore.EffectRunLiveness",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: enumelement ProjectionObserverRegistration.collectionElement has been added as a new enum case",
+      "source": "Sources/InnoFlowCore/ProjectionObserverRegistry.swift",
+      "declaration": "package enum ProjectionObserverRegistration<Snapshot>",
+      "reason": "New case of a package enum: collection rows register by element identity."
+    },
+    {
+      "message": "API breakage: func Store.runConcurrently(_:context:awaited:recurse:) has parameter 2 type change from Swift.Bool to (InnoFlowCore.ReducerEffect<R.Action, R.Output>, InnoFlowCore.EffectExecutionContext?, Swift.Bool) async -> Swift.Void",
+      "source": "Sources/InnoFlowCore/Store+EffectDriver.swift",
+      "declaration": "package func runConcurrently(",
+      "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    },
+    {
+      "message": "API breakage: func Store.runSequentially(_:context:awaited:recurse:) has parameter 2 type change from Swift.Bool to (InnoFlowCore.ReducerEffect<R.Action, R.Output>, InnoFlowCore.EffectExecutionContext?, Swift.Bool) async -> Swift.Void",
+      "source": "Sources/InnoFlowCore/Store+EffectDriver.swift",
+      "declaration": "package func runSequentially(",
+      "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    },
+    {
+      "message": "API breakage: func EffectDriver.runConcurrently(_:context:awaited:recurse:) has been renamed to func runConcurrently(_:context:recurse:)",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package protocol EffectDriver<Action, Output>: AnyObject",
+      "reason": "The `awaited:` parameter of the package driver protocol was always `false` and was removed."
+    },
+    {
+      "message": "API breakage: func EffectDriver.runSequentially(_:context:awaited:recurse:) has been renamed to func runSequentially(_:context:recurse:)",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package protocol EffectDriver<Action, Output>: AnyObject",
+      "reason": "The `awaited:` parameter of the package driver protocol was always `false` and was removed."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.registerAndStart(token:id:sequence:context:task:gate:) has been renamed to func register(token:id:sequence:context:task:liveness:)",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.registerAndStart(token:ids:sequence:context:task:gate:) has been renamed to func register(token:ids:sequence:context:task:liveness:)",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.cancelInFlight(id:upTo:) has been removed",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.canStartOperation(token:id:sequence:) has been removed",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.canStartOperation(token:ids:sequence:) has been removed",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.checkCancellation(token:id:sequence:) has been removed",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: func EffectRuntime.checkCancellation(token:ids:sequence:) has been removed",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: var EffectRuntime.unownedExecutor has been removed",
+      "source": "Sources/InnoFlowCore/EffectRuntime.swift",
+      "declaration": "package actor EffectRuntime<Action: Sendable>",
+      "reason": "The run-task bookkeeping moved from a package actor onto the MainActor so reducer-returned cancellation is accepted and released without suspending."
+    },
+    {
+      "message": "API breakage: struct ReducerEffect.LazyMappedEffect has been removed",
+      "source": "Sources/InnoFlowCore/EffectTask.swift",
+      "declaration": "package struct LazyMappedEffect: Sendable",
+      "reason": "Unused package effect representation removed; `map` builds the mapped tree directly."
+    },
+    {
+      "message": "API breakage: enumelement ReducerEffect.Operation.lazyMap has been removed",
+      "source": "Sources/InnoFlowCore/EffectTask.swift",
+      "declaration": "package indirect enum Operation: Sendable",
+      "reason": "Unused case of the package effect operation enum removed."
+    },
+    {
+      "message": "API breakage: func Store.runConcurrently(_:context:awaited:recurse:) has been renamed to func runConcurrently(_:context:recurse:)",
+      "source": "Sources/InnoFlowCore/Store+EffectDriver.swift",
+      "declaration": "package func runConcurrently(",
+      "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    },
+    {
+      "message": "API breakage: func Store.runSequentially(_:context:awaited:recurse:) has been renamed to func runSequentially(_:context:recurse:)",
+      "source": "Sources/InnoFlowCore/Store+EffectDriver.swift",
+      "declaration": "package func runSequentially(",
+      "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    },
+    {
+      "message": "API breakage: constructor SelectionCacheEntry.init(key:valueType:selection:retainStrongly:) has been removed",
+      "source": "Sources/InnoFlowCore/StoreCaches.swift",
+      "declaration": "package final class SelectionCacheEntry",
+      "reason": "Package cache entry: key-path selections are retained by observation, not at creation."
+    },
+    {
+      "message": "API breakage: func StoreEffectBridge.cancelInFlightEffects(id:upTo:) has been removed",
+      "source": "Sources/InnoFlowCore/StoreEffectBridge.swift",
+      "declaration": "package final class StoreEffectBridge<Action: Sendable, Output: Sendable>",
+      "reason": "The package bridge releases cancelled work through one synchronous entry point."
+    },
+    {
+      "message": "API breakage: func TestStore.runConcurrently(_:context:awaited:recurse:) has parameter 2 type change from Swift.Bool to (InnoFlowCore.ReducerEffect<R.Action, R.Output>, InnoFlowCore.EffectExecutionContext?, Swift.Bool) async -> Swift.Void",
+      "source": "Sources/InnoFlowTesting/TestStore+EffectDriver.swift",
+      "declaration": "package func runConcurrently(",
+      "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    },
+    {
+      "message": "API breakage: func TestStore.runSequentially(_:context:awaited:recurse:) has parameter 2 type change from Swift.Bool to (InnoFlowCore.ReducerEffect<R.Action, R.Output>, InnoFlowCore.EffectExecutionContext?, Swift.Bool) async -> Swift.Void",
+      "source": "Sources/InnoFlowTesting/TestStore+EffectDriver.swift",
+      "declaration": "package func runSequentially(",
+      "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    },
+    {
+      "message": "API breakage: func TestStore.runConcurrently(_:context:awaited:recurse:) has been renamed to func runConcurrently(_:context:recurse:)",
+      "source": "Sources/InnoFlowTesting/TestStore+EffectDriver.swift",
+      "declaration": "package func runConcurrently(",
+      "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    },
+    {
+      "message": "API breakage: func TestStore.runSequentially(_:context:awaited:recurse:) has been renamed to func runSequentially(_:context:recurse:)",
+      "source": "Sources/InnoFlowTesting/TestStore+EffectDriver.swift",
+      "declaration": "package func runSequentially(",
+      "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    }
+  ]
+}

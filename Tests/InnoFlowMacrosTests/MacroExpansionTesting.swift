@@ -16,6 +16,7 @@ func assertSwiftTestingMacroExpansion(
   expandedSource expectedExpandedSource: String,
   diagnostics: [DiagnosticSpec] = [],
   macros: [String: any Macro.Type],
+  missingConformances: [TypeSyntax] = ["Reducer"],
   applyFixIts: [String]? = nil,
   fixedSource expectedFixedSource: String? = nil,
   testModuleName: String = "TestModule",
@@ -27,7 +28,15 @@ func assertSwiftTestingMacroExpansion(
   line: UInt = #line,
   column: UInt = #column
 ) {
-  let macroSpecs = macros.mapValues { MacroSpec(type: $0) }
+  // The compiler passes an extension macro the declared conformances that the
+  // attached type does not already state; `@InnoFlow` declares `Reducer`.
+  // Tests of a feature that spells `: Reducer` out pass an empty list.
+  let macroSpecs = macros.reduce(into: [String: MacroSpec]()) { specs, entry in
+    specs[entry.key] =
+      entry.key == "InnoFlow"
+      ? MacroSpec(type: entry.value, conformances: missingConformances)
+      : MacroSpec(type: entry.value)
+  }
   SwiftSyntaxMacrosGenericTestSupport.assertMacroExpansion(
     originalSource,
     expandedSource: expectedExpandedSource,

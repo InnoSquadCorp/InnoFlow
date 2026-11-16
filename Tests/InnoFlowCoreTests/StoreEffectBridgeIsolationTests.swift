@@ -13,7 +13,7 @@ import Testing
 /// invokes the bridge, so removing the class-level isolation from
 /// ``StoreEffectBridge`` would surface as a compile error here.
 @MainActor
-@Suite("StoreEffectBridge isolation contract")
+@Suite("StoreEffectBridge isolation contract", .timeLimit(.minutes(5)))
 struct StoreEffectBridgeIsolationTests {
   @Test("markCancelledInFlight rolls the boundary back by exactly one sequence")
   func markCancelledInFlightRollsBackByOne() {
@@ -298,14 +298,14 @@ struct StoreEffectBridgeIsolationTests {
 
     bridge.markCancelled(id: outerID, upTo: effectiveSequence)
     let staleBoundary = bridge.markCancelled(id: outerID, upTo: staleSequence)
-    await bridge.cancelEffects(id: outerID, upTo: staleBoundary)
+    bridge.cancelEffects(id: outerID, upTo: staleBoundary)
 
     #expect(effectiveTask.isCancelled)
     #expect(newerTask.isCancelled == false)
     #expect(bridge.debounceScope(for: effectiveID) == nil)
     #expect(bridge.debounceScope(for: newerID)?.sequence == newerSequence)
 
-    await bridge.cancelEffects(id: outerID, upTo: newerSequence)
+    bridge.cancelEffects(id: outerID, upTo: newerSequence)
     #expect(newerTask.isCancelled)
 
     await hold.open()
@@ -440,7 +440,7 @@ struct StoreEffectBridgeIsolationTests {
 
     bridge.markCancelledAll(upTo: effectiveSequence)
     let staleBoundary = bridge.markCancelledAll(upTo: staleSequence)
-    await bridge.cancelAllEffects(upTo: staleBoundary)
+    bridge.cancelAllEffects(upTo: staleBoundary)
 
     #expect(effectiveThrottleTask.isCancelled)
     #expect(effectiveDebounceTask.isCancelled)
@@ -451,7 +451,7 @@ struct StoreEffectBridgeIsolationTests {
     #expect(bridge.debounceScope(for: effectiveDebounceID) == nil)
     #expect(bridge.debounceScope(for: newerDebounceID)?.sequence == newerSequence)
 
-    await bridge.cancelAllEffects(upTo: newerSequence)
+    bridge.cancelAllEffects(upTo: newerSequence)
     #expect(newerThrottleTask.isCancelled)
     #expect(newerDebounceTask.isCancelled)
 

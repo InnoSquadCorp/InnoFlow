@@ -2,7 +2,7 @@ import InnoFlow
 import InnoFlowTesting
 import Testing
 
-@Suite("Output promotion")
+@Suite("Output promotion", .timeLimit(.minutes(5)))
 @MainActor
 struct OutputPromotionTests {
   @Test("output-free children and effect helpers compose into typed-output parents")

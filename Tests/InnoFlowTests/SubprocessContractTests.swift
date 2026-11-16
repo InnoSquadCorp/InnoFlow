@@ -12,7 +12,8 @@ import os
 @Suite(
   "Stale Scope Crash Contract Tests",
   .serialized,
-  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support"),
+  .timeLimit(.minutes(30))
 )
 struct StaleScopeCrashContractTests {
   @Test("Stale ScopedStore parent-release contract crashes in a subprocess")
@@ -91,7 +92,8 @@ struct StaleScopeCrashContractTests {
 @Suite(
   "Stale Scope Release Contract Tests",
   .serialized,
-  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support"),
+  .timeLimit(.minutes(30))
 )
 struct StaleScopeReleaseContractTests {
   @Test("Stale ScopedStore returns cached state after parent release in release-like execution")
@@ -121,7 +123,8 @@ struct StaleScopeReleaseContractTests {
 @Suite(
   "PhaseMap Crash Contract Tests",
   .serialized,
-  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support"),
+  .timeLimit(.minutes(30))
 )
 struct PhaseMapCrashContractTests {
   @Test("PhaseMap direct phase mutations crash in a subprocess with contextual diagnostics")
@@ -174,7 +177,8 @@ struct PhaseMapCrashContractTests {
 @Suite(
   "Conditional Reducer Release Contract Tests",
   .serialized,
-  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support"),
+  .timeLimit(.minutes(30))
 )
 struct ConditionalReducerReleaseContractTests {
   @Test("IfLet drops child actions as a release-safe no-op when optional state is nil")

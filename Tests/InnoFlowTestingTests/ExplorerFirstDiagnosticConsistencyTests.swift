@@ -2,6 +2,8 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
+@testable import InnoFlowCoreTestSupport
+
 private actor PriorityGate {
   private var open = false
   private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -44,7 +46,7 @@ private struct IdleCleanupReducer: Reducer {
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> { .none }
 }
 @MainActor
-@Suite("Explorer first-diagnostic and cancelled cleanup")
+@Suite("Explorer first-diagnostic and cancelled cleanup", .timeLimit(.minutes(5)))
 struct ExplorerFirstDiagnosticConsistencyTests {
   @Test("a later clock timeout does not erase the runtime diagnostic already observed")
   func firstDiagnosticSurvivesClockTimeout() async {
@@ -58,7 +60,9 @@ struct ExplorerFirstDiagnosticConsistencyTests {
         currentGate = gate
         let fresh = TestStore(
           reducer: PriorityReducer(gate: gate), initialState: .init(),
-          clock: ManualTestClock(), effectTimeout: .seconds(1))
+          // The diagnostic must arrive before this budget ends; scale it
+          // with the suite so a saturated parallel run does not reorder them.
+          clock: ManualTestClock(), effectTimeout: scaledTestDeadline(.seconds(1)))
         store = fresh
         return fresh
       },

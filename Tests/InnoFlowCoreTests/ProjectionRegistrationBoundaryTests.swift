@@ -36,7 +36,7 @@ private enum RegistrationBoundaryKind: CaseIterable, Sendable {
   case dependencies
 }
 
-@Suite("Projection registration action boundaries")
+@Suite("Projection registration action boundaries", .timeLimit(.minutes(5)))
 @MainActor
 struct ProjectionRegistrationBoundaryTests {
   @Test(arguments: RegistrationBoundaryKind.allCases, [false, true])

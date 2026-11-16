@@ -159,7 +159,7 @@ private func measureProjectionObserverRegistry(
   }
 }
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(5)))
 struct PerfProjectionObserverRegistry {
   @Test(
     "ProjectionObserverRegistry refresh benchmark",

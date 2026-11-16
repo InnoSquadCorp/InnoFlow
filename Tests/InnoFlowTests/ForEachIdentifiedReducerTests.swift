@@ -60,7 +60,7 @@ struct IdentifiedCollectionFeature {
   }
 }
 
-@Suite("ForEachIdentifiedReducer")
+@Suite("ForEachIdentifiedReducer", .timeLimit(.minutes(5)))
 @MainActor
 struct ForEachIdentifiedReducerTests {
 

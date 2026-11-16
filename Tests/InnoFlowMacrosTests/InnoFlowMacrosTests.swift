@@ -19,7 +19,7 @@ import Testing
   ]
 #endif
 
-@Suite("Macro Tests")
+@Suite("Macro Tests", .timeLimit(.minutes(5)))
 struct InnoFlowMacrosTests {
 
   @Test("Output paths preserve availability and conditional compilation")
@@ -1922,13 +1922,15 @@ struct InnoFlowMacrosTests {
     #endif
   }
 
-  @Test("@InnoFlow diagnoses generated action path collisions in static multi-bindings")
-  func staticMultiBindingActionPathCollisionsAreDiagnosed() throws {
+  // A canonical static variable is the author's manual path even when it is
+  // one binding of several: it replaces synthesis instead of colliding with it.
+  @Test("@InnoFlow treats a canonical name in a static multi-binding as a manual action path")
+  func staticMultiBindingManualActionPathSuppressesSynthesis() throws {
     #if canImport(InnoFlowMacros)
       assertSwiftTestingMacroExpansion(
         """
         @InnoFlow
-        struct CollisionFeature {
+        struct MultiBindingManualPathFeature {
             struct State: Sendable {}
             enum Action: Sendable {
                 static let unrelated = 0, childCasePath = 1
@@ -1944,7 +1946,7 @@ struct InnoFlowMacrosTests {
         }
         """,
         expandedSource: """
-          struct CollisionFeature {
+          struct MultiBindingManualPathFeature {
               struct State: Sendable {}
               enum Action: Sendable {
                   static let unrelated = 0, childCasePath = 1
@@ -1963,17 +1965,9 @@ struct InnoFlowMacrosTests {
               }
           }
 
-          extension CollisionFeature: Reducer {
+          extension MultiBindingManualPathFeature: Reducer {
           }
           """,
-        diagnostics: [
-          DiagnosticSpec(
-            message:
-              "generated action path `childCasePath` collides with another generated action path or existing static member; declare an explicit static alias or rename the case",
-            line: 7,
-            column: 14
-          )
-        ],
         macros: testMacros
       )
     #else

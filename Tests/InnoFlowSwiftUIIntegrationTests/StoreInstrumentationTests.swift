@@ -68,7 +68,7 @@ private final class CallbackProjectionObserver: ProjectionObserver {
   }
 }
 
-@Suite("Store Instrumentation Tests", .serialized)
+@Suite("Store Instrumentation Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct StoreInstrumentationTests {
   @Test("Store processes async run effect")
@@ -696,7 +696,9 @@ struct StoreInstrumentationTests {
   )
   func projectionObserverStatsTrackSelectiveRefresh() {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
-    _ = store.select(\.child)
+    // A key-path selection stays registered only while a handle or a pending
+    // tracked read keeps it alive, so the stats under test need the handle.
+    let keyPathSelection = store.select(\.child)
     let dependencySelection = store.select(dependingOn: \.child.title) { $0.uppercased() }
     let fallbackSelection = store.select { $0.child.title }
 
@@ -720,7 +722,7 @@ struct StoreInstrumentationTests {
     #expect(afterTitleMutation.refreshPassCount == afterChildMutation.refreshPassCount + 1)
     #expect(afterTitleMutation.evaluatedObservers == afterChildMutation.evaluatedObservers + 3)
     #expect(afterTitleMutation.refreshedObservers == afterChildMutation.refreshedObservers + 3)
-    withExtendedLifetime((dependencySelection, fallbackSelection)) {}
+    withExtendedLifetime((keyPathSelection, dependencySelection, fallbackSelection)) {}
   }
 
   @Test(
@@ -800,7 +802,7 @@ struct StoreInstrumentationTests {
     let store = Store(reducer: ScopedBindableChildFeature(), initialState: .init())
     let scoped = store.scope(
       state: \.child, action: ScopedBindableChildFeature.Action.childCasePath)
-    _ = scoped.select(\.step)
+    let keyPathSelection = scoped.select(\.step)
     let dependencySelection = scoped.select(dependingOn: \.title) { $0.uppercased() }
     let fallbackSelection = scoped.select { $0.title }
 
@@ -823,7 +825,7 @@ struct StoreInstrumentationTests {
     #expect(afterTitleMutation.refreshPassCount == afterChildMutation.refreshPassCount + 1)
     #expect(afterTitleMutation.evaluatedObservers == afterChildMutation.evaluatedObservers + 2)
     #expect(afterTitleMutation.refreshedObservers == afterChildMutation.refreshedObservers + 2)
-    withExtendedLifetime((dependencySelection, fallbackSelection)) {}
+    withExtendedLifetime((keyPathSelection, dependencySelection, fallbackSelection)) {}
   }
 
   @Test(

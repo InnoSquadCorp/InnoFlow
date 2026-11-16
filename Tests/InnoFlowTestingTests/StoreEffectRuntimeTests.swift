@@ -12,7 +12,7 @@ import os
 
 // MARK: - Store Effect Runtime Tests
 
-@Suite("Store Effect Runtime Tests", .serialized)
+@Suite("Store Effect Runtime Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct StoreEffectRuntimeTests {
   @Test("Store processes immediate follow-up actions through a FIFO queue")
@@ -96,7 +96,7 @@ struct StoreEffectRuntimeTests {
           liveExactTokens: 0
         )
     )
-    #expect(await store.effectBridge.runtime.activeCancellationIDCount() == 0)
+    #expect(store.effectBridge.runtime.activeCancellationIDCount() == 0)
   }
 
   @Test("Store releases settled dynamic debounce ownership")
@@ -126,7 +126,7 @@ struct StoreEffectRuntimeTests {
           liveExactTokens: 0
         )
     )
-    #expect(await store.effectBridge.runtime.activeCancellationIDCount() == 0)
+    #expect(store.effectBridge.runtime.activeCancellationIDCount() == 0)
   }
 
   @Test("Store cancelAllEffects cancels pending effects")
@@ -282,7 +282,7 @@ struct StoreEffectRuntimeTests {
     }
 
     try #require(await firstStarted.wait())
-    await store.cancelEffects(id: futureID, context: context)
+    store.cancelEffects(id: futureID, context: context)
     await releaseFirst.open()
     _ = await walkTask.result
 
@@ -317,7 +317,7 @@ struct StoreEffectRuntimeTests {
         await clock.sleeperCount == 1
       }
     )
-    await store.cancelEffects(id: futureID, context: context)
+    store.cancelEffects(id: futureID, context: context)
     await clock.advance(by: .seconds(1))
     await drainAsyncWork()
 
@@ -472,8 +472,7 @@ struct StoreEffectRuntimeTests {
 
     await store.runConcurrently(
       [.none],
-      context: newerContext,
-      awaited: false
+      context: newerContext
     ) { _, _, _ in
       childReady.signal()
       await releaseChild.wait()
@@ -483,7 +482,7 @@ struct StoreEffectRuntimeTests {
 
     do {
       try #require(await childReady.wait())
-      await store.cancelEffects(
+      store.cancelEffects(
         id: id,
         context: store.effectBridge.makeEffectContext(
           sequence: staleSequence,
@@ -528,8 +527,7 @@ struct StoreEffectRuntimeTests {
 
     await store.runSequentially(
       [.none],
-      context: olderContext,
-      awaited: false
+      context: olderContext
     ) { _, _, _ in
       olderReady.signal()
       await releaseOlder.wait()
@@ -542,10 +540,9 @@ struct StoreEffectRuntimeTests {
 
       await store.runSequentially(
         [.none],
-        context: currentContext,
-        awaited: false
+        context: currentContext
       ) { _, _, _ in
-        await store.cancelInFlightEffects(id: id, context: currentContext)
+        store.cancelInFlightEffects(id: id, context: currentContext)
         await currentProbe.recordCancellationRequested(Task.isCancelled)
         currentFinished.signal()
       }
@@ -677,7 +674,7 @@ struct StoreEffectRuntimeTests {
       #expect(store.throttleState.scope(for: timingID)?.contains(suppressedOuterID) == false)
       #expect(store.throttleState.latestAdmissionSequence(for: timingID) == nil)
 
-      await store.cancelEffects(
+      store.cancelEffects(
         id: firstOuterID,
         context: store.effectBridge.makeEffectContext(
           sequence: 1,
@@ -2489,8 +2486,8 @@ struct StoreEffectRuntimeTests {
       potentialCancellationIDs: [id]
     )
 
-    await store.cancelEffects(id: id, context: context)
-    let task = await store.startRun(
+    store.cancelEffects(id: id, context: context)
+    let task = store.startRun(
       priority: nil,
       operation: { _, _ in
         await probe.markStarted()
@@ -2508,21 +2505,19 @@ struct StoreEffectRuntimeTests {
   func effectRuntimeCancelledTokenFinishIsIdempotent() async {
     let runtime = EffectRuntime<CounterFeature.Action>()
     let token = UUID()
-    let gate = RunStartGate()
     let task = Task<Void, Never> {}
 
-    await runtime.registerAndStart(
+    runtime.register(
       token: token,
       id: nil,
       sequence: 1,
-      task: task,
-      gate: gate
+      task: task
     )
-    await runtime.cancelAll(upTo: 1)
-    await runtime.finish(token: token)
-    await runtime.finish(token: token)
+    runtime.cancelAll(upTo: 1)
+    runtime.finish(token: token)
+    runtime.finish(token: token)
 
-    let metrics = await runtime.metricsSnapshot()
+    let metrics = runtime.metricsSnapshot()
     #expect(metrics.preparedRuns == 1)
     #expect(metrics.attachedRuns == 1)
     #expect(metrics.finishedRuns == 1)
@@ -2535,8 +2530,8 @@ struct StoreEffectRuntimeTests {
     let id = AnyEffectID(StaticEffectID("runtime-sequence-boundary"))
     let olderToken = UUID()
     let newerToken = UUID()
-    let olderHold = LateSendGate()
-    let newerHold = LateSendGate()
+    let olderHold = RunStartGate()
+    let newerHold = RunStartGate()
     let olderTask = Task<Void, Never> {
       await olderHold.wait()
     }
@@ -2544,26 +2539,24 @@ struct StoreEffectRuntimeTests {
       await newerHold.wait()
     }
 
-    await runtime.registerAndStart(
+    runtime.register(
       token: olderToken,
       id: id,
       sequence: 1,
-      task: olderTask,
-      gate: RunStartGate()
+      task: olderTask
     )
-    await runtime.registerAndStart(
+    runtime.register(
       token: newerToken,
       id: id,
       sequence: 2,
-      task: newerTask,
-      gate: RunStartGate()
+      task: newerTask
     )
 
-    await runtime.cancel(id: id, upTo: 1)
+    runtime.cancel(id: id, upTo: 1)
 
     #expect(olderTask.isCancelled)
     #expect(newerTask.isCancelled == false)
-    switch await runtime.emissionDecision(token: newerToken, id: id, sequence: 2) {
+    switch runtime.emissionDecision(token: newerToken, id: id, sequence: 2) {
     case .allow:
       break
     case .drop(let reason):
@@ -2574,8 +2567,8 @@ struct StoreEffectRuntimeTests {
     await newerHold.open()
     _ = await olderTask.result
     _ = await newerTask.result
-    await runtime.finish(token: olderToken)
-    await runtime.finish(token: newerToken)
+    runtime.finish(token: olderToken)
+    runtime.finish(token: newerToken)
   }
 
   @Test("EffectRuntime cancelAll preserves registered runs above its sequence boundary")
@@ -2583,8 +2576,8 @@ struct StoreEffectRuntimeTests {
     let runtime = EffectRuntime<CounterFeature.Action>()
     let olderToken = UUID()
     let newerToken = UUID()
-    let olderHold = LateSendGate()
-    let newerHold = LateSendGate()
+    let olderHold = RunStartGate()
+    let newerHold = RunStartGate()
     let olderTask = Task<Void, Never> {
       await olderHold.wait()
     }
@@ -2592,26 +2585,24 @@ struct StoreEffectRuntimeTests {
       await newerHold.wait()
     }
 
-    await runtime.registerAndStart(
+    runtime.register(
       token: olderToken,
       id: nil,
       sequence: 1,
-      task: olderTask,
-      gate: RunStartGate()
+      task: olderTask
     )
-    await runtime.registerAndStart(
+    runtime.register(
       token: newerToken,
       id: nil,
       sequence: 2,
-      task: newerTask,
-      gate: RunStartGate()
+      task: newerTask
     )
 
-    await runtime.cancelAll(upTo: 1)
+    runtime.cancelAll(upTo: 1)
 
     #expect(olderTask.isCancelled)
     #expect(newerTask.isCancelled == false)
-    switch await runtime.emissionDecision(token: newerToken, id: nil, sequence: 2) {
+    switch runtime.emissionDecision(token: newerToken, id: nil, sequence: 2) {
     case .allow:
       break
     case .drop(let reason):
@@ -2622,8 +2613,8 @@ struct StoreEffectRuntimeTests {
     await newerHold.open()
     _ = await olderTask.result
     _ = await newerTask.result
-    await runtime.finish(token: olderToken)
-    await runtime.finish(token: newerToken)
+    runtime.finish(token: olderToken)
+    runtime.finish(token: newerToken)
   }
 
   @Test("Store cancelled run effects do not start after public cancellation")

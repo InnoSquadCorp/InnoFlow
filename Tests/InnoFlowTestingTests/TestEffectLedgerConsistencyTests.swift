@@ -2,7 +2,7 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
-@Suite("Testing effect ledger", .serialized)
+@Suite("Testing effect ledger", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestEffectLedgerConsistencyTests {
   @Test("latest replacement is recorded in the displaced dispatch ledger")

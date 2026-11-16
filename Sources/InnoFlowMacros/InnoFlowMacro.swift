@@ -184,8 +184,17 @@ public struct InnoFlowMacro: ExtensionMacro, MemberAttributeMacro, MemberMacro {
       )
     }
 
+    // `protocols` lists only the declared conformances the type does not
+    // already state. A feature that spells out `: Reducer` itself needs no
+    // extension; emitting one would be a redundant-conformance error.
+    guard !protocols.isEmpty else {
+      return []
+    }
     let extendedType = type.trimmedDescription
-    let extensionDecl = try ExtensionDeclSyntax("extension \(raw: extendedType): Reducer {}")
+    let conformances = protocols.map(\.trimmedDescription).joined(separator: ", ")
+    let extensionDecl = try ExtensionDeclSyntax(
+      "extension \(raw: extendedType): \(raw: conformances) {}"
+    )
     return [extensionDecl]
   }
 

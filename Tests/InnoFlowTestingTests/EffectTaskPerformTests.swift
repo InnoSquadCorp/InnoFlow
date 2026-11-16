@@ -3,7 +3,7 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
-@Suite("EffectTask.perform")
+@Suite("EffectTask.perform", .timeLimit(.minutes(5)))
 @MainActor
 struct EffectTaskPerformTests {
   @Test("maps a successful operation to one action")

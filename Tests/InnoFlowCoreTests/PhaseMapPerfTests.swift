@@ -154,7 +154,7 @@ private func measureBlock(
 
 // MARK: - Dispatch benchmarks
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(5)))
 struct PerfPhaseMapDispatch {
 
   @Test("PhaseMap dispatch benchmark", arguments: phaseMapPerfScenarios)

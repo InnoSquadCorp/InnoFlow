@@ -4,7 +4,7 @@ import Observation
 import Testing
 import os
 
-@Suite("FlowTask reduction cancellation boundary")
+@Suite("FlowTask reduction cancellation boundary", .timeLimit(.minutes(5)))
 @MainActor
 struct FlowTaskCancellationBoundaryTests {
   @Test("cancellation between emission and reduction drops queued descendants", arguments: [0, 1])

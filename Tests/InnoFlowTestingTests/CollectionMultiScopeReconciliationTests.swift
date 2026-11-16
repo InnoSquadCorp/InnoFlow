@@ -196,7 +196,7 @@ private func groupInitialState(groupCount: Int, rowCount: Int, duplicateSlots: B
   }
 }
 
-@Suite("Collection reconciliation across direct scopes")
+@Suite("Collection reconciliation across direct scopes", .timeLimit(.minutes(5)))
 @MainActor struct CollectionMultiScopeReconciliationTests {
   @Test(arguments: [false, true], [1, 8, 32, 128])
   func denseDirectScopesPreserveOwnerLifetimes(testing: Bool, groups: Int) async {

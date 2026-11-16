@@ -252,7 +252,7 @@ private func consumeConstructedReducer<T>(_ value: T) {
 // factories that return `some Reducer` because that would partially hide the
 // construction cost we want to measure.
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(5)))
 struct PerfReducerComposition {
 
   @Test func _perf_constructOnly_N2() async throws {

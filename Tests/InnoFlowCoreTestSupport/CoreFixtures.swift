@@ -366,7 +366,7 @@ final class AsyncTestSignal: Sendable {
       }
       group.addTask {
         do {
-          try await Task.sleep(for: timeout)
+          try await Task.sleep(for: scaledTestDeadline(timeout))
           return false
         } catch {
           return false

@@ -1,5 +1,5 @@
 import Foundation
-import os
+import Synchronization
 
 /// Runs an optional child before its parent and binds the child's effects to
 /// the lifetime of its explicit instance identity.
@@ -237,7 +237,7 @@ extension ReducerEffect {
 /// Captured by events, never reconstructed from the current child state.
 package final class ChildLifetimeOwner: Sendable {
   package let generation = UUID()
-  private let cancelled = OSAllocatedUnfairLock(initialState: false)
+  private let cancelled = Mutex(false)
 
   package var cancellationID: AnyEffectID {
     AnyEffectID(EffectID(CancellationID(generation: generation)))
@@ -394,8 +394,6 @@ package final class ChildLifetimeRegistry {
       return .cancel(id(raw))
     case .animation(let effect, let animation):
       return recurse(effect).applyingAnimation(animation)
-    case .lazyMap(let lazy):
-      return recurse(lazy.materialize())
     case .owned:
       return effect
     case .none, .send, .output, .run, .diagnosticDrop:

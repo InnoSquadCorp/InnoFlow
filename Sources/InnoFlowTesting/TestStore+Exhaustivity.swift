@@ -106,7 +106,7 @@ extension TestStore {
     )
     await walker.walk(
       effect,
-      context: nextEffectContext(
+      context: reductionTurnContext(
         for: effect, location: location, flowTaskTracker: queuedAction.context?.flowTaskTracker),
       awaited: false
     )

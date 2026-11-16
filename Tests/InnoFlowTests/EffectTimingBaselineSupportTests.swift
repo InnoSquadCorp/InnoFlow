@@ -6,7 +6,7 @@ import Foundation
 import InnoFlowTesting
 import Testing
 
-@Suite("EffectTiming baseline support")
+@Suite("EffectTiming baseline support", .timeLimit(.minutes(5)))
 struct EffectTimingBaselineSupportTests {
 
   @Test("Matched run pair counting ignores incomplete sequences")

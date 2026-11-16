@@ -3,7 +3,7 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
-@Suite("Dispatch identity and timing schema")
+@Suite("Dispatch identity and timing schema", .timeLimit(.minutes(5)))
 struct DispatchIdentityConsistencyTests {
   @Test func monotonicWithinProcessAndUniqueAcrossConcurrentCallers() async {
     let first = DispatchID()

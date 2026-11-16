@@ -12,7 +12,7 @@ import os
 
 // MARK: - TestStore Effect Algebra Tests
 
-@Suite("TestStore Effect Algebra Tests", .serialized)
+@Suite("TestStore Effect Algebra Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreEffectAlgebraTests {
   @Test("ThrottleStateMap.clearState cancels trailing task and clears pending state")

@@ -7,7 +7,7 @@ import Testing
 @testable import InnoFlowCore
 @testable import InnoFlowTesting
 
-@Suite("TestStore Terminal Verification Tests", .serialized)
+@Suite("TestStore Terminal Verification Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreTerminalVerificationTests {
   @Test("deinit reports a buffered action when finish is omitted")

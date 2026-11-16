@@ -5,7 +5,7 @@
 import InnoFlowTesting
 import Testing
 
-@Suite("ManualTestClock deterministic waits")
+@Suite("ManualTestClock deterministic waits", .timeLimit(.minutes(5)))
 struct ManualTestClockTests {
 
   @Test("Pre-cancelled sleep throws for negative, zero and positive durations")

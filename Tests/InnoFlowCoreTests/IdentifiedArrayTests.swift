@@ -7,7 +7,7 @@ import Testing
 
 @testable import InnoFlowCore
 
-@Suite("IdentifiedArray")
+@Suite("IdentifiedArray", .timeLimit(.minutes(5)))
 struct IdentifiedArrayTests {
 
   private struct Row: Identifiable, Hashable, Sendable {

@@ -3,30 +3,36 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
-import OSLog
-public import os
+import Synchronization
 
-/// Thread-safe slot registry used to pair `runStarted` and `runFinished`
-/// callbacks for the signpost adapter. Signpost interval state values must
-/// be carried verbatim from begin to end, so the registry stores them inside
-/// an `OSAllocatedUnfairLock` slot keyed by the run's UUID token. The
-/// callbacks are synchronous fire-and-forget from the store runtime's
-/// perspective, so the lock is uncontended in the common case.
-final class OSSignpostIntervalStateRegistry: Sendable {
-  private let lock = OSAllocatedUnfairLock<[UUID: OSSignpostIntervalState]>(initialState: [:])
+#if canImport(OSLog)
+  import OSLog
+  public import os
+#endif
 
-  func store(_ state: OSSignpostIntervalState, for token: UUID) {
-    lock.withLock { storage in
-      storage[token] = state
+#if canImport(OSLog)
+  /// Thread-safe slot registry used to pair `runStarted` and `runFinished`
+  /// callbacks for the signpost adapter. Signpost interval state values must
+  /// be carried verbatim from begin to end, so the registry stores them inside
+  /// an `Mutex` slot keyed by the run's UUID token. The
+  /// callbacks are synchronous fire-and-forget from the store runtime's
+  /// perspective, so the lock is uncontended in the common case.
+  final class OSSignpostIntervalStateRegistry: Sendable {
+    private let lock = Mutex<[UUID: OSSignpostIntervalState]>([:])
+
+    func store(_ state: OSSignpostIntervalState, for token: UUID) {
+      lock.withLock { storage in
+        storage[token] = state
+      }
+    }
+
+    func take(token: UUID) -> OSSignpostIntervalState? {
+      lock.withLock { storage in
+        storage.removeValue(forKey: token)
+      }
     }
   }
-
-  func take(token: UUID) -> OSSignpostIntervalState? {
-    lock.withLock { storage in
-      storage.removeValue(forKey: token)
-    }
-  }
-}
+#endif
 
 /// Why a produced action was dropped before re-entering the store queue.
 public enum ActionDropReason: Sendable, Equatable {
@@ -413,192 +419,200 @@ public struct StoreInstrumentation<Action: Sendable>: Sendable {
       }
     )
   }
+}
 
-  /// Bridges store instrumentation to `OSSignposter`, surfacing run lifecycle
-  /// inside Instruments without changing reducer or effect semantics.
-  ///
-  /// Each `.runStarted` event opens an interval signpost named after the
-  /// supplied `name`, identified by the run's UUID token. The matching
-  /// `.runFinished` event closes the same interval. Action emissions and
-  /// cancellations are surfaced as `emitEvent` signposts on the same name
-  /// so they appear inline with the interval in Instruments' timeline.
-  ///
-  /// Pair with the existing `.osLog(logger:)` adapter through `.combined(...)`
-  /// when you want both Console-readable output and signpost-driven Instruments
-  /// traces from the same store.
-  ///
-  /// Action, error, and cancellation-ID payloads are redacted by default because
-  /// `String(describing:)` and error descriptions can expose user data in
-  /// Instruments traces. Opt in with `includeActions: true` and
-  /// `includeErrorPayload: true` and `includeCancellationIDs: true` only for local
-  /// debugging sessions where payload visibility is intentional.
-  public static func signpost(
-    signposter: OSSignposter,
-    name: StaticString = "InnoFlow.run",
-    includeActions: Bool = false,
-    includeErrorPayload: Bool = false,
-    includeCancellationIDs: Bool = false
-  ) -> Self {
-    let intervalStates = OSSignpostIntervalStateRegistry()
+// The adapters below bridge to Apple's unified logging and signposts. They
+// exist only where OSLog does, so the rest of the module builds on other
+// platforms.
+#if canImport(OSLog)
+  extension StoreInstrumentation {
+    /// Bridges store instrumentation to `OSSignposter`, surfacing run lifecycle
+    /// inside Instruments without changing reducer or effect semantics.
+    ///
+    /// Each `.runStarted` event opens an interval signpost named after the
+    /// supplied `name`, identified by the run's UUID token. The matching
+    /// `.runFinished` event closes the same interval. Action emissions and
+    /// cancellations are surfaced as `emitEvent` signposts on the same name
+    /// so they appear inline with the interval in Instruments' timeline.
+    ///
+    /// Pair with the existing `.osLog(logger:)` adapter through `.combined(...)`
+    /// when you want both Console-readable output and signpost-driven Instruments
+    /// traces from the same store.
+    ///
+    /// Action, error, and cancellation-ID payloads are redacted by default because
+    /// `String(describing:)` and error descriptions can expose user data in
+    /// Instruments traces. Opt in with `includeActions: true` and
+    /// `includeErrorPayload: true` and `includeCancellationIDs: true` only for local
+    /// debugging sessions where payload visibility is intentional.
+    public static func signpost(
+      signposter: OSSignposter,
+      name: StaticString = "InnoFlow.run",
+      includeActions: Bool = false,
+      includeErrorPayload: Bool = false,
+      includeCancellationIDs: Bool = false
+    ) -> Self {
+      let intervalStates = OSSignpostIntervalStateRegistry()
 
-    return .init(
-      didStartRun: { event in
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
-        let state = signposter.beginInterval(
-          name,
-          id: signposter.makeSignpostID(),
-          "token=\(event.token.uuidString) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
-        )
-        intervalStates.store(state, for: event.token)
-      },
-      didFinishRun: { event in
-        guard let state = intervalStates.take(token: event.token) else { return }
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
-        signposter.endInterval(
-          name,
-          state,
-          "token=\(event.token.uuidString) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
-        )
-      },
-      didFailRun: { event in
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
-        // Close the interval so signposter pairing remains balanced even when
-        // the run terminates abnormally, then surface the failure as an event.
-        if let state = intervalStates.take(token: event.token) {
+      return .init(
+        didStartRun: { event in
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
+          let state = signposter.beginInterval(
+            name,
+            id: signposter.makeSignpostID(),
+            "token=\(event.token.uuidString) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
+          )
+          intervalStates.store(state, for: event.token)
+        },
+        didFinishRun: { event in
+          guard let state = intervalStates.take(token: event.token) else { return }
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
           signposter.endInterval(
             name,
             state,
-            "token=\(event.token.uuidString) failed cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
+            "token=\(event.token.uuidString) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
+          )
+        },
+        didFailRun: { event in
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
+          // Close the interval so signposter pairing remains balanced even when
+          // the run terminates abnormally, then surface the failure as an event.
+          if let state = intervalStates.take(token: event.token) {
+            signposter.endInterval(
+              name,
+              state,
+              "token=\(event.token.uuidString) failed cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
+            )
+          }
+          let renderedErrorDescription =
+            includeErrorPayload ? event.errorDescription : "<redacted>"
+          signposter.emitEvent(
+            name,
+            id: .exclusive,
+            "fail token=\(event.token.uuidString) errorType=\(event.errorTypeName) errorDescription=\(renderedErrorDescription) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
+          )
+        },
+        didEmitAction: { event in
+          let actionDescription =
+            includeActions ? String(describing: event.action) : "<redacted>"
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
+          signposter.emitEvent(
+            name,
+            id: .exclusive,
+            "emit action=\(actionDescription) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
+          )
+        },
+        didDropAction: { event in
+          let renderedAction =
+            includeActions ? event.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
+          signposter.emitEvent(
+            name,
+            id: .exclusive,
+            "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
+          )
+        },
+        didDeliverOutput: { event in
+          signposter.emitEvent(
+            name,
+            id: .exclusive,
+            "output subscribers=\(event.subscriberCount) enqueued=\(event.enqueuedCount) dropped=\(event.droppedCount) terminated=\(event.terminatedCount) dispatchCapture=\(String(describing: event.dispatchCaptureDisposition)) suppressed=\(event.wasSuppressedByCancellation) sequence=\(String(describing: event.sequence))"
+          )
+        },
+        didDrainActionQueue: { event in
+          signposter.emitEvent(
+            name,
+            id: .exclusive,
+            "queue-drain processed=\(event.processedActionCount) pendingHighWater=\(event.pendingActionHighWaterMark) storageHighWater=\(event.storageHighWaterMark) retainedBytes=\(event.retainedByteEstimate) releasedExcess=\(event.didReleaseExcessCapacity)"
+          )
+        },
+        didCancelEffects: { event in
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: event.id) : "<redacted>"
+          signposter.emitEvent(
+            name,
+            id: .exclusive,
+            "cancel id=\(renderedCancellationID) sequence=\(event.sequence)"
           )
         }
-        let renderedErrorDescription =
-          includeErrorPayload ? event.errorDescription : "<redacted>"
-        signposter.emitEvent(
-          name,
-          id: .exclusive,
-          "fail token=\(event.token.uuidString) errorType=\(event.errorTypeName) errorDescription=\(renderedErrorDescription) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
-        )
-      },
-      didEmitAction: { event in
-        let actionDescription =
-          includeActions ? String(describing: event.action) : "<redacted>"
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
-        signposter.emitEvent(
-          name,
-          id: .exclusive,
-          "emit action=\(actionDescription) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
-        )
-      },
-      didDropAction: { event in
-        let renderedAction =
-          includeActions ? event.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: event.cancellationID) : "<redacted>"
-        signposter.emitEvent(
-          name,
-          id: .exclusive,
-          "drop action=\(renderedAction) reason=\(String(describing: event.reason)) cancellationID=\(renderedCancellationID) sequence=\(String(describing: event.sequence))"
-        )
-      },
-      didDeliverOutput: { event in
-        signposter.emitEvent(
-          name,
-          id: .exclusive,
-          "output subscribers=\(event.subscriberCount) enqueued=\(event.enqueuedCount) dropped=\(event.droppedCount) terminated=\(event.terminatedCount) dispatchCapture=\(String(describing: event.dispatchCaptureDisposition)) suppressed=\(event.wasSuppressedByCancellation) sequence=\(String(describing: event.sequence))"
-        )
-      },
-      didDrainActionQueue: { event in
-        signposter.emitEvent(
-          name,
-          id: .exclusive,
-          "queue-drain processed=\(event.processedActionCount) pendingHighWater=\(event.pendingActionHighWaterMark) storageHighWater=\(event.storageHighWaterMark) retainedBytes=\(event.retainedByteEstimate) releasedExcess=\(event.didReleaseExcessCapacity)"
-        )
-      },
-      didCancelEffects: { event in
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: event.id) : "<redacted>"
-        signposter.emitEvent(
-          name,
-          id: .exclusive,
-          "cancel id=\(renderedCancellationID) sequence=\(event.sequence)"
-        )
-      }
-    )
-  }
+      )
+    }
 
-  /// Bridges store instrumentation to `Logger` for Console-readable runtime
-  /// events.
-  ///
-  /// Action and cancellation-ID payloads are redacted by default. Set the
-  /// corresponding opt-in only when those descriptions are safe to expose in
-  /// public Console output.
-  public static func osLog(
-    logger: Logger,
-    includeActions: Bool = false,
-    includeCancellationIDs: Bool = false
-  ) -> Self {
-    .sink { event in
-      switch event {
-      case .runStarted(let runEvent):
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: runEvent.cancellationID) : "<redacted>"
-        logger.debug(
-          "InnoFlow run started token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
-        )
+    /// Bridges store instrumentation to `Logger` for Console-readable runtime
+    /// events.
+    ///
+    /// Action and cancellation-ID payloads are redacted by default. Set the
+    /// corresponding opt-in only when those descriptions are safe to expose in
+    /// public Console output.
+    public static func osLog(
+      logger: Logger,
+      includeActions: Bool = false,
+      includeCancellationIDs: Bool = false
+    ) -> Self {
+      .sink { event in
+        switch event {
+        case .runStarted(let runEvent):
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: runEvent.cancellationID) : "<redacted>"
+          logger.debug(
+            "InnoFlow run started token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
+          )
 
-      case .runFinished(let runEvent):
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: runEvent.cancellationID) : "<redacted>"
-        logger.debug(
-          "InnoFlow run finished token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
-        )
+        case .runFinished(let runEvent):
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: runEvent.cancellationID) : "<redacted>"
+          logger.debug(
+            "InnoFlow run finished token=\(runEvent.token.uuidString, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: runEvent.sequence), privacy: .public)"
+          )
 
-      case .runFailed(let failedEvent):
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: failedEvent.cancellationID) : "<redacted>"
-        logger.error(
-          "InnoFlow run failed token=\(failedEvent.token.uuidString, privacy: .public) errorType=\(failedEvent.errorTypeName, privacy: .public) errorDescription=\(failedEvent.errorDescription, privacy: .private) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: failedEvent.sequence), privacy: .public)"
-        )
+        case .runFailed(let failedEvent):
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: failedEvent.cancellationID) : "<redacted>"
+          logger.error(
+            "InnoFlow run failed token=\(failedEvent.token.uuidString, privacy: .public) errorType=\(failedEvent.errorTypeName, privacy: .public) errorDescription=\(failedEvent.errorDescription, privacy: .private) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: failedEvent.sequence), privacy: .public)"
+          )
 
-      case .actionEmitted(let actionEvent):
-        let actionDescription =
-          includeActions ? String(describing: actionEvent.action) : "<redacted>"
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: actionEvent.cancellationID) : "<redacted>"
-        logger.debug(
-          "InnoFlow emitted action=\(actionDescription, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
-        )
+        case .actionEmitted(let actionEvent):
+          let actionDescription =
+            includeActions ? String(describing: actionEvent.action) : "<redacted>"
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: actionEvent.cancellationID) : "<redacted>"
+          logger.debug(
+            "InnoFlow emitted action=\(actionDescription, privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: actionEvent.sequence), privacy: .public)"
+          )
 
-      case .actionDropped(let dropEvent):
-        let renderedAction =
-          includeActions ? dropEvent.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: dropEvent.cancellationID) : "<redacted>"
-        logger.debug(
-          "InnoFlow dropped action=\(renderedAction, privacy: .public) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
-        )
+        case .actionDropped(let dropEvent):
+          let renderedAction =
+            includeActions
+            ? dropEvent.action.map(String.init(describing:)) ?? "<none>" : "<redacted>"
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: dropEvent.cancellationID) : "<redacted>"
+          logger.debug(
+            "InnoFlow dropped action=\(renderedAction, privacy: .public) reason=\(String(describing: dropEvent.reason), privacy: .public) cancellationID=\(renderedCancellationID, privacy: .public) sequence=\(String(describing: dropEvent.sequence), privacy: .public)"
+          )
 
-      case .outputDelivered(let outputEvent):
-        logger.debug(
-          "InnoFlow delivered output subscribers=\(outputEvent.subscriberCount, privacy: .public) enqueued=\(outputEvent.enqueuedCount, privacy: .public) dropped=\(outputEvent.droppedCount, privacy: .public) terminated=\(outputEvent.terminatedCount, privacy: .public) dispatchCapture=\(String(describing: outputEvent.dispatchCaptureDisposition), privacy: .public) suppressed=\(outputEvent.wasSuppressedByCancellation, privacy: .public) sequence=\(String(describing: outputEvent.sequence), privacy: .public)"
-        )
+        case .outputDelivered(let outputEvent):
+          logger.debug(
+            "InnoFlow delivered output subscribers=\(outputEvent.subscriberCount, privacy: .public) enqueued=\(outputEvent.enqueuedCount, privacy: .public) dropped=\(outputEvent.droppedCount, privacy: .public) terminated=\(outputEvent.terminatedCount, privacy: .public) dispatchCapture=\(String(describing: outputEvent.dispatchCaptureDisposition), privacy: .public) suppressed=\(outputEvent.wasSuppressedByCancellation, privacy: .public) sequence=\(String(describing: outputEvent.sequence), privacy: .public)"
+          )
 
-      case .actionQueueDrained(let queueEvent):
-        logger.debug(
-          "InnoFlow action queue drained processed=\(queueEvent.processedActionCount, privacy: .public) pendingHighWater=\(queueEvent.pendingActionHighWaterMark, privacy: .public) storageHighWater=\(queueEvent.storageHighWaterMark, privacy: .public) retainedBytes=\(queueEvent.retainedByteEstimate, privacy: .public) releasedExcess=\(queueEvent.didReleaseExcessCapacity, privacy: .public)"
-        )
+        case .actionQueueDrained(let queueEvent):
+          logger.debug(
+            "InnoFlow action queue drained processed=\(queueEvent.processedActionCount, privacy: .public) pendingHighWater=\(queueEvent.pendingActionHighWaterMark, privacy: .public) storageHighWater=\(queueEvent.storageHighWaterMark, privacy: .public) retainedBytes=\(queueEvent.retainedByteEstimate, privacy: .public) releasedExcess=\(queueEvent.didReleaseExcessCapacity, privacy: .public)"
+          )
 
-      case .effectsCancelled(let cancellationEvent):
-        let renderedCancellationID =
-          includeCancellationIDs ? String(describing: cancellationEvent.id) : "<redacted>"
-        logger.debug(
-          "InnoFlow cancelled effects id=\(renderedCancellationID, privacy: .public) sequence=\(cancellationEvent.sequence, privacy: .public)"
-        )
+        case .effectsCancelled(let cancellationEvent):
+          let renderedCancellationID =
+            includeCancellationIDs ? String(describing: cancellationEvent.id) : "<redacted>"
+          logger.debug(
+            "InnoFlow cancelled effects id=\(renderedCancellationID, privacy: .public) sequence=\(cancellationEvent.sequence, privacy: .public)"
+          )
+        }
       }
     }
   }
-}
+#endif

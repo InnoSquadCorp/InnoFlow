@@ -10,7 +10,7 @@ import os
 // InnoFlow - A Hybrid Architecture Framework for SwiftUI
 // Copyright © 2025 InnoSquad. All rights reserved.
 
-@Suite("Phase Transition Graph Tests")
+@Suite("Phase Transition Graph Tests", .timeLimit(.minutes(5)))
 @MainActor
 struct PhaseTransitionGraphTests {
   @Test("Graph exposes legal successors for a phase")

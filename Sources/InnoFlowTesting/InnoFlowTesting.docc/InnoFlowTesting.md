@@ -69,8 +69,27 @@ Its `sleep(for:)` throws `CancellationError` for an already-cancelled task,
 including zero and negative durations. Uncancelled nonpositive sleeps return
 without parking; positive sleeps can be synchronized using the clock's
 deterministic registration waits before advancing time.
+
+Every clock wait is bounded. A wait whose event never happens throws
+`ManualTestClock.WaitTimeout`, naming what was awaited and what the clock
+observed, instead of suspending the test. A call without `timeout:` uses the
+clock's own `waitTimeout`: `ManualTestClock.defaultWaitTimeout` (ten seconds),
+or the value passed to `ManualTestClock(waitTimeout:)`. The deadline is a
+failure backstop on wall-clock time, never pacing.
+
+`advance(by:)` moves time in one jump, so a periodic effect receives one tick.
+`advance(by:inStepsOf:onceSleepersReach:)` drives periodic work: before every
+increment it waits until at least the given number of sleepers are suspended.
+That number is a threshold for the whole clock, so pass the total number of
+sleepers that must be parked before time may move, not just the periodic one.
 ``EffectTimingRecorder`` captures instrumentation events for repeatable baseline
 comparisons.
+
+`TestStore` deadlines default to ``TestStoreDefaults/effectTimeout``: one
+second, or the positive number of seconds in
+`INNOFLOW_TESTSTORE_EFFECT_TIMEOUT`. A value that is not used as written —
+clamped to one day, or ignored because it is not a positive number — is
+reported once on standard error.
 
 Attach ``TestStoreInvariant`` values to verify post-reduction state constraints
 once across direct sends, received effects, scoped forwarding, and automatic
@@ -78,8 +97,11 @@ consumption. Use ``TestStoreScenario`` to package deterministic action and
 output steps for reuse; it is test input, not production state recording or
 replay. Cancelling a scenario stops before subsequent steps, cancels remaining
 TestStore effects, and returns a result with the interrupted zero-based step
-index and label instead of reporting normal completion. Scoped output reception
-consumes the same root queue and therefore
+index and label instead of reporting normal completion. A scenario `advance`
+step waits for its sleeper threshold within the store's effect timeout, like
+`receive` and `finish`; if the threshold is not met it records a failure, does
+not move the clock, and the scenario continues with its next step. Scoped
+output reception consumes the same root queue and therefore
 retains root ordering, exhaustivity, and total-deadline behavior.
 
 ## Failure locations and test frameworks
@@ -90,11 +112,15 @@ invariants, terminal verification, and asynchronous run failures preserve the
 complete origin. The legacy `file:` overload remains supported when explicitly
 supplied; it uses the same value for file ID/path and column 1.
 
-While a Swift Testing test is current, failures use `Issue.record` with the
-actual `SourceLocation`. Otherwise they use XCTest's `XCTFail` when XCTest is
-available. XCTest's public failure interface supports file path and line;
-column precision is available through Swift Testing. Skipped assertions remain
-warnings and never become XCTest failures.
+A store records at initialization whether a Swift Testing test created it.
+Failures use `Issue.record` with the actual `SourceLocation` while a Swift
+Testing test is current, and also when the report comes from a store that a
+Swift Testing test created but that can no longer see that test: the
+deinitializer safety net runs with task-local values cleared, so the recorded
+owner, not `Test.current`, selects the channel there. Otherwise failures use
+XCTest's `XCTFail` when XCTest is available. XCTest's public failure interface
+supports file path and line; column precision is available through Swift
+Testing. Skipped assertions remain warnings and never become XCTest failures.
 
 Scoped output reception supports the same exact-value, predicate, and case-path
 forms as root reception, with one shared root queue and total timeout. Structural
@@ -113,6 +139,7 @@ Read <doc:AdvancedTesting> for phase coverage and reproducible seeded exploratio
 - ``Exhaustivity``
 - ``TestStoreInvariant``
 - ``TestStoreScenario``
+- ``TestStoreDefaults``
 - ``PhaseCoverageRecorder``
 - ``TestStoreExplorer``
 - ``SplitMix64``

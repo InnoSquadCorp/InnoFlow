@@ -46,6 +46,9 @@ public struct TestStoreExplorationChoice<Action: Equatable & Sendable>: Sendable
   }
   /// Uses the fresh store's manual clock for every replay. The explicit
   /// registration threshold prevents time advancing before an effect parks.
+  /// The wait for that threshold is bounded by the store's effect timeout
+  /// alone; a threshold that is not met in time is a `.configuration`
+  /// failure, never a reducer reproduction.
   public static func advance(
     by duration: Duration, onceSleepersReach count: Int, weight: UInt64 = 1
   ) -> Self {
@@ -428,20 +431,17 @@ private func executeExplorationChoice<R: Reducer>(
     guard let clock = store.manualClock else {
       throw ExplorationInteractionError.missingManualClock
     }
-    // An already satisfied registration threshold must win even with a
-    // zero budget. The timeout bounds only registration, never the finite
-    // actor/yield work that advances logical time after readiness is known.
-    if await clock.sleeperCount < sleepers {
-      let timeout = store.effectTimeout
-      try await withThrowingTaskGroup(of: Void.self) { group in
-        group.addTask { try await clock.waitForSleepers(atLeast: sleepers) }
-        group.addTask {
-          try await ContinuousClock().sleep(for: timeout)
-          throw ExplorationInteractionError.sleeperRegistrationTimedOut
-        }
-        defer { group.cancelAll() }
-        try await group.next()
-      }
+    // One deadline: the store's effect timeout bounds the registration wait,
+    // and the clock's own wait deadline never takes part. An unmet threshold
+    // is therefore always the same configuration failure, whichever of the two
+    // budgets is shorter. An already satisfied threshold wins even with a zero
+    // budget, because the wait returns before it arms a deadline. The timeout
+    // bounds only registration, never the finite actor/yield work that
+    // advances logical time after readiness is known.
+    do {
+      try await clock.waitForSleepers(atLeast: sleepers, timeout: store.effectTimeout)
+    } catch is ManualTestClock.WaitTimeout {
+      throw ExplorationInteractionError.sleeperRegistrationTimedOut
     }
     try Task.checkCancellation()
     await clock.advance(by: duration)

@@ -85,12 +85,14 @@ the active cache during the same parent refresh. Once external row handles are
 gone, an off-screen or otherwise quiescent view does not need to scope again to
 release removed-row state.
 
-Within the active family, a row resolves in O(1) when its cached offset still
-contains the same ID. If the ID moved, the resolver scans once by ID and updates
-that row's offset for subsequent reads.
+Within the active family, a row resolves in O(1) from its cached offset. A
+structural change (ids, order or count) indexes every row's offset once, for
+the whole family, before any row is refreshed, so a row does not scan for its
+element. A collection without contiguous storage, and a row family superseded
+by a later scope over the same key path, fall back to scanning by ID.
 
 - a steady-state list trends toward 100% offset hits after warm-up
-- insert, removal, and reorder operations miss only for rows whose cached offset no longer contains their ID
+- insert, removal, and reorder operations reindex once and refresh only the rows whose element changed or was removed
 - value-only changes at a stable offset remain O(1), and rebuilding an equivalent array does not refresh collection observers
 
 These are guidelines, not blocking gates. If a future change measurably moves any of them and the change is intentional, capture the new value as a fixture in a dedicated commit alongside `EffectTimingBaselineGate` style refresh.

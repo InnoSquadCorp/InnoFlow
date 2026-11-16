@@ -9,7 +9,8 @@ import Testing
 
 @Suite(
   "EffectTiming trend script",
-  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support")
+  .enabled(if: hostProcessTestsSupported, "requires macOS subprocess support"),
+  .timeLimit(.minutes(30))
 )
 struct EffectTimingTrendScriptTests {
 

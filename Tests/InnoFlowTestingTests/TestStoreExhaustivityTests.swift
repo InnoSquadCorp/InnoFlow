@@ -7,7 +7,7 @@ import Testing
 @testable import InnoFlowCore
 @testable import InnoFlowTesting
 
-@Suite("TestStore Exhaustivity Tests", .serialized)
+@Suite("TestStore Exhaustivity Tests", .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct TestStoreExhaustivityTests {
   @Test("exhaustivity defaults to on and scoped stores forward it")

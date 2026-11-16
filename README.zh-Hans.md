@@ -6,21 +6,21 @@
 
 以 SwiftUI 为中心的单向状态管理框架，负责业务与领域状态转换。先使用 reducer、Store 和确定性测试，再按功能需求添加编排。
 
-## InnoFlow 6.0.2
+## InnoFlow 6.1.0
 
-本 README 描述 **已发布的 6.0.2 API**，发布于 **2026-10-08**，提交为 `1176de1e4783b638c03a9334f43cc49378957148`。[版本源码](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [发布说明](RELEASE_NOTES.md) · [迁移](MIGRATION.md)。
+本 README 描述尚未打标签或发布的 **6.1.0 候选版本**。已发布的稳定版本仍是 **6.0.2**，发布于 **2026-10-08**，提交为 `1176de1e4783b638c03a9334f43cc49378957148`。[6.0.2 源码](https://github.com/InnoSquadCorp/InnoFlow/tree/6.0.2) · [发布说明](RELEASE_NOTES.md) · [迁移](MIGRATION.md)。
 
-开发分支包含后续 CI、测试组织、验证工具和文档变更。本次更新时 `Sources/` 与 6.0.2 一致；后续工具变更尚未发布。开发分支的 `STABLE_VERSION` 为 6.0.2，不可变标签保留当时的候选元数据。托管 DocC 跟随部署版本；确认已安装版本时请查看标签源码。七份 README 提供相同的入门内容，详细指南使用英语。
+6.1.0 为 `ManualTestClock` 的等待设置期限，并改变 reducer 返回的取消何时生效、键路径 selection 的存活时间、执行哪个节流请求以及 `@InnoFlow` 合成哪些 case path；升级前请阅读迁移说明。在确认发布之前，`STABLE_VERSION` 仍为 6.0.2。托管 DocC 跟随部署版本；确认已安装版本时请查看标签源码。七份 README 提供相同的入门内容，详细指南使用英语。
 
 ## 安装
 
 要求 Swift **6.3+**、Swift **6 语言模式**；最低平台为 iOS **18+**、macOS **15+**、tvOS **18+**、watchOS **11+**、visionOS **2+**。SwiftSyntax 范围为 `>=603.0.0, <605.0.0`，仓库锁文件使用 604.0.0。请选用匹配目标的 Xcode/SDK。声明的部署下限不代表所有旧运行时均已执行验证。
 
-添加包后明确选择产品。`from:` 允许后续兼容版本，请检查实际 `Package.resolved`。复现本次发布时使用 `exact: "6.0.2"`。
+添加包后明确选择产品。`from:` 允许后续兼容版本，请检查实际 `Package.resolved`。复现本次发布时使用 `exact: "6.1.0"`。
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.0.2")
+  .package(url: "https://github.com/InnoSquadCorp/InnoFlow.git", from: "6.1.0")
 ]
 ```
 

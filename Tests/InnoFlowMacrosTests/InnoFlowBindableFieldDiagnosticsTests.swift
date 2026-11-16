@@ -8,7 +8,7 @@ import SwiftSyntaxMacros
 import SwiftSyntaxMacrosTestSupport
 import Testing
 
-@Suite("Macro Tests")
+@Suite("Macro Tests", .timeLimit(.minutes(5)))
 struct InnoFlowBindableFieldDiagnosticsTests {
 
   @Test("@InnoFlow: @BindableField matched by Action.setX emits no diagnostics")
