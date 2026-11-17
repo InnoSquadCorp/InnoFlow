@@ -159,15 +159,17 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// ``optionalValue`` when a dead selection should be treated as absence.
   ///
   /// Reading it observes the liveness of the selection's owner — the parent
-  /// store's release, or the scoped store's deactivation — rather than the
-  /// selection itself, so it does not keep the selection alive: its reader
-  /// is notified when the owner is deactivated, even after the selection
-  /// was released.
+  /// store's release, and for a scoped store also its deactivation — and does
+  /// not keep the selection alive: its reader is notified when the owner is
+  /// deactivated, even after the selection or the scoped store was released.
+  /// While the owner is alive it also observes this selection's own
+  /// deactivation, which is how a scoped store that is released while this
+  /// selection lives notifies its readers.
   public var isAlive: Bool {
     // Observe the owner first, so the access is recorded whatever the
-    // result is.
+    // result is. `isActive` registers a tracker without retaining.
     let ownerIsAlive = observedOwnerIsAlive()
-    return ownerIsAlive && parentObject != nil && storedIsActive
+    return ownerIsAlive && parentObject != nil && isActive
   }
 
   /// Liveness as part of a read that goes on to the value: the value read
@@ -346,10 +348,12 @@ extension Store {
   /// `recordsStateRead` says whether creating the selection reads ``state``
   /// for `initialValue`. A closure-based selection does: nothing retains it
   /// after the reading body returns, so that recorded read of the owner is
-  /// what notifies its reader. A cache hit records the same read, so a reader
-  /// that obtains another holder's selection is still notified after that
-  /// holder releases it. A key-path selection reads ``untrackedState`` and
-  /// relies on its owner's retention instead.
+  /// what notifies its reader. A cache hit records the same Observation
+  /// access, so a reader that obtains another holder's selection is still
+  /// notified after that holder releases it. The hit reads no state, so a
+  /// reducer can obtain a cached selection while its store reduces. A
+  /// key-path selection reads ``untrackedState`` and relies on its owner's
+  /// retention instead.
   private func cachedSelectedStore<Value: Equatable & Sendable>(
     cacheKey: SelectionCacheKey?,
     recordsStateRead: Bool,
@@ -363,7 +367,7 @@ extension Store {
         for: cacheKey, valueType: Value.self)
     {
       if recordsStateRead {
-        _ = state
+        recordStateAccess()
       }
       return cached
     }
@@ -574,8 +578,9 @@ extension Store {
 
 extension ScopedStore {
   /// Returns the live selection for `cacheKey`, or creates one. As on
-  /// `Store`, a cache hit records the read of ``cachedState`` that creating a
-  /// closure-based selection records (`recordsStateRead`).
+  /// `Store`, a cache hit records the Observation access of the
+  /// ``cachedState`` read that creating a closure-based selection records
+  /// (`recordsStateRead`), without copying the snapshot.
   private func cachedSelectedStore<Value: Equatable & Sendable>(
     cacheKey: SelectionCacheKey?,
     recordsStateRead: Bool,
@@ -589,7 +594,7 @@ extension ScopedStore {
         for: cacheKey, valueType: Value.self)
     {
       if recordsStateRead {
-        _ = cachedState
+        recordCachedStateAccess()
       }
       return cached
     }
@@ -600,7 +605,8 @@ extension ScopedStore {
       sourceIsAlive: { @MainActor [weak self] in
         self?.isAlive == true
       },
-      // `isAlive` reads `isActive`, which deactivation invalidates.
+      // `isAlive` observes this scope's deactivation and the parent
+      // store's release, which notifies also after this scope is gone.
       observedOwnerIsAlive: { @MainActor [weak self] in
         self?.isAlive == true
       },

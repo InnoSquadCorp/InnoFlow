@@ -36,6 +36,16 @@ public final class Store<R: Reducer> {
     storedState
   }
 
+  /// Records the Observation access that reading ``state`` records, without
+  /// reading the state.
+  ///
+  /// A reduction holds exclusive access to the stored state, so this is the
+  /// form that is safe while one runs: a reducer can obtain a cached
+  /// closure-based selection of its own store, which records this access.
+  package func recordStateAccess() {
+    access(keyPath: stateKeyPath)
+  }
+
   private let reducer: R
   package let clock: StoreClock
   package let instrumentation: StoreInstrumentation<R.Action>
