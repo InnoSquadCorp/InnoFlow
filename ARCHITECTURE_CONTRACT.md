@@ -180,10 +180,13 @@ expose the same tiered read contract:
   notification so a reader that reads again keeps the same handle. A key-path
   selection that is never read, or that passes two notifications unread, is
   released, and a released selection leaves its dependency bucket at once, so
-  the owner stops evaluating its key path. A read of liveness alone
-  (`isAlive`) registers a tracker that no value change fires, so it is
-  retained until the selection is deactivated. The selection cannot tell a
-  tracked read from an untracked one: any read starts the retention above.
+  the owner stops evaluating its key path. A liveness read (`isAlive`)
+  records its Observation access on the owner's liveness — the parent
+  `Store`'s release or the `ScopedStore`'s deactivation — instead of on the
+  selection, so it never retains the selection, and its reader is notified
+  when the owner is deactivated even after the selection was released. The
+  selection cannot tell a tracked value read from an untracked one: any value
+  read starts the retention above.
   Key paths must therefore be valid for every state reachable while a reader
   holds the selection or the owner still retains it.
 - A dependency bucket's change predicate is determined by its key. Key-path
@@ -209,13 +212,19 @@ expose the same tiered read contract:
   superseded stay correct but resolve their element by scanning; the family
   that replaces them reports their vanished elements at the next structural
   change. A row whose id occurs more than once resolves its first occurrence.
+  A scope in the middle of the pass, before or after the pass classifies the
+  change, changes none of these rules: every row still compares its element
+  with that element's previous value, so a row that only moved is not
+  refreshed, a removed row of the active family does not scan, and a row
+  whose id occurs more than once follows its first occurrence.
 - Creating a key-path selection seeds its snapshot without recording an
   Observation access on the parent, so a view that selects one value does
   not depend on the whole parent state; the owner retains the selection for
   its reader instead. A closure-based selection (`dependingOn:`,
   `dependingOnAll:`, a selector, with or without `id:`) has no such
   retention, so creating one during a tracked read records a read of the
-  parent's state, as in 6.0.x. A view that creates one in its body is
+  parent's state, as in 6.0.x, and so does getting another holder's live
+  selection from the `id:` cache. A view that obtains one in its body is
   therefore invalidated by any parent change until it holds the selection.
 - A reducer-returned `.cancel`, a `cancelInFlight: true` replacement, a
   newer debounce request and a `latest` lane request are accepted in the
@@ -235,10 +244,21 @@ expose the same tiered read contract:
   earlier effect under the identifier is released and recorded, even when
   the replacing dispatch is then cancelled before its effect runs. A
   `latest` request that a lane with another policy will reject changes
-  nothing. A throttled subtree is the exception: whether it runs depends on its window,
+  nothing. The turn decides every lane request it reaches against the lane
+  state of that turn, with the rule admission applies, and the interpreter
+  later reports exactly that decision: a request the lane rejects, or whose
+  own tree already cancelled its lane identifier, completes without awaiting,
+  so a cancellation after it in a `concatenate` is still accepted in the
+  turn; a request the lane admits awaits its run. A `latest` lane displaced
+  in a reduction turn stays the open `latest` lane under its identifier until
+  its replacement is admitted or can no longer proceed, so a request with
+  another policy meets a conflicting lane. A throttled subtree is the exception: whether it runs depends on its window,
   so cancellation inside it is accepted when the interpreter admits it.
-  `Store` and `TestStore` share this acceptance, so a test receives exactly
-  the actions a production store reduces.
+  `Store` and `TestStore` share this acceptance, so a test receives the
+  actions a production store reduces (see TestStore delivery below for the
+  order and for cancellations a test issues). A dispatch whose declared work
+  an identifier cancellation releases before that work is registered records
+  the cancellation in diagnostics when the interpreter skips the work.
 - A run's task-cancellation handlers (`withTaskCancellationHandler`,
   `AsyncStream` termination) execute where cancellation is delivered, which
   can be the main thread inside `send`, `cancelEffects` or `Store.deinit`.
@@ -327,7 +347,12 @@ children, and derived `SelectedStore` projections.
   observes completion without receiving authority to cancel another
   dispatch's pending work. Store and TestStore therefore apply stale ID/global
   cancellation to the same active throttle scope, while TestStore keeps one
-  finish activity through post-fire recursion.
+  finish activity through post-fire recursion. A cancellation that removes
+  the window's newest trailing request — through its dispatch or through an
+  identifier only that request carries — removes only the retained requests
+  it covers and hands the window, with its timer, to the newest remaining
+  request that can still proceed (a window retains the newest request and up
+  to seven it replaced); the window resets only when none remains.
 - A `FlowTask` retains cancellation scopes weakly. Live effect contexts keep
   their own scopes alive, while completed descendants do not accumulate behind
   one long-running sibling.
@@ -415,6 +440,8 @@ removes that sleeper and leaves the clock reusable.
 Phase declarations and references compare the same logical Swift identifier, regardless of optional backticks. Action and Output path names preserve raw spelling and strip exactly one leading underscore. Code emission separately escapes generated members, case references, and payload labels. Missing cases and active-context member collisions remain errors; manual paths and ignored cases keep their existing meaning. Valid language spellings are tested through real consumers, including keywords, spaces, punctuation, numbers, and Unicode.
 
 ### TestStoreDispatch
+
+TestStore delivery: a `Store` reduces an effect action when an effect delivers it, while a `TestStore` buffers it and reduces it when the test receives it. A buffered action is therefore one a `Store` would already have reduced. A cancellation that the delivering effect's own continuation applies later (its own `.cancel` after a `.send(...).cancellable(id)`, or work that waits for the delivering run) does not remove it; after that continuation has passed it, only a cancellation applied while the test reduces an earlier received action, or the cancellation of its dispatch, still removes it. A cancellation applied while the test reduces a received action — its reduction-turn acceptance and the synchronous part of its effect walk — removes the covered actions behind it. Other cancellations, such as `cancelEffects(identifiedBy:)`, `cancelAllEffects()`, a `TestStoreDispatch.cancel()` or a test `send`, remove the covered actions the delivering effect has not moved past, which is the `Store` schedule where the cancellation lands first. The actions the synchronous part of a received action's effect walk delivers are queued ahead of the actions the run that emitted the received action sent after it, the order a `Store` reduces them in; interleavings a `Store` does not order (independent runs, `merge` children, deeper follow-up chains against independent work) stay in delivery order. Outputs follow the same rules.
 
 Root, scoped, and phase helper sends return one discardable TestStoreDispatch. Queued actions keep their dispatch activity until the receive reduction has registered follow-up work. Runtime completion is separate from unverified delivered outputs. Dispatch finish never consumes either queue, regardless of exhaustivity, and can be retried after explicit receive. Timeout/caller cancellation cancels only that dispatch and does not mark uncooperative physical work finished. Handles weakly reference their store. Non-exhaustive receiveOutput advances intermediate actions using a non-consuming shared queue revision, preserving per-queue FIFO and one total deadline.
 

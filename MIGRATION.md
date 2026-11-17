@@ -32,9 +32,11 @@ A key-path selection is now alive while one of these holds:
   delivered yet (this is what keeps a transient view-body read such as
   `store.select(\.count).requireAlive()` working);
 - one notification has been delivered since the last read. A reader that
-  reads again during this window gets the same handle back;
-- its liveness alone was read (`isAlive`). No value change notifies such a
-  reader, so the owner keeps the selection until it is deactivated.
+  reads again during this window gets the same handle back.
+
+Reading `isAlive` keeps nothing alive. It observes the owner instead, so its
+reader is notified when the store is released or the row is removed, even
+after the selection itself was released.
 
 What to check:
 
@@ -57,8 +59,10 @@ Closure-based selections — `select(dependingOn:)`, `select(dependingOnAll:)`
 and `select { … }`, with or without `id:` — keep the 6.0.x behavior: the owner
 does not retain one for its reader, so creating one during a tracked read
 records a read of the owner's state. A view that creates one in its body is
-invalidated by any state change until it holds the selection. Key-path
-selections no longer record that read.
+invalidated by any state change until it holds the selection. Getting
+another holder's live selection through the same `id:` records that read
+too; in 6.0.x such a reader stopped updating once the holder released the
+selection. Key-path selections no longer record that read.
 
 No source changes are required for selections that are held or read in a view
 body.
@@ -78,12 +82,41 @@ turn: the run it replaces is reported as superseded and released, also when
 the dispatch that returned the request is cancelled before its effect runs.
 A `latest` request that a lane with another policy rejects replaces nothing,
 as in 6.0.x. `runLaneSnapshots()` does not list the lane between that turn and
-the replacement's admission; the replacement keeps the lane's identity.
+the replacement's admission; the replacement keeps the lane's identity, and
+until then a request with another policy meets the lane as conflicting.
+
+The reduction turn decides every lane request it reaches against the lane
+state of that turn, and the request later reports exactly that decision. A
+request the lane rejects (`busy`, `queueFull`, `conflictingPolicy`) completes
+without awaiting, so a `.cancel` after it in a `concatenate` is accepted in
+the turn too; the request stays rejected even if the lane finished before
+the interpreter reached it. In 6.0.x such a request was admitted against the
+lane it met at that later point.
 
 `TestStore` applies the same rule. A test that received an action from work
 its next `send` cancels through a composite effect (for example
 `.concatenate(.cancel(id), .send(next))`) no longer receives it, matching
 `Store`.
+
+`TestStore` now treats a buffered effect action as one a `Store` has already
+reduced:
+
+- A cancellation that the delivering effect applies afterwards no longer
+  removes it. `.concatenate(.send(a).cancellable(id), .cancel(id))`, a run
+  under `id` followed by `.cancel(id)`, and the same shapes inside a `merge`
+  now let the test receive `a`; in 6.0.x the action was dropped. Add the
+  missing `receive` to an exhaustive test of such an effect.
+- The actions a received action's effect delivers synchronously are queued
+  ahead of the later emissions of the run that emitted the received action.
+  Receive them in that order; in 6.0.x the order depended on timing.
+- A cancellation the test issues — `cancelEffects(identifiedBy:)`,
+  `cancelAllEffects()`, a dispatch's `cancel()`, or a `send` whose reduction
+  cancels — still removes covered actions the delivering effect has not moved
+  past, as before.
+
+Cancelling a queued serial request through its dispatch now returns its
+capacity at once; the next request is no longer rejected with `queueFull`
+while that cancellation is on its way to the scheduler.
 
 Cancellation is delivered synchronously. A task-cancellation handler inside
 an effect operation (`withTaskCancellationHandler`, `AsyncStream`
@@ -94,11 +127,13 @@ the main thread is waiting to do, such as a lock the caller holds or
 
 ### Throttle trailing requests
 
-When the newest trailing request of a throttle window belongs to a dispatch
-that is cancelled before the window closes, the window now fires the request
-it replaced. In 6.0.x it fired nothing if the cancelled dispatch's effect had
-already been interpreted, and the replaced request otherwise. A window
-keeps the newest request and up to seven it replaced.
+When the newest trailing request of a throttle window is cancelled before the
+window closes — its dispatch is cancelled, or an ID only it carries is
+cancelled — the window now fires the request it replaced. In 6.0.x an ID
+cancellation fired nothing, and a dispatch cancellation fired nothing if the
+cancelled dispatch's effect had already been interpreted, and the replaced
+request otherwise. A window keeps the newest request and up to seven it
+replaced.
 
 ### Case-path synthesis
 

@@ -154,3 +154,30 @@ extension TestStore {
     }
   }
 }
+
+// MARK: - Receiving
+
+extension TestStore {
+  package func popBufferedQueuedAction() -> ActionQueue<R.Action>.QueuedAction? {
+    while let entry = queue.popBuffered() {
+      guard entry.isDeliverable else {
+        entry.finish()
+        continue
+      }
+      return entry
+    }
+    return nil
+  }
+
+  package func popBufferedAction() async -> R.Action? {
+    guard let entry = popBufferedQueuedAction() else { return nil }
+    defer { entry.finish() }
+    return entry.action
+  }
+
+  package func discardInvalidatedActions() {
+    queue.removeBuffered { !$0.isDeliverable }
+    outputQueue.removeBuffered { !$0.isDeliverable }
+    finishActivity.noteProgress()
+  }
+}

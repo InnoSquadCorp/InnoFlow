@@ -20,8 +20,26 @@ history of every ID ever used.
 Serial promotion publishes the next reservation synchronously, but does not start
 it until the driver attaches its task. Promotion and attachment share one start
 boundary, so a request produces one started transition. Cancelling a pending
-reservation returns queue capacity immediately. Completing an old or already
-removed ticket cannot remove a newer lane.
+reservation returns queue capacity immediately, whether the cancellation comes
+through an ID it carries or through its dispatch: a pending request that can
+no longer proceed never counts toward capacity or the snapshot's pending
+count, even before its cancellation reaches the scheduler, and it is released
+through the same terminal transition as an explicit cancellation. Completing an
+old or already removed ticket cannot remove a newer lane.
+
+A `latest` lane displaced in a reduction turn remains the open `latest` lane
+under its ID until its replacement is admitted or can no longer proceed: the
+replacement keeps the lane's identity, and a request with another policy is
+rejected as conflicting.
+
+The reduction turn that returns an effect decides each lane request it reaches
+without awaiting against the lane state of that turn, with the same rule
+admission applies (one side-effect-free decision function serves both). A
+request the lane rejects, or whose own tree already cancelled its lane ID,
+completes without awaiting, so the turn keeps accepting the cancellations
+behind it, and the interpreter later reports exactly that outcome without
+consulting the lane again. A request the lane admits awaits its run, so the
+interpreter admits it against the lane it meets then.
 
 ## Lifecycle observations
 

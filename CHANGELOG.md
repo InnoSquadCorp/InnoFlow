@@ -119,14 +119,23 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   generated one. A manual path in a narrower `#if` than its case leaves the
   helper synthesized under the complementary condition.
 - A throttle window fires the newest trailing request that can still proceed.
-  When the newest request's dispatch is cancelled, the window falls back to
-  the request it replaced (the window keeps the newest request and up to
-  seven it replaced)
-  instead of firing nothing. Before, the outcome depended on whether the
-  cancelled dispatch's effect had been interpreted yet.
+  When the newest request is cancelled — through its dispatch or through an
+  ID only it carries — the window falls back to the request it replaced (the
+  window keeps the newest request and up to seven it replaced) instead of
+  firing nothing, and keeps its timer. Before, an ID cancellation always
+  reset the window, and the outcome of a dispatch cancellation depended on
+  whether the cancelled dispatch's effect had been interpreted yet.
+- `TestStore` queues the actions that a received action's effect delivers
+  synchronously ahead of the actions that the run which emitted the received
+  action sent after it, the order in which a `Store` reduces them. Before,
+  the order depended on whether the test received the first action before
+  the run emitted the next one. Interleavings a `Store` does not order stay
+  in delivery order.
 - A collection scope now refreshes only the rows a change can affect instead
   of every row on any change, and rows resolve their positions once per
-  structural change instead of each scanning the collection. On the local
+  structural change instead of each scanning the collection, also when an
+  observation callback scopes the collection again during the refresh pass.
+  On the local
   benchmark with 1,000 retained rows, one row update dropped from 4.0 ms to
   0.06 ms and a structural change from 297 ms to about 1 ms. Elements whose
   stored bytes are identical are treated as unchanged without calling `==`.
@@ -185,9 +194,35 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   the replacing dispatch is cancelled before its effect runs. Until the lane
   admits the replacement, `runLaneSnapshots()` does not list it; the
   replacement keeps the lane's identity. A `latest` request that a lane with
-  another policy rejects replaces nothing.
-  `TestStore` applies the same rules, so a test receives exactly the actions
-  a production store reduces.
+  another policy rejects replaces nothing. The turn decides every lane
+  request it reaches against the lane state of that turn: a request the lane
+  rejects completes without awaiting, so a cancellation after it is accepted
+  in the turn as well, and the request is reported with that rejection even
+  if the lane changed before the interpreter reached it. A `latest` lane
+  displaced in the turn stays the open `latest` lane until its replacement
+  is admitted, so a request with another policy is rejected as conflicting
+  instead of taking the lane over.
+  `TestStore` applies the same rules, so a test receives the actions a
+  production store reduces.
+- `TestStore` delivers an effect action that the delivering effect cancels
+  afterwards, as a `Store` reduces it: `.concatenate(.send(a).cancellable(id),
+  .cancel(id))`, a run under `id` followed by `.cancel(id)` in a
+  `concatenate`, and the same inside a `merge`. A cancellation applied while
+  the test reduces an earlier received action still removes the action, and
+  a cancellation the test issues (`cancelEffects`, `cancelAllEffects`, a
+  dispatch's `cancel()`, a `send`) removes the actions the delivering effect
+  has not moved past yet.
+- Cancelling a queued serial request through its dispatch returns its queue
+  capacity at once: a pending request that can no longer proceed no longer
+  counts toward `maxPending` or `pendingRequestCount`. Before, the next
+  request could be rejected with `queueFull` until the cancellation reached
+  the scheduler.
+- `StoreDiagnostics` records `cancellationRequested` for a dispatch whose
+  declared work an ID cancellation released before that work was registered:
+  the issuing effect's own `.cancel` interpreted before a `merge` sibling
+  registered its work, or a cancellation that landed while an earlier
+  `concatenate` sibling was still running. Before, the work was skipped
+  without a record.
 - Release pending scheduled requests in the same turn as cancellation
   acceptance. With `StoreDiagnostics` enabled, `cancelEffects(identifiedBy:)`
   and `cancelAllEffects()` suspended between marking cancellation and
@@ -201,9 +236,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   (plus one more), releases selections that are never read, and removes a
   released selection from its dependency bucket immediately. A selection
   that was never read costs nothing after it is dropped; one that was read is
-  released after two further value changes. A selection read only for
-  liveness (`isAlive`) is kept until it is deactivated, because no value
-  change notifies that reader. Releasing a selection removes it from its
+  released after two further value changes. Reading `isAlive` observes the
+  owner's liveness and never keeps a selection alive; its reader is notified
+  when the store is released or the row is removed, even after the selection
+  was released. Releasing a selection removes it from its
   dependency bucket in place, so releasing many selections of one dependency
   stays linear.
 - Selecting on a `ScopedStore` whose collection element was removed, or whose
@@ -216,7 +252,9 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   state, so a view that creates one in its body depends only on that
   selection. A closure-based selection still records that read, as in 6.0.x:
   nothing keeps it alive after the body returns, and the read is what
-  notifies such a view.
+  notifies such a view. Getting another holder's live closure-based
+  selection from `select(…, id:)` records that read too; before, such a
+  reader stopped updating once the holder released the selection.
 - Never access projection registry storage while an observer callback runs.
   An always-refresh observer that registered another observer during a pass
   trapped with an exclusivity violation.

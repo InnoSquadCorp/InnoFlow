@@ -576,6 +576,14 @@ struct EffectRunSchedulerTests {
     #expect(store.state.completed == [2])
   }
 
+}
+
+/// Admission after a reduction turn displaced a lane or a dispatch was
+/// cancelled. Host-only: these tests stay out of the focused platform
+/// runtime inventory that `EffectRunSchedulerTests` belongs to.
+@Suite("Effect run admission after cancellation", .timeLimit(.minutes(5)))
+@MainActor
+struct EffectRunAdmissionCancellationTests {
   // MARK: Displaced latest lanes
 
   @Test("A displaced latest lane is still the open latest lane until its replacement is admitted")

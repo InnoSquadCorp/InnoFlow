@@ -169,6 +169,42 @@
       "source": "Sources/InnoFlowTesting/TestStore+EffectDriver.swift",
       "declaration": "package func runSequentially(",
       "reason": "Package witness of the driver requirement whose `awaited:` parameter was removed."
+    },
+    {
+      "message": "API breakage: func ThrottleStateMap.clearState(for:where:) has return type change from Swift.Bool to InnoFlowCore.ThrottleStateMap<Action, Output>.WindowCancellation",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package final class ThrottleStateMap<Action: Sendable, Output: Sendable>",
+      "reason": "The package throttle state reports how a cancellation changed a window, so the runtime can hand the window and its timer to the newest request that can still proceed."
+    },
+    {
+      "message": "API breakage: func ThrottleStateMap.clearStates(where:) has return type change from () to [InnoFlowCore.AnyEffectID : InnoFlowCore.EffectExecutionContext]",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package final class ThrottleStateMap<Action: Sendable, Output: Sendable>",
+      "reason": "The package throttle state returns the request that took over each window whose owner a cancellation removed, so the runtime can move the shared timer to it."
+    },
+    {
+      "message": "API breakage: func ThrottleStateMap.storePending(_:context:requiresAwaitedCompletion:for:) has parameter 3 type change from InnoFlowCore.AnyEffectID to InnoFlowCore.DelayedEffectScope?",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package final class ThrottleStateMap<Action: Sendable, Output: Sendable>",
+      "reason": "The package throttle state records each retained request's delayed scope, which the window passes to when a cancellation removes its owner."
+    },
+    {
+      "message": "API breakage: func ThrottleStateMap.storePending(_:context:requiresAwaitedCompletion:for:) has been renamed to func storePending(_:context:requiresAwaitedCompletion:scope:for:)",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package final class ThrottleStateMap<Action: Sendable, Output: Sendable>",
+      "reason": "The same package method gained the `scope:` parameter; no consumer can reach it."
+    },
+    {
+      "message": "API breakage: accessor CollectionScopeCacheBucket.offsetsByID.Set() has been removed",
+      "source": "Sources/InnoFlowCore/StoreCaches.swift",
+      "declaration": "package final class CollectionScopeCacheBucket",
+      "reason": "The package collection-scope cache changes its offsets only through its indexing methods, which record whether positions were indexed against the reduced collection."
+    },
+    {
+      "message": "API breakage: accessor CollectionScopeCacheBucket.revision.Set() has been removed",
+      "source": "Sources/InnoFlowCore/StoreCaches.swift",
+      "declaration": "package final class CollectionScopeCacheBucket",
+      "reason": "The package collection-scope cache advances its revision only through its indexing methods, for the same reason."
     }
   ]
 }

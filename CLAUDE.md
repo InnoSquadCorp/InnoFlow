@@ -121,11 +121,21 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    other earlier effect under its ID is released and recorded, so nothing is
    left half-cancelled when the replacing dispatch is cancelled before its
    effect is interpreted. A `latest` request that a lane with another policy
-   will reject changes nothing. A throttled subtree is accepted when its window admits it. `Store` and
+   will reject changes nothing. The turn decides every lane request it
+   reaches against the lane state of that turn, with the rule admission
+   applies, and the interpreter reports exactly that decision later: a
+   request the lane rejects, or whose own tree cancelled its lane ID first,
+   completes without awaiting, so a later sibling is still accepted in the
+   turn. A `latest` lane displaced in a reduction turn stays the open
+   `latest` lane under its ID until its replacement is admitted or can no
+   longer proceed. A throttled subtree is accepted when its window admits it. `Store` and
    `TestStore` share this acceptance through
-   `ReductionTurnCancellationAcceptor`; a test must receive exactly the
-   actions a production store reduces. A dispatch whose effect is cancelled
-   before it was interpreted still records the cancellation in diagnostics.
+   `ReductionTurnCancellationAcceptor`; a test must receive the actions a
+   production store reduces, under the TestStore delivery rules in "Testing
+   dispatch ownership". A dispatch whose effect is cancelled before it was
+   interpreted still records the cancellation in diagnostics, and so does a
+   dispatch whose declared work an ID cancellation releases before that work
+   is registered, when the interpreter skips the work.
    No suspension may separate cancellation acceptance from releasing that
    work, with or without diagnostics. All Store effect bookkeeping, including
    run tasks, is MainActor-isolated: `cancelEffects(identifiedBy:)` and
@@ -151,8 +161,10 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
     publish its new lane generation before any suspension. Inherited effect
     cancellation IDs also own pending scheduled requests: cancelling one
     removes its pending request and returns queue capacity immediately. A
-    running serial or drop lane keeps its physical slot until the operation
-    actually returns.
+    pending request whose dispatch or ID was cancelled never counts toward
+    capacity or `pendingRequestCount`, even before that cancellation reaches
+    the scheduler. A running serial or drop lane keeps its physical slot
+    until the operation actually returns.
 13. `FlowScope` owns only explicitly tracked dispatches. Closing one scope must
     not cancel sibling scopes, untracked work, or an entire Store. Cancelling
     the caller starts owned cancellation even while the scope body is awaiting
@@ -171,14 +183,17 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
     identity while it is referenced, and its owner retains it from a read
     until that read's notification plus one more; a selection that is never
     read, or goes unread across two notifications, is released and its key
-    path is no longer evaluated. A read of liveness alone (`isAlive`) is
-    retained until the selection is deactivated, because no value change
-    notifies that reader. Creating a key-path selection never records an
-    Observation access on the parent. Nothing retains a closure-based
-    selection (`dependingOn:`, `dependingOnAll:`, a selector, with or without
-    `id:`) after the reading body returns, so creating one records a read of
-    the parent's state, as in 6.0.x; a reader that holds it is notified
-    through the selection alone. Selection creation never traps: a selection
+    path is no longer evaluated. A liveness read (`isAlive`) observes the
+    owner's liveness — the parent `Store`'s release or the `ScopedStore`'s
+    deactivation — and does not retain the selection; its reader is notified
+    when the owner is deactivated, even after the selection was released.
+    Creating a key-path selection never records an Observation access on the
+    parent. Nothing retains a closure-based selection (`dependingOn:`,
+    `dependingOnAll:`, a selector, with or without `id:`) after the reading
+    body returns, so obtaining one — created, or returned from the `id:`
+    cache — records the read of the parent's state that creating it records,
+    as in 6.0.x; a reader that holds it is notified through the selection
+    alone. Selection creation never traps: a selection
     created on a projection that is no longer alive reports that through its
     own accessors. Parent
     release invalidates tracked projection liveness and optional reads on
@@ -224,7 +239,10 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
     deactivated by the pass that classifies its removal, also when a
     callback scopes the collection again during that pass, through the same
     or another action path. A row whose id occurs more than once resolves its
-    first occurrence.
+    first occurrence. A scope during that pass, before or after the pass
+    classifies the change, changes none of these rules: a row that only moved
+    is not refreshed, a removed row of the active family does not scan, and a
+    duplicated id still follows its first occurrence.
 
 `IdentifiedArrayTests` and `ManualTestClockTests` lock contract 17 and the
 sleep rules of contract 18, and `ProjectionLifetimeConsistencyTests` locks the
@@ -235,9 +253,11 @@ one at simulator discovery), so keep wall-clock measurements out of them. The
 other contracts added after them are locked by host suites that are not in
 that inventory: `ReducerCancellationAcceptanceTests`,
 `ThrottleTrailingFallbackTests`, `TestStoreReductionTurnCancellationTests`,
-`ProjectionReleaseScalingTests`, `CollectionProjectionRefreshTests`,
-`EffectCancellationScopeTests`, `ManualTestClockDeadlineTests`,
-`ClockStepDeadlineTests` and `TestStoreOwnerFrameworkReportingTests`. Run
+`TestStoreDeliveryOrderTests`, `EffectRunAdmissionCancellationTests`,
+`ProjectionReleaseScalingTests`, `ProjectionRetentionTests`,
+`CollectionProjectionRefreshTests`, `EffectCancellationScopeTests`,
+`ManualTestClockDeadlineTests`, `ClockStepDeadlineTests` and
+`TestStoreOwnerFrameworkReportingTests`. Run
 targeted local tests when changing them; the full release/runtime matrix
 remains CI-only.
 
@@ -663,6 +683,7 @@ InnoFlow/
 │       ├── TestStore+Output.swift
 │       ├── TestStoreActionQueue.swift        # deterministic test action delivery
 │       ├── TestStoreRunSupport.swift         # run endpoint, bridge, and start gate
+│       ├── TestStore+DeliveryOrder.swift     # Store-order delivery of buffered actions
 │       ├── ScopedTestStore.swift
 │       └── ManualTestClock.swift
 └── Examples/InnoFlowSampleApp/
@@ -694,11 +715,11 @@ Do not leave the rule enforced only by prose.
 
 ### Runtime completion and result mapping
 
-A throttle window fires the newest trailing request that can still proceed: cancelling the newest request's dispatch gives the window back to the request it replaced (a bounded number of superseded requests is retained), independent of whether the cancelled effect had been interpreted. The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
+A throttle window fires the newest trailing request that can still proceed: cancelling the newest request — through its dispatch or through an ID only it carries — gives the window, with its timer, back to the request it replaced (a bounded number of superseded requests is retained), independent of whether the cancelled effect had been interpreted; the window resets only when no retained request can still proceed. The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
 
 ### Testing dispatch ownership
 
-`TestStore.send`, scoped sends, and phase sends return discardable `TestStoreDispatch`. Effect actions retain their originating context and a queue activity lease through reduction and descendant registration. Task `finish(timeout:)` is non-consuming and diagnoses only its own unverified actions/outputs in both exhaustivity modes. It never drains another dispatch. Global store finish remains the terminal/draining API. In `.off`, receiveOutput progresses necessary FIFO actions, checks output between actions, and shares one total deadline. Exhaustive global finish snapshots actions and outputs together before cleanup.
+`TestStore.send`, scoped sends, and phase sends return discardable `TestStoreDispatch`. Effect actions retain their originating context and a queue activity lease through reduction and descendant registration. A buffered effect action is one a Store would already have reduced: a cancellation the delivering effect's own continuation applies later does not remove it, and once that continuation has passed it only a cancellation applied while the test reduces an earlier received action, or its dispatch's cancellation, removes it. Test-issued cancellations (`cancelEffects`, `cancelAllEffects`, dispatch `cancel()`, a test `send`) remove the covered actions the delivering effect has not passed, the Store schedule where the cancellation lands first. The synchronous follow-ups of an action a run emitted are queued ahead of that run's later emissions; interleavings a Store does not order stay in delivery order. Outputs follow the same rules. Task `finish(timeout:)` is non-consuming and diagnoses only its own unverified actions/outputs in both exhaustivity modes. It never drains another dispatch. Global store finish remains the terminal/draining API. In `.off`, receiveOutput progresses necessary FIFO actions, checks output between actions, and shares one total deadline. Exhaustive global finish snapshots actions and outputs together before cleanup.
 
 ### Optional child ownership
 
