@@ -47,9 +47,11 @@ What to check:
   changed twice, whether or not the read was tracked, so a key path that can
   trap for some states (for example an `Array` index) is still evaluated for
   that long, and while a reader holds or observes the selection.
-- Selecting on a `ScopedStore` whose collection element was removed returns a
-  selection that is not alive: `optionalValue` is `nil` and `requireAlive()`
-  traps. In 6.0.x the same call site returned the cached, deactivated handle.
+- Selecting on a `ScopedStore` whose collection element was removed, or whose
+  parent store was released, returns a selection that is not alive:
+  `optionalValue` is `nil` and `requireAlive()` traps. In 6.0.x the same call
+  site returned the cached, deactivated handle, and creating a closure-based
+  selection or the first key-path selection there trapped in debug builds.
 
 Closure-based selections — `select(dependingOn:)`, `select(dependingOnAll:)`
 and `select { … }`, with or without `id:` — keep the 6.0.x behavior: the owner

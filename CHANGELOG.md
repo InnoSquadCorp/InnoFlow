@@ -206,9 +206,12 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   change notifies that reader. Releasing a selection removes it from its
   dependency bucket in place, so releasing many selections of one dependency
   stays linear.
-- Selecting on a `ScopedStore` whose collection element was removed returns a
-  new selection that is not alive — `optionalValue` is `nil` and
-  `requireAlive()` traps — instead of the cached, deactivated handle.
+- Selecting on a `ScopedStore` whose collection element was removed, or whose
+  parent store was released, returns a new selection that is not alive —
+  `optionalValue` is `nil` and `requireAlive()` traps — instead of the cached,
+  deactivated handle. In 6.0.x, creating a closure-based selection or the
+  first key-path selection on such a `ScopedStore` trapped in debug builds;
+  it now succeeds and reports the absence through the selection.
 - Creating a key-path selection no longer records a read of the whole parent
   state, so a view that creates one in its body depends only on that
   selection. A closure-based selection still records that read, as in 6.0.x:
