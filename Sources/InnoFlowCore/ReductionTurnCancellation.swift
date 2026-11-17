@@ -27,11 +27,14 @@ package protocol ReductionTurnCancellationAcceptor: AnyObject {
     context: EffectExecutionContext
   )
 
-  /// The policy of the run lane currently open under `id`, if any.
+  /// The run lane a request under `id` meets now, if any: an open lane, or
+  /// a `latest` lane displaced for a replacement that can still proceed.
   ///
-  /// A lane with another policy rejects a `latest` request, which then
-  /// replaces nothing; the pass must not accept anything for such a request.
-  func runLaneKind(for id: AnyEffectID) -> EffectExecutionPolicy.Kind?
+  /// The pass decides each lane request it reaches against this lane, with
+  /// the same rule admission applies. A `latest` request that a lane with
+  /// another policy rejects replaces nothing, and a request the lane rejects
+  /// completes without awaiting.
+  func runLane(for id: AnyEffectID) -> EffectRunLaneView?
 
   /// Accepts a `latest` lane request that its lane will admit, for every
   /// effect sequence issued before `context`'s own, exactly as admitting it
@@ -53,6 +56,13 @@ extension ReductionTurnCancellationAcceptor {
   /// applies to itself on the way: a subtree the interpreter will skip
   /// because an earlier sibling cancelled its ID completes without awaiting,
   /// so a later sibling is still reached in this turn.
+  ///
+  /// A lane request the pass reaches is admitted against the lane state of
+  /// this turn. A request the lane rejects, or one whose own tree cancelled
+  /// its lane ID first, completes without awaiting; the pass records that
+  /// outcome and keeps scanning, and the interpreter reports exactly that
+  /// outcome later, whatever the lane looks like by then. A request the lane
+  /// admits awaits its run, so the scan stops there.
   package func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
@@ -86,23 +96,25 @@ extension ReductionTurnCancellationAcceptor {
       return !proceeds(context)
 
     case .scheduledRun(let id, let policy, _, _, _):
+      // The interpreter skips a request whose enclosing context it will not
+      // admit before the lane sees it.
       guard proceeds(context) else { return true }
       let scheduledContext = EffectExecutionContext.withCancellation(id, on: context)
-      // The lane this request meets at admission: one already open, or one an
-      // earlier request of this same tree opens on the way.
-      let laneKind = turn.openedLanes[id] ?? runLaneKind(for: id)
-      if case .latest = policy.kind, proceeds(scheduledContext),
-        laneKind == nil || laneKind == .latest
-      {
-        // A `latest` request supersedes its predecessors when it is returned,
-        // not when the lane eventually admits it. The lane rejects a request
-        // whose own context is already cancelled, or one that meets a lane
-        // with another policy; such a request replaces nothing.
-        acceptLatestReplacementInReductionTurn(id: id, context: scheduledContext)
-      }
-      if laneKind == nil, proceeds(scheduledContext) {
-        turn.openedLanes[id] = policy.kind
-      }
+      let admission = admitInReductionTurn(
+        id: id,
+        policy: policy.kind,
+        context: scheduledContext,
+        proceeds: proceeds(scheduledContext),
+        turn: &turn
+      )
+      scheduledContext.cancellationScope?.recordTurnLaneAdmission(
+        admission,
+        cancellationIDs: scheduledContext.cancellationIDs,
+        policy: policy.kind
+      )
+      // A request the lane does not admit awaits nothing, so a later
+      // `concatenate` sibling is still reached in this turn.
+      if case .completed = admission { return true }
       return false
 
     case .cancel(let id):
@@ -166,12 +178,67 @@ extension ReductionTurnCancellationAcceptor {
       preconditionFailure("Child lifetime metadata must be prepared synchronously after reduction")
     }
   }
+
+  /// Decides a lane request against the lane state of this turn, with the
+  /// rule admission applies: the lane open now, as changed by the requests
+  /// this tree admitted before it.
+  private func admitInReductionTurn(
+    id: AnyEffectID,
+    policy: EffectExecutionPolicy.Kind,
+    context: EffectExecutionContext,
+    proceeds: Bool,
+    turn: inout ReductionTurnState
+  ) -> ReductionTurnLaneAdmission {
+    // The request's own tree cancelled its lane ID on the way.
+    guard proceeds else { return .completed(.cancelledBeforeStart) }
+    let sequence = context.sequence ?? 0
+    let lane = turn.lane(for: id, current: runLane(for: id))
+    switch EffectRunScheduler.decide(policy: policy, sequence: sequence, lane: lane) {
+    case .open, .replace:
+      if case .latest = policy {
+        // A `latest` request supersedes its predecessors when it is returned,
+        // not when the lane eventually admits it.
+        acceptLatestReplacementInReductionTurn(id: id, context: context)
+      }
+      turn.openedLanes[id] = EffectRunLaneView(
+        policy: policy, holderSequence: sequence, pendingCount: 0)
+      return .admitted
+    case .queue:
+      turn.queue(on: id)
+      return .admitted
+    case .reject(let reason):
+      return .completed(.rejected(reason))
+    case .superseded:
+      return .completed(.superseded)
+    }
+  }
 }
 
 /// What one reduction-turn pass has simulated so far.
 private struct ReductionTurnState {
   /// IDs this tree cancelled on the way; the interpreter skips their work.
   var cancelledBySelf: Set<AnyEffectID> = []
-  /// Run lanes this tree opens before a later request of it is admitted.
-  var openedLanes: [AnyEffectID: EffectExecutionPolicy.Kind] = [:]
+  /// Lanes a request of this tree opened or took over on the way.
+  var openedLanes: [AnyEffectID: EffectRunLaneView] = [:]
+  /// Requests of this tree queued on a lane it did not open.
+  var queuedOnOpenLanes: [AnyEffectID: Int] = [:]
+
+  /// The lane a later request of this tree meets: one the tree opened, or
+  /// the lane open now with the requests this tree queued on it. The lane is
+  /// read again for every request, because a cancellation the pass accepted
+  /// on the way can have released part of it.
+  func lane(for id: AnyEffectID, current: EffectRunLaneView?) -> EffectRunLaneView? {
+    if let opened = openedLanes[id] { return opened }
+    guard var lane = current else { return nil }
+    lane.pendingCount += queuedOnOpenLanes[id] ?? 0
+    return lane
+  }
+
+  mutating func queue(on id: AnyEffectID) {
+    if openedLanes[id] != nil {
+      openedLanes[id]?.pendingCount += 1
+    } else {
+      queuedOnOpenLanes[id, default: 0] += 1
+    }
+  }
 }

@@ -575,6 +575,335 @@ struct EffectRunSchedulerTests {
 
     #expect(store.state.completed == [2])
   }
+
+  // MARK: Displaced latest lanes
+
+  @Test("A displaced latest lane is still the open latest lane until its replacement is admitted")
+  func displacedLatestLaneConflictsUntilReplacementIsAdmitted() async {
+    let store = Store(reducer: SameDispatchLatestFeature())
+    let scheduler = store.effectBridge.runScheduler
+    let lane = AnyEffectID(StaticEffectID("displaced-latest-lane"))
+    func admit(
+      _ policy: EffectExecutionPolicy, sequence: UInt64, context: EffectExecutionContext? = nil
+    ) async -> EffectRunScheduler.Plan {
+      await scheduler.admit(
+        id: lane, policy: policy, cancellationIDs: [], sequence: sequence, dispatchID: nil,
+        onCancellation: { _, _ in }, onStart: { _ in }, onPendingExit: { _ in },
+        context: context)
+    }
+
+    let runningSequence = store.effectBridge.nextSequence()
+    guard case .accepted = await admit(.latest, sequence: runningSequence) else {
+      Issue.record("Expected the first latest request to open the lane")
+      scheduler.cancelAll()
+      return
+    }
+    let laneIdentity = scheduler.snapshots(limit: 1).first?.id
+    // The replacement's reduction turn displaces the lane before admission.
+    let replacementSequence = store.effectBridge.nextSequence()
+    let replacement = store.effectBridge.makeEffectContext(
+      sequence: replacementSequence, cancellationIDs: [lane], potentialCancellationIDs: [lane])
+    scheduler.displaceLatestLane(id: lane, successor: replacement)
+    #expect(scheduler.snapshots(limit: 1).isEmpty)
+
+    let laterSequence = store.effectBridge.nextSequence()
+    let serial = await admit(.serial(maxPending: 4), sequence: laterSequence)
+    #expect(rejection(serial) == .conflictingPolicy)
+    let drop = await admit(.dropWhileRunning, sequence: laterSequence)
+    #expect(rejection(drop) == .conflictingPolicy)
+    guard case .terminal(.superseded) = await admit(.latest, sequence: runningSequence) else {
+      Issue.record("An older latest request must not replace the displaced lane")
+      scheduler.cancelAll()
+      return
+    }
+
+    guard case .accepted = await admit(.latest, sequence: replacementSequence, context: replacement)
+    else {
+      Issue.record("The replacement must reopen the displaced lane")
+      scheduler.cancelAll()
+      return
+    }
+    #expect(scheduler.snapshots(limit: 1).first?.id == laneIdentity)
+    scheduler.cancelAll()
+  }
+
+  @Test(
+    "A merged serial request cannot reopen a latest lane its latest sibling replaced",
+    arguments: [false, true])
+  func mergedSerialAndLatestOnOpenLatestLane(latestFirst: Bool) async {
+    let probe = ScheduledRunProbe()
+    let store = Store(reducer: MergedLaneFeature(probe: probe))
+
+    let first = store.send(.open)
+    await probe.waitUntilStarted(count: 1)
+    let merged = store.send(.merged(latestFirst: latestFirst))
+    await probe.waitUntilStarted(count: 2)
+    #expect(await probe.startedValues() == [1, 3])
+
+    for value in 1...3 { await probe.release(value) }
+    await first.finish()
+    await merged.finish()
+    let rejected = SchedulingAdmission(request: 2, admission: .rejected(.conflictingPolicy))
+    #expect(store.state.admissions.contains(rejected))
+    #expect(store.state.admissions.contains(.init(request: 3, admission: .started)))
+    #expect(store.state.completed == [3])
+  }
+
+  @Test(
+    "TestStore rejects a merged serial request on a latest lane its sibling replaced",
+    arguments: [false, true])
+  func testStoreMergedSerialAndLatestOnOpenLatestLane(latestFirst: Bool) async {
+    let probe = ScheduledRunProbe()
+    let store = TestStore(reducer: MergedLaneFeature(probe: probe))
+    store.exhaustivity = .off
+
+    await store.send(.open)
+    await probe.waitUntilStarted(count: 1)
+    await store.send(.merged(latestFirst: latestFirst))
+    await probe.waitUntilStarted(count: 2)
+    #expect(await probe.startedValues() == [1, 3])
+
+    for value in 1...3 { await probe.release(value) }
+    await store.finish()
+    let rejected = SchedulingAdmission(request: 2, admission: .rejected(.conflictingPolicy))
+    #expect(store.state.admissions.contains(rejected))
+    #expect(store.state.admissions.contains(.init(request: 3, admission: .started)))
+    #expect(store.state.completed == [3])
+  }
+
+  // MARK: Pending requests cancelled through their dispatch
+
+  @Test("A queued request cancelled through its dispatch frees its slot before the next admission")
+  func dispatchCancelledQueuedRequestFreesItsSlot() async {
+    let probe = ScheduledRunProbe()
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: SchedulingFeature(policy: .serial(maxPending: 1), probe: probe),
+      diagnostics: diagnostics
+    )
+
+    let first = store.send(.request(1))
+    await probe.waitUntilStarted(count: 1)
+    let second = store.send(.request(2))
+    #expect(
+      await waitUntil {
+        store.state.admissions.contains(.init(request: 2, admission: .queued(position: 1)))
+      }
+    )
+
+    // One MainActor turn: the third request's admission is interpreted after
+    // this turn but before the cancellation of the second reaches the
+    // scheduler through its task.
+    let third = store.send(.request(3))
+    second.cancel()
+    #expect(store.runLaneSnapshots().first?.pendingRequestCount == 0)
+    #expect(await waitUntil { store.state.admissions.contains { $0.request == 3 } })
+    #expect(store.state.admissions.contains(.init(request: 3, admission: .queued(position: 1))))
+
+    await probe.release(1)
+    #expect(await waitUntilAsync { await probe.startedValues().count == 2 })
+    await probe.release(3)
+    await first.finish()
+    await second.finish()
+    await third.finish()
+    #expect(await probe.startedValues() == [1, 3])
+    #expect(store.state.completed == [1, 3])
+
+    let records = diagnostics.snapshot().records
+    let secondDispatch = records.filter { $0.kind == .submitted }.map(\.dispatchID)[1]
+    let terminalAdmissions = records.filter {
+      $0.dispatchID == secondDispatch && $0.kind == .admission(.cancelledBeforeStart)
+    }
+    #expect(terminalAdmissions.count == 1)
+  }
+
+  @Test("TestStore frees a dispatch-cancelled queued request's slot before the next send")
+  func testStoreDispatchCancelledQueuedRequestFreesItsSlot() async {
+    let probe = ScheduledRunProbe()
+    let store = TestStore(
+      reducer: SchedulingFeature(policy: .serial(maxPending: 1), probe: probe)
+    )
+
+    await store.send(.request(1))
+    await store.receive(.admission(1, .started)) {
+      $0.admissions.append(.init(request: 1, admission: .started))
+    }
+    await probe.waitUntilStarted(count: 1)
+
+    let second = await store.send(.request(2))
+    await store.receive(.admission(2, .queued(position: 1))) {
+      $0.admissions.append(.init(request: 2, admission: .queued(position: 1)))
+    }
+    second.cancel()
+
+    await store.send(.request(3))
+    await store.receive(.admission(3, .queued(position: 1))) {
+      $0.admissions.append(.init(request: 3, admission: .queued(position: 1)))
+    }
+
+    await probe.release(1)
+    await store.receive(.completed(1)) {
+      $0.completed.append(1)
+    }
+    await store.receive(.admission(3, .started)) {
+      $0.admissions.append(.init(request: 3, admission: .started))
+    }
+    #expect(await waitUntilAsync { await probe.startedValues().count == 2 })
+    await probe.release(3)
+    await store.receive(.completed(3)) {
+      $0.completed.append(3)
+    }
+    await store.finish()
+
+    #expect(await probe.startedValues() == [1, 3])
+    let events = second.effectLedger.events
+    #expect(events.filter { $0 == .admitted(.cancelledBeforeStart) }.count == 1)
+    #expect(events.filter { $0 == .cancelled(.effect) }.count == 1)
+  }
+
+  // MARK: Reentrant cancellation handlers
+
+  @Test("A cancellation handler that re-enters the store finds its request already cancelled")
+  func reentrantCancellationHandlerSeesFinalSchedulerState() async {
+    let probe = ScheduledRunProbe()
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let reentry = ReentrantStoreReference()
+    let store = Store(
+      reducer: ReentrantLatestFeature(probe: probe, reentry: reentry), diagnostics: diagnostics)
+    reentry.store = store
+
+    let first = store.send(.search(1))
+    await probe.waitUntilStarted(count: 1)
+    // The run's cancellation handler runs inside this call and sends a newer
+    // `latest` request for the same lane.
+    await store.cancelEffects(identifiedBy: ReentrantLatestFeature.lane)
+    #expect(await waitUntilAsync { await probe.startedValues() == [1, 2] })
+
+    await probe.release(1)
+    await probe.release(2)
+    await first.finish()
+    #expect(await waitUntil { store.state.completed == [2] })
+
+    let records = diagnostics.snapshot().records
+    let firstDispatch = records.first { $0.kind == .submitted }?.dispatchID
+    #expect(firstDispatch != nil)
+    // The explicitly cancelled request is not also reported as superseded.
+    #expect(
+      records.contains { $0.dispatchID == firstDispatch && $0.kind == .admission(.superseded) }
+        == false)
+    #expect(
+      records.filter { $0.dispatchID == firstDispatch && $0.kind == .cancellationRequested }.count
+        == 1)
+  }
+}
+
+private func rejection(_ plan: EffectRunScheduler.Plan) -> EffectAdmissionRejection? {
+  guard case .rejected(let reason) = plan else { return nil }
+  return reason
+}
+
+/// A `latest` lane, then one dispatch that merges a serial and a `latest`
+/// request for the same lane.
+private struct MergedLaneFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var admissions: [SchedulingAdmission] = []
+    var completed: [Int] = []
+    init() {}
+  }
+
+  enum Action: Equatable, Sendable {
+    case open
+    case merged(latestFirst: Bool)
+    case admission(Int, EffectAdmission)
+    case completed(Int)
+  }
+
+  let probe: ScheduledRunProbe
+  private let lane: StaticEffectID = "merged-lane"
+
+  private func request(_ value: Int, _ policy: EffectExecutionPolicy) -> EffectTask<Action> {
+    let probe = probe
+    return .run(
+      id: lane,
+      policy: policy,
+      onAdmission: { .admission(value, $0) },
+      { send, context in
+        await probe.run(value)
+        guard await context.isCancellationRequested() == false else { return }
+        await send(.completed(value))
+      }
+    )
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .open:
+      return request(1, .latest)
+
+    case .merged(let latestFirst):
+      let serial = request(2, .serial(maxPending: 4))
+      let latest = request(3, .latest)
+      return latestFirst ? .merge(latest, serial) : .merge(serial, latest)
+
+    case .admission(let request, let admission):
+      state.admissions.append(.init(request: request, admission: admission))
+      return .none
+
+    case .completed(let value):
+      state.completed.append(value)
+      return .none
+    }
+  }
+}
+
+@MainActor
+private final class ReentrantStoreReference {
+  weak var store: Store<ReentrantLatestFeature>?
+  var hasReentered = false
+}
+
+/// A `latest` run whose cancellation handler re-enters the store, once, with
+/// a newer request for the same lane.
+private struct ReentrantLatestFeature: Reducer {
+  struct State: Equatable, Sendable, DefaultInitializable {
+    var completed: [Int] = []
+    init() {}
+  }
+
+  enum Action: Equatable, Sendable {
+    case search(Int)
+    case completed(Int)
+  }
+
+  static let lane: StaticEffectID = "reentrant-cancellation-handler"
+  let probe: ScheduledRunProbe
+  let reentry: ReentrantStoreReference
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .search(let value):
+      let probe = probe
+      let reentry = reentry
+      return .run(id: Self.lane, policy: .latest) { send, context in
+        await withTaskCancellationHandler {
+          await probe.run(value)
+        } onCancel: {
+          // Cancellation is delivered synchronously on the MainActor.
+          MainActor.assumeIsolated {
+            guard !reentry.hasReentered else { return }
+            reentry.hasReentered = true
+            _ = reentry.store?.send(.search(value + 1))
+          }
+        }
+        guard await context.isCancellationRequested() == false else { return }
+        await send(.completed(value))
+      }
+
+    case .completed(let value):
+      state.completed.append(value)
+      return .none
+    }
+  }
 }
 
 private struct SchedulingAdmission: Equatable, Sendable {

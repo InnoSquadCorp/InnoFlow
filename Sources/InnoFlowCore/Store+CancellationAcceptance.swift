@@ -111,8 +111,8 @@ extension Store: ReductionTurnCancellationAcceptor {
     scope.recordAcceptedCancellation(request)
   }
 
-  package func runLaneKind(for id: AnyEffectID) -> EffectExecutionPolicy.Kind? {
-    effectBridge.runScheduler.laneKind(for: id)
+  package func runLane(for id: AnyEffectID) -> EffectRunLaneView? {
+    effectBridge.runScheduler.laneView(for: id)
   }
 
   package func acceptLatestReplacementInReductionTurn(
