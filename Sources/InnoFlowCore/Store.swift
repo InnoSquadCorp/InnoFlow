@@ -385,6 +385,13 @@ public final class Store<R: Reducer> {
     observerRegistry.unregister(observerID)
   }
 
+  /// Whether the projection refresh of the latest reduction has yet to
+  /// classify the change of `collection`; see
+  /// ``ProjectionObserverRegistry/isAwaitingClassification(of:)``.
+  package func isAwaitingProjectionClassification(of collection: AnyKeyPath) -> Bool {
+    observerRegistry.isAwaitingClassification(of: collection)
+  }
+
   package var scopedObserverRefreshCount: UInt64 {
     observerRegistry.statsSnapshot.refreshPassCount
   }

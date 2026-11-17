@@ -56,12 +56,38 @@ private struct LooseRow: Equatable, Sendable, Identifiable {
   }
 }
 
+private let countedPositionalReads = OSAllocatedUnfairLock(initialState: 0)
+
+/// Contiguous rows whose positional reads are counted. Classification and
+/// reindexing use the contiguous buffer, so the counted reads are the rows
+/// resolving their element and a scope enumerating the collection.
+private struct CountedRows: RandomAccessCollection, Equatable, Sendable {
+  var storage: [RefreshRow]
+
+  var startIndex: Int { 0 }
+  var endIndex: Int { storage.count }
+
+  subscript(position: Int) -> RefreshRow {
+    countedPositionalReads.withLock { $0 += 1 }
+    return storage[position]
+  }
+
+  func withContiguousStorageIfAvailable<Result>(
+    _ body: (UnsafeBufferPointer<RefreshRow>) throws -> Result
+  ) rethrows -> Result? {
+    try storage.withContiguousStorageIfAvailable(body)
+  }
+}
+
 private struct RefreshFeature: Reducer {
   struct State: Equatable, Sendable {
     var rows: IdentifiedArray<Int, RefreshRow>
     var segmented: SegmentedRows
     var measurements: [Measurement] = []
     var loose: [LooseRow] = []
+    /// A plain array, so it can hold duplicate ids.
+    var list: [RefreshRow] = []
+    var counted = CountedRows(storage: [])
     var unrelated = 0
   }
 
@@ -79,6 +105,8 @@ private struct RefreshFeature: Reducer {
     case moveFirstToEndIncrementing
     case replaceMeasurements([Measurement])
     case replaceLoose([LooseRow])
+    case replaceList([RefreshRow])
+    case replaceCounted([RefreshRow])
     case segmentedIncrement(Int)
     case segmentedRemoveFirst
   }
@@ -116,6 +144,12 @@ private struct RefreshFeature: Reducer {
 
     case .replaceLoose(let rows):
       state.loose = rows
+
+    case .replaceList(let rows):
+      state.list = rows
+
+    case .replaceCounted(let rows):
+      state.counted.storage = rows
 
     case .segmentedIncrement(let id):
       if let index = state.segmented.head.firstIndex(where: { $0.id == id }) {
@@ -167,6 +201,28 @@ private let looseRowPath = CollectionActionPath<
   extract: { _ in nil }
 )
 
+private let listRowPath = CollectionActionPath<
+  RefreshFeature.Action, Int, RefreshFeature.RowAction
+>(
+  embed: { id, _ in .touchUnrelated },
+  extract: { _ in nil }
+)
+
+/// The same routing as `listRowPath` with its own identity.
+private let otherListRowPath = CollectionActionPath<
+  RefreshFeature.Action, Int, RefreshFeature.RowAction
+>(
+  embed: { id, _ in .touchUnrelated },
+  extract: { _ in nil }
+)
+
+private let countedRowPath = CollectionActionPath<
+  RefreshFeature.Action, Int, RefreshFeature.RowAction
+>(
+  embed: { id, _ in .touchUnrelated },
+  extract: { _ in nil }
+)
+
 private let segmentedRowPath = CollectionActionPath<
   RefreshFeature.Action, Int, RefreshFeature.RowAction
 >(
@@ -178,6 +234,19 @@ private let segmentedRowPath = CollectionActionPath<
 @Suite("Collection projections refresh only the rows a change affects", .timeLimit(.minutes(5)))
 struct CollectionProjectionRefreshTests {
   private typealias RowStore = ScopedStore<RefreshFeature, RefreshRow, RefreshFeature.RowAction>
+
+  /// When an observation callback scopes the collection again during the
+  /// refresh pass of one reduction.
+  enum ReScope: CaseIterable, Sendable {
+    /// Not at all.
+    case none
+    /// Before the pass classifies the collection's change.
+    case samePathBeforeClassification
+    /// Before classification, through another action path.
+    case otherPathBeforeClassification
+    /// From a row's callback, after classification.
+    case samePathDuringRowPass
+  }
 
   private func makeStore(rowCount: Int = 6) -> Store<RefreshFeature> {
     let rows = (0..<rowCount).map { RefreshRow(id: $0) }
@@ -455,6 +524,117 @@ struct CollectionProjectionRefreshTests {
     store.send(.replaceLoose([LooseRow(id: 1, value: 5)]))
 
     #expect(rows[0].optionalState?.value == 5)
+  }
+
+  @Test(
+    "A duplicated-id row shows its first occurrence when the rows are scoped during the pass",
+    arguments: ReScope.allCases
+  )
+  func duplicatedIDRowFollowsItsFirstOccurrenceAcrossReScopes(reScope: ReScope) {
+    let store = makeStore()
+    store.send(.replaceList([RefreshRow(id: 1, value: 10), RefreshRow(id: 1, value: 20)]))
+    let rows = store.scope(collection: \.list, action: listRowPath)
+    #expect(rows[0] === rows[1])
+    #expect(rows[0].optionalState?.value == 10)
+    let ids = store.select(dependingOn: \.list) { $0.map(\.id) }
+
+    switch reScope {
+    case .none:
+      break
+    case .samePathBeforeClassification, .otherPathBeforeClassification:
+      let path = reScope == .samePathBeforeClassification ? listRowPath : otherListRowPath
+      withObservationTracking {
+        _ = ids.optionalValue
+      } onChange: {
+        MainActor.assumeIsolated {
+          _ = store.scope(collection: \.list, action: path)
+        }
+      }
+    case .samePathDuringRowPass:
+      withObservationTracking {
+        _ = rows[0].optionalState
+      } onChange: {
+        MainActor.assumeIsolated {
+          _ = store.scope(collection: \.list, action: listRowPath)
+        }
+      }
+    }
+    let notified = OSAllocatedUnfairLock(initialState: 0)
+    withObservationTracking {
+      _ = rows[0].optionalState
+    } onChange: {
+      notified.withLock { $0 += 1 }
+    }
+
+    // Another id replaces the first occurrence; the second occurrence keeps
+    // its bytes and its offset.
+    store.send(.replaceList([RefreshRow(id: 2, value: 0), RefreshRow(id: 1, value: 20)]))
+
+    #expect(rows[0].optionalState?.value == 20)
+    #expect(notified.withLock { $0 } == 1)
+
+    // The id becomes unique with the value the row shows.
+    store.send(.replaceList([RefreshRow(id: 1, value: 20)]))
+    #expect(rows[0].optionalState?.value == 20)
+    #expect(rows[0].isAlive)
+    withExtendedLifetime(ids) {}
+  }
+
+  @Test(
+    "Scoping the rows during the pass resolves only the changed and the removed row",
+    arguments: [ReScope.none, .samePathBeforeClassification, .samePathDuringRowPass]
+  )
+  func reScopeDuringThePassResolvesOnlyAffectedRows(reScope: ReScope) {
+    let rowCount = 40
+    let store = makeStore()
+    store.send(.replaceCounted((0..<rowCount).map { RefreshRow(id: $0) }))
+    let rows = store.scope(collection: \.counted, action: countedRowPath)
+    let count = store.select(dependingOn: \.counted) { $0.count }
+
+    switch reScope {
+    case .none, .otherPathBeforeClassification:
+      break
+    case .samePathBeforeClassification:
+      withObservationTracking {
+        _ = count.optionalValue
+      } onChange: {
+        MainActor.assumeIsolated {
+          _ = store.scope(collection: \.counted, action: countedRowPath)
+        }
+      }
+    case .samePathDuringRowPass:
+      // Row 5 is refreshed before row 20, which is removed.
+      withObservationTracking {
+        _ = rows[5].optionalState
+      } onChange: {
+        MainActor.assumeIsolated {
+          _ = store.scope(collection: \.counted, action: countedRowPath)
+        }
+      }
+    }
+    let notifications = track(rows)
+    var next = (0..<rowCount).map { RefreshRow(id: $0) }
+    next[5].value = 1
+    next.remove(at: 20)
+    let before = store.projectionObserverStats
+
+    countedPositionalReads.withLock { $0 = 0 }
+    store.send(.replaceCounted(next))
+    let positionalReads = countedPositionalReads.withLock { $0 }
+
+    // The scope enumerates the reduced collection once. Row 5 resolves at its
+    // indexed offset; removed row 20 resolves through its absent marker; the
+    // rows that only moved are neither refreshed nor read.
+    let scopeReads = reScope == .none ? 0 : rowCount - 1
+    #expect(positionalReads - scopeReads == 1)
+    let after = store.projectionObserverStats
+    // Rows 5 and 20, and the `count` selection.
+    #expect(after.evaluatedObservers == before.evaluatedObservers + 3)
+    #expect(notifications.withLock { $0 } == [5: 1, 20: 1])
+    #expect(rows[20].isAlive == false)
+    #expect(rows[5].optionalState?.value == 1)
+    #expect(rows.filter(\.isAlive).map(\.state) == next)
+    withExtendedLifetime(count) {}
   }
 
   @Test("IdentifiedArray exposes its elements as contiguous storage")
