@@ -168,7 +168,7 @@ extension TestStore: EffectDriver {
       context: schedulingContext
     )
     let endpoint = makeRunEndpoint()
-    let completion = FlowTaskCompletion()
+    let completion = ThrottleWindowCompletion()
     let task = Task { [weak self] in
       defer { completion.complete() }
       let pending: ThrottleStateMap<R.Action, R.Output>.PendingTrailing?
@@ -207,7 +207,6 @@ extension TestStore: EffectDriver {
       endpoint.finishTrackedTask(token: activityToken)
     }
     throttleState.setTrailingTask(task, completion: completion, for: id)
-    schedulingContext.flowTaskTracker?.trackCompletion(of: completion)
     throttleActivityTokenByID[id] = activityToken
     trackEffectTask(token: activityToken, task: task, context: schedulingContext)
     return task
@@ -222,10 +221,8 @@ extension TestStore: EffectDriver {
       throttleActivityTokenByID.removeValue(forKey: id)
       return
     }
+    // The newer request's dispatch waits for the window through `throttleState`.
     refreshTrackedTask(token: token, context: context)
-    if let completion = throttleState.trailingCompletion(for: id) {
-      context.flowTaskTracker?.trackCompletion(of: completion)
-    }
   }
 
   package var now: ContinuousClock.Instant {

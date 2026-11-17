@@ -53,6 +53,98 @@ private struct TrailingFeature: Reducer {
   }
 }
 
+/// Parks trailing runs until a test releases them, ignoring cancellation.
+private final class TrailingRunGate: Sendable {
+  private struct State {
+    var started: Set<String> = []
+    var released: Set<String> = []
+    var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+  }
+
+  private let state = OSAllocatedUnfairLock(initialState: State())
+
+  func hasStarted(_ tag: String) -> Bool {
+    state.withLock { $0.started.contains(tag) }
+  }
+
+  func release(_ tag: String) {
+    let waiters = state.withLock { state -> [CheckedContinuation<Void, Never>] in
+      state.released.insert(tag)
+      return state.waiters.removeValue(forKey: tag) ?? []
+    }
+    for waiter in waiters {
+      waiter.resume()
+    }
+  }
+
+  func run(_ tag: String) async {
+    await withCheckedContinuation { continuation in
+      let isReleased = state.withLock { state -> Bool in
+        state.started.insert(tag)
+        guard !state.released.contains(tag) else { return true }
+        state.waiters[tag, default: []].append(continuation)
+        return false
+      }
+      if isReleased {
+        continuation.resume()
+      }
+    }
+  }
+}
+
+/// Trailing-only requests whose trailing effect is a run that parks, some
+/// awaited inside a concatenation.
+private struct AwaitedTrailingFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: Sendable {
+    /// `concatenate(throttled(tag), .send(.after(tag)))`, all inside
+    /// `.cancellable(owner)`.
+    case awaitedOwnedConcatenation(String, by: EffectID<String>)
+    /// `concatenate(throttled(tag).cancellable(owner), .send(.after(tag)))`:
+    /// the owner ID covers only the throttle request.
+    case awaitedOwnedRequest(String, by: EffectID<String>)
+    /// `throttled(tag).cancellable(owner)`, not awaited.
+    case ownedRequest(String, by: EffectID<String>)
+    case ran(String)
+    case after(String)
+  }
+
+  let gate: TrailingRunGate
+
+  private func throttled(_ tag: String) -> EffectTask<Action> {
+    let gate = gate
+    return EffectTask<Action>.run { send in
+      await gate.run(tag)
+      await send(.ran(tag))
+    }
+    .throttle(windowID, for: .seconds(1), leading: false, trailing: true)
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .awaitedOwnedConcatenation(let tag, let owner):
+      return EffectTask<Action>.concatenate(throttled(tag), .send(.after(tag))).cancellable(owner)
+
+    case .awaitedOwnedRequest(let tag, let owner):
+      return .concatenate(throttled(tag).cancellable(owner), .send(.after(tag)))
+
+    case .ownedRequest(let tag, let owner):
+      return throttled(tag).cancellable(owner)
+
+    case .ran(let tag):
+      state.log.append("ran-\(tag)")
+      return .none
+
+    case .after(let tag):
+      state.log.append("after-\(tag)")
+      return .none
+    }
+  }
+}
+
 /// A store clock whose time stands still and whose sleeps end on demand, so
 /// every request after the first lands in the open window and the window
 /// closes exactly when the test says so.
@@ -102,8 +194,19 @@ struct ThrottleTrailingFallbackTests {
     }
   }
 
-  private func pendingSequence(_ store: Store<TrailingFeature>) -> UInt64? {
+  private func pendingSequence<R: Reducer>(_ store: Store<R>) -> UInt64? {
     store.effectBridge.throttleState.pending(for: AnyEffectID(windowID))?.context?.sequence
+  }
+
+  /// Sends `action`, whose request lands in the open window, and waits until
+  /// the window holds it as its newest trailing request.
+  private func sendIntoWindow(
+    _ action: AwaitedTrailingFeature.Action, on store: Store<AwaitedTrailingFeature>
+  ) async -> FlowTask {
+    let previous = pendingSequence(store)
+    let task = store.send(action)
+    await waitUntil { pendingSequence(store) != previous }
+    return task
   }
 
   /// Sends a request into the open window and waits until the window holds
@@ -236,5 +339,85 @@ struct ThrottleTrailingFallbackTests {
     await waitUntil { store.state.fired.count == 2 }
 
     #expect(store.state.fired == ["first", "fourth"])
+  }
+
+  // MARK: Dispatches of removed requests
+
+  // A cancellation that removes a request from a window it hands over must
+  // not leave that request's dispatch waiting for the window: the window's
+  // timer now serves other dispatches' requests.
+
+  @Test("A request its own ID cancellation removes from a window releases its dispatch at once")
+  func removedNewestRequestReleasesItsDispatch() async {
+    let clock = WindowClock()
+    let store = Store(reducer: TrailingFeature(), initialState: .init(), clock: clock.storeClock)
+    store.send(.request("first"))
+    await waitUntil { clock.hasSleeper && store.state.fired == ["first"] }
+    let second = await requestInWindow("second", ownedBy: olderOwnerID, on: store)
+    let third = await requestInWindow("third", ownedBy: newestOwnerID, on: store)
+
+    await store.cancelEffects(identifiedBy: newestOwnerID)
+    await waitUntil { third.isFinished }
+    #expect(third.isFinished)
+    #expect(second.isFinished == false)
+
+    clock.closeWindow()
+    await waitUntil { store.state.fired.count == 2 }
+    #expect(store.state.fired == ["first", "second"])
+    await second.finish()
+  }
+
+  @Test("A removed request's dispatch does not wait for the awaited run of its successor")
+  func removedRequestDoesNotWaitForSuccessorRun() async {
+    let clock = WindowClock()
+    let gate = TrailingRunGate()
+    let store = Store(
+      reducer: AwaitedTrailingFeature(gate: gate), initialState: .init(),
+      clock: clock.storeClock)
+    // The awaited trailing-only opener: the window's first trailing request.
+    let second = store.send(.awaitedOwnedConcatenation("second", by: olderOwnerID))
+    await waitUntil { clock.hasSleeper && pendingSequence(store) != nil }
+    let third = await sendIntoWindow(.ownedRequest("third", by: newestOwnerID), on: store)
+
+    await store.cancelEffects(identifiedBy: newestOwnerID)
+    await waitUntil { third.isFinished }
+    #expect(third.isFinished)
+
+    clock.closeWindow()
+    // The window falls back to `second`, whose run is awaited by its own
+    // concatenation and is still parked.
+    await waitUntil { gate.hasStarted("second") }
+    #expect(third.isFinished)
+    #expect(second.isFinished == false)
+
+    gate.release("second")
+    await second.finish()
+    #expect(store.state.log == ["ran-second", "after-second"])
+  }
+
+  @Test("An awaited request its own ID cancellation removes stops waiting for the window")
+  func removedAwaitedRequestStopsWaitingForTheWindow() async {
+    let clock = WindowClock()
+    let gate = TrailingRunGate()
+    let store = Store(
+      reducer: AwaitedTrailingFeature(gate: gate), initialState: .init(),
+      clock: clock.storeClock)
+    let first = store.send(.ownedRequest("first", by: olderOwnerID))
+    await waitUntil { clock.hasSleeper && pendingSequence(store) != nil }
+    let third = await sendIntoWindow(.awaitedOwnedRequest("third", by: newestOwnerID), on: store)
+
+    await store.cancelEffects(identifiedBy: newestOwnerID)
+    // The concatenation goes on past the removed request: its ID covers only
+    // that request.
+    await waitUntil { store.state.log == ["after-third"] && third.isFinished }
+    #expect(store.state.log == ["after-third"])
+    #expect(third.isFinished)
+    #expect(first.isFinished == false)
+
+    clock.closeWindow()
+    await waitUntil { gate.hasStarted("first") }
+    gate.release("first")
+    await first.finish()
+    #expect(store.state.log == ["after-third", "ran-first"])
   }
 }

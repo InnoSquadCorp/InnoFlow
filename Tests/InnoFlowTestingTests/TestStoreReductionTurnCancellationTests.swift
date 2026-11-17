@@ -122,6 +122,59 @@ private struct RejectedLaneFeature: Reducer {
   }
 }
 
+/// Lane requests in the branches of one `merge`, which the interpreter runs
+/// in any order, beside parked work that counts its cancellations.
+private struct MergedLaneFeature: Reducer {
+  struct State: Equatable, Sendable {}
+
+  enum Action: Equatable, Sendable {
+    /// Parked work under `workID`, or under the lane's ID.
+    case startWork(underLane: Bool)
+    /// `merge(drop request, concatenate(drop request, .cancel(workID)))`.
+    case sameLaneThenCancel
+    /// `merge(latest request, serial request)` for one closed lane.
+    case latestAndSerial(latestFirst: Bool)
+  }
+
+  let gate: ParkGate
+  let workCancellations: CancellationCounter
+
+  private func request(_ index: Int, _ policy: EffectExecutionPolicy) -> EffectTask<Action> {
+    let gate = gate
+    return .run(id: laneID, policy: policy) { _, _ in
+      gate.markStarted(index)
+      await gate.waitUntilReleased(index)
+    }
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .startWork(let underLane):
+      let gate = gate
+      let workCancellations = workCancellations
+      return EffectTask<Action>.run { _ in
+        await withTaskCancellationHandler {
+          gate.markStarted(2)
+          await gate.waitUntilReleased(2)
+        } onCancel: {
+          workCancellations.increment()
+        }
+      }
+      .cancellable(underLane ? laneID : workID)
+
+    case .sameLaneThenCancel:
+      return .merge(
+        request(4, .dropWhileRunning),
+        .concatenate(request(5, .dropWhileRunning), .cancel(workID)))
+
+    case .latestAndSerial(let latestFirst):
+      let latest = request(4, .latest)
+      let serial = request(5, .serial(maxPending: 4))
+      return latestFirst ? .merge(latest, serial) : .merge(serial, latest)
+    }
+  }
+}
+
 /// Throttled requests, each inside `.cancellable` of an owner ID that covers
 /// only it.
 private struct OwnedThrottleFeature: Reducer {
@@ -384,6 +437,67 @@ struct TestStoreReductionTurnCancellationTests {
     await store.receive(.fired("second")) {
       $0.fired = ["first", "second"]
     }
+    await store.finish()
+  }
+
+  @Test("A throttle request its own ID cancellation removes releases its test dispatch at once")
+  func removedThrottleRequestReleasesItsDispatch() async throws {
+    let clock = ManualTestClock()
+    let store = TestStore(reducer: OwnedThrottleFeature(), initialState: .init(), clock: clock)
+
+    await store.send(.request("first", ownedBy: olderOwnerID))
+    await store.receive(.fired("first")) {
+      $0.fired = ["first"]
+    }
+    try await clock.waitForSleepers(atLeast: 1)
+    let second = await store.send(.request("second", ownedBy: olderOwnerID))
+    let third = await store.send(.request("third", ownedBy: newestOwnerID))
+    let window = AnyEffectID(windowID)
+    await waitUntil {
+      store.throttleState.pending(for: window)?.scope?.inheritedCancellationIDs
+        == [AnyEffectID(newestOwnerID)]
+    }
+
+    // The window falls back to `second`; `third`'s dispatch has nothing
+    // left to wait for.
+    await store.cancelEffects(identifiedBy: newestOwnerID)
+    await third.finish()
+    #expect(third.isFinished)
+    #expect(second.isFinished == false)
+
+    await clock.advance(by: .seconds(1))
+    await store.receive(.fired("second")) {
+      $0.fired = ["first", "second"]
+    }
+    await store.finish()
+  }
+
+  @Test(
+    "TestStore accepts nothing behind a lane request another merge branch can reorder",
+    arguments: [
+      MergedLaneFeature.Action.sameLaneThenCancel, .latestAndSerial(latestFirst: true),
+      .latestAndSerial(latestFirst: false),
+    ])
+  fileprivate func nothingAcceptedBehindOrderDependentLaneRequest(
+    trigger: MergedLaneFeature.Action
+  ) async {
+    let gate = ParkGate()
+    let workCancellations = CancellationCounter()
+    let store = TestStore(
+      reducer: MergedLaneFeature(gate: gate, workCancellations: workCancellations),
+      initialState: .init())
+    store.exhaustivity = .off
+
+    await store.send(.startWork(underLane: trigger != .sameLaneThenCancel))
+    await waitUntil { gate.hasStarted(2) }
+
+    await store.send(trigger)
+    // The merge's branches run in tasks after `send` returns: only the
+    // reduction turn has run, and it accepted nothing the order of those
+    // branches decides.
+    #expect(workCancellations.value == 0)
+
+    for index in [2, 4, 5] { gate.release(index) }
     await store.finish()
   }
 }

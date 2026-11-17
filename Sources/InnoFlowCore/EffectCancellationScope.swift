@@ -277,8 +277,26 @@ package final class EffectCancellationScope: Sendable {
   /// the interpreter reaches without awaiting asynchronous work.
   ///
   /// Requests are correlated by their cancellation IDs, which end with the
-  /// lane ID, and their policy, oldest first: `merge` children run in any
-  /// order, and two requests with the same key are interchangeable.
+  /// lane ID, and their policy, oldest first. Two requests with one key are
+  /// not interchangeable — their admission callbacks, operations and
+  /// `concatenate` continuations differ — so the correlation is sound only
+  /// because the interpreter reaches the requests of one key in the order
+  /// the pass recorded them:
+  /// - The pass decides no lane request that shares its lane with a lane
+  ///   request in another branch of an enclosing `merge`, whose children the
+  ///   interpreter runs in any order. Two recorded requests with one key
+  ///   share their lane, so neither lies in such a branch of the other: a
+  ///   `concatenate` orders them, and the interpreter finishes the earlier
+  ///   one's admission, which consumes the oldest entry, before it reaches the
+  ///   later one.
+  /// - A request the pass leaves undecided has no entry and consumes none of
+  ///   another request's: a recorded request with its key is ordered before
+  ///   it by a `concatenate`, so it is admitted first, and none can follow it,
+  ///   because the scan stops at an undecided request.
+  /// - A recorded request the interpreter skips stops at its enclosing
+  ///   context, whose cancellation tokens every later request with its key
+  ///   shares, so those are skipped as well and nothing consumes the entry it
+  ///   leaves behind.
   package func recordTurnLaneAdmission(
     _ admission: ReductionTurnLaneAdmission,
     cancellationIDs: [AnyEffectID],

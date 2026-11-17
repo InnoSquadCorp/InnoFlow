@@ -274,7 +274,9 @@ package struct EffectWalker<D: EffectDriver> {
 
   private struct ThrottlePlan {
     let runsLeadingEffect: Bool
-    let trailingTaskToAwait: Task<Void, Never>?
+    /// What an awaited trailing request waits for: the end of its window, or
+    /// a cancellation that removes it from the window first.
+    let trailingCompletionToAwait: (@Sendable () async -> Void)?
   }
 
   private func walkThrottle(
@@ -304,9 +306,51 @@ package struct EffectWalker<D: EffectDriver> {
       await walk(nested, context: throttleContext, awaited: awaited)
     }
 
-    if let trailingTask = plan.trailingTaskToAwait {
-      _ = await trailingTask.result
+    if let trailingCompletion = plan.trailingCompletionToAwait {
+      await trailingCompletion()
     }
+  }
+
+  /// Makes the window under `id` hold `request` for its dispatch, and returns
+  /// what the request's interpreter frame awaits when it is awaited.
+  ///
+  /// The frame waits for its own request, not for the shared timer task: a
+  /// cancellation that removes the request from the window releases it,
+  /// while the timer keeps serving the requests that remain.
+  private func holdWindow(
+    _ id: AnyEffectID,
+    request: DelayedEffectScope,
+    drain: Task<Void, Never>,
+    awaited: Bool,
+    driver: D
+  ) -> (@Sendable () async -> Void)? {
+    let window = driver.throttleState.holdWindow(for: id, request: request)
+    guard awaited else { return nil }
+    guard let window else {
+      return { _ = await drain.result }
+    }
+    let requestID = request.requestID
+    return { await window.waitForRelease(of: requestID) }
+  }
+
+  /// Reports a throttle request that an ID cancellation released while its
+  /// clock was read: the request was declared but registered nowhere that
+  /// cancellation could find it, and the interpreter now skips it.
+  ///
+  /// As for work released before the interpreter reached it, only an ID
+  /// cancellation is reported: a cancelled dispatch records its own
+  /// cancellation, and a cancellation of every effect is not an ID
+  /// cancellation.
+  private func reportReleasedDuringClockRead(
+    _ throttleContext: EffectExecutionContext,
+    work: ReducerEffect<D.Action, D.Output>,
+    driver: D
+  ) {
+    guard work.performsWork,
+      throttleContext.flowTaskTracker?.isCancelled != true,
+      throttleContext.cancellationScope?.isGloballyCancelled != true
+    else { return }
+    driver.reportCancelledBeforeRegistration(context: throttleContext)
   }
 
   /// Prepares throttle state without retaining the driver across delayed work.
@@ -336,8 +380,16 @@ package struct EffectWalker<D: EffectDriver> {
     defer {
       driver.throttleState.endAdmission(for: id)
     }
+    let proceededBeforeClockRead = driver.shouldProceed(context: throttleContext)
     let now = await driver.now
-    guard driver.shouldProceed(context: throttleContext) else { return nil }
+    guard driver.shouldProceed(context: throttleContext) else {
+      // A cancellation accepted during the clock read found the request
+      // nowhere: it is declared, but not registered yet.
+      if proceededBeforeClockRead {
+        reportReleasedDuringClockRead(throttleContext, work: nested, driver: driver)
+      }
+      return nil
+    }
     guard driver.throttleState.admit(delayedScope) else { return nil }
 
     // Inside active window — store trailing if requested, then drop.
@@ -372,12 +424,13 @@ package struct EffectWalker<D: EffectDriver> {
         }
         return .init(
           runsLeadingEffect: false,
-          trailingTaskToAwait: awaited ? trailingTask : nil
+          trailingCompletionToAwait: holdWindow(
+            id, request: delayedScope, drain: trailingTask, awaited: awaited, driver: driver)
         )
       }
       return .init(
         runsLeadingEffect: false,
-        trailingTaskToAwait: nil
+        trailingCompletionToAwait: nil
       )
     }
 
@@ -408,7 +461,9 @@ package struct EffectWalker<D: EffectDriver> {
 
     return .init(
       runsLeadingEffect: leading,
-      trailingTaskToAwait: trailing && awaited ? throttleDrain : nil
+      trailingCompletionToAwait: holdWindow(
+        id, request: delayedScope, drain: throttleDrain, awaited: trailing && awaited,
+        driver: driver)
     )
   }
 

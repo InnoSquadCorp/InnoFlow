@@ -48,8 +48,8 @@ package protocol ReductionTurnCancellationAcceptor: AnyObject {
 }
 
 extension ReductionTurnCancellationAcceptor {
-  /// Accepts every cancellation the interpreter would reach without awaiting
-  /// asynchronous work.
+  /// Accepts every cancellation the interpreter reaches without awaiting
+  /// asynchronous work, in whatever order it runs `merge` children.
   ///
   /// The traversal mirrors `EffectWalker`'s admission guards with the real
   /// execution context, and simulates the cancellations this same tree
@@ -63,12 +63,25 @@ extension ReductionTurnCancellationAcceptor {
   /// outcome and keeps scanning, and the interpreter reports exactly that
   /// outcome later, whatever the lane looks like by then. A request the lane
   /// admits awaits its run, so the scan stops there.
+  ///
+  /// The pass walks `merge` children in declaration order, but the
+  /// interpreter runs them in any order. Work whose outcome another branch
+  /// of an enclosing `merge` can change is therefore order-dependent, and
+  /// the pass decides nothing for it: it treats that work as awaiting, so the
+  /// scan of its branch stops there and the interpreter decides it. That
+  /// covers work whose context another branch can cancel (`.cancel` of one
+  /// of its IDs), and a lane request that shares its lane with a lane request
+  /// in another branch, or whose IDs another branch requests any
+  /// cancellation of. Another branch's work counts wherever it is in that
+  /// branch, also behind asynchronous work. Everything the pass does decide
+  /// therefore holds in every order the interpreter may pick.
   package func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
   ) {
     var turn = ReductionTurnState()
-    _ = acceptSynchronousCancellations(in: effect, context: context, turn: &turn)
+    _ = acceptSynchronousCancellations(
+      in: effect, context: context, siblings: MergeSiblings(), turn: &turn)
   }
 
   /// - Returns: `true` when the subtree completes without asynchronous work,
@@ -76,14 +89,24 @@ extension ReductionTurnCancellationAcceptor {
   private func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext,
+    siblings: MergeSiblings,
     turn: inout ReductionTurnState
   ) -> Bool {
     /// Whether the interpreter will still admit work in `context` once it has
-    /// applied the cancellations this tree issued before reaching it.
-    func proceeds(_ context: EffectExecutionContext) -> Bool {
+    /// applied the cancellations this tree issued before reaching it, or
+    /// `nil` when that depends on the order it runs `merge` children in.
+    ///
+    /// An ID this tree cancelled on the way stops the work only when no other
+    /// branch of an enclosing `merge` cancels it: such a cancel may have been
+    /// recorded by a branch the interpreter reaches after this work.
+    func proceeds(_ context: EffectExecutionContext) -> Bool? {
       guard context.shouldProceed else { return false }
-      return turn.cancelledBySelf.isEmpty
-        || !context.cancellationIDs.contains(where: turn.cancelledBySelf.contains)
+      let ids = context.cancellationIDs
+      if ids.contains(where: { turn.cancelledBySelf.contains($0) && !siblings.cancel($0) }) {
+        return false
+      }
+      if ids.contains(where: siblings.cancel) { return nil }
+      return true
     }
 
     switch effect.operation {
@@ -93,19 +116,25 @@ extension ReductionTurnCancellationAcceptor {
     case .run, .throttle:
       // An admitted run or throttle awaits; a skipped one returns at its
       // admission guard.
-      return !proceeds(context)
+      return proceeds(context) == false
 
     case .scheduledRun(let id, let policy, _, _, _):
       // The interpreter skips a request whose enclosing context it will not
       // admit before the lane sees it.
-      guard proceeds(context) else { return true }
+      guard let enclosingProceeds = proceeds(context) else { return false }
+      guard enclosingProceeds else { return true }
       let scheduledContext = EffectExecutionContext.withCancellation(id, on: context)
+      // Another branch can change the lane, or cancel the request, before
+      // the interpreter admits it or after: only admission can decide it.
+      guard
+        !siblings.mayReorder(laneRequest: id, cancellationIDs: scheduledContext.cancellationIDs),
+        let requestProceeds = proceeds(scheduledContext)
+      else { return false }
       let admission = admitInReductionTurn(
         id: id,
         policy: policy.kind,
         context: scheduledContext,
-        proceeds: proceeds(scheduledContext),
-        turn: &turn
+        proceeds: requestProceeds
       )
       scheduledContext.cancellationScope?.recordTurnLaneAdmission(
         admission,
@@ -118,45 +147,56 @@ extension ReductionTurnCancellationAcceptor {
       return false
 
     case .cancel(let id):
-      guard proceeds(context) else { return true }
+      guard let proceeding = proceeds(context) else { return false }
+      guard proceeding else { return true }
       acceptInReductionTurn(.all(id), context: context)
       turn.cancelledBySelf.insert(id)
       return true
 
     case .cancellable(let nested, let id, let cancelInFlight):
-      guard proceeds(context) else { return true }
+      guard let proceeding = proceeds(context) else { return false }
+      guard proceeding else { return true }
       if cancelInFlight {
         acceptInReductionTurn(.inFlight(id), context: context)
       }
       return acceptSynchronousCancellations(
         in: nested,
         context: .withCancellation(id, on: context),
+        siblings: siblings,
         turn: &turn
       )
 
     case .debounce(_, let id, _):
-      guard proceeds(context) else { return true }
+      guard let proceeding = proceeds(context) else { return false }
+      guard proceeding else { return true }
       // A newer debounce request supersedes its predecessors when it is
       // returned, not when its timer is eventually scheduled.
       acceptInReductionTurn(.inFlight(id), context: .withCancellation(id, on: context))
       return false
 
     case .merge(let children):
-      guard proceeds(context) else { return true }
+      guard let proceeding = proceeds(context) else { return false }
+      guard proceeding else { return true }
+      let branches = MergeBranches(children)
       var completesSynchronously = true
-      for child in children {
+      for (index, child) in children.enumerated() {
         let childCompletes = acceptSynchronousCancellations(
-          in: child, context: context, turn: &turn)
+          in: child,
+          context: context,
+          siblings: siblings.entering(branch: index, of: branches),
+          turn: &turn
+        )
         completesSynchronously = completesSynchronously && childCompletes
       }
       return completesSynchronously
 
     case .concatenate(let children):
       for child in children {
-        guard proceeds(context) else { return true }
+        guard let proceeding = proceeds(context) else { return false }
+        guard proceeding else { return true }
         guard
           acceptSynchronousCancellations(
-            in: child, context: context, turn: &turn)
+            in: child, context: context, siblings: siblings, turn: &turn)
         else {
           return false
         }
@@ -165,12 +205,13 @@ extension ReductionTurnCancellationAcceptor {
 
     case .animation(let nested, _):
       return acceptSynchronousCancellations(
-        in: nested, context: context, turn: &turn)
+        in: nested, context: context, siblings: siblings, turn: &turn)
 
     case .owned(let owner, let nested):
       return acceptSynchronousCancellations(
         in: nested,
         context: .withOwner(owner, on: context),
+        siblings: siblings,
         turn: &turn
       )
 
@@ -179,32 +220,31 @@ extension ReductionTurnCancellationAcceptor {
     }
   }
 
-  /// Decides a lane request against the lane state of this turn, with the
-  /// rule admission applies: the lane open now, as changed by the requests
-  /// this tree admitted before it.
+  /// Decides a lane request against the lane open now, with the rule
+  /// admission applies.
+  ///
+  /// The request is order-independent, so no other request of this tree can
+  /// change its lane first: an earlier request on the same lane in the same
+  /// branch either completed without changing the lane or was admitted,
+  /// which stops the scan before this one.
   private func admitInReductionTurn(
     id: AnyEffectID,
     policy: EffectExecutionPolicy.Kind,
     context: EffectExecutionContext,
-    proceeds: Bool,
-    turn: inout ReductionTurnState
+    proceeds: Bool
   ) -> ReductionTurnLaneAdmission {
     // The request's own tree cancelled its lane ID on the way.
     guard proceeds else { return .completed(.cancelledBeforeStart) }
     let sequence = context.sequence ?? 0
-    let lane = turn.lane(for: id, current: runLane(for: id))
-    switch EffectRunScheduler.decide(policy: policy, sequence: sequence, lane: lane) {
+    switch EffectRunScheduler.decide(policy: policy, sequence: sequence, lane: runLane(for: id)) {
     case .open, .replace:
       if case .latest = policy {
         // A `latest` request supersedes its predecessors when it is returned,
         // not when the lane eventually admits it.
         acceptLatestReplacementInReductionTurn(id: id, context: context)
       }
-      turn.openedLanes[id] = EffectRunLaneView(
-        policy: policy, holderSequence: sequence, pendingCount: 0)
       return .admitted
     case .queue:
-      turn.queue(on: id)
       return .admitted
     case .reject(let reason):
       return .completed(.rejected(reason))
@@ -218,27 +258,148 @@ extension ReductionTurnCancellationAcceptor {
 private struct ReductionTurnState {
   /// IDs this tree cancelled on the way; the interpreter skips their work.
   var cancelledBySelf: Set<AnyEffectID> = []
-  /// Lanes a request of this tree opened or took over on the way.
-  var openedLanes: [AnyEffectID: EffectRunLaneView] = [:]
-  /// Requests of this tree queued on a lane it did not open.
-  var queuedOnOpenLanes: [AnyEffectID: Int] = [:]
+}
 
-  /// The lane a later request of this tree meets: one the tree opened, or
-  /// the lane open now with the requests this tree queued on it. The lane is
-  /// read again for every request, because a cancellation the pass accepted
-  /// on the way can have released part of it.
-  func lane(for id: AnyEffectID, current: EffectRunLaneView?) -> EffectRunLaneView? {
-    if let opened = openedLanes[id] { return opened }
-    guard var lane = current else { return nil }
-    lane.pendingCount += queuedOnOpenLanes[id] ?? 0
-    return lane
+/// The IDs one subtree touches anywhere: work the interpreter reaches only
+/// after awaiting, and delayed work, count as much as work it reaches at once.
+private struct EffectFootprint {
+  /// Lanes the subtree requests.
+  var laneIDs: Set<AnyEffectID> = []
+  /// IDs the subtree cancels, its own sequence included (`.cancel`).
+  var cancelledIDs: Set<AnyEffectID> = []
+  /// IDs the subtree requests any cancellation of: `.cancel`,
+  /// `cancelInFlight: true`, a `latest` lane request, a debounce or a
+  /// throttle request.
+  var cancellationIDs: Set<AnyEffectID> = []
+
+  mutating func collect<Action, Output>(_ effect: ReducerEffect<Action, Output>) {
+    switch effect.operation {
+    case .none, .send, .output, .run, .diagnosticDrop:
+      return
+    case .scheduledRun(let id, let policy, _, _, _):
+      laneIDs.insert(id)
+      if case .latest = policy {
+        cancellationIDs.insert(id)
+      }
+    case .cancel(let id):
+      cancelledIDs.insert(id)
+      cancellationIDs.insert(id)
+    case .cancellable(let nested, let id, let cancelInFlight):
+      if cancelInFlight {
+        cancellationIDs.insert(id)
+      }
+      collect(nested)
+    case .debounce(let nested, let id, _), .throttle(let nested, let id, _, _, _):
+      cancellationIDs.insert(id)
+      collect(nested)
+    case .merge(let children), .concatenate(let children):
+      for child in children {
+        collect(child)
+      }
+    case .animation(let nested, _), .owned(_, let nested), .lifetimeScope(_, let nested):
+      collect(nested)
+    case .optionalChild(_, _, _, let child, let parent):
+      collect(child)
+      collect(parent)
+    }
+  }
+}
+
+/// Which branches of one `merge` touch each ID.
+private struct MergeBranches {
+  private enum Holders {
+    case one(Int)
+    case several
   }
 
-  mutating func queue(on id: AnyEffectID) {
-    if openedLanes[id] != nil {
-      openedLanes[id]?.pendingCount += 1
-    } else {
-      queuedOnOpenLanes[id, default: 0] += 1
+  private var lanes: [AnyEffectID: Holders] = [:]
+  private var cancelled: [AnyEffectID: Holders] = [:]
+  private var cancellations: [AnyEffectID: Holders] = [:]
+
+  init<Action, Output>(_ branches: [ReducerEffect<Action, Output>]) {
+    for (index, branch) in branches.enumerated() {
+      var footprint = EffectFootprint()
+      footprint.collect(branch)
+      Self.add(footprint.laneIDs, branch: index, to: &lanes)
+      Self.add(footprint.cancelledIDs, branch: index, to: &cancelled)
+      Self.add(footprint.cancellationIDs, branch: index, to: &cancellations)
+    }
+  }
+
+  var isEmpty: Bool {
+    lanes.isEmpty && cancellations.isEmpty
+  }
+
+  private static func add(
+    _ ids: Set<AnyEffectID>, branch: Int, to holders: inout [AnyEffectID: Holders]
+  ) {
+    for id in ids {
+      switch holders[id] {
+      case nil:
+        holders[id] = .one(branch)
+      case .one(let holder) where holder != branch:
+        holders[id] = .several
+      case .one, .several:
+        break
+      }
+    }
+  }
+
+  private static func another(
+    than branch: Int, in holders: [AnyEffectID: Holders], holds id: AnyEffectID
+  ) -> Bool {
+    switch holders[id] {
+    case nil: return false
+    case .one(let holder): return holder != branch
+    case .several: return true
+    }
+  }
+
+  /// Whether a branch other than `branch` requests the lane `id`.
+  func otherBranch(than branch: Int, requestsLane id: AnyEffectID) -> Bool {
+    Self.another(than: branch, in: lanes, holds: id)
+  }
+
+  /// Whether a branch other than `branch` cancels `id`, its own sequence
+  /// included.
+  func otherBranch(than branch: Int, cancels id: AnyEffectID) -> Bool {
+    Self.another(than: branch, in: cancelled, holds: id)
+  }
+
+  /// Whether a branch other than `branch` requests any cancellation of `id`.
+  func otherBranch(than branch: Int, requestsCancellationOf id: AnyEffectID) -> Bool {
+    Self.another(than: branch, in: cancellations, holds: id)
+  }
+}
+
+/// What the other branches of the `merge` nodes enclosing a node touch: work
+/// the interpreter may run before that node or after it.
+private struct MergeSiblings {
+  private var levels: [(branches: MergeBranches, branch: Int)] = []
+
+  /// The siblings of `branch`'s subtree in a `merge` whose branches are
+  /// `branches`.
+  func entering(branch: Int, of branches: MergeBranches) -> MergeSiblings {
+    guard !branches.isEmpty else { return self }
+    var siblings = self
+    siblings.levels.append((branches, branch))
+    return siblings
+  }
+
+  /// Whether another branch cancels `id`, its own sequence included.
+  func cancel(_ id: AnyEffectID) -> Bool {
+    levels.contains { $0.branches.otherBranch(than: $0.branch, cancels: id) }
+  }
+
+  /// Whether another branch can decide a lane request first or last: it
+  /// requests the same lane, or requests any cancellation of one of the
+  /// request's IDs.
+  func mayReorder(laneRequest lane: AnyEffectID, cancellationIDs: [AnyEffectID]) -> Bool {
+    levels.contains { level in
+      level.branches.otherBranch(than: level.branch, requestsLane: lane)
+        || cancellationIDs.contains {
+          level.branches.otherBranch(than: level.branch, requestsCancellationOf: $0)
+        }
     }
   }
 }
