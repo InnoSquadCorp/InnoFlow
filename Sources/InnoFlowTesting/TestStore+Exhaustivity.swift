@@ -96,20 +96,9 @@ extension TestStore {
     _ queuedAction: ActionQueue<R.Action>.QueuedAction,
     location: TestStoreSourceLocation
   ) async {
-    defer { queuedAction.finish() }
-    guard shouldProceed(context: queuedAction.context) else { return }
-    let action = queuedAction.action
-    let effect = reduceAction(
-      action,
-      source: .automatic,
-      location: location
-    )
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location, flowTaskTracker: queuedAction.context?.flowTaskTracker),
-      awaited: false
-    )
+    await reduceReceivedAction(
+      queuedAction, source: .automatic, location: location,
+      willReduce: { _ in }, didReduce: { _ in })
   }
 
   package func reportSkippedAction(

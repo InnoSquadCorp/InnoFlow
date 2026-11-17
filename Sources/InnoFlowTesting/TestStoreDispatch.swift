@@ -161,13 +161,13 @@ extension TestStore {
   package func unverifiedSnapshot(dispatchID: DispatchID? = nil) -> TestStoreUnverifiedSnapshot {
     var snapshot = TestStoreUnverifiedSnapshot()
     queue.forEachBuffered { entry in
-      guard shouldProceed(context: entry.context) else { return }
+      guard entry.isDeliverable else { return }
       guard dispatchID == nil || entry.context?.dispatchID == dispatchID else { return }
       snapshot.actionCount += 1
       if snapshot.actions.count < 20 { snapshot.actions.append(String(describing: entry.action)) }
     }
     outputQueue.forEachBuffered { entry in
-      guard shouldProceed(context: entry.context) else { return }
+      guard entry.isDeliverable else { return }
       guard dispatchID == nil || entry.context?.dispatchID == dispatchID else { return }
       snapshot.outputCount += 1
       if snapshot.outputs.count < 20 { snapshot.outputs.append(String(describing: entry.action)) }

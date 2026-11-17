@@ -411,7 +411,13 @@ struct TestStoreCoreTests {
 
     store.deliverAction(.increment, context: context)
     await drainAsyncWork()
-    await store.cancelEffects(id: id, context: context)
+    // Another effect cancels the ID. A cancellation the delivering effect
+    // itself applies later would leave the action receivable, as in a Store.
+    let cancellingContext = store.makeEffectContext(
+      sequence: store.nextSequence(),
+      potentialCancellationIDs: [id]
+    )
+    await store.cancelEffects(id: id, context: cancellingContext)
 
     await store.assertNoBufferedActions()
     await store.finish()

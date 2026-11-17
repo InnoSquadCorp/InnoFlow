@@ -59,18 +59,66 @@ package final class TestStoreDispatchActivity: Sendable {
   deinit { finish() }
 }
 
+/// What a test store knows about one delivered effect action or output.
+///
+/// A `Store` reduces an effect action, and publishes an output, the moment an
+/// effect delivers it. A test store buffers the value until the test receives
+/// it, so a cancellation applied in between decides from this record whether
+/// a `Store` would already have handled the value.
+@MainActor
+package final class TestStoreDelivery {
+  private static var lastOrder: UInt64 = 0
+
+  /// The order every buffered action and output of every test store shares.
+  package let order: UInt64
+  /// The run that emitted the action, when a run emitted it.
+  package let runToken: UUID?
+  /// The continuation of the effect sequence that delivered the value has
+  /// moved past it, so a `Store` has certainly handled it: only a
+  /// cancellation applied while the test reduces an earlier received action,
+  /// or the end of its dispatch, still removes it.
+  package var isSettled = false
+  /// A cancellation applied while the test reduced an earlier received action
+  /// covered the value, which a `Store` would therefore never have delivered.
+  package var isWithdrawn = false
+
+  init(runToken: UUID?) {
+    Self.lastOrder &+= 1
+    order = Self.lastOrder
+    self.runToken = runToken
+  }
+
+  /// Every delivery recorded so far has an order below this one.
+  package static var nextOrder: UInt64 { lastOrder &+ 1 }
+}
+
 @MainActor
 package final class ActionQueue<Action: Sendable> {
   package struct QueuedAction: Sendable {
     let action: Action
     let context: EffectExecutionContext?
+    let delivery: TestStoreDelivery
     private let activity: TestStoreDispatchActivity?
 
-    init(action: Action, context: EffectExecutionContext?, tracksActivity: Bool) {
+    init(
+      action: Action,
+      context: EffectExecutionContext?,
+      delivery: TestStoreDelivery,
+      tracksActivity: Bool
+    ) {
       self.action = action
       self.context = context?.frozenForExecution()
+      self.delivery = delivery
       activity =
         tracksActivity ? (context?.flowTaskTracker).map(TestStoreDispatchActivity.init) : nil
+    }
+
+    /// Whether the test may still receive the value. A settled value ignores
+    /// later cancellation of its effect, but not the end of its dispatch.
+    @MainActor package var isDeliverable: Bool {
+      guard !delivery.isWithdrawn else { return false }
+      guard !delivery.isSettled else { return context?.flowTaskTracker?.isCancelled != true }
+      return context?.shouldProceed ?? true
     }
 
     func finish() { activity?.finish() }
@@ -90,6 +138,8 @@ package final class ActionQueue<Action: Sendable> {
   // an arbitrary waiter via `waiters.keys.first`, which made multi-waiter
   // test scenarios non-deterministic across runs.
   private var waiters: [Waiter] = []
+  /// Values resumed to a waiter that has not run yet; they are still pending.
+  private var handedOff: [QueuedAction] = []
 
   package var pendingWaiterCount: Int {
     waiters.count
@@ -106,14 +156,29 @@ package final class ActionQueue<Action: Sendable> {
     }
   }
 
+  /// Buffered values and values already resumed to a waiter that has not run.
+  func forEachPending(_ body: (QueuedAction) -> Void) {
+    handedOff.forEach(body)
+    forEachBuffered(body)
+  }
+
   // Internal diagnostics hook for verifying forwarded wait budgets without
   // coupling tests to scheduler-dependent wall-clock completion thresholds.
   var waitTimeoutObserver: ((Duration) -> Void)?
 
-  func enqueue(_ action: Action, context: EffectExecutionContext?, tracksActivity: Bool = true) {
+  /// Delivers a value to the first waiter, or buffers it. A value buffered
+  /// with `aheadOfRun` goes before the first buffered value that run emitted.
+  func enqueue(
+    _ action: Action,
+    context: EffectExecutionContext?,
+    tracksActivity: Bool = true,
+    runToken: UUID? = nil,
+    aheadOfRun anchor: UUID? = nil
+  ) {
     let queuedAction = QueuedAction(
       action: action,
       context: context,
+      delivery: TestStoreDelivery(runToken: runToken),
       tracksActivity: tracksActivity
     )
     while !waiters.isEmpty {
@@ -123,11 +188,18 @@ package final class ActionQueue<Action: Sendable> {
         head.continuation.resume(returning: nil)
         continue
       }
+      handedOff.append(queuedAction)
       head.continuation.resume(returning: queuedAction)
       return
     }
 
-    buffer.append(queuedAction)
+    if let anchor,
+      let index = buffer[headIndex...].firstIndex(where: { $0.delivery.runToken == anchor })
+    {
+      buffer.insert(queuedAction, at: index)
+    } else {
+      buffer.append(queuedAction)
+    }
   }
 
   func removeBuffered(where predicate: (QueuedAction) -> Bool) {
@@ -152,7 +224,7 @@ package final class ActionQueue<Action: Sendable> {
 
     let waiterID = UUID()
     let resolution = ActionQueueWaiterResolution()
-    return await withTaskCancellationHandler {
+    let received: QueuedAction? = await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
         guard !resolution.isCancellationClaimed else {
           continuation.resume(returning: nil)
@@ -180,6 +252,10 @@ package final class ActionQueue<Action: Sendable> {
         self?.resolveWaiter(id: waiterID, returning: nil)
       }
     }
+    if let received {
+      handedOff.removeAll { $0.delivery === received.delivery }
+    }
+    return received
   }
 
   func popBuffered() -> QueuedAction? {

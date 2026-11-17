@@ -99,7 +99,7 @@ extension TestStore {
         queuedAction = awaitedAction
       }
 
-      guard shouldProceed(context: queuedAction.context) else {
+      guard queuedAction.isDeliverable else {
         queuedAction.finish()
         didDiscardInvalidatedAction = true
         continue

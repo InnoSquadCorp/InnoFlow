@@ -404,34 +404,22 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)?,
     location: TestStoreSourceLocation
   ) async {
-    defer { queuedAction.finish() }
-    guard shouldProceed(context: queuedAction.context) else { return }
-    let action = queuedAction.action
-    let previousState = state
-
-    let effect = reduceAction(
-      action,
-      source: .receive,
-      location: location
-    )
-    assertStateTransition(
-      from: previousState,
-      expectedStateMutation: updateExpectedState.map { update in
-        { state in
-          update(&state)
-          return true
-        }
-      },
-      eventDescription: "mismatch after receiving action.",
-      location: location
-    )
-
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location, flowTaskTracker: queuedAction.context?.flowTaskTracker),
-      awaited: false
-    )
+    await reduceReceivedAction(
+      queuedAction, source: .receive, location: location,
+      willReduce: { _ in },
+      didReduce: { previousState in
+        assertStateTransition(
+          from: previousState,
+          expectedStateMutation: updateExpectedState.map { update in
+            { state in
+              update(&state)
+              return true
+            }
+          },
+          eventDescription: "mismatch after receiving action.",
+          location: location
+        )
+      })
   }
 
   public func assertNoBufferedActions(

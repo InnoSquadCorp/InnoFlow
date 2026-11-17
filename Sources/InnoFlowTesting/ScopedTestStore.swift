@@ -587,28 +587,22 @@ where Root.State: Equatable {
     assert updateExpectedState: ((inout ChildState) -> Void)?,
     location: TestStoreSourceLocation
   ) async {
-    defer { queuedAction.finish() }
-    guard parent.shouldProceed(context: queuedAction.context) else { return }
-    let rootAction = queuedAction.action
-    let previousRootState = parent.state
-    _ = stateReader(previousRootState)
-
-    let effect = parent.applyScopedAction(
-      rootAction,
+    await parent.reduceReceivedAction(
+      queuedAction,
       source: .scopedReceive,
-      location: location
-    )
-    parent.assertStateTransition(
-      from: previousRootState,
-      expectedStateMutation: rootStateUpdater(from: updateExpectedState),
-      mismatchLabel: "Scoped root state",
-      eventDescription: "mismatch after receiving action.",
-      failureContext: failureContext,
-      exhaustiveGuidance: scopedExhaustivityGuidance,
-      location: location
-    )
-
-    await parent.walkScopedEffect(effect, context: queuedAction.context, location: location)
+      location: location,
+      willReduce: { _ = stateReader($0) },
+      didReduce: { previousRootState in
+        parent.assertStateTransition(
+          from: previousRootState,
+          expectedStateMutation: rootStateUpdater(from: updateExpectedState),
+          mismatchLabel: "Scoped root state",
+          eventDescription: "mismatch after receiving action.",
+          failureContext: failureContext,
+          exhaustiveGuidance: scopedExhaustivityGuidance,
+          location: location
+        )
+      })
   }
 
   private func reportScopedParentMismatch(

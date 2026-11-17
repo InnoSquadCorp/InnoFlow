@@ -101,6 +101,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let runScheduler = EffectRunScheduler()
   package var invariants: [TestStoreInvariant<R.State>] = []
   package var phaseCoverageObserver: (any PhaseMapRuntimeObserver)?
+  /// The buffered action the test is reducing, while that reduction lasts.
+  package var receivedReduction: TestStoreReceivedReduction?
 
   package var walker: EffectWalker<TestStore<R>> {
     EffectWalker(driver: self)
@@ -233,17 +235,23 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   @discardableResult
   package func markCancelled(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
-    effectBoundaries.markCancelled(id: id, upTo: sequence)
+    let boundary = effectBoundaries.markCancelled(id: id, upTo: sequence)
+    withdrawDeliveries(cancelledBy: id, upTo: boundary, issuedBy: sequence)
+    return boundary
   }
 
   @discardableResult
   package func markCancelledInFlight(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
-    effectBoundaries.markCancelledInFlight(id: id, upTo: sequence)
+    let boundary = effectBoundaries.markCancelledInFlight(id: id, upTo: sequence)
+    withdrawDeliveries(cancelledBy: id, upTo: boundary, issuedBy: sequence)
+    return boundary
   }
 
   @discardableResult
   package func markCancelledAll(upTo sequence: UInt64? = nil) -> UInt64 {
-    effectBoundaries.markCancelledAll(upTo: sequence)
+    let boundary = effectBoundaries.markCancelledAll(upTo: sequence)
+    withdrawDeliveries(cancelledBy: nil, upTo: boundary, issuedBy: sequence)
+    return boundary
   }
 
 }
