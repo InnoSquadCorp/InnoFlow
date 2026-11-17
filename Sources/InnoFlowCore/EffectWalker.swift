@@ -118,7 +118,7 @@ package struct EffectWalker<D: EffectDriver> {
       }
       await walk(
         nested,
-        context: .withCancellation(id, on: context),
+        context: declaringContext(id, on: context, for: nested),
         awaited: awaited
       )
 
@@ -168,6 +168,29 @@ package struct EffectWalker<D: EffectDriver> {
     return driver.shouldProceed(context: context)
   }
 
+  /// The context of work this tree declares under `id`.
+  ///
+  /// An ID cancellation accepted while the work was declared but not yet
+  /// interpreted leaves its token already cancelled, so the work is skipped
+  /// without ever registering where that cancellation could have found it.
+  /// When the enclosing context still proceeds, only that ID stops the work:
+  /// the driver records the cancellation for the dispatch that owns it.
+  /// `work` is the subtree the context covers; `nil` stands for a lane
+  /// request, which is always work.
+  private func declaringContext(
+    _ id: AnyEffectID,
+    on context: EffectExecutionContext?,
+    for work: ReducerEffect<D.Action, D.Output>?
+  ) -> EffectExecutionContext {
+    let declared = EffectExecutionContext.withCancellation(id, on: context)
+    if let driver, !driver.shouldProceed(context: declared),
+      driver.shouldProceed(context: context), work?.performsWork != false
+    {
+      driver.reportCancelledBeforeRegistration(context: declared)
+    }
+    return declared
+  }
+
   /// Registers run work in a short-lived frame so an awaited run does not
   /// retain the driver while the operation is suspended.
   private func prepareRun(
@@ -194,7 +217,7 @@ package struct EffectWalker<D: EffectDriver> {
   ) async -> Task<Void, Never>? {
     guard let driver else { return nil }
     guard driver.shouldProceed(context: context) else { return nil }
-    let scheduledContext = EffectExecutionContext.withCancellation(id, on: context)
+    let scheduledContext = declaringContext(id, on: context, for: nil)
     return await driver.scheduleRun(
       id: id,
       policy: policy,
@@ -228,7 +251,7 @@ package struct EffectWalker<D: EffectDriver> {
   ) async -> Task<Void, Never>? {
     guard let driver else { return nil }
 
-    let delayedContext = EffectExecutionContext.withCancellation(id, on: context)
+    let delayedContext = declaringContext(id, on: context, for: nested)
 
     let delayedScope = DelayedEffectScope(
       ownerID: id,
@@ -263,7 +286,7 @@ package struct EffectWalker<D: EffectDriver> {
     context: EffectExecutionContext?,
     awaited: Bool
   ) async {
-    let throttleContext = EffectExecutionContext.withCancellation(id, on: context)
+    let throttleContext = declaringContext(id, on: context, for: nested)
     guard
       let plan = await prepareThrottle(
         nested: nested,
@@ -327,6 +350,7 @@ package struct EffectWalker<D: EffectDriver> {
           nested,
           context: throttleContext,
           requiresAwaitedCompletion: awaited,
+          scope: delayedScope,
           for: id
         )
 
@@ -367,6 +391,7 @@ package struct EffectWalker<D: EffectDriver> {
         nested,
         context: throttleContext,
         requiresAwaitedCompletion: awaited,
+        scope: delayedScope,
         for: id
       )
     }
@@ -396,6 +421,26 @@ package struct EffectWalker<D: EffectDriver> {
   {
     { [self] effect, context, awaited in
       await self.walk(effect, context: context, awaited: awaited)
+    }
+  }
+}
+
+extension ReducerEffect {
+  /// Whether interpreting this tree can do anything a cancellation would
+  /// stop: deliver an action or output, start or schedule work, or request
+  /// cancellation. A drop report is delivered regardless of cancellation.
+  fileprivate var performsWork: Bool {
+    switch operation {
+    case .none, .diagnosticDrop:
+      return false
+    case .cancellable(let effect, _, let cancelInFlight):
+      return cancelInFlight || effect.performsWork
+    case .animation(let effect, _), .owned(_, let effect), .lifetimeScope(_, let effect):
+      return effect.performsWork
+    case .merge(let effects), .concatenate(let effects):
+      return effects.contains { $0.performsWork }
+    case .send, .output, .run, .scheduledRun, .cancel, .debounce, .throttle, .optionalChild:
+      return true
     }
   }
 }

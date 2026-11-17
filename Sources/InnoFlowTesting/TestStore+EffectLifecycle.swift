@@ -242,11 +242,15 @@ extension TestStore {
         && (scope.sequence <= sequence
           || scope.shouldProceed == false)
     }
-    throttleState.clearStates { scope in
+    let throttleOwners = throttleState.clearStates { scope in
       scope.contains(id)
         && (scope.sequence <= sequence
           || scope.shouldProceed == false)
     }
+    // A window whose newest request the cancellation removed passes to the
+    // request it replaced, which still needs the shared timer: move the
+    // timer to that request before releasing the tasks under `id`.
+    handThrottleTimersOver(to: throttleOwners)
     guard let tokens = taskIDsByEffectID[id] else { return }
 
     for token in Array(tokens) {
@@ -282,6 +286,17 @@ extension TestStore {
     throttleState.clearStates { scope in
       scope.sequence <= sequence
         || scope.shouldProceed == false
+    }
+  }
+
+  /// Re-indexes each shared trailing timer under the request that now owns
+  /// its window, exactly as a newer request in the window does.
+  private func handThrottleTimersOver(to owners: [AnyEffectID: EffectExecutionContext]) {
+    for (windowID, owner) in owners {
+      guard let token = throttleActivityTokenByID[windowID], runningTasks[token] != nil else {
+        continue
+      }
+      refreshTrackedTask(token: token, context: owner)
     }
   }
 

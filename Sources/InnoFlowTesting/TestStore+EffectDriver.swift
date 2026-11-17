@@ -313,8 +313,8 @@ extension TestStore: ReductionTurnCancellationAcceptor {
     scope.recordAcceptedCancellation(request)
   }
 
-  package func runLaneKind(for id: AnyEffectID) -> EffectExecutionPolicy.Kind? {
-    runScheduler.laneKind(for: id)
+  package func runLane(for id: AnyEffectID) -> EffectRunLaneView? {
+    runScheduler.laneView(for: id)
   }
 
   package func acceptLatestReplacementInReductionTurn(

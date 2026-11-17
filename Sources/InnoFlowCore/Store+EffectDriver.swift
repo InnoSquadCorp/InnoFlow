@@ -432,6 +432,12 @@ extension Store: EffectDriver {
     effectBridge.shouldProceed(context: context)
   }
 
+  package func reportCancelledBeforeRegistration(context: EffectExecutionContext) {
+    guard let diagnostics, let dispatchID = context.dispatchID else { return }
+    diagnostics.recordCancellationRequested(
+      dispatchID, sequence: context.sequence, hasEffectID: true)
+  }
+
   @discardableResult
   package func scheduleDebounce(
     _ nested: ReducerEffect<R.Action, R.Output>,

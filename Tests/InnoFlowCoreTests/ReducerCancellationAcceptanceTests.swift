@@ -424,6 +424,214 @@ private func admissionLabel(_ admission: EffectAdmission) -> String {
   }
 }
 
+/// Work a dispatch declares under `workID` but has not registered yet when a
+/// cancellation of that ID is accepted.
+private struct DeclaredWorkFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var marks = 0
+    var log: [String] = []
+  }
+
+  enum Action: Sendable {
+    /// The issuing effect's own `.cancel` is interpreted while its work under
+    /// the ID still waits behind a held sibling.
+    case ownCancelBeforeRegistration
+    /// Control: the work is registered and parked before the own `.cancel`.
+    case ownCancelAfterRegistration
+    /// Control: the own `.cancel` follows work that has already finished.
+    case ownCancelAfterOwnWork
+    /// The work under the ID waits behind a held run.
+    case declareBehindHold
+    case cancelWork
+    case mark
+    case ran
+  }
+
+  let gate: EmissionGate
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    let gate = gate
+    let hold = EffectTask<Action>.run { _ in
+      gate.markStarted(1)
+      await gate.waitUntilReleased(1)
+    }
+    switch action {
+    case .ownCancelBeforeRegistration:
+      return .merge(
+        .concatenate(
+          hold,
+          EffectTask<Action>.run { send in
+            gate.markStarted(2)
+            await send(.ran)
+          }
+          .cancellable(workID)
+        ),
+        .concatenate(.cancel(workID), .send(.mark))
+      )
+
+    case .ownCancelAfterRegistration:
+      return .merge(
+        EffectTask<Action>.run { send in
+          gate.markStarted(2)
+          await gate.waitUntilReleased(2)
+          await send(.ran)
+        }
+        .cancellable(workID),
+        .concatenate(hold, .cancel(workID), .send(.mark))
+      )
+
+    case .ownCancelAfterOwnWork:
+      return .concatenate(EffectTask<Action>.send(.mark).cancellable(workID), .cancel(workID))
+
+    case .declareBehindHold:
+      return .concatenate(
+        hold,
+        EffectTask<Action>.run { send in
+          gate.markStarted(2)
+          await send(.ran)
+        }
+        .cancellable(workID)
+      )
+
+    case .cancelWork:
+      return .cancel(workID)
+
+    case .mark:
+      state.marks += 1
+      return .none
+
+    case .ran:
+      state.log.append("ran")
+      return .none
+    }
+  }
+}
+
+private final class CancellationCounter: Sendable {
+  private let count = OSAllocatedUnfairLock(initialState: 0)
+
+  func increment() {
+    count.withLock { $0 += 1 }
+  }
+
+  var value: Int {
+    count.withLock { $0 }
+  }
+}
+
+private let laneID = EffectID<String>("reducer-cancellation-acceptance-lane")
+private let otherLaneID = EffectID<String>("reducer-cancellation-acceptance-other-lane")
+
+/// A lane request followed, in the same concatenation, by a `.cancel` of
+/// unrelated work. A request the lane does not admit awaits nothing.
+private struct LaneThenCancelFeature: Reducer {
+  enum Trigger: Sendable, CaseIterable {
+    /// `dropWhileRunning` meets its own busy lane.
+    case busyDropLane
+    /// `latest` meets a `dropWhileRunning` lane.
+    case conflictingPolicy
+    /// `serial(maxPending: 0)` meets its running lane.
+    case fullSerialQueue
+    /// The same tree cancels the lane ID before it requests the lane.
+    case laneCancelledByOwnTree
+    /// Control: the lane admits the request, whose run is awaited.
+    case admittedRequest
+  }
+
+  struct State: Equatable, Sendable {
+    var admissions: [EffectAdmission] = []
+  }
+
+  enum Action: Sendable {
+    case occupyDropLane
+    case occupySerialLane
+    case startWork
+    case trigger(Trigger)
+    case openLatestUnderOwner
+    case dropRequestThenCancel
+    case admission(EffectAdmission)
+  }
+
+  let gate: EmissionGate
+  let workCancellations: CancellationCounter
+
+  private func occupant(_ policy: EffectExecutionPolicy) -> EffectTask<Action> {
+    let gate = gate
+    return .run(id: laneID, policy: policy) { _, _ in
+      gate.markStarted(10)
+      await gate.waitUntilReleased(10)
+    }
+  }
+
+  /// A lane request that never awaits anything once it is admitted.
+  private func request(
+    on id: EffectID<String> = laneID,
+    _ policy: EffectExecutionPolicy,
+    onAdmission: (@Sendable (EffectAdmission) -> Action)? = nil
+  ) -> EffectTask<Action> {
+    let gate = gate
+    guard let onAdmission else {
+      return .run(id: id, policy: policy) { _, _ in gate.markStarted(30) }
+    }
+    return .run(id: id, policy: policy, onAdmission: onAdmission) { _, _ in gate.markStarted(30) }
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    let gate = gate
+    let workCancellations = workCancellations
+    switch action {
+    case .occupyDropLane:
+      return occupant(.dropWhileRunning)
+
+    case .occupySerialLane:
+      return occupant(.serial(maxPending: 0))
+
+    case .startWork:
+      return EffectTask<Action>.run { _ in
+        await withTaskCancellationHandler {
+          gate.markStarted(20)
+          await gate.waitUntilReleased(20)
+        } onCancel: {
+          workCancellations.increment()
+        }
+      }
+      .cancellable(workID)
+
+    case .trigger(let trigger):
+      let laneRequest: EffectTask<Action>
+      switch trigger {
+      case .busyDropLane:
+        laneRequest = request(.dropWhileRunning)
+      case .conflictingPolicy:
+        laneRequest = request(.latest)
+      case .fullSerialQueue:
+        laneRequest = request(.serial(maxPending: 0))
+      case .laneCancelledByOwnTree:
+        laneRequest = .concatenate(.cancel(laneID), request(.serial(maxPending: 4)))
+      case .admittedRequest:
+        laneRequest = .run(id: otherLaneID, policy: .dropWhileRunning) { _, _ in
+          gate.markStarted(31)
+          await gate.waitUntilReleased(31)
+        }
+      }
+      return .concatenate(laneRequest, .cancel(workID))
+
+    case .openLatestUnderOwner:
+      return occupant(.latest).cancellable(otherID)
+
+    case .dropRequestThenCancel:
+      return .concatenate(
+        request(.dropWhileRunning, onAdmission: { .admission($0) }),
+        .cancel(workID)
+      )
+
+    case .admission(let admission):
+      state.admissions.append(admission)
+      return .none
+    }
+  }
+}
+
 @MainActor
 @Suite(
   "Reducer-returned cancellation is accepted in the reduction turn", .serialized,
@@ -826,5 +1034,152 @@ struct ReducerCancellationAcceptanceTests {
     await cancellation.value
     await waitUntil { scheduler.activeRequestCount == 0 }
     #expect(scheduler.activeRequestCount == 0)
+  }
+
+  // MARK: Work cancelled before it registered
+
+  private func cancellationRecorded(
+    for dispatchIndex: Int, in diagnostics: StoreDiagnostics
+  ) -> Bool {
+    let records = diagnostics.snapshot().records
+    let dispatches = records.filter { $0.kind == .submitted }.map(\.dispatchID)
+    guard dispatches.indices.contains(dispatchIndex) else { return false }
+    return records.contains {
+      $0.dispatchID == dispatches[dispatchIndex] && $0.kind == .cancellationRequested
+    }
+  }
+
+  @Test(
+    "An own cancel records the cancellation whether or not its work registered first",
+    arguments: [true, false])
+  func ownCancelRecordsCancellationInEitherOrder(cancelFirst: Bool) async {
+    let gate = EmissionGate()
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: DeclaredWorkFeature(gate: gate), initialState: .init(), diagnostics: diagnostics)
+
+    if cancelFirst {
+      // The work waits behind the held sibling, so the cancel is interpreted
+      // before anything is registered under the ID.
+      let dispatch = store.send(.ownCancelBeforeRegistration)
+      await waitUntil { store.state.marks == 1 && gate.hasStarted(1) }
+      gate.release(1)
+      await dispatch.finish()
+      #expect(gate.hasStarted(2) == false)
+    } else {
+      let dispatch = store.send(.ownCancelAfterRegistration)
+      await waitUntil { gate.hasStarted(1) && gate.hasStarted(2) }
+      gate.release(1)
+      await waitUntil { store.state.marks == 1 }
+      gate.release(2)
+      await dispatch.finish()
+    }
+
+    #expect(store.state.log.isEmpty)
+    #expect(cancellationRecorded(for: 0, in: diagnostics))
+  }
+
+  @Test(
+    "A partly interpreted dispatch records the cancellation of work it had not reached",
+    arguments: ["reducer", "store"])
+  func partlyInterpretedDispatchRecordsSkippedWork(cancelledBy source: String) async {
+    let gate = EmissionGate()
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: DeclaredWorkFeature(gate: gate), initialState: .init(), diagnostics: diagnostics)
+
+    let dispatch = store.send(.declareBehindHold)
+    // The root interpreter has started: the held run is registered, the work
+    // under the ID behind it is not.
+    await waitUntil { gate.hasStarted(1) }
+    if source == "reducer" {
+      store.send(.cancelWork)
+    } else {
+      await store.cancelEffects(identifiedBy: workID)
+    }
+    gate.release(1)
+    await dispatch.finish()
+
+    #expect(gate.hasStarted(2) == false)
+    #expect(store.state.log.isEmpty)
+    #expect(cancellationRecorded(for: 0, in: diagnostics))
+  }
+
+  @Test("Control: an own cancel after its own work completed records nothing")
+  func ownCancelAfterCompletedWorkRecordsNothing() async {
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: DeclaredWorkFeature(gate: EmissionGate()), initialState: .init(),
+      diagnostics: diagnostics)
+
+    await store.send(.ownCancelAfterOwnWork).finish()
+
+    #expect(store.state.marks == 1)
+    #expect(diagnostics.snapshot().records.contains { $0.kind == .cancellationRequested } == false)
+  }
+
+  // MARK: Lane requests the reduction turn passes
+
+  @Test(
+    "A cancel behind a lane request the lane does not admit is accepted in the reduction turn",
+    arguments: LaneThenCancelFeature.Trigger.allCases)
+  fileprivate func cancelBehindRejectedLaneRequest(trigger: LaneThenCancelFeature.Trigger) async {
+    let gate = EmissionGate()
+    let workCancellations = CancellationCounter()
+    let store = Store(
+      reducer: LaneThenCancelFeature(gate: gate, workCancellations: workCancellations),
+      initialState: .init())
+
+    switch trigger {
+    case .busyDropLane, .conflictingPolicy, .admittedRequest:
+      store.send(.occupyDropLane)
+      await waitUntil { gate.hasStarted(10) }
+    case .fullSerialQueue:
+      store.send(.occupySerialLane)
+      await waitUntil { gate.hasStarted(10) }
+    case .laneCancelledByOwnTree:
+      break
+    }
+    let work = store.send(.startWork)
+    await waitUntil { gate.hasStarted(20) }
+
+    let triggered = store.send(.trigger(trigger))
+    // Nothing has suspended since `send` returned: a cancellation accepted in
+    // the reduction turn has already run the work's cancellation handler.
+    let cancelledInTurn = workCancellations.value
+
+    for index in [10, 20, 31] { gate.release(index) }
+    await work.finish()
+    await triggered.finish()
+    if trigger == .admittedRequest {
+      #expect(cancelledInTurn == 0, "an admitted request's run is awaited")
+    } else {
+      #expect(cancelledInTurn == 1)
+      #expect(gate.hasStarted(30) == false)
+    }
+  }
+
+  @Test("A lane request the reduction turn passes keeps the admission of that turn")
+  func laneRequestKeepsTheAdmissionOfItsTurn() async {
+    let gate = EmissionGate()
+    let store = Store(
+      reducer: LaneThenCancelFeature(gate: gate, workCancellations: CancellationCounter()),
+      initialState: .init())
+
+    let running = store.send(.openLatestUnderOwner)
+    await waitUntil { gate.hasStarted(10) }
+
+    // One MainActor turn: the drop request meets the open `latest` lane in
+    // its reduction turn, then that lane closes before the interpreter runs.
+    let dispatch = store.send(.dropRequestThenCancel)
+    await store.cancelEffects(identifiedBy: otherID)
+    #expect(store.runLaneSnapshots().isEmpty)
+
+    await dispatch.finish()
+    #expect(store.state.admissions == [.rejected(.conflictingPolicy)])
+    #expect(gate.hasStarted(30) == false)
+
+    gate.release(10)
+    await running.finish()
   }
 }

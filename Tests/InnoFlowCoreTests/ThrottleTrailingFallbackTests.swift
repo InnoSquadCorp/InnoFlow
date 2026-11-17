@@ -16,6 +16,8 @@ import os
 // dispatch's effect had already been interpreted.
 
 private let windowID = EffectID<String>("throttle-trailing-fallback")
+private let olderOwnerID = EffectID<String>("throttle-trailing-fallback-older")
+private let newestOwnerID = EffectID<String>("throttle-trailing-fallback-newest")
 
 private struct TrailingFeature: Reducer {
   struct State: Equatable, Sendable {
@@ -24,6 +26,9 @@ private struct TrailingFeature: Reducer {
 
   enum Action: Sendable {
     case request(String)
+    /// A request inside `.cancellable(owner)`: the owner ID covers only it.
+    case requestOwned(String, by: EffectID<String>)
+    case cancel(EffectID<String>)
     case fired(String)
   }
 
@@ -32,6 +37,14 @@ private struct TrailingFeature: Reducer {
     case .request(let tag):
       return EffectTask<Action>.send(.fired(tag))
         .throttle(windowID, for: .seconds(1), leading: true, trailing: true)
+
+    case .requestOwned(let tag, let owner):
+      return EffectTask<Action>.send(.fired(tag))
+        .throttle(windowID, for: .seconds(1), leading: true, trailing: true)
+        .cancellable(owner)
+
+    case .cancel(let owner):
+      return .cancel(owner)
 
     case .fired(let tag):
       state.fired.append(tag)
@@ -97,10 +110,10 @@ struct ThrottleTrailingFallbackTests {
   /// it as its newest trailing request.
   @discardableResult
   private func requestInWindow(
-    _ tag: String, on store: Store<TrailingFeature>
+    _ tag: String, ownedBy owner: EffectID<String>? = nil, on store: Store<TrailingFeature>
   ) async -> FlowTask {
     let previous = pendingSequence(store)
-    let task = store.send(.request(tag))
+    let task = store.send(owner.map { .requestOwned(tag, by: $0) } ?? .request(tag))
     await waitUntil { pendingSequence(store) != previous }
     return task
   }
@@ -166,5 +179,62 @@ struct ThrottleTrailingFallbackTests {
 
     // The oldest request the window can still fall back to is `newer-0`.
     #expect(store.state.fired == ["first", "newer-0"])
+  }
+
+  @Test(
+    "Cancelling an ID only the newest request carries fires the request it replaced",
+    arguments: [false, true])
+  func newestRequestCancelledByItsOwnIDFallsBack(throughReducer: Bool) async {
+    let clock = WindowClock()
+    let store = Store(reducer: TrailingFeature(), initialState: .init(), clock: clock.storeClock)
+    store.send(.request("first"))
+    await waitUntil { clock.hasSleeper && store.state.fired == ["first"] }
+    await requestInWindow("second", ownedBy: olderOwnerID, on: store)
+    await requestInWindow("third", ownedBy: newestOwnerID, on: store)
+
+    if throughReducer {
+      store.send(.cancel(newestOwnerID))
+    } else {
+      await store.cancelEffects(identifiedBy: newestOwnerID)
+    }
+    clock.closeWindow()
+    await waitUntil { store.state.fired.count == 2 }
+
+    #expect(store.state.fired == ["first", "second"])
+  }
+
+  @Test("Cancelling an ID only a replaced request carries still fires the newest request")
+  func replacedRequestCancelledByItsOwnIDKeepsNewest() async {
+    let clock = WindowClock()
+    let store = Store(reducer: TrailingFeature(), initialState: .init(), clock: clock.storeClock)
+    store.send(.request("first"))
+    await waitUntil { clock.hasSleeper && store.state.fired == ["first"] }
+    await requestInWindow("second", ownedBy: olderOwnerID, on: store)
+    await requestInWindow("third", ownedBy: newestOwnerID, on: store)
+
+    await store.cancelEffects(identifiedBy: olderOwnerID)
+    clock.closeWindow()
+    await waitUntil { store.state.fired.count == 2 }
+
+    #expect(store.state.fired == ["first", "third"])
+  }
+
+  @Test("Cancelling the window's ID resets the window and fires nothing")
+  func windowIDCancellationResetsTheWindow() async {
+    let clock = WindowClock()
+    let store = Store(reducer: TrailingFeature(), initialState: .init(), clock: clock.storeClock)
+    store.send(.request("first"))
+    await waitUntil { clock.hasSleeper && store.state.fired == ["first"] }
+    await requestInWindow("second", ownedBy: olderOwnerID, on: store)
+    await requestInWindow("third", ownedBy: newestOwnerID, on: store)
+
+    await store.cancelEffects(identifiedBy: windowID)
+    #expect(store.effectBridge.throttleState.trailingTask(for: AnyEffectID(windowID)) == nil)
+    clock.closeWindow()
+    // A request after the reset opens a new window and runs as its leading request.
+    store.send(.request("fourth"))
+    await waitUntil { store.state.fired.count == 2 }
+
+    #expect(store.state.fired == ["first", "fourth"])
   }
 }

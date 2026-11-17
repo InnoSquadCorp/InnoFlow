@@ -127,6 +127,12 @@ package final class EffectCancellationScope: Sendable {
     /// Requests accepted in the reduction turn, before the interpreter task
     /// reaches the node that issued them, counted per request.
     var acceptedCancellations: [EffectCancellationRequest: Int] = [:]
+    /// Lane admissions the reduction turn decided for scheduled requests,
+    /// keyed by the request's cancellation IDs (ending with its lane ID) and
+    /// kept in declaration order per policy.
+    var turnLaneAdmissions:
+      [[AnyEffectID]: [(policy: EffectExecutionPolicy.Kind, admission: ReductionTurnLaneAdmission)]] =
+        [:]
     /// The dispatch whose effect this scope belongs to, and whether its root
     /// interpreter has still to start. Work such a scope declares is not
     /// registered anywhere yet, so a cancellation accepted in that gap finds
@@ -267,6 +273,39 @@ package final class EffectCancellationScope: Sendable {
     }
   }
 
+  /// Records the admission the reduction turn decided for a scheduled request
+  /// the interpreter reaches without awaiting asynchronous work.
+  ///
+  /// Requests are correlated by their cancellation IDs, which end with the
+  /// lane ID, and their policy, oldest first: `merge` children run in any
+  /// order, and two requests with the same key are interchangeable.
+  package func recordTurnLaneAdmission(
+    _ admission: ReductionTurnLaneAdmission,
+    cancellationIDs: [AnyEffectID],
+    policy: EffectExecutionPolicy.Kind
+  ) {
+    state.withLock { state in
+      state.turnLaneAdmissions[cancellationIDs, default: []].append((policy, admission))
+    }
+  }
+
+  /// Consumes the oldest admission the reduction turn recorded for a request
+  /// with these cancellation IDs and policy, or returns `nil` when the turn
+  /// did not reach such a request.
+  package func consumeTurnLaneAdmission(
+    cancellationIDs: [AnyEffectID],
+    policy: EffectExecutionPolicy.Kind
+  ) -> ReductionTurnLaneAdmission? {
+    state.withLock { state in
+      guard var entries = state.turnLaneAdmissions[cancellationIDs],
+        let index = entries.firstIndex(where: { $0.policy == policy })
+      else { return nil }
+      let admission = entries.remove(at: index).admission
+      state.turnLaneAdmissions[cancellationIDs] = entries.isEmpty ? nil : entries
+      return admission
+    }
+  }
+
   fileprivate func cancel(id: AnyEffectID) {
     let token = state.withLock { state -> EffectCancellationToken? in
       if state.interpreterCount > 0, state.potentialCancellationIDs.contains(id) {
@@ -299,6 +338,7 @@ package final class EffectCancellationScope: Sendable {
         state.potentialCancellationIDs.removeAll(keepingCapacity: false)
         state.pendingCancellationIDs.removeAll(keepingCapacity: false)
         state.acceptedCancellations.removeAll(keepingCapacity: false)
+        state.turnLaneAdmissions.removeAll(keepingCapacity: false)
       }
     }
   }
