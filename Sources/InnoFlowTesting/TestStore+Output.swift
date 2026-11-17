@@ -147,7 +147,7 @@ extension TestStore {
         // action before checking outputs again. An action flood cannot starve
         // the output side, and the original deadline covers all progress.
         if let action = queue.popBuffered() {
-          guard shouldProceed(context: action.context) else {
+          guard action.isDeliverable else {
             action.finish()
             didProgress = true
             continue
@@ -179,7 +179,7 @@ extension TestStore {
         queuedOutput = received
       }
 
-      guard shouldProceed(context: queuedOutput.context) else {
+      guard queuedOutput.isDeliverable else {
         didProgress = true
         continue
       }
@@ -209,7 +209,7 @@ extension TestStore {
 
   package func popBufferedOutput() async -> R.Output? {
     while let queuedOutput = outputQueue.popBuffered() {
-      guard shouldProceed(context: queuedOutput.context) else { continue }
+      guard queuedOutput.isDeliverable else { continue }
       return queuedOutput.action
     }
     return nil

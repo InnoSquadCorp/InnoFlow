@@ -324,7 +324,7 @@ extension TestStore {
 
   package func popBufferedQueuedAction() -> ActionQueue<R.Action>.QueuedAction? {
     while let entry = queue.popBuffered() {
-      guard shouldProceed(context: entry.context) else {
+      guard entry.isDeliverable else {
         entry.finish()
         continue
       }
@@ -340,8 +340,8 @@ extension TestStore {
   }
 
   package func discardInvalidatedActions() {
-    queue.removeBuffered { !shouldProceed(context: $0.context) }
-    outputQueue.removeBuffered { !shouldProceed(context: $0.context) }
+    queue.removeBuffered { !$0.isDeliverable }
+    outputQueue.removeBuffered { !$0.isDeliverable }
     finishActivity.noteProgress()
   }
 
