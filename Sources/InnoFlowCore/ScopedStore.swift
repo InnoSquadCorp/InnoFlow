@@ -162,24 +162,20 @@ extension Store {
       for: anyKeyPath,
       signature: signature
     )
-    bucket.revision &+= 1
+    // An observation callback can scope the collection after a reduction and
+    // before the refresh pass classified it. The rows' positions then belong
+    // to the reduced collection, and that pass must not read them as
+    // positions in the collection before the reduction.
+    bucket.beginIndexing(
+      aheadOfRegistry: isAwaitingProjectionClassification(of: anyKeyPath)
+    )
     let elements = state[keyPath: collection]
     var stores: [ScopedStore<R, CollectionState.Element, ChildAction>] = []
 
     for (offset, element) in elements.enumerated() {
       let scopedElementID = element.id
       let elementID = AnyHashable(scopedElementID)
-
-      let offsetBox =
-        bucket.offsetsByID[elementID]
-        ?? CollectionScopeOffsetBox(offset: offset, revision: bucket.revision &- 1)
-      // A duplicate id resolves its first occurrence, like the linear
-      // fallback; a later occurrence must not move the shared offset.
-      if offsetBox.revision != bucket.revision {
-        offsetBox.offset = offset
-        offsetBox.revision = bucket.revision
-      }
-      bucket.offsetsByID[elementID] = offsetBox
+      let offsetBox = bucket.index(elementID, at: offset)
 
       if let cached = bucket.storesByID[elementID]
         as? ScopedStore<R, CollectionState.Element, ChildAction>,
@@ -217,13 +213,15 @@ extension Store {
       stores.append(scopedStore)
     }
 
-    // A row whose element is gone keeps its outdated box and its place in
-    // the cache: the projection registry deactivates it when it classifies
-    // the change that removed the element, and deactivation is what removes
-    // it here. Dropping it now would hide it from that pass when this call
-    // runs between a reduction and the registry's refresh (an observation
-    // callback that scopes the collection again), leaving a removed row
-    // alive with its last value.
+    // A row whose element is gone keeps its box, now marked absent, and its
+    // place in the cache: the projection registry deactivates it when it
+    // classifies the change that removed the element — without scanning for
+    // the element, also when this call runs in the middle of that pass — and
+    // deactivation is what removes it here. Dropping it now would hide it
+    // from that pass when this call runs between a reduction and the
+    // registry's refresh (an observation callback that scopes the collection
+    // again), leaving a removed row alive with its last value.
+    bucket.markUnindexedElementsAbsent()
     collectionScopeCache.store(bucket, for: anyKeyPath)
     return stores
   }

@@ -176,12 +176,24 @@ package final class CollectionScopeOffsetBox {
 }
 
 /// Per-collection cache for stable row projections and their latest fast-path offsets.
+///
+/// Every indexing — a scope call or a structural refresh — starts a revision
+/// and leaves each box at that revision: an element of the indexed
+/// collection at the offset of its id's first occurrence, any other box
+/// marked ``CollectionScopeOffsetBox/absent``.
 @MainActor
 package final class CollectionScopeCacheBucket {
   package let signature: CollectionScopeCacheSignature
   package var storesByID: [AnyHashable: AnyObject] = [:]
-  package var offsetsByID: [AnyHashable: CollectionScopeOffsetBox] = [:]
-  package var revision: UInt64 = 0
+  package private(set) var offsetsByID: [AnyHashable: CollectionScopeOffsetBox] = [:]
+  package private(set) var revision: UInt64 = 0
+  /// Whether the current revision indexed a collection that the projection
+  /// registry has not classified yet: a scope that ran after a reduction and
+  /// before the refresh pass compared that collection with the one before
+  /// the reduction. The boxes then hold positions in the reduced collection,
+  /// not in the pass's previous one.
+  package private(set) var isIndexedAheadOfRegistry = false
+  private var indexedElementCount = 0
   /// Elements that a row family this one replaced had indexed and this one
   /// has no row for. A row of the replaced family can still be alive — the
   /// collection may be scoped with another action path between a reduction
@@ -192,6 +204,47 @@ package final class CollectionScopeCacheBucket {
 
   package init(signature: CollectionScopeCacheSignature) {
     self.signature = signature
+  }
+
+  /// Starts the revision a scope call indexes the store's current
+  /// collection under. `aheadOfRegistry` says that the registry has yet to
+  /// compare that collection with its previous snapshot.
+  package func beginIndexing(aheadOfRegistry: Bool) {
+    revision &+= 1
+    indexedElementCount = 0
+    isIndexedAheadOfRegistry = aheadOfRegistry
+  }
+
+  /// Records `offset` as the position of `elementID` in the collection being
+  /// indexed and returns the element's box. A duplicate id keeps the offset
+  /// of its first occurrence, which is the element its row resolves.
+  package func index(_ elementID: AnyHashable, at offset: Int) -> CollectionScopeOffsetBox {
+    guard let offsetBox = offsetsByID[elementID] else {
+      let offsetBox = CollectionScopeOffsetBox(offset: offset, revision: revision)
+      offsetsByID[elementID] = offsetBox
+      indexedElementCount += 1
+      return offsetBox
+    }
+    if offsetBox.revision != revision {
+      offsetBox.offset = offset
+      offsetBox.revision = revision
+      indexedElementCount += 1
+    }
+    return offsetBox
+  }
+
+  /// Marks every element the current revision did not index as absent, so
+  /// a row whose element is gone resolves `nil` without scanning the
+  /// collection.
+  ///
+  /// The box and its row stay cached: the registry deactivates the row when
+  /// it refreshes it, and deactivation removes both.
+  package func markUnindexedElementsAbsent() {
+    guard indexedElementCount < offsetsByID.count else { return }
+    for offsetBox in offsetsByID.values where offsetBox.revision != revision {
+      offsetBox.offset = CollectionScopeOffsetBox.absent
+      offsetBox.revision = revision
+    }
   }
 
   /// Takes over the elements `replaced` indexed that this family has no row
@@ -218,13 +271,16 @@ package final class CollectionScopeCacheBucket {
   /// change can add or remove an element, so a box indexed by the current
   /// revision stays valid until the next structural change indexes again.
   /// Returns `nil` when the collection exposes no contiguous storage and
-  /// every row has to be refreshed; removed rows then keep an outdated box
-  /// and resolve through their linear fallback.
+  /// every row has to be refreshed.
   package func reindex<CollectionState: Collection>(
     from previousCollection: CollectionState,
     to nextCollection: CollectionState
   ) -> [AnyHashable]?
   where CollectionState.Element: Equatable & Identifiable {
+    // The boxes hold positions in `previousCollection` unless a scope
+    // indexed the reduced collection before this pass classified it.
+    let boxesIndexPreviousCollection = !isIndexedAheadOfRegistry
+    isIndexedAheadOfRegistry = false
     let previousRevision = revision
     revision &+= 1
     // Reported once: a row of the replaced family that is still alive is
@@ -236,6 +292,11 @@ package final class CollectionScopeCacheBucket {
 
     let affected = previousCollection.withContiguousStorageIfAvailable { previous in
       nextCollection.withContiguousStorageIfAvailable { next -> [AnyHashable] in
+        // A row shows the first occurrence of its id in the previous
+        // collection. Boxes indexed ahead of this pass hold positions in
+        // `next`, so those occurrences are looked up instead.
+        let previousFirstOffsets =
+          boxesIndexPreviousCollection ? nil : firstOffsetsOfIndexedElements(in: previous)
         var affectedElementIDs = Array(supersededElementIDs)
         for offset in 0..<next.count {
           let element = next[offset]
@@ -245,19 +306,25 @@ package final class CollectionScopeCacheBucket {
           guard let offsetBox = offsetsByID[elementID], offsetBox.revision != revision
           else { continue }
 
-          // The box still holds the element's offset in the previous
-          // collection when it was indexed by the previous revision — unless
-          // the rows were scoped again after the reduction and before this
-          // pass, which indexes them against the next collection. Identical
-          // bytes are the same element either way; otherwise the element at
-          // that offset must be confirmed before its value is compared.
-          let previousOffset = offsetBox.offset
+          let previousOffset: Int?
+          if let previousFirstOffsets {
+            previousOffset = previousFirstOffsets[elementID]
+          } else if offsetBox.revision == previousRevision, offsetBox.offset >= 0,
+            offsetBox.offset < previous.count
+          {
+            previousOffset = offsetBox.offset
+          } else {
+            previousOffset = nil
+          }
+          // Identical bytes are the same element. An element without a
+          // previous occurrence is reported: a row created for it already
+          // shows it, and refreshing that row changes nothing.
           let isUnchanged =
-            offsetBox.revision == previousRevision
-            && previousOffset >= 0 && previousOffset < previous.count
-            && (projectionElementsAreBitwiseEqual(previous, previousOffset, next, offset)
-              || (previous[previousOffset].id == element.id
-                && previous[previousOffset] == element))
+            previousOffset.map { previousOffset in
+              projectionElementsAreBitwiseEqual(previous, previousOffset, next, offset)
+                || (previous[previousOffset].id == element.id
+                  && previous[previousOffset] == element)
+            } ?? false
           if !isUnchanged {
             affectedElementIDs.append(elementID)
           }
@@ -284,7 +351,25 @@ package final class CollectionScopeCacheBucket {
       offsetBox.offset = offset
       offsetBox.revision = revision
     }
+    for offsetBox in offsetsByID.values where offsetBox.revision != revision {
+      offsetBox.offset = CollectionScopeOffsetBox.absent
+      offsetBox.revision = revision
+    }
     return nil
+  }
+
+  /// The offset of the first occurrence of every indexed id in `collection`.
+  private func firstOffsetsOfIndexedElements<Element: Identifiable>(
+    in collection: UnsafeBufferPointer<Element>
+  ) -> [AnyHashable: Int] {
+    var offsets: [AnyHashable: Int] = [:]
+    offsets.reserveCapacity(offsetsByID.count)
+    for offset in 0..<collection.count {
+      let elementID = AnyHashable(collection[offset].id)
+      guard offsetsByID[elementID] != nil, offsets[elementID] == nil else { continue }
+      offsets[elementID] = offset
+    }
+    return offsets
   }
 }
 

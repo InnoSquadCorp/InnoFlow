@@ -314,8 +314,8 @@ struct ProjectionLifetimeConsistencyTests {
       notificationCount.withLock { $0 += 1 }
     }
 
-    // A liveness tracker is not fired by value changes, so no number of
-    // them may release the selection it is registered on.
+    // The liveness read observes the store, not the selection, which nothing
+    // retains: value changes never fire that tracker.
     store!.send(.increment)
     store!.send(.increment)
     store!.send(.increment)
