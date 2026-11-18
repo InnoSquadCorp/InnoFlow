@@ -3,6 +3,7 @@
 // Copyright © 2025 InnoSquad. All rights reserved.
 
 import Foundation
+import Synchronization
 
 /// Ownership metadata for delayed debounce and throttle work.
 ///
@@ -14,6 +15,8 @@ package struct DelayedEffectScope: Sendable {
   package let inheritedCancellationIDs: [AnyEffectID]
   package let sequence: UInt64
   package let cancellationContext: EffectExecutionContext?
+  /// Identifies the request this scope belongs to, through every copy.
+  package let requestID: UUID
 
   package init(
     ownerID: AnyEffectID,
@@ -25,6 +28,7 @@ package struct DelayedEffectScope: Sendable {
     self.inheritedCancellationIDs = inheritedCancellationIDs
     self.sequence = sequence ?? 0
     self.cancellationContext = cancellationContext?.frozenForExecution()
+    self.requestID = UUID()
   }
 
   package func contains(_ id: AnyEffectID) -> Bool {
@@ -42,6 +46,91 @@ package func shouldAdmitDelayedScope(
 ) -> Bool {
   guard let current else { return true }
   return candidate.sequence >= current.sequence
+}
+
+/// The end of one throttle window, which every request the window holds
+/// waits for: through its dispatch, and through the interpreter frame of an
+/// awaited request.
+///
+/// The window's timer is shared by the dispatches whose requests it holds,
+/// but each request waits through an entry of its own. A request that a
+/// cancellation removes from the window is released at once, so its
+/// dispatch's waiting stays scoped to its own work, while the window keeps
+/// its timer for the requests that remain. The timer's task completes the
+/// window when it returns, which releases every request still held.
+package final class ThrottleWindowCompletion: Sendable {
+  private struct Entry {
+    /// The completion the request's dispatch tracks.
+    var dispatchCompletion: FlowTaskCompletion?
+    /// Interpreter frames of the request that await the window.
+    var waiters: [CheckedContinuation<Void, Never>] = []
+  }
+
+  private struct State {
+    var isComplete = false
+    var entries: [UUID: Entry] = [:]
+  }
+
+  private let state = Mutex(State())
+
+  package init() {}
+
+  /// Makes the window hold `request`, and `tracker`'s dispatch wait for it
+  /// on that request's behalf. A completed window holds nothing.
+  package func hold(_ request: UUID, for tracker: FlowTaskTracker?) {
+    let dispatchCompletion = tracker.map { _ in FlowTaskCompletion() }
+    let isHeld = state.withLock { state -> Bool in
+      guard !state.isComplete, state.entries[request] == nil else { return false }
+      state.entries[request] = Entry(dispatchCompletion: dispatchCompletion)
+      return true
+    }
+    // A completion the window completed in between is observed as complete.
+    if isHeld, let tracker, let dispatchCompletion {
+      tracker.trackCompletion(of: dispatchCompletion)
+    }
+  }
+
+  /// Suspends until the window releases `request`: when it completes, or
+  /// when a cancellation removes the request first. Returns at once for a
+  /// request the window does not hold.
+  package func waitForRelease(of request: UUID) async {
+    await withCheckedContinuation { continuation in
+      let isHeld = state.withLock { state -> Bool in
+        guard state.entries[request] != nil else { return false }
+        state.entries[request]?.waiters.append(continuation)
+        return true
+      }
+      if !isHeld {
+        continuation.resume()
+      }
+    }
+  }
+
+  /// Releases `request`, which the window no longer holds.
+  package func release(_ request: UUID) {
+    guard let entry = state.withLock({ $0.entries.removeValue(forKey: request) }) else { return }
+    Self.finish(entry)
+  }
+
+  /// Ends the window and releases every request it still holds.
+  package func complete() {
+    let entries = state.withLock { state -> [Entry] in
+      state.isComplete = true
+      let entries = Array(state.entries.values)
+      state.entries.removeAll(keepingCapacity: false)
+      return entries
+    }
+    for entry in entries {
+      Self.finish(entry)
+    }
+  }
+
+  private static func finish(_ entry: Entry) {
+    entry.dispatchCompletion?.complete()
+    for waiter in entry.waiters {
+      waiter.resume()
+    }
+  }
 }
 
 @MainActor
@@ -92,7 +181,7 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
   /// requests it can fall back to. Older ones are dropped first.
   package static var supersededPendingLimit: Int { 8 }
   private var trailingTaskByID: [AnyEffectID: Task<Void, Never>] = [:]
-  private var trailingCompletionByID: [AnyEffectID: FlowTaskCompletion] = [:]
+  private var trailingCompletionByID: [AnyEffectID: ThrottleWindowCompletion] = [:]
   private var generationByID: [AnyEffectID: UInt64] = [:]
   private var scopeByID: [AnyEffectID: DelayedEffectScope] = [:]
   private var admissionStateByID: [AnyEffectID: AdmissionState] = [:]
@@ -149,15 +238,31 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
 
   package func setTrailingTask(
     _ task: Task<Void, Never>,
-    completion: FlowTaskCompletion? = nil,
+    completion: ThrottleWindowCompletion? = nil,
     for id: AnyEffectID
   ) {
     trailingTaskByID[id] = task
     trailingCompletionByID[id] = completion
   }
 
-  package func trailingCompletion(for id: AnyEffectID) -> FlowTaskCompletion? {
+  package func trailingCompletion(for id: AnyEffectID) -> ThrottleWindowCompletion? {
     trailingCompletionByID[id]
+  }
+
+  /// Makes the window under `id` hold `request`: the request's dispatch
+  /// waits for the window until it closes, or until a cancellation removes
+  /// the request from it.
+  ///
+  /// - Returns: the window that now holds the request, for an awaited request
+  ///   to wait on.
+  @discardableResult
+  package func holdWindow(
+    for id: AnyEffectID,
+    request: DelayedEffectScope
+  ) -> ThrottleWindowCompletion? {
+    guard let window = trailingCompletionByID[id] else { return nil }
+    window.hold(request.requestID, for: request.cancellationContext?.flowTaskTracker)
+    return window
   }
 
   package func scope(for id: AnyEffectID) -> DelayedEffectScope? {
@@ -257,16 +362,30 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
   /// the window, ownership passes to the newest remaining request that can
   /// still proceed, and the window keeps its timer and deadline; only a
   /// window with no such request left is reset.
+  ///
+  /// The window releases every request the cancellation covers, so their
+  /// dispatches no longer wait for a timer that now serves other requests.
   @discardableResult
   package func clearState(
     for id: AnyEffectID,
     where shouldClear: (DelayedEffectScope) -> Bool
   ) -> WindowCancellation {
+    let window = trailingCompletionByID[id]
+    var released: [UUID] = []
+    defer {
+      // Once the window's state is final: releasing a request runs its
+      // dispatch's completion callbacks.
+      for request in released {
+        window?.release(request)
+      }
+    }
     let retained = pendingByID[id] ?? []
     let remaining = retained.filter { request in
-      guard request.context?.shouldProceed != false else { return false }
-      guard let scope = request.scope else { return true }
-      return !shouldClear(scope)
+      if let scope = request.scope, shouldClear(scope) {
+        released.append(scope.requestID)
+        return false
+      }
+      return request.context?.shouldProceed != false
     }
     if remaining.count != retained.count {
       pendingByID[id] = remaining.isEmpty ? nil : remaining
@@ -274,6 +393,7 @@ package final class ThrottleStateMap<Action: Sendable, Output: Sendable> {
     guard let owner = scopeByID[id], shouldClear(owner) else {
       return remaining.count == retained.count ? .unaffected : .pruned
     }
+    released.append(owner.requestID)
     guard let successor = remaining.last, let successorScope = successor.scope else {
       resetWindow(for: id)
       windowEndByID.removeValue(forKey: id)
@@ -464,6 +584,11 @@ package protocol EffectDriver<Action, Output>: AnyObject {
   /// that requirement through `PendingTrailing.requiresAwaitedCompletion`.
   /// `schedulingContext` identifies the effect frame that created the sleeper;
   /// a successful drain still recurses with the latest pending context.
+  ///
+  /// The drain installs a ``ThrottleWindowCompletion`` with its task through
+  /// ``ThrottleStateMap/setTrailingTask(_:completion:for:)`` and completes it
+  /// when the task returns. The walker makes each request's dispatch wait on
+  /// that window, never on the task itself.
   @discardableResult
   func scheduleTrailingDrain(
     for id: AnyEffectID,
@@ -479,6 +604,8 @@ package protocol EffectDriver<Action, Output>: AnyObject {
   /// Refreshes runtime-specific ownership when an active trailing drain is
   /// reused by a newer pending effect. Production Store ownership lives in
   /// `throttleState`; TestStore also reindexes its finish/cancellation task.
+  /// The newer request's dispatch waits for the window through
+  /// ``ThrottleStateMap/holdWindow(for:request:)``.
   func refreshTrailingDrainOwnership(
     for id: AnyEffectID,
     context: EffectExecutionContext
