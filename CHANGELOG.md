@@ -122,8 +122,11 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   When the newest request is cancelled — through its dispatch or through an
   ID only it carries — the window falls back to the request it replaced (the
   window keeps the newest request and up to seven it replaced) instead of
-  firing nothing, and keeps its timer. The request the cancellation removed
-  no longer holds its dispatch, which finishes once its own work is done. Before, an ID cancellation always
+  firing nothing, and keeps its timer. A request an ID cancellation removed
+  no longer holds its dispatch, which finishes once its own work is done; a
+  request removed through its dispatch while an interpreter frame awaits it,
+  and a leading opener another request superseded as owner, still wait for
+  the window to end, as in 6.0.x. Before, an ID cancellation always
   reset the window, and the outcome of a dispatch cancellation depended on
   whether the cancelled dispatch's effect had been interpreted yet.
 - `TestStore` queues the actions that a received action's effect delivers
@@ -189,7 +192,9 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   earlier effects only; the effect that issued the request is still
   interpreted in declaration order, so an earlier `concatenate` sibling of a
   `.cancel` runs before that cancel covers its own effect. A cancel that follows a
-  sibling its own effect already cancelled is accepted in the turn as well. A
+  sibling its own effect already cancelled is accepted in the turn as well,
+  unless another branch of an enclosing `merge` also cancels that sibling's
+  ID; it is then accepted when the interpreter reaches it. A
   `latest` request that its lane will admit is accepted completely in the
   turn: the run it replaces is reported as superseded and released even when
   the replacing dispatch is cancelled before its effect runs. Until the lane
@@ -247,8 +252,9 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   that was never read costs nothing after it is dropped; one that was read is
   released after two further value changes. Reading `isAlive` observes the
   owner's liveness and never keeps a selection alive; its reader is notified
-  when the store is released or the row is removed, even after the
-  selection, or the `ScopedStore` it read through, was released. Releasing a selection removes it from its
+  when its owner — the store, or a scope — is deactivated, even after the
+  selection was released. A selection whose `ScopedStore` was released first
+  turns dead without a notification, as in 6.0.x. Releasing a selection removes it from its
   dependency bucket in place, so releasing many selections of one dependency
   stays linear.
 - Selecting on a `ScopedStore` whose collection element was removed, or whose
@@ -257,9 +263,6 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   deactivated handle. In 6.0.x, creating a closure-based selection or the
   first key-path selection on such a `ScopedStore` trapped in debug builds;
   it now succeeds and reports the absence through the selection.
-- A selection that outlived its `ScopedStore` turned dead without notifying
-  its readers. Releasing a `ScopedStore` that is still active now deactivates
-  the selections created on it, which notifies their readers.
 - Creating a key-path selection no longer records a read of the whole parent
   state, so a view that creates one in its body depends only on that
   selection. A closure-based selection still records that read, as in 6.0.x:
@@ -288,7 +291,7 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
 
 ### Notes
 
-- `SelectedStore.deinit` and `ScopedStore.deinit` carry the `@_optimize(none)` workaround for
+- `SelectedStore.deinit` carries the `@_optimize(none)` workaround for
   swiftlang/swift#88173, like the store deinitializers; see
   `docs/SWIFT_TOOLCHAIN_TRACKING.md`.
 - Because cancellation is delivered synchronously, a task-cancellation

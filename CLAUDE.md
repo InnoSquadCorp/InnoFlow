@@ -132,7 +132,9 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    another branch cancels or requests the cancellation of, wherever that
    work lies in its branch. The turn accepts no `latest` replacement for it
    and nothing behind it in its branch; its admission decides it. Work whose
-   context another branch's `.cancel` covers is treated the same way. A
+   context another branch's `.cancel` covers is treated the same way, even
+   when the work's own path cancelled that ID first, so a cancellation behind
+   it is accepted when the interpreter reaches it. A
    `latest` request merged only with work that touches neither its lane nor
    its IDs, such as `.merge(.send(.loading), latestRun)`, is still accepted
    in the turn. A `latest` lane displaced in a reduction turn stays the open
@@ -194,12 +196,11 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
     until that read's notification plus one more; a selection that is never
     read, or goes unread across two notifications, is released and its key
     path is no longer evaluated. A liveness read (`isAlive`) observes the
-    owner's liveness — the parent `Store`'s release, and for a `ScopedStore`
-    also its deactivation — and the selection's own deactivation, and does
-    not retain the selection; its reader is notified when the owner is
-    deactivated or its store is released, even after the selection or its
-    `ScopedStore` was released. A `ScopedStore` released while still active
-    deactivates the selections created on it.
+    owner's liveness — the parent `Store`'s release, or the `ScopedStore`'s
+    deactivation — and does not retain the selection; its reader is notified
+    when the owner is deactivated, even after the selection was released. A
+    `ScopedStore` that is released without being deactivated notifies no
+    one, so a reader that needs that notification holds the scope.
     Creating a key-path selection never records an Observation access on the
     parent. Nothing retains a closure-based selection (`dependingOn:`,
     `dependingOnAll:`, a selector, with or without `id:`) after the reading
@@ -730,7 +731,7 @@ Do not leave the rule enforced only by prose.
 
 ### Runtime completion and result mapping
 
-A throttle window fires the newest trailing request that can still proceed: cancelling the newest request — through its dispatch or through an ID only it carries — gives the window, with its timer, back to the request it replaced (a bounded number of superseded requests is retained), independent of whether the cancelled effect had been interpreted; the window resets only when no retained request can still proceed. A request that a cancellation removes from a window no longer holds its dispatch: the dispatch, and the interpreter frame of an awaited request, are released at once, while the window keeps its timer for the requests it still holds. The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
+A throttle window fires the newest trailing request that can still proceed: cancelling the newest request — through its dispatch or through an ID only it carries — gives the window, with its timer, back to the request it replaced (a bounded number of superseded requests is retained), independent of whether the cancelled effect had been interpreted; the window resets only when no retained request can still proceed. A request that an ID cancellation removes from a window's retained requests no longer holds its dispatch: the dispatch, and the interpreter frame of an awaited request, are released at once, while the window keeps its timer for the requests it still holds. Two cases still wait for the window to end: a request that its dispatch's cancellation removes while an interpreter frame awaits it, and a request the window holds but no longer retains (a leading opener another request superseded as owner, or one past the bound). The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
 
 ### Testing dispatch ownership
 

@@ -159,17 +159,15 @@ public final class SelectedStore<Value: Equatable & Sendable> {
   /// ``optionalValue`` when a dead selection should be treated as absence.
   ///
   /// Reading it observes the liveness of the selection's owner — the parent
-  /// store's release, and for a scoped store also its deactivation — and does
-  /// not keep the selection alive: its reader is notified when the owner is
-  /// deactivated, even after the selection or the scoped store was released.
-  /// While the owner is alive it also observes this selection's own
-  /// deactivation, which is how a scoped store that is released while this
-  /// selection lives notifies its readers.
+  /// store's release, or the scoped store's deactivation — rather than the
+  /// selection itself, so it does not keep the selection alive: its reader
+  /// is notified when the owner is deactivated, even after the selection
+  /// was released.
   public var isAlive: Bool {
     // Observe the owner first, so the access is recorded whatever the
-    // result is. `isActive` registers a tracker without retaining.
+    // result is.
     let ownerIsAlive = observedOwnerIsAlive()
-    return ownerIsAlive && parentObject != nil && isActive
+    return ownerIsAlive && parentObject != nil && storedIsActive
   }
 
   /// Liveness as part of a read that goes on to the value: the value read
@@ -605,8 +603,7 @@ extension ScopedStore {
       sourceIsAlive: { @MainActor [weak self] in
         self?.isAlive == true
       },
-      // `isAlive` observes this scope's deactivation and the parent
-      // store's release, which notifies also after this scope is gone.
+      // `isAlive` reads `isActive`, which deactivation invalidates.
       observedOwnerIsAlive: { @MainActor [weak self] in
         self?.isAlive == true
       },

@@ -36,10 +36,9 @@ A key-path selection is now alive while one of these holds:
 
 Reading `isAlive` keeps nothing alive. It observes the owner instead, so its
 reader is notified when the store is released or the row is removed, even
-after the selection, or the `ScopedStore` it read through, was released. A
-`ScopedStore` released while it is still active deactivates the selections
-created on it: their readers are notified, `isAlive` becomes `false` and
-`optionalValue` `nil`. In 6.0.x such selections turned dead silently.
+after the selection itself was released. A selection on a `ScopedStore` that
+is itself released first turns dead without a notification, as in 6.0.x:
+hold the scope while its readers need one.
 
 What to check:
 
@@ -97,7 +96,8 @@ the interpreter reached it. In 6.0.x such a request was admitted against the
 lane it met at that later point.
 
 Two lane requests for one ID in different branches of one `merge`, or a lane
-request whose IDs another branch cancels, are decided by admission, in
+request whose IDs another branch cancels or requests the cancellation of, are
+decided by admission, in
 whatever order the interpreter reaches them; a `latest` request among them
 releases its predecessors when it is admitted, not in the reduction turn.
 Use `concatenate` when the order matters.

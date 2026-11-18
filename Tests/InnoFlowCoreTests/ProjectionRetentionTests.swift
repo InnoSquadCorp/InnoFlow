@@ -108,16 +108,6 @@ private let retentionChildPath = CasePath<RetentionFeature.Action, RetentionFeat
   }
 )
 
-private typealias RetentionChildScope = ScopedStore<
-  RetentionFeature, RetentionFeature.State.Child, RetentionFeature.ChildAction
->
-
-/// One call site, so a body that scopes again gets the cached scope.
-@MainActor
-private func childScope(of store: Store<RetentionFeature>) -> RetentionChildScope {
-  store.scope(state: \.child, action: retentionChildPath)
-}
-
 /// `RetentionFeature` as a closure reducer that runs `read.body` while it
 /// reduces `.touchOther`: inside the reduction, which holds exclusive access
 /// to the store's state.
@@ -189,23 +179,6 @@ struct ProjectionRetentionTests {
       notifications.withLock { $0 += 1 }
     }
     return notifications
-  }
-
-  /// Polls until `condition` holds. The deadline is a failure backstop scaled
-  /// with `INNOFLOW_TEST_WAIT_SCALE`, reported where the wait was written.
-  private func waitUntil(
-    sourceLocation: SourceLocation = #_sourceLocation,
-    _ condition: @MainActor () -> Bool
-  ) async {
-    let deadline = ContinuousClock.now.advanced(by: scaledTestDeadline(.seconds(10)))
-    while !condition() {
-      guard ContinuousClock.now < deadline else {
-        Issue.record(
-          "The awaited condition was not reached in time", sourceLocation: sourceLocation)
-        return
-      }
-      try? await Task.sleep(for: .milliseconds(2))
-    }
   }
 
   // MARK: Liveness reads
@@ -332,76 +305,6 @@ struct ProjectionRetentionTests {
     #expect(notifications.withLock { $0 } == 1)
     #expect(selection.isAlive == false)
     #expect(selection.optionalValue == nil)
-  }
-
-  @Test(
-    "A liveness read through a single scope is notified when the store is released",
-    arguments: [false, true]
-  )
-  func singleScopeLivenessReadIsNotifiedByTheReleasedStore(holdsScope: Bool) {
-    var store: Store<RetentionFeature>? = Store(reducer: RetentionFeature(), initialState: .init())
-    var scope: RetentionChildScope? = childScope(of: store!)
-    weak let weakScope = scope
-    var isAlive: Bool?
-    let notifications = track {
-      // Like a body: it gets the scope from the scope cache and keeps
-      // neither the scope nor the selection.
-      isAlive = childScope(of: store!).select(\RetentionFeature.State.Child.number).isAlive
-    }
-    #expect(isAlive == true)
-    if !holdsScope {
-      scope = nil
-      #expect(weakScope == nil)
-    }
-
-    store!.send(.child(.bump))
-    #expect(notifications.withLock { $0 } == 0)
-
-    store = nil
-    #expect(notifications.withLock { $0 } == 1)
-    withExtendedLifetime(scope) {}
-  }
-
-  @Test(
-    "A selection that outlives its scope is deactivated, which notifies its reader",
-    arguments: [false, true]
-  )
-  func selectionOutlivingItsScopeIsDeactivated(readsValue: Bool) {
-    let store = Store(reducer: RetentionFeature(), initialState: .init())
-    var scope: RetentionChildScope? = childScope(of: store)
-    let selection = scope!.select(\RetentionFeature.State.Child.number)
-    let notifications = track {
-      if readsValue {
-        _ = selection.optionalValue
-      } else {
-        _ = selection.isAlive
-      }
-    }
-    weak let weakScope = scope
-    scope = nil
-    #expect(weakScope == nil)
-    #expect(notifications.withLock { $0 } == 1)
-    #expect(selection.isAlive == false)
-    #expect(selection.optionalValue == nil)
-
-    store.send(.child(.bump))
-    #expect(notifications.withLock { $0 } == 1)
-  }
-
-  @Test("A scope released off the main actor deactivates its selection on the main actor")
-  func scopeReleasedOffTheMainActorDeactivatesItsSelection() async {
-    let store = Store(reducer: RetentionFeature(), initialState: .init())
-    let held = OSAllocatedUnfairLock<RetentionChildScope?>(initialState: childScope(of: store))
-    let selection = held.withLock { $0 }!.select(\RetentionFeature.State.Child.number)
-    let notifications = track { _ = selection.optionalValue }
-
-    // The last reference goes away on another executor, so the scope's
-    // isolated deinitializer runs on the main actor afterwards.
-    await Task.detached { held.withLock { $0 = nil } }.value
-    await waitUntil { notifications.withLock { $0 } == 1 }
-    #expect(selection.isAlive == false)
-    #expect(selection.optionalValue == nil)
-    withExtendedLifetime(store) {}
   }
 
   @Test("A liveness reader of a removed row is not notified again when the store is released")

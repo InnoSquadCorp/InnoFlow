@@ -474,17 +474,9 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
   /// this to skip work that would otherwise read a stale cached snapshot
   /// from `state` or have its action dropped by `send(_:)`.
   ///
-  /// While the projection is alive, reading it observes the two events that
-  /// end its liveness: its deactivation and the parent store's release. The
-  /// store's release notifies the reader also when this projection was
-  /// released first.
-  ///
   /// See ARCHITECTURE_CONTRACT.md — "Projection lifecycle contract".
   public var isAlive: Bool {
-    // Each access is recorded only once the checks before it passed, so a
-    // reader that saw a dead projection is not notified again later.
-    guard parent != nil, isActive else { return false }
-    return !parentLifetime.observedIsReleased
+    parent != nil && !parentLifetime.isReleased && isActive
   }
 
   /// A read accessor that reports a released parent or inactive projection
@@ -548,20 +540,6 @@ public final class ScopedStore<ParentReducer: Reducer, ChildState: Equatable, Ch
     self.onDeactivation = onDeactivation
     self.actionTransform = actionTransform
     parent.registerProjectionObserver(self, registration: observerRegistration)
-  }
-
-  // A selection references this projection weakly and can outlive it. When
-  // this projection is released while still active, nothing else tells the
-  // readers of such a selection that it is no longer alive, so deactivate the
-  // selections here, while this projection's registry still exists on
-  // MainActor. A deactivated projection already deactivated them.
-  // `@_optimize(none)` works around the Swift 6.3 EarlyPerfInliner crash on
-  // generic isolated deinitializers (swiftlang/swift#88173; see Store.deinit).
-  @_optimize(none)
-  isolated deinit {
-    guard storedIsActive else { return }
-    observerRegistry.refreshAll()
-    observerRegistry.pruneAllObservers()
   }
 
   private func staleMessage() -> String {

@@ -36,7 +36,7 @@
     "Tests/InnoFlowCoreTests/ProjectionObserverRegistryPerfTests.swift": "5d5b8d4d67266c0e06bd76eb86522ededa022e361a2887441bc36242a9b69faa",
     "Tests/InnoFlowCoreTests/ProjectionRegistrationBoundaryTests.swift": "af0de33dc011a489094e0ea59bfbb642fda8d0501a66840deb74d03e75841b73",
     "Tests/InnoFlowCoreTests/ProjectionReleaseScalingTests.swift": "f2824201b30660b6c985e6feee59b3a34a3084a689c524fd8f367fd53ffa6bd8",
-    "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift": "20541a3f59ab4ed548c4b0b3cd8e49ce8e39f6f90759de24f512d92c9e379429",
+    "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift": "1464919dce2fce7bf702956b66adc28cf4f89c41fec25545463c8f4a350b16c7",
     "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "bd16d033a5e2f61b3a6bc861d0b2efdb26087963067b7a0afaafe63ee8b4c20d",
     "Tests/InnoFlowCoreTests/ReducerCompositionPerfTests.swift": "24efa0ec44f6b760bd382fe71d4df54107d2294271431107f85e2ea25d2e1abb",
     "Tests/InnoFlowCoreTests/RunLaneSnapshotConsistencyTests.swift": "e66c242be821db94376435d588b1ed891be1d3b0693d70b8e4fa3bf165cc708b",
@@ -1327,7 +1327,7 @@
       "displayName": "Dynamic key-path selections read for liveness and value stop being evaluated",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/dynamicKeyPathSelectionsReadForLivenessAreReleased()",
-      "line": 260,
+      "line": 233,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1336,7 +1336,7 @@
       "displayName": "A selection read for its liveness and its value is released after two unread changes",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/livenessAndValueReadFollowsTheValueRule()",
-      "line": 213,
+      "line": 186,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1345,7 +1345,7 @@
       "displayName": "A liveness read retains nothing and is notified when the store is released",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/livenessReadIsNotifiedByTheReleasedStore()",
-      "line": 282,
+      "line": 255,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1354,7 +1354,7 @@
       "displayName": "A liveness reader of a held selection is notified once when the store is released",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/livenessReaderOfAHeldSelectionIsNotifiedOnce()",
-      "line": 321,
+      "line": 294,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1363,7 +1363,7 @@
       "displayName": "Control: a reader whose id: selection is still held is notified through it",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/readerOfAHeldSharedSelectionIsNotified()",
-      "line": 502,
+      "line": 405,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1372,7 +1372,7 @@
       "displayName": "A reader of another holder's id: row selection is notified after the holder lets go",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/readerOfASharedRowSelectionIsNotifiedByTheRow(kind:)",
-      "line": 444,
+      "line": 347,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1381,7 +1381,7 @@
       "displayName": "A reader of another holder's id: selection is notified after the holder lets go",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/readerOfASharedSelectionIsNotifiedByTheStore(kind:)",
-      "line": 424,
+      "line": 327,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1390,7 +1390,7 @@
       "displayName": "A liveness reader of a removed row is not notified again when the store is released",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/removedRowLivenessReaderIsNotNotifiedByTheStoreRelease()",
-      "line": 407,
+      "line": 310,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1399,16 +1399,7 @@
       "displayName": "A liveness read of a row selection retains nothing and is notified when the row goes",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/rowLivenessReadIsNotifiedByTheRemovedRow()",
-      "line": 300,
-      "target": "InnoFlowCoreTests"
-    },
-    {
-      "attribute": "@Test(\"A scope released off the main actor deactivates its selection on the main actor\")",
-      "conditionalContexts": [],
-      "displayName": "A scope released off the main actor deactivates its selection on the main actor",
-      "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
-      "identifier": "ProjectionRetentionTests/scopeReleasedOffTheMainActorDeactivatesItsSelection()",
-      "line": 391,
+      "line": 273,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1417,16 +1408,7 @@
       "displayName": "A scoped selection read for its liveness and its value is released after two changes",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/scopedLivenessAndValueReadFollowsTheValueRule()",
-      "line": 237,
-      "target": "InnoFlowCoreTests"
-    },
-    {
-      "attribute": "@Test(\n    \"A selection that outlives its scope is deactivated, which notifies its reader\",\n    arguments: [false, true]\n  )",
-      "conditionalContexts": [],
-      "displayName": "A selection that outlives its scope is deactivated, which notifies its reader",
-      "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
-      "identifier": "ProjectionRetentionTests/selectionOutlivingItsScopeIsDeactivated(readsValue:)",
-      "line": 365,
+      "line": 210,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1435,16 +1417,7 @@
       "displayName": "A reducer gets another holder's id: selection while its own store reduces",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/sharedSelectionObtainedWhileTheStoreReduces(kind:onRow:)",
-      "line": 466,
-      "target": "InnoFlowCoreTests"
-    },
-    {
-      "attribute": "@Test(\n    \"A liveness read through a single scope is notified when the store is released\",\n    arguments: [false, true]\n  )",
-      "conditionalContexts": [],
-      "displayName": "A liveness read through a single scope is notified when the store is released",
-      "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
-      "identifier": "ProjectionRetentionTests/singleScopeLivenessReadIsNotifiedByTheReleasedStore(holdsScope:)",
-      "line": 337,
+      "line": 369,
       "target": "InnoFlowCoreTests"
     },
     {
