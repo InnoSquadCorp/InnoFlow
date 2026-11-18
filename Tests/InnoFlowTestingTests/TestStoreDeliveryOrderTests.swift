@@ -1069,8 +1069,10 @@ private func settle(until done: @MainActor () -> Bool) async {
 @MainActor
 private func holdUntilClockReadsServed(_ clock: ManualTestClock) {
   let served = ServedFlag()
-  // The lowest priority: the clock serves every read queued before this one.
-  Task.detached(priority: .background) {
+  // The priority of the jobs that read the clock: an actor serves the jobs of
+  // one priority in the order they were queued. A lower one would starve
+  // under load.
+  Task.detached(priority: Task.currentPriority) {
     _ = await clock.now
     served.set()
   }
@@ -2710,8 +2712,9 @@ struct TestStoreDeliveryOrderTests {
     // The job that delivers `r` and `xz` queues a job that queues the job
     // delivering `z`. A `Store` runs `r`'s interpreter task, which suspends
     // to read the clock, then that job, which queues `z`'s job before the
-    // task finishes, and starts `xz`'s walk only in the job queued when it
-    // finishes, behind `z`'s job: `xzv`'s cancel of `z`'s effect comes late.
+    // task finishes, and starts `xz`'s walk only once it finishes, at the
+    // earliest in the job queued then, behind `z`'s job: `xzv`'s cancel of
+    // `z`'s effect comes late.
     let ids = [AnyEffectID(markID)]
     let reference = Store(
       reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
@@ -2938,10 +2941,11 @@ struct TestStoreDeliveryOrderTests {
     // One job delivers `r` and `shape`'s action, then queues the receive of
     // `r` and a job that waits until `r`'s clock read is served, then queues
     // a job that queues the one delivering `z`. A `Store` starts the waiting
-    // walk in the job queued when `r`'s interpreter task finishes, and
-    // resumes it after its own clock read, behind `z`'s job: `z` comes before
-    // `xv`, and `xc`'s cancel of `z`'s effect comes late. `r` then has nothing
-    // left in its anchor chain, which goes on all the same.
+    // walk only once `r`'s interpreter task has finished, at the earliest in
+    // the job queued then, and resumes it after its own clock read, behind
+    // `z`'s job: `z` comes before `xv`, and `xc`'s cancel of `z`'s effect
+    // comes late. `r` then has nothing left in its anchor chain, which goes
+    // on all the same.
     let ids = [AnyEffectID(markID)]
     let referenceClock = ManualTestClock()
     let reference = Store(

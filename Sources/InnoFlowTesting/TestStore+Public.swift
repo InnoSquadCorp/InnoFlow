@@ -20,8 +20,9 @@ extension TestStore {
   /// When a reduction returns an effect a `Store` interprets in a MainActor
   /// task it creates — anything but `.none` or a plain `.send` or `.output`,
   /// also under ownership metadata — the send starts that effect where a
-  /// `Store` walks it: once the MainActor jobs queued before that task have
-  /// run and the walk of the task created before it has finished. It
+  /// `Store` walks it at the earliest: once the MainActor jobs queued before
+  /// that task have run and the walk of the task created before it has
+  /// finished. It
   /// buffers what the effect delivers there, and, once the walk has
   /// suspended, where a `Store` resumes it at the earliest. A buffered
   /// action reduced first whose walk had not started when the send began,
@@ -89,10 +90,10 @@ extension TestStore {
   /// Receives the next buffered effect action, requires it to equal
   /// `expectedAction`, and verifies its state transition.
   ///
-  /// A received action's effect starts where a `Store` would start it, as
-  /// for ``send(_:assert:fileID:filePath:line:column:)``: an effect the
-  /// `Store` interprets in a MainActor task of its own starts once the
-  /// MainActor jobs queued before that task have run and the walk of the
+  /// A received action's effect starts where a `Store` would start it at the
+  /// earliest, as for ``send(_:assert:fileID:filePath:line:column:)``: an
+  /// effect the `Store` interprets in a MainActor task of its own starts once
+  /// the MainActor jobs queued before that task have run and the walk of the
   /// task created before it has finished.
   public func receive(
     _ expectedAction: R.Action,
