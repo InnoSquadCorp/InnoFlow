@@ -51,7 +51,7 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let diffLineLimit: Int
   package let wallClock = ContinuousClock()
   package let manualClock: ManualTestClock?
-  /// Buffered effect actions. They share delivery turns with `outputQueue`.
+  /// Buffered effect actions. Each delivery opens an anchor chain.
   package let queue: ActionQueue<R.Action>
   /// Buffered outputs.
   package let outputQueue: ActionQueue<R.Output>
@@ -103,8 +103,11 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let runScheduler = EffectRunScheduler()
   package var invariants: [TestStoreInvariant<R.State>] = []
   package var phaseCoverageObserver: (any PhaseMapRuntimeObserver)?
-  /// The buffered action the test is reducing, while that reduction lasts.
-  package var receivedReduction: TestStoreReceivedReduction?
+  /// The delivery of the buffered action the test is reducing, until the
+  /// reduction-turn acceptance of its effect has run.
+  package var reducingAction: TestStoreDelivery?
+  /// The reductions whose effect walk the store follows, by effect sequence.
+  package var followedWalks: [UInt64: TestStoreFollowedWalk] = [:]
 
   package var walker: EffectWalker<TestStore<R>> {
     EffectWalker(driver: self)
@@ -122,9 +125,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     self.reducer = reducer
     self.state = initialState
     self.manualClock = clock
-    let deliveryTurns = TestStoreDeliveryTurns()
-    self.queue = ActionQueue(turns: deliveryTurns)
-    self.outputQueue = ActionQueue(turns: deliveryTurns)
+    self.queue = ActionQueue(opensAnchorChains: true)
+    self.outputQueue = ActionQueue(opensAnchorChains: false)
     // A deadline is a failure backstop; one far beyond a day cannot be
     // represented by every wait that sleeps on it, so it is clamped like
     // `INNOFLOW_TESTSTORE_EFFECT_TIMEOUT`.

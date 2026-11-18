@@ -70,12 +70,7 @@ extension TestStore {
       location: location
     )
 
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location, flowTaskTracker: dispatch.tracker),
-      awaited: false
-    )
+    await walkSentEffect(effect, location: location, flowTaskTracker: dispatch.tracker)
     return dispatch.task
   }
 
@@ -610,13 +605,8 @@ extension TestStore {
     flowTaskTracker: FlowTaskTracker? = nil,
     location: TestStoreSourceLocation
   ) async {
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location,
-        flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker),
-      awaited: false
-    )
+    await walkSentEffect(
+      effect, location: location, flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker)
   }
 
   package func walkScopedEffect(_ effect: ReducerEffect<R.Action, R.Output>) async {
