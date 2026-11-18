@@ -967,6 +967,33 @@ private func queueEmission<R: Reducer>(
   }
 }
 
+/// Queues a MainActor job that delivers `action` in a context the store
+/// makes now, under `ids`, as a run started before does: a cancellation of
+/// one of `ids` before the job runs covers the delivery.
+@MainActor
+@discardableResult
+private func queueEmissionOfEarlierEffect<R: Reducer>(
+  _ action: R.Action,
+  under ids: [AnyEffectID],
+  into store: Store<R>
+) -> Task<Void, Never> {
+  let bridge = store.effectBridge
+  let context = bridge.makeEffectContext(sequence: bridge.nextSequence(), cancellationIDs: ids)
+  return Task { @MainActor in store.deliverAction(action, context: context) }
+}
+
+/// The same job for a test store.
+@MainActor
+@discardableResult
+private func queueEmissionOfEarlierEffect<R: Reducer>(
+  _ action: R.Action,
+  under ids: [AnyEffectID],
+  into store: TestStore<R>
+) -> Task<Void, Never> where R.State: Equatable {
+  let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: ids)
+  return Task { @MainActor in store.deliverAction(action, context: context) }
+}
+
 /// Returns once every MainActor job queued before the call has run.
 @MainActor
 private func mainActorBarrier() async {
@@ -1154,6 +1181,127 @@ private struct ScopedSentFollowUpParent: Reducer {
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     composed.reduce(into: &state, action: action)
+  }
+}
+
+/// What competes with the interpreted follow-up of an action a send drains.
+private enum SendDrainShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// Nothing.
+  case alone
+  /// `x`, delivered by a job queued before `a` was sent.
+  case queuedEmission
+  /// The same, and `c` cancels the ID `x` is delivered under.
+  case cancelledEmission
+
+  var testDescription: String { rawValue }
+
+  /// What a `Store` reduces: `a`, `b` and `c` during the two sends, then the
+  /// queued job, then the interpreter job of `b`, which it created when it
+  /// reduced `b` during the first send.
+  var log: [String] {
+    self == .queuedEmission ? ["a", "b", "c", "x", "b2"] : ["a", "b", "c", "b2"]
+  }
+}
+
+private let drainedEmissionID = EffectID<String>("delivery-order-drained-emission")
+
+/// `a` returns `.send(.b)`; `b` returns `.send(.b2).cancellable(id)`; `c`
+/// returns nothing, or cancels the ID of the queued emission.
+private struct SendDrainFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case a, b, b2, c, x
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  let shape: SendDrainShape
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    state.log.append(action.rawValue)
+    switch action {
+    case .a: return .send(.b)
+    case .b: return EffectTask<Action>.send(.b2).cancellable(followID)
+    case .c: return shape == .cancelledEmission ? .cancel(drainedEmissionID) : .none
+    default: return .none
+    }
+  }
+}
+
+/// `SendDrainFeature` as a child, sent through the root or a scoped store.
+private struct SendDrainParent: Reducer {
+  struct State: Equatable, Sendable {
+    var child = SendDrainFeature.State()
+  }
+
+  enum Action: Equatable, Sendable {
+    case child(SendDrainFeature.Action)
+
+    static let childPath = CasePath<Self, SendDrainFeature.Action>(
+      embed: Self.child,
+      extract: { action in
+        guard case .child(let childAction) = action else { return nil }
+        return childAction
+      }
+    )
+  }
+
+  let shape: SendDrainShape
+
+  private var composed: some Reducer<State, Action, Never> {
+    Scope(state: \.child, action: Action.childPath, reducer: SendDrainFeature(shape: shape))
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    composed.reduce(into: &state, action: action)
+  }
+}
+
+/// `a` returns `.send(.b)`; `b`, `b2` and `c` return a wrapped send of the
+/// next action, so the sent action's interpreter competes with the follow-up
+/// of the drained one.
+private struct DeepSendDrainFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case a, b, b2, b3, c, c2
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    state.log.append(action.rawValue)
+    switch action {
+    case .a: return .send(.b)
+    case .b: return EffectTask<Action>.send(.b2).cancellable(followID)
+    case .b2: return EffectTask<Action>.send(.b3).cancellable(markID)
+    case .c: return EffectTask<Action>.send(.c2).cancellable(otherID)
+    default: return .none
+    }
+  }
+}
+
+private let drainThrottleID = EffectID<String>("delivery-order-drain-throttle")
+
+/// `r` returns a throttled `.send(.rl)`, whose walk reads the clock first.
+private struct ThrottledDrainFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case r, rl, c, y
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    state.log.append(action.rawValue)
+    guard action == .r else { return .none }
+    return EffectTask<Action>.send(.rl).throttle(drainThrottleID, for: .seconds(1))
   }
 }
 
@@ -1832,6 +1980,112 @@ struct TestStoreDeliveryOrderTests {
     }
     await store.finish()
     #expect(store.state.child.log == shape.log)
+  }
+
+  @Test(
+    "A send reduces the sent action before the interpreted effects of the actions it drains",
+    arguments: SendDrainShape.allCases, [false, true])
+  fileprivate func sendReducesSentActionBeforeDrainedInterpreters(
+    shape: SendDrainShape, viaScope: Bool
+  ) async {
+    // A `Store` reduces `b` with the first send and creates its interpreter
+    // job then; it reduces `c` during the second send, before that job and
+    // before the job queued ahead of it.
+    let atSend = ["a", "b", "c"]
+    let emissionIDs = [AnyEffectID(drainedEmissionID)]
+    let reference = Store(reducer: SendDrainParent(shape: shape), initialState: .init())
+    let referenceEmission =
+      shape == .alone
+      ? nil : queueEmissionOfEarlierEffect(.child(.x), under: emissionIDs, into: reference)
+    reference.send(.child(.a))
+    reference.send(.child(.c))
+    #expect(reference.state.child.log == atSend)
+    await referenceEmission?.value
+    await settle { reference.state.child.log.count == shape.log.count }
+    #expect(reference.state.child.log == shape.log)
+
+    let store = TestStore(reducer: SendDrainParent(shape: shape), initialState: .init())
+    store.exhaustivity = .off
+    let child = store.scope(state: \.child, action: SendDrainParent.Action.childPath)
+    if shape != .alone {
+      queueEmissionOfEarlierEffect(.child(.x), under: emissionIDs, into: store)
+    }
+    if viaScope {
+      await child.send(.a)
+      await child.send(.c)
+    } else {
+      await store.send(.child(.a))
+      await store.send(.child(.c))
+    }
+    // The second send drained `b` and reduced `c` before it started `b`'s
+    // effect where the Store's interpreter job runs.
+    #expect(store.state.child.log == atSend)
+    var log = atSend
+    for entry in shape.log.dropFirst(atSend.count) {
+      log.append(entry)
+      await store.receive(.child(SendDrainFeature.Action(entry))) { [log] in $0.child.log = log }
+    }
+    await store.finish()
+    #expect(store.state.child.log == shape.log)
+  }
+
+  @Test(
+    "A sent action's interpreter comes before the follow-ups of the actions its send drains",
+    arguments: [true, false])
+  func sentInterpreterPrecedesDrainedFollowUps(exhaustive: Bool) async {
+    // A `Store` creates `b`'s interpreter job during the first send and
+    // `c`'s during the second; `b`'s job creates the one that reduces `b3`
+    // behind `c`'s.
+    let expected = ["a", "b", "c", "b2", "c2", "b3"]
+    let reference = Store(reducer: DeepSendDrainFeature(), initialState: .init())
+    reference.send(.a)
+    reference.send(.c)
+    await settle { reference.state.log.count == expected.count }
+    #expect(reference.state.log == expected)
+
+    let store = TestStore(reducer: DeepSendDrainFeature(), initialState: .init())
+    store.exhaustivity = .off
+    await store.send(.a)
+    await store.send(.c)
+    store.exhaustivity = exhaustive ? .on : .off
+    var log = ["a", "b", "c"]
+    for entry in expected.dropFirst(log.count) {
+      log.append(entry)
+      await store.receive(DeepSendDrainFeature.Action(entry)) { [log] in $0.log = log }
+    }
+    await store.finish()
+    #expect(store.state.log == expected)
+  }
+
+  @Test("A send leaves buffered what is delivered while it drains earlier actions")
+  func sendLeavesValuesDeliveredDuringItsDrain() async {
+    // `r`'s interpreter job already ran when `c` is sent, and `y`'s job was
+    // queued before the send: a `Store` reduces `y` after `c`.
+    let reference = Store(
+      reducer: ThrottledDrainFeature(), initialState: .init(),
+      clock: .manual(ManualTestClock()))
+    await queueEmission(.r, into: reference).value
+    await mainActorBarrier()
+    let referenceEmission = queueEmission(.y, into: reference)
+    reference.send(.c)
+    await referenceEmission.value
+    #expect(reference.state.log.firstIndex(of: "c")! < reference.state.log.firstIndex(of: "y")!)
+
+    let clock = ManualTestClock()
+    let store = TestStore(reducer: ThrottledDrainFeature(), initialState: .init(), clock: clock)
+    store.exhaustivity = .off
+    await queueEmission(.r, into: store).value
+    await mainActorBarrier()
+    queueEmission(.y, into: store)
+    // The send drains `r`; its throttle walk reads the manual clock, and `y`
+    // is delivered while it waits.
+    await store.send(.c)
+    #expect(store.state.log == ["r", "c"])
+    await store.receive(.y)
+    await store.receive(.rl)
+    await clock.advance(by: .seconds(1))
+    await store.finish()
+    #expect(store.state.log == ["r", "c", "y", "rl"])
   }
 
   @Test(

@@ -13,21 +13,30 @@ package import InnoFlowCore
 // the values the synchronous part of that walk delivers are handled where
 // that task runs. MainActor tasks run in the order they are created, so such
 // a value is handled where a MainActor task created while the action was
-// handled runs.
+// handled runs, unless the interpreter task created before it is still
+// suspended — a throttle reading its clock, a scheduled run waiting for
+// admission — which the task awaits before it walks. A test store does not
+// model that wait.
 //
 // A test store buffers the values at the same points instead, reduces an
 // action when the test receives it, and keeps each buffer in the order in
 // which a `Store` handles the values, where every value was handled at its
 // delivery:
 //
-// - Every effect-action delivery, and every `send` whose reduction returns an
-//   effect a `Store` interprets, opens an anchor chain and queues its first
-//   marker task right away. When a marker runs, it takes the next MainActor
-//   event as its position: the place where the `Store` runs the interpreter
-//   task of that action.
+// - Every effect-action delivery outside the synchronous part of a walk the
+//   test store follows, and every `send` whose reduction returns an effect a
+//   `Store` interprets, opens an anchor chain and queues its first marker
+//   task right away. When a marker runs, it takes the next MainActor event as
+//   its position: the place where the `Store` runs the interpreter task of
+//   that action.
 // - A received or sent action whose effect a `Store` interprets is walked
 //   only once its anchor has run. The MainActor jobs queued before the anchor
 //   deliver their values first, as they do in a `Store`.
+// - A `send` first reduces the buffered actions delivered before it, which a
+//   `Store` reduced at their delivery, then the sent action, which a `Store`
+//   reduces before any MainActor job queued by then runs. It walks the
+//   drained actions' effects whose anchors have not run only after that, in
+//   anchor order, and leaves buffered every value delivered from the send on.
 // - A value delivered outside such a walk is handled at its delivery, a new
 //   event. A plain `.send` or `.output` that a received action's reduction
 //   returns, also under ownership metadata, is drained with the reduction:
@@ -67,6 +76,31 @@ package struct TestStoreOrder: Comparable, Sendable {
 
   package static func < (lhs: Self, rhs: Self) -> Bool {
     (lhs.event, lhs.order) < (rhs.event, rhs.order)
+  }
+
+  /// The place of an action the test sends now, which a `Store` reduces in
+  /// the current MainActor job: behind every value delivered or anchored
+  /// before, ahead of every value delivered or anchored from now on.
+  @MainActor
+  package static func now() -> Self {
+    Self(event: TestStoreEvents.next(), order: 0)
+  }
+}
+
+/// The effect walks of the buffered actions a send reduces before the sent
+/// action whose anchors had not run when the send began: a `Store` runs
+/// those interpreter tasks after it reduces the sent action.
+@MainActor
+package struct TestStoreDeferredWalks {
+  fileprivate var walks: [@MainActor () async -> Void] = []
+
+  package init() {}
+
+  /// Runs the walks in order, each once its anchor has run.
+  fileprivate func run() async {
+    for walk in walks {
+      await walk()
+    }
   }
 }
 
@@ -352,7 +386,54 @@ extension TestStore {
     didReduce: (R.State) -> Void
   ) async {
     defer { entry.finish() }
-    guard entry.isDeliverable else { return }
+    guard
+      let reduction = reduceAndAccept(
+        entry, source: source, location: location, willReduce: willReduce, didReduce: didReduce)
+    else { return }
+    await walkReceivedEffect(reduction.effect, context: reduction.context, of: entry)
+  }
+
+  /// Reduces a buffered action that a send drains before it reduces the sent
+  /// action. A `Store` reduced that action at its delivery, but runs the
+  /// interpreter task it created then only after the sent action, when that
+  /// task has not run yet: such a walk is added to `deferred` instead, still
+  /// anchored where that task runs, and keeps the action's activity lease.
+  package func reduceBufferedActionBeforeSend(
+    _ entry: ActionQueue<R.Action>.QueuedAction,
+    location: TestStoreSourceLocation,
+    deferring deferred: inout TestStoreDeferredWalks
+  ) async {
+    guard
+      let reduction = reduceAndAccept(
+        entry, source: .automatic, location: location, willReduce: { _ in }, didReduce: { _ in })
+    else {
+      entry.finish()
+      return
+    }
+    if reduction.effect.storeHandling == .interpreted,
+      entry.delivery.followUpAnchor?.position == nil
+    {
+      deferred.walks.append { [self] in
+        defer { entry.finish() }
+        await walkReceivedEffect(reduction.effect, context: reduction.context, of: entry)
+      }
+      return
+    }
+    defer { entry.finish() }
+    await walkReceivedEffect(reduction.effect, context: reduction.context, of: entry)
+  }
+
+  /// Reduces a deliverable buffered action and runs the reduction-turn
+  /// acceptance of its effect; `nil` when the action is no longer
+  /// deliverable.
+  private func reduceAndAccept(
+    _ entry: ActionQueue<R.Action>.QueuedAction,
+    source: TestStoreReductionSource,
+    location: TestStoreSourceLocation,
+    willReduce: (R.State) -> Void,
+    didReduce: (R.State) -> Void
+  ) -> (effect: ReducerEffect<R.Action, R.Output>, context: EffectExecutionContext)? {
+    guard entry.isDeliverable else { return nil }
     let previousState = state
     willReduce(previousState)
 
@@ -364,7 +445,14 @@ extension TestStore {
     let context = reductionTurnContext(
       for: effect, location: location, flowTaskTracker: entry.context?.flowTaskTracker)
     reducingAction = nil
+    return (effect, context)
+  }
 
+  private func walkReceivedEffect(
+    _ effect: ReducerEffect<R.Action, R.Output>,
+    context: EffectExecutionContext,
+    of entry: ActionQueue<R.Action>.QueuedAction
+  ) async {
     switch effect.storeHandling {
     case .nothing:
       entry.delivery.settle()
@@ -383,20 +471,29 @@ extension TestStore {
   /// cancellation that effect requests already accepted. A `Store` creates
   /// an interpreter task for an effect it does not drain at the reduction;
   /// the walk waits until that task would run.
+  ///
+  /// - Parameter deferred: The walks of the buffered actions the send reduced
+  ///   first whose interpreter tasks a `Store` runs after the sent action's
+  ///   reduction, ahead of the one it creates for the sent action.
   package func walkSentEffect(
     _ effect: ReducerEffect<R.Action, R.Output>,
     location: TestStoreSourceLocation,
-    flowTaskTracker: FlowTaskTracker?
+    flowTaskTracker: FlowTaskTracker?,
+    after deferred: TestStoreDeferredWalks = .init()
   ) async {
     let context = reductionTurnContext(
       for: effect, location: location, flowTaskTracker: flowTaskTracker)
     guard effect.storeHandling == .interpreted else {
       // A `Store` handles a drained follow-up of a sent action at its
-      // delivery, during the send.
+      // delivery, during the send, before any interpreter task runs.
       await walker.walk(effect, context: context, awaited: false)
+      await deferred.run()
       return
     }
+    // The `Store` creates the interpreter task at the reduction, behind the
+    // ones of the actions the send reduced first.
     let chain = TestStoreAnchorChain(markerCount: queue.anchorMarkerCount)
+    await deferred.run()
     await walkFollowing(effect, context: context, walk: TestStoreFollowedWalk(sentChain: chain))
   }
 
@@ -560,7 +657,23 @@ extension ReducerEffect {
 
 extension TestStore {
   package func popBufferedQueuedAction() -> ActionQueue<R.Action>.QueuedAction? {
-    while let entry = queue.popBuffered() {
+    popBufferedQueuedAction(handledBefore: nil)
+  }
+
+  /// Pops the next deliverable buffered action a `Store` handles before
+  /// `limit`, or `nil` when the next one is handled after it.
+  package func popBufferedQueuedAction(
+    before limit: TestStoreOrder
+  ) -> ActionQueue<R.Action>.QueuedAction? {
+    popBufferedQueuedAction(handledBefore: limit)
+  }
+
+  private func popBufferedQueuedAction(
+    handledBefore limit: TestStoreOrder?
+  ) -> ActionQueue<R.Action>.QueuedAction? {
+    while let entry = queue.popBuffered(if: { entry in
+      limit.map { entry.delivery.storeOrder < $0 } ?? true
+    }) {
       guard entry.isDeliverable else {
         entry.finish()
         continue

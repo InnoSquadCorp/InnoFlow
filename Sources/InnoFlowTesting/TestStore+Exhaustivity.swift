@@ -5,16 +5,28 @@
 import Foundation
 
 extension TestStore {
+  /// Reduces the buffered actions a `Store` reduced before an action the
+  /// test sends now: those delivered before the send, with the values their
+  /// reductions drain and the values of interpreter tasks that already ran.
+  ///
+  /// - Returns: The walks of the drained actions whose interpreter tasks a
+  ///   `Store` runs after it reduces the sent action; the send runs them
+  ///   after its reduction.
   package func prepareForSend(
     location: TestStoreSourceLocation
-  ) async {
+  ) async -> TestStoreDeferredWalks {
     noteTestInteraction(location: location)
     let deadline = wallClock.now.advanced(by: effectTimeout)
     var skippedActionCount = 0
     var skippedActionDescriptions: [String] = []
     var didDrainAction = false
+    // A `Store` reduces the sent action in the current MainActor job, before
+    // any job queued now runs: values delivered or anchored from now on stay
+    // buffered.
+    let sendOrder = TestStoreOrder.now()
+    var deferred = TestStoreDeferredWalks()
 
-    while let action = popBufferedQueuedAction() {
+    while let action = popBufferedQueuedAction(before: sendOrder) {
       // Give one already-buffered action a chance to recover even when the
       // configured timeout is zero, then bound recursive synchronous sends.
       if didDrainAction, wallClock.now >= deadline {
@@ -39,17 +51,18 @@ extension TestStore {
           """,
           location
         )
-        return
+        action.finish()
+        return deferred
       }
       if skippedActionDescriptions.count < 20 {
         skippedActionDescriptions.append(String(describing: action.action))
       }
       skippedActionCount += 1
-      await applyUnassertedAction(action, location: location)
+      await reduceBufferedActionBeforeSend(action, location: location, deferring: &deferred)
       didDrainAction = true
     }
 
-    guard skippedActionCount > 0 else { return }
+    guard skippedActionCount > 0 else { return deferred }
 
     let actionList = formattedSkippedActions(
       skippedActionDescriptions,
@@ -68,7 +81,7 @@ extension TestStore {
       )
 
     case .off(let showSkippedAssertions):
-      guard showSkippedAssertions else { return }
+      guard showSkippedAssertions else { return deferred }
       warningReporter(
         """
         TestStore skipped \(skippedActionCount) effect action(s) before sending a new action:
@@ -79,6 +92,7 @@ extension TestStore {
         location
       )
     }
+    return deferred
   }
 
   private func formattedSkippedActions(

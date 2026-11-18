@@ -10,17 +10,20 @@ extension TestStore {
 
   /// Sends a user action and verifies its state transition.
   ///
-  /// Buffered effect actions are reduced first. Exhaustive stores report
+  /// Buffered effect actions delivered before the send are reduced first, as
+  /// a `Store` reduced them at their delivery. Exhaustive stores report
   /// those actions as unreceived; non-exhaustive stores continue silently or
   /// emit warnings according to ``exhaustivity``. Recovery is bounded by the
   /// store's effect timeout so a recursively emitted action cannot block the
   /// send forever.
   ///
-  /// When the reduction returns an effect a `Store` interprets in a MainActor
-  /// task it creates — anything but `.none` or a plain `.send` or `.output` —
-  /// the send starts that effect once the MainActor jobs queued before that
-  /// task have run, and buffers what the effect delivers before it first
-  /// suspends where that task runs.
+  /// When a reduction returns an effect a `Store` interprets in a MainActor
+  /// task it creates — anything but `.none` or a plain `.send` or `.output`,
+  /// also under ownership metadata — the send starts that effect once the
+  /// MainActor jobs queued before that task have run, and buffers what the
+  /// effect delivers before it first suspends where that task runs. For a
+  /// buffered action reduced first whose task has not run yet, that is after
+  /// the new action is reduced, as in a `Store`.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -54,7 +57,7 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
-    await prepareForSend(location: location)
+    let deferredWalks = await prepareForSend(location: location)
     let dispatch = makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousState = state
@@ -76,7 +79,8 @@ extension TestStore {
       location: location
     )
 
-    await walkSentEffect(effect, location: location, flowTaskTracker: dispatch.tracker)
+    await walkSentEffect(
+      effect, location: location, flowTaskTracker: dispatch.tracker, after: deferredWalks)
     return dispatch.task
   }
 

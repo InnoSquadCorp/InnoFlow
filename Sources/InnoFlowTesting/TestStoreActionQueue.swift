@@ -277,8 +277,9 @@ package final class ActionQueue<Action: Sendable> {
     return received
   }
 
-  func popBuffered() -> QueuedAction? {
-    guard headIndex < buffer.count else { return nil }
+  /// Removes and returns the first buffered value when `isEligible` accepts it.
+  func popBuffered(if isEligible: (QueuedAction) -> Bool = { _ in true }) -> QueuedAction? {
+    guard headIndex < buffer.count, isEligible(buffer[headIndex]) else { return nil }
     let queuedAction = buffer[headIndex]
     headIndex += 1
     compactBufferIfNeeded()

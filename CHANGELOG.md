@@ -143,7 +143,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   emission, and a follow-up of a run's emission before the run's next
   emission or a `concatenate` step after a run. `send` and `receive` of an
   action whose effect a `Store` interprets let the MainActor jobs queued
-  before that task run before they return. Before, the order, and with a
+  before that task run before they return. A `send` that first reduces
+  buffered actions reduces the sent action before it starts their wrapped
+  follow-ups, as a `Store` does; before, such a follow-up was reduced ahead
+  of the sent action. Before, the order, and with a
   cancellation the set of received actions and outputs, depended on when
   the test received the first action. Where the `Store` order is itself a
   race, such as a wrapped follow-up of a wrapped follow-up of a run's

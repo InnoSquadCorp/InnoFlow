@@ -96,7 +96,7 @@ where Root.State: Equatable {
     assert updateExpectedState: ((inout ChildState) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
-    await parent.prepareForSend(location: location)
+    let deferredWalks = await parent.prepareForSend(location: location)
     let dispatch = parent.makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousRootState = parent.state
@@ -120,7 +120,8 @@ where Root.State: Equatable {
       location: location
     )
 
-    await parent.walkScopedEffect(effect, flowTaskTracker: dispatch.tracker, location: location)
+    await parent.walkSentEffect(
+      effect, location: location, flowTaskTracker: dispatch.tracker, after: deferredWalks)
     return dispatch.task
   }
 

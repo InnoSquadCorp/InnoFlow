@@ -217,6 +217,12 @@
       "source": "Sources/InnoFlowCore/EffectDriver.swift",
       "declaration": "package final class ThrottleStateMap<Action: Sendable, Output: Sendable>",
       "reason": "A throttle window's completion holds each request it serves separately, so a cancellation that removes a request from the window releases only that request's dispatch; no consumer can reach the package throttle state."
+    },
+    {
+      "message": "API breakage: func TestStore.prepareForSend(location:) has return type change from () to InnoFlowTesting.TestStoreDeferredWalks",
+      "source": "Sources/InnoFlowTesting/TestStore+Exhaustivity.swift",
+      "declaration": "package func prepareForSend(",
+      "reason": "The package send drain returns the effect walks of the buffered actions it reduced whose interpreter tasks a Store runs after the sent action, so the send runs them after its reduction; only the package's own root and scoped sends call it."
     }
   ]
 }

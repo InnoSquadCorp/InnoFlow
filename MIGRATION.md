@@ -126,11 +126,15 @@ reduced, and a buffered output as one it has already published:
   same `concatenate` (as in 6.0.x), and a run emission whose MainActor job
   was already queued when the action was delivered or sent — and ahead of
   what is delivered later, such as the emitting run's next emission or a
-  `concatenate` step after a run. `send` and `receive` of an action whose
-  effect is not `.none` or a plain `.send` or `.output` now start that
-  effect only once that task would run, so a MainActor job queued before it,
-  such as a run's emission, is delivered before they return: an exhaustive
-  test receives that emission before the wrapped follow-up. Where the
+  `concatenate` step after a run. `send` and `receive` now start an effect
+  that is not `.none` or a plain `.send` or `.output` only once that task
+  would run, so a MainActor job queued before it, such as a run's emission,
+  is delivered before they return: an exhaustive test receives that
+  emission before the wrapped follow-up. A `send` that first reduces
+  buffered actions (in a non-exhaustive store, or after reporting them in an
+  exhaustive one) reduces the sent action before it starts their effects,
+  so their wrapped follow-ups come after the sent action; in 6.0.x such a
+  follow-up was reduced first. Where the
   `Store` order is a race — a run's next emission against a wrapped
   follow-up of a wrapped follow-up of its previous emission — a test can
   receive either order; accept both with `receive(where:)` or use a
