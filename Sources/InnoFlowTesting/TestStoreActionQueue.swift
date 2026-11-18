@@ -94,7 +94,11 @@ package final class ActionQueue<Action: Sendable> {
       return id.map { context?.cancellationIDs.contains($0) == true } ?? true
     }
 
-    func finish() { activity?.finish() }
+    /// The value is done: it was reduced, or it left the buffer unreduced.
+    @MainActor func finish() {
+      activity?.finish()
+      delivery.settle()
+    }
   }
 
   /// Where a value no waiter takes is buffered.
@@ -115,8 +119,9 @@ package final class ActionQueue<Action: Sendable> {
     let resolution: ActionQueueWaiterResolution
   }
 
-  /// The delivery turns this queue shares with the other queue of its store.
-  let turns: TestStoreDeliveryTurns
+  /// Counts the markers of the anchor chains its deliveries open; `nil` for
+  /// outputs, which are never reduced.
+  let anchorMarkerCount: TestStoreAnchorMarkerCount?
   private var buffer: [QueuedAction] = []
   private var headIndex = 0
   // Waiters intentionally use an ordered array instead of a dictionary so
@@ -127,8 +132,10 @@ package final class ActionQueue<Action: Sendable> {
   /// Values resumed to a waiter that has not run yet; they are still pending.
   private var handedOff: [QueuedAction] = []
 
-  package init(turns: TestStoreDeliveryTurns = .init()) {
-    self.turns = turns
+  /// - Parameter opensAnchorChains: Whether a value delivered at its own
+  ///   delivery opens an anchor chain: an action does, an output does not.
+  package init(opensAnchorChains: Bool = true) {
+    anchorMarkerCount = opensAnchorChains ? TestStoreAnchorMarkerCount() : nil
   }
 
   package var pendingWaiterCount: Int {
@@ -153,7 +160,8 @@ package final class ActionQueue<Action: Sendable> {
   /// Delivers a value to the first waiter, or buffers it at `placement`.
   ///
   /// - Parameter delivery: Where a `Store` handles the value; by default at
-  ///   its own delivery. It is recorded before a waiter is resumed.
+  ///   its own delivery. It is recorded, and the anchor marker of an action
+  ///   it opens is queued, before a waiter is resumed.
   /// - Returns: The record of the delivery.
   @discardableResult
   func enqueue(
@@ -166,7 +174,7 @@ package final class ActionQueue<Action: Sendable> {
     let queuedAction = QueuedAction(
       action: action,
       context: context,
-      delivery: delivery ?? .delivered(in: turns),
+      delivery: delivery ?? .delivered(opening: anchorMarkerCount),
       tracksActivity: tracksActivity
     )
     while !waiters.isEmpty {

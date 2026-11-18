@@ -16,11 +16,18 @@ import Testing
 // non-exhaustively, for orders a `Store` fixes: a cancellation that comes
 // after a delivery never removes the delivered value; a received action's
 // plain follow-ups, at any depth, precede everything delivered after it; and
-// a follow-up a `Store` interprets in a job of its own comes after what was
-// delivered in the received action's MainActor job and before what is
-// delivered in a later one, such as the run's next emission or the next step
-// of a `concatenate` after a run. A cancellation the test issues itself is
-// the one exception to the first rule: it lands before the values it covers.
+// a follow-up a `Store` interprets in a task it creates while it handles the
+// action comes where that task runs: after the MainActor jobs queued before
+// it, such as the rest of the received action's job or an emission already
+// on its way when the action was delivered or sent, and before the jobs
+// queued after it, such as the run's next emission or the next step of a
+// `concatenate` after a run. A cancellation the test issues itself is the
+// one exception to the first rule: it lands before the values it covers.
+//
+// A test queues a MainActor job ahead of its next statement by creating a
+// MainActor task that delivers through the store's effect driver, as the
+// MainActor job of a run's emission does: created MainActor tasks run in the
+// order they are created, so no blocking or sleeping is needed.
 
 private let markID = EffectID<String>("delivery-order-mark")
 private let otherID = EffectID<String>("delivery-order-other")
@@ -266,6 +273,15 @@ private struct ChainFeature: Reducer {
       case "a": self = .a(index)
       case "f": self = .f(index)
       default: self = .g(index)
+      }
+    }
+
+    var entry: String {
+      switch self {
+      case .start: "start"
+      case .a(let index): "a\(index)"
+      case .f(let index): "f\(index)"
+      case .g(let index): "g\(index)"
       }
     }
   }
@@ -909,6 +925,264 @@ private func waitUntilIdle<R: Reducer>(_ store: TestStore<R>) async where R.Stat
   await waitFor(store) { store.finishActivity.snapshot.activeCount == 0 }
 }
 
+// MARK: - Interpreter anchors
+
+private let emitterID = EffectID<String>("delivery-order-emitter")
+private let nestedID = EffectID<String>("delivery-order-nested")
+
+/// Queues a MainActor job that delivers `action` through the store's effect
+/// driver under `ids`, as the MainActor job of a run's emission does, and
+/// then runs `next` in the same job. MainActor tasks run in the order they
+/// are created, so the job runs after every job queued before it and before
+/// every job queued after it, without blocking or sleeping.
+@MainActor
+@discardableResult
+private func queueEmission<R: Reducer>(
+  _ action: R.Action,
+  under ids: [AnyEffectID] = [],
+  into store: Store<R>,
+  then next: (@MainActor @Sendable () -> Void)? = nil
+) -> Task<Void, Never> {
+  Task { @MainActor in
+    let bridge = store.effectBridge
+    let context = bridge.makeEffectContext(sequence: bridge.nextSequence(), cancellationIDs: ids)
+    store.deliverAction(action, context: context)
+    next?()
+  }
+}
+
+/// The same job for a test store.
+@MainActor
+@discardableResult
+private func queueEmission<R: Reducer>(
+  _ action: R.Action,
+  under ids: [AnyEffectID] = [],
+  into store: TestStore<R>,
+  then next: (@MainActor @Sendable () -> Void)? = nil
+) -> Task<Void, Never> where R.State: Equatable {
+  Task { @MainActor in
+    let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: ids)
+    store.deliverAction(action, context: context)
+    next?()
+  }
+}
+
+/// Returns once every MainActor job queued before the call has run.
+@MainActor
+private func mainActorBarrier() async {
+  await Task { @MainActor in }.value
+}
+
+/// Lets a `Store` run the MainActor jobs it queues, one level of interpreter
+/// tasks per barrier, until `done` holds.
+@MainActor
+private func settle(until done: @MainActor () -> Bool) async {
+  for _ in 0..<16 where !done() {
+    await mainActorBarrier()
+  }
+}
+
+/// What the interpreted follow-up of `pong` competes with: `x`, delivered by
+/// a job queued before `ping` was sent.
+private enum CompetingShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `pong` returns `.send(.p2).cancellable(id)`.
+  case order
+  /// The same, and `p2` cancels the ID `x` was delivered under.
+  case followUpCancelsEmission
+  /// `pong` returns `output(.op).cancellable(id)`, and `x` returns `output(.ox)`.
+  case outputs
+
+  var testDescription: String { rawValue }
+
+  /// What a `Store` reduces: `pong` during the send, `x` in the queued job,
+  /// then the follow-up in the interpreter job queued behind it.
+  var log: [String] { self == .outputs ? ["pong", "x"] : ["pong", "x", "p2"] }
+}
+
+private struct CompetingFollowUpFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case ping, pong, p2, x
+  }
+
+  enum Output: Equatable, Sendable {
+    case op, ox
+  }
+
+  let shape: CompetingShape
+
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
+    if action != .ping { state.log.append(action.rawValue) }
+    switch action {
+    case .ping:
+      return .send(.pong)
+    case .pong:
+      return shape == .outputs
+        ? Self.output(.op).cancellable(followID)
+        : ReducerEffect<Action, Output>.send(.p2).cancellable(followID)
+    case .p2:
+      return shape == .followUpCancelsEmission ? .cancel(emitterID) : .none
+    case .x:
+      return shape == .outputs ? Self.output(.ox) : .none
+    }
+  }
+}
+
+/// When the test receives `pong`, and whether exhaustively.
+private struct ReceiveMode: Sendable, CustomTestStringConvertible {
+  /// After the queued job and `pong`'s anchor ran, instead of in the job
+  /// that sent `ping`.
+  let late: Bool
+  let exhaustive: Bool
+
+  var testDescription: String {
+    "\(late ? "late" : "eager")-\(exhaustive ? "exhaustive" : "nonExhaustive")"
+  }
+
+  static let all = [false, true].flatMap { late in
+    [true, false].map { Self(late: late, exhaustive: $0) }
+  }
+}
+
+/// A delivery made between the jobs that deliver `x` and `y`.
+private enum InterveningDelivery: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  case nothing
+  /// Another store delivers `pong`.
+  case otherStore
+  /// The same store delivers `pong`.
+  case sameStore
+
+  var testDescription: String { rawValue }
+
+  /// What a `Store` reduces: `x2` in the interpreter job queued while `x`
+  /// was reduced, behind the job that delivers `y`.
+  var log: [String] { (self == .sameStore ? ["pong"] : []) + ["x", "y", "x2"] }
+}
+
+private struct QueuedEmissionsFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case ping, pong, x, x2, y
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    if action != .ping { state.log.append(action.rawValue) }
+    switch action {
+    case .ping: return .send(.pong)
+    case .x: return EffectTask<Action>.send(.x2).cancellable(followID)
+    default: return .none
+    }
+  }
+}
+
+private struct PingFeature: Reducer {
+  struct State: Equatable, Sendable {}
+
+  enum Action: Equatable, Sendable {
+    case ping, pong
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    action == .ping ? .send(.pong) : .none
+  }
+}
+
+/// How a sent action returns its follow-up.
+private enum SentFollowUpShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `.send(.pong)`, which a `Store` drains with the send.
+  case plain
+  /// `.send(.pong).cancellable(id)`, which a `Store` interprets in a job it
+  /// queues at the send.
+  case wrapped
+
+  var testDescription: String { rawValue }
+
+  var log: [String] { self == .plain ? ["pong", "x"] : ["x", "pong"] }
+}
+
+private struct SentFollowUpFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case ping, pong, x
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  let shape: SentFollowUpShape
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    if action != .ping { state.log.append(action.rawValue) }
+    guard action == .ping else { return .none }
+    return shape == .plain ? .send(.pong) : EffectTask<Action>.send(.pong).cancellable(followID)
+  }
+}
+
+/// `SentFollowUpFeature` as a child, sent through a scoped test store.
+private struct ScopedSentFollowUpParent: Reducer {
+  struct State: Equatable, Sendable {
+    var child = SentFollowUpFeature.State()
+  }
+
+  enum Action: Equatable, Sendable {
+    case child(SentFollowUpFeature.Action)
+
+    static let childPath = CasePath<Self, SentFollowUpFeature.Action>(
+      embed: Self.child,
+      extract: { action in
+        guard case .child(let childAction) = action else { return nil }
+        return childAction
+      }
+    )
+  }
+
+  let shape: SentFollowUpShape
+
+  private var composed: some Reducer<State, Action, Never> {
+    Scope(state: \.child, action: Action.childPath, reducer: SentFollowUpFeature(shape: shape))
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    composed.reduce(into: &state, action: action)
+  }
+}
+
+/// Interpreted follow-ups two levels deep. `start` delivers `a` and `b` from
+/// one job; the tests also deliver them from two jobs, the second queued by
+/// the first.
+private struct NestedFollowUpFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case start, a, a2, a3, b, b2
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    if action != .start { state.log.append(action.rawValue) }
+    switch action {
+    case .start: return .concatenate(.send(.a), .send(.b))
+    case .a: return EffectTask<Action>.send(.a2).cancellable(followID)
+    case .a2: return EffectTask<Action>.send(.a3).cancellable(nestedID)
+    case .b: return EffectTask<Action>.send(.b2).cancellable(unrelatedID)
+    default: return .none
+    }
+  }
+}
+
 @Suite("TestStore delivery order matches Store", .serialized, .timeLimit(.minutes(2)))
 @MainActor
 struct TestStoreDeliveryOrderTests {
@@ -1371,17 +1645,20 @@ struct TestStoreDeliveryOrderTests {
   }
 
   @Test(
-    "A chain of two interpreted follow-ups is received in a Store's usual order",
+    "A chain of two interpreted follow-ups is received in an order a Store has",
     arguments: [false, true], [true, false])
-  func interpretedChainKeepsUsualOrder(cancelsRun: Bool, exhaustive: Bool) async {
+  func interpretedChainFollowsTheRace(cancelsRun: Bool, exhaustive: Bool) async {
     let shape = ChainShape(first: .wrapped, second: .wrapped, cancelsRun: cancelsRun)
     let feature = ChainFeature(shape: shape)
     // A Store reduces `g1` in a job it queues while it reduces `f1`; the
-    // run's next emission races that job and usually reaches the store first.
+    // run's next emission races that job and usually reaches the store
+    // first. A test store queues the anchor of that job when the anchor of
+    // `f1`'s interpreter runs, and follows the race as it happens.
     let usual = ["a1", "f1", "a2", "g1", "f2", "g2"]
     let chainFirst = cancelsRun ? ["a1", "f1", "g1"] : ["a1", "f1", "g1", "a2", "f2", "g2"]
+    let orders = [usual, chainFirst]
     let reduced = await storeLog(feature, .start, state: .init(), log: \.log)
-    #expect(reduced == usual || reduced == chainFirst)
+    #expect(orders.contains(reduced))
 
     let store = TestStore(reducer: feature, initialState: .init())
     store.exhaustivity = exhaustive ? .on : .off
@@ -1389,13 +1666,246 @@ struct TestStoreDeliveryOrderTests {
     // Both emissions are buffered before the test receives the first.
     await waitFor(store) { store.unverifiedSnapshot().actionCount == 2 }
     if exhaustive {
+      // Receive whichever of the two orders the buffer keeps.
       var log: [String] = []
-      for entry in usual {
-        log.append(entry)
-        await store.receive(ChainFeature.Action(entry)) { [log] in $0.log = log }
+      while true {
+        let candidates = orders.filter { $0.starts(with: log) && $0.count > log.count }
+        let next = Set(candidates.map { $0[log.count] })
+        guard !next.isEmpty else { break }
+        let received = await store.receive(
+          where: { next.contains($0.entry) },
+          assert: { [log] state, action in state.log = log + [action.entry] }
+        )
+        guard let received else { break }
+        log.append(received.entry)
       }
     }
     await store.finish()
-    #expect(store.state.log == usual)
+    #expect(orders.contains(store.state.log))
+  }
+
+  @Test(
+    "A received action's interpreted follow-up comes after a job queued before its delivery",
+    arguments: CompetingShape.allCases, ReceiveMode.all)
+  fileprivate func interpretedFollowUpAfterQueuedJob(
+    shape: CompetingShape, mode: ReceiveMode
+  ) async {
+    let (late, exhaustive) = (mode.late, mode.exhaustive)
+    let feature = CompetingFollowUpFeature(shape: shape)
+    let emitter = [AnyEffectID(emitterID)]
+    let outputs: [CompetingFollowUpFeature.Output] = shape == .outputs ? [.ox, .op] : []
+
+    let reference = Store(reducer: feature, initialState: .init())
+    let published = reference.outputs()
+    let referenceEmission = queueEmission(.x, under: emitter, into: reference)
+    // Reduces `pong`, whose interpreter job is queued behind the emission job.
+    let ping = reference.send(.ping)
+    await referenceEmission.value
+    await ping.finish()
+    #expect(reference.state.log == shape.log)
+    var iterator = published.makeAsyncIterator()
+    var referenceOutputs: [CompetingFollowUpFeature.Output] = []
+    for _ in outputs {
+      if let output = await iterator.next() { referenceOutputs.append(output) }
+    }
+    #expect(referenceOutputs == outputs)
+
+    let store = TestStore(reducer: feature, initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    let emission = queueEmission(.x, under: emitter, into: store)
+    // `pong` is buffered, and its anchor queued, while the emission job is
+    // still queued.
+    await store.send(.ping)
+    if late {
+      await emission.value
+      await mainActorBarrier()
+    }
+    // Eager: `pong` is reduced in the job that sent `ping`.
+    var log: [String] = []
+    for entry in shape.log {
+      log.append(entry)
+      await store.receive(CompetingFollowUpFeature.Action(rawValue: entry)!) { [log] in
+        $0.log = log
+      }
+    }
+    for output in outputs {
+      await store.receiveOutput(output, timeout: .zero)
+    }
+    await store.finish()
+    #expect(store.state.log == shape.log)
+  }
+
+  @Test(
+    "An interpreted follow-up comes after a job queued behind its action's delivery job",
+    arguments: InterveningDelivery.allCases, [true, false])
+  fileprivate func interpretedFollowUpAfterLaterQueuedJob(
+    delivery: InterveningDelivery, exhaustive: Bool
+  ) async {
+    let reference = Store(reducer: QueuedEmissionsFeature(), initialState: .init())
+    let otherReference = Store(reducer: PingFeature(), initialState: .init())
+    let referenceFirst = queueEmission(.x, into: reference)
+    switch delivery {
+    case .nothing: break
+    case .otherStore: otherReference.send(.ping)
+    case .sameStore: reference.send(.ping)
+    }
+    let referenceSecond = queueEmission(.y, into: reference)
+    await referenceFirst.value
+    await referenceSecond.value
+    await settle { reference.state.log.count == delivery.log.count }
+    #expect(reference.state.log == delivery.log)
+
+    let store = TestStore(reducer: QueuedEmissionsFeature(), initialState: .init())
+    let other = TestStore(reducer: PingFeature(), initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    other.exhaustivity = exhaustive ? .on : .off
+    queueEmission(.x, into: store)
+    switch delivery {
+    case .nothing: break
+    case .otherStore: await other.send(.ping)
+    case .sameStore: await store.send(.ping)
+    }
+    queueEmission(.y, into: store)
+    var log: [String] = []
+    for entry in delivery.log {
+      log.append(entry)
+      await store.receive(QueuedEmissionsFeature.Action(entry)) { [log] in $0.log = log }
+    }
+    await store.finish()
+    #expect(store.state.log == delivery.log)
+    if delivery == .otherStore {
+      await other.receive(.pong)
+    }
+    await other.finish()
+  }
+
+  @Test(
+    "A sent action's interpreted follow-up comes after a job queued before the send",
+    arguments: SentFollowUpShape.allCases, [true, false])
+  fileprivate func sentFollowUpAfterQueuedJob(shape: SentFollowUpShape, exhaustive: Bool) async {
+    let feature = SentFollowUpFeature(shape: shape)
+    let reference = Store(reducer: feature, initialState: .init())
+    let referenceEmission = queueEmission(.x, into: reference)
+    let ping = reference.send(.ping)
+    await referenceEmission.value
+    await ping.finish()
+    #expect(reference.state.log == shape.log)
+
+    let store = TestStore(reducer: feature, initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    queueEmission(.x, into: store)
+    // A wrapped follow-up is walked where the job a Store queues at the
+    // send runs, behind the emission job.
+    await store.send(.ping)
+    var log: [String] = []
+    for entry in shape.log {
+      log.append(entry)
+      await store.receive(SentFollowUpFeature.Action(entry)) { [log] in $0.log = log }
+    }
+    await store.finish()
+    #expect(store.state.log == shape.log)
+  }
+
+  @Test(
+    "A scoped send's interpreted follow-up comes after a job queued before the send",
+    arguments: SentFollowUpShape.allCases, [true, false])
+  fileprivate func scopedSentFollowUpAfterQueuedJob(
+    shape: SentFollowUpShape, exhaustive: Bool
+  ) async {
+    let feature = ScopedSentFollowUpParent(shape: shape)
+    let reference = Store(reducer: feature, initialState: .init())
+    let referenceEmission = queueEmission(.child(.x), into: reference)
+    let ping = reference.send(.child(.ping))
+    await referenceEmission.value
+    await ping.finish()
+    #expect(reference.state.child.log == shape.log)
+
+    let store = TestStore(reducer: feature, initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    let child = store.scope(state: \.child, action: ScopedSentFollowUpParent.Action.childPath)
+    queueEmission(.child(.x), into: store)
+    await child.send(.ping)
+    var log: [String] = []
+    for entry in shape.log {
+      log.append(entry)
+      await child.receive(SentFollowUpFeature.Action(entry)) { [log] in $0.log = log }
+    }
+    await store.finish()
+    #expect(store.state.child.log == shape.log)
+  }
+
+  @Test(
+    "An interpreted follow-up's own follow-up comes after its siblings' follow-ups",
+    arguments: [true, false])
+  func nestedFollowUpsKeepInterpreterOrder(exhaustive: Bool) async {
+    // A Store reduces `a` and `b` in one job and queues their interpreter
+    // jobs; the job of `a` reduces `a2` and queues the job that reduces `a3`
+    // behind the job of `b`.
+    let expected = ["a", "b", "a2", "b2", "a3"]
+    #expect(await storeLog(NestedFollowUpFeature(), .start, state: .init(), log: \.log) == expected)
+
+    let store = TestStore(reducer: NestedFollowUpFeature(), initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    await store.send(.start)
+    var log: [String] = []
+    for entry in expected {
+      log.append(entry)
+      await store.receive(NestedFollowUpFeature.Action(entry)) { [log] in $0.log = log }
+    }
+    await store.finish()
+    #expect(store.state.log == expected)
+  }
+
+  @Test(
+    "A nested interpreted follow-up comes after an emission queued while its chain ran",
+    arguments: [true, false])
+  func nestedFollowUpAfterQueuedEmission(exhaustive: Bool) async {
+    // The shape of `run { send(a); send(b) }`, with the job of `b` queued once
+    // `a` was delivered: a Store runs the interpreter job of `a` first, which
+    // queues the one of `a2` behind the job of `b`, and that job queues the
+    // interpreter job of `b` behind the one of `a2`.
+    let expected = ["a", "a2", "b", "a3", "b2"]
+    let reference = Store(reducer: NestedFollowUpFeature(), initialState: .init())
+    queueEmission(.a, into: reference) {
+      queueEmission(.b, into: reference)
+    }
+    await settle { reference.state.log.count == expected.count }
+    #expect(reference.state.log == expected)
+
+    let store = TestStore(reducer: NestedFollowUpFeature(), initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    queueEmission(.a, into: store) {
+      queueEmission(.b, into: store)
+    }
+    var log: [String] = []
+    for entry in expected {
+      log.append(entry)
+      await store.receive(NestedFollowUpFeature.Action(entry)) { [log] in $0.log = log }
+    }
+    await store.finish()
+    #expect(store.state.log == expected)
+  }
+
+  @Test("A delivered action left unreceived queues a bounded number of anchor markers")
+  func unreceivedActionBoundsAnchorMarkers() async {
+    let store = TestStore(reducer: QueuedEmissionsFeature(), initialState: .init())
+    store.exhaustivity = .off
+    store.deliverAction(.y, context: nil)
+    // Every barrier lets the marker queued before it run, and that marker
+    // queues the next level while `y` is unreceived.
+    for _ in 0..<(TestStoreAnchorChain.depth + 2) {
+      await mainActorBarrier()
+    }
+    #expect(store.queuedAnchorMarkerCount == TestStoreAnchorChain.depth)
+
+    // An action whose walk ends before its first marker runs stops there.
+    store.deliverAction(.pong, context: nil)
+    await store.receive(.y)
+    await store.receive(.pong)
+    for _ in 0..<(TestStoreAnchorChain.depth + 2) {
+      await mainActorBarrier()
+    }
+    #expect(store.queuedAnchorMarkerCount == TestStoreAnchorChain.depth + 1)
+    await store.finish()
   }
 }
