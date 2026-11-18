@@ -109,6 +109,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package var reducingAction: TestStoreDelivery?
   /// The reductions whose effect walk the store follows, by effect sequence.
   package var followedWalks: [UInt64: TestStoreFollowedWalk] = [:]
+  /// Where the last interpreted walk the store followed finished: a `Store`
+  /// starts a root interpreter walk only once the one before it has finished.
+  package var interpreterTail: TestStoreAnchor?
 
   package var walker: EffectWalker<TestStore<R>> {
     EffectWalker(driver: self)

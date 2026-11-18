@@ -151,14 +151,15 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   that drain suspends — a scheduled run waiting for admission or a throttle
   reading its clock lets queued jobs run — stays buffered behind the sent
   action, and the sent action's cancellation removes it when it covers it,
-  as a `Store` drops it. A value the suspended walk itself delivers once it
-  resumes comes behind the MainActor jobs queued before the walk's
-  interpreter task first ran, where a `Store` resumes that task at the
-  earliest, and an interpreter walk created behind it starts only after it
-  returns. That value is reduced before the sent action when the walk's
-  next anchor level ran before the send began; otherwise it comes behind
-  it, as in a `Store` whose send comes right after that task first ran.
-  Before, the order, and with a cancellation the set of received actions
+  as a `Store` drops it. `TestStore` also follows what a `Store` does when
+  an interpreter walk suspends: it walks interpreted effects in the order a
+  `Store` creates their tasks, starts a walk only where the walk before it
+  finished, and keys what a walk delivers after it first suspends where a
+  `Store` resumes it at the earliest, behind the MainActor jobs queued
+  before the walk started. Such a value is reduced before a later send when
+  that point came before the send began, and otherwise comes behind it, as
+  in a `Store` whose send comes right after the walk started. Before, the
+  order, and with a cancellation the set of received actions
   and outputs, depended on when the test received the first action. Where
   the `Store` order is itself a race, such as a wrapped follow-up of a
   wrapped follow-up of a run's emission against the run's next emission, a

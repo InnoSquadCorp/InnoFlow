@@ -1562,16 +1562,21 @@ private struct ScopedDrainCancelParent: Reducer {
   }
 }
 
+private let waitThrottleID = EffectID<String>("delivery-order-wait-throttle")
+
 /// `r` returns a throttled `.send(.rl)`, delivered once the walk has read
 /// the clock, and `rc` a throttled cancel of `z`'s effect; `t` and `xv`, which
-/// `x` sends from an interpreter task of its own, cancel the throttle.
+/// `x` sends from an interpreter task of its own, cancel that throttle. `xt`
+/// throttles `.send(.xl)` under another ID, which `sv`, sent by `s`'s
+/// interpreter, cancels; `xz` sends `xzv`, which cancels `z`'s effect; `n`
+/// does nothing.
 private struct ThrottleCancelFeature: Reducer {
   struct State: Equatable, Sendable {
     var log: [String] = []
   }
 
   enum Action: String, Equatable, Sendable {
-    case r, rc, rl, t, x, xv, z
+    case r, rc, rl, t, x, xv, z, xt, xl, s, sv, xz, xzv, n
   }
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
@@ -1582,7 +1587,12 @@ private struct ThrottleCancelFeature: Reducer {
       return EffectTask<Action>.cancel(drainEmitID).throttle(drainThrottleID, for: .seconds(1))
     case .t, .xv: return .cancel(drainThrottleID)
     case .x: return EffectTask<Action>.send(.xv).cancellable(otherID)
-    case .rl, .z: return .none
+    case .xt: return EffectTask<Action>.send(.xl).throttle(waitThrottleID, for: .seconds(1))
+    case .s: return EffectTask<Action>.send(.sv).cancellable(unrelatedID)
+    case .sv: return .cancel(waitThrottleID)
+    case .xz: return EffectTask<Action>.send(.xzv).cancellable(otherID)
+    case .xzv: return .cancel(markID)
+    case .rl, .z, .xl, .n: return .none
     }
   }
 }
@@ -2605,6 +2615,160 @@ struct TestStoreDeliveryOrderTests {
     #expect(store.state.log == ["r", "x", "rl", "xv", "t"])
     await store.finish()
     #expect(store.state.log == reference.state.log)
+  }
+
+  @Test(
+    "A walk waiting for a suspended one starts behind the jobs queued before that one resumed",
+    arguments: [true, false])
+  func waitingWalkStartsBehindJobsQueuedBeforeResumption(exhaustive: Bool) async {
+    // The job that delivers `r` and `xz` queues a job that queues the job
+    // delivering `z`. A `Store` runs `r`'s interpreter task, which suspends
+    // to read the clock, then that job, which queues `z`'s job before the
+    // task finishes, and starts `xz`'s walk only in the job queued when it
+    // finishes, behind `z`'s job: `xzv`'s cancel of `z`'s effect comes late.
+    let ids = [AnyEffectID(markID)]
+    let reference = Store(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    let referenceContext = reference.effectBridge.makeEffectContext(
+      sequence: reference.effectBridge.nextSequence(), cancellationIDs: ids)
+    await Task { @MainActor in
+      reference.deliverAction(.r, context: nil)
+      reference.deliverAction(.xz, context: nil)
+      Task { @MainActor in
+        Task { @MainActor in reference.deliverAction(.z, context: referenceContext) }
+      }
+    }.value
+    await settle { reference.state.log.contains("xzv") }
+    let referenceLog = reference.state.log
+    #expect(referenceLog.contains("z"))
+    #expect(referenceLog.firstIndex(of: "z") ?? 0 < referenceLog.firstIndex(of: "xzv") ?? 0)
+
+    let store = TestStore(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
+    store.exhaustivity = .off
+    let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: ids)
+    await Task { @MainActor in
+      store.deliverAction(.r, context: nil)
+      store.deliverAction(.xz, context: nil)
+      Task { @MainActor in
+        Task { @MainActor in store.deliverAction(.z, context: context) }
+      }
+    }.value
+    await settle { false }
+    await store.send(.t)
+    store.exhaustivity = exhaustive ? .on : .off
+    #expect(store.state.log == ["r", "xz", "rl", "z", "xzv", "t"])
+    await store.finish()
+    #expect(store.state.log == ["r", "xz", "rl", "z", "xzv", "t"])
+  }
+
+  @Test(
+    "A deferred walk starts only once the suspended walk before it finishes",
+    arguments: [true, false])
+  func deferredWalkWaitsForSuspendedWalkBeforeIt(exhaustive: Bool) async {
+    // The job that delivers `r` queues the job that sends `n`, then delivers
+    // `x`: a `Store` starts `x`'s walk only once `r`'s interpreter task,
+    // suspended to read the clock, has finished, so `rl` comes before `xv`,
+    // whose cancel of the throttle then has nothing to remove.
+    let reference = Store(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    await Task { @MainActor in
+      reference.deliverAction(.r, context: nil)
+      Task { @MainActor in _ = reference.send(.n) }
+      reference.deliverAction(.x, context: nil)
+    }.value
+    await settle { reference.state.log.contains("xv") }
+    #expect(reference.state.log == ["r", "x", "n", "rl", "xv"])
+
+    let store = TestStore(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
+    store.exhaustivity = .off
+    // `x`'s anchor runs after the send began: its walk is deferred.
+    let send = await Task { @MainActor in
+      store.deliverAction(.r, context: nil)
+      let send = Task { @MainActor in _ = await store.send(.n) }
+      store.deliverAction(.x, context: nil)
+      return send
+    }.value
+    await send.value
+    store.exhaustivity = exhaustive ? .on : .off
+    if exhaustive {
+      await store.receive(.rl) { $0.log = ["r", "x", "n", "rl"] }
+      await store.receive(.xv) { $0.log = ["r", "x", "n", "rl", "xv"] }
+    }
+    await store.finish()
+    #expect(store.state.log == reference.state.log)
+  }
+
+  @Test(
+    "The sent walk starts only once the suspended walk before it finishes",
+    arguments: [true, false])
+  func sentWalkWaitsForSuspendedWalkBeforeIt(exhaustive: Bool) async {
+    // The job that delivers `r` and `xt` queues the job that sends `s`. A
+    // `Store` walks `xt`'s effect only once `r`'s interpreter task has
+    // finished, and `s`'s only once `xt`'s has, after its own clock read:
+    // `xl` comes before `sv`, whose cancel of `xt`'s throttle comes late.
+    let reference = Store(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    await Task { @MainActor in
+      reference.deliverAction(.r, context: nil)
+      reference.deliverAction(.xt, context: nil)
+      Task { @MainActor in _ = reference.send(.s) }
+    }.value
+    await settle { reference.state.log.contains("sv") }
+    #expect(reference.state.log == ["r", "xt", "s", "rl", "xl", "sv"])
+
+    let store = TestStore(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
+    store.exhaustivity = .off
+    let send = await Task { @MainActor in
+      store.deliverAction(.r, context: nil)
+      store.deliverAction(.xt, context: nil)
+      return Task { @MainActor in _ = await store.send(.s) }
+    }.value
+    await send.value
+    store.exhaustivity = exhaustive ? .on : .off
+    if exhaustive {
+      await store.receive(.rl) { $0.log = ["r", "xt", "s", "rl"] }
+      await store.receive(.xl) { $0.log = ["r", "xt", "s", "rl", "xl"] }
+      await store.receive(.sv) { $0.log = ["r", "xt", "s", "rl", "xl", "sv"] }
+    }
+    // Ends `r`'s throttle window, the one sleeper left.
+    store.exhaustivity = .off
+    await store.send(.t)
+    await store.finish()
+    #expect(Array(store.state.log.prefix(6)) == reference.state.log)
+  }
+
+  @Test(
+    "A walk created behind a received walk that suspended starts after it",
+    arguments: [true, false])
+  func walkBehindReceivedSuspendedWalkStartsAfterIt(exhaustive: Bool) async {
+    // One job delivers `r` and `x`: a `Store` walks `x`'s effect only once
+    // `r`'s interpreter task, suspended to read the clock, has finished, so
+    // `rl` comes before `xv`, also when the test receives `r` first.
+    let reference = Store(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    await queueEmission(.r, into: reference, then: { reference.deliverAction(.x, context: nil) })
+      .value
+    await settle { reference.state.log.contains("xv") }
+    #expect(reference.state.log == ["r", "x", "rl", "xv"])
+
+    let store = TestStore(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
+    store.exhaustivity = exhaustive ? .on : .off
+    await queueEmission(.r, into: store, then: { store.deliverAction(.x, context: nil) }).value
+    await settle { false }
+    await store.receive(.r) { $0.log = ["r"] }
+    if exhaustive {
+      await store.receive(.x) { $0.log = ["r", "x"] }
+      await store.receive(.rl) { $0.log = ["r", "x", "rl"] }
+      await store.receive(.xv) { $0.log = ["r", "x", "rl", "xv"] }
+    } else {
+      await store.send(.n)
+    }
+    await store.finish()
+    #expect(Array(store.state.log.prefix(4)) == reference.state.log)
   }
 
   @Test(

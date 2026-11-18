@@ -19,13 +19,13 @@ extension TestStore {
   ///
   /// When a reduction returns an effect a `Store` interprets in a MainActor
   /// task it creates — anything but `.none` or a plain `.send` or `.output`,
-  /// also under ownership metadata — the send starts that effect once the
-  /// MainActor jobs queued before that task have run, and buffers what the
-  /// effect delivers before it first suspends where that task runs. For a
-  /// buffered action reduced first whose task had not run when the send
-  /// began, that is after the new action is reduced, as in a `Store`; one
-  /// whose task had run is walked until it returns, clock read or admission
-  /// included, before the new action is reduced.
+  /// also under ownership metadata — the send starts that effect where a
+  /// `Store` walks it: once the MainActor jobs queued before that task have
+  /// run and the walk of the task created before it has finished. It
+  /// buffers what the effect delivers there, and, once the walk has
+  /// suspended, where a `Store` resumes it at the earliest. A buffered
+  /// action reduced first whose walk had not started when the send began is
+  /// walked after the new action is reduced, as in a `Store`.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -91,7 +91,8 @@ extension TestStore {
   /// A received action's effect starts where a `Store` would start it, as
   /// for ``send(_:assert:fileID:filePath:line:column:)``: an effect the
   /// `Store` interprets in a MainActor task of its own starts once the
-  /// MainActor jobs queued before that task have run.
+  /// MainActor jobs queued before that task have run and the walk of the
+  /// task created before it has finished.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
