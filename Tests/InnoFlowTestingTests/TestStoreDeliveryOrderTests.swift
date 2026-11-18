@@ -1563,15 +1563,15 @@ private struct ScopedDrainCancelParent: Reducer {
 }
 
 /// `r` returns a throttled `.send(.rl)`, delivered once the walk has read
-/// the clock, and `rc` a throttled cancel of `z`'s effect; `t` cancels the
-/// throttle.
+/// the clock, and `rc` a throttled cancel of `z`'s effect; `t` and `xv`, which
+/// `x` sends from an interpreter task of its own, cancel the throttle.
 private struct ThrottleCancelFeature: Reducer {
   struct State: Equatable, Sendable {
     var log: [String] = []
   }
 
   enum Action: String, Equatable, Sendable {
-    case r, rc, rl, t, z
+    case r, rc, rl, t, x, xv, z
   }
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
@@ -1580,7 +1580,8 @@ private struct ThrottleCancelFeature: Reducer {
     case .r: return EffectTask<Action>.send(.rl).throttle(drainThrottleID, for: .seconds(1))
     case .rc:
       return EffectTask<Action>.cancel(drainEmitID).throttle(drainThrottleID, for: .seconds(1))
-    case .t: return .cancel(drainThrottleID)
+    case .t, .xv: return .cancel(drainThrottleID)
+    case .x: return EffectTask<Action>.send(.xv).cancellable(otherID)
     case .rl, .z: return .none
     }
   }
@@ -2521,6 +2522,37 @@ struct TestStoreDeliveryOrderTests {
   }
 
   @Test(
+    "A drained walk's value after its clock read is behind a send right after its interpreter ran",
+    arguments: [true, false])
+  func drainedWalkValueFollowsSendRightAfterItsInterpreter(exhaustive: Bool) async {
+    // The job that delivers `r` queues the job that sends `t` right behind
+    // `r`'s interpreter task: a `Store` reduces `t`, whose cancel of the
+    // throttle skips `rl`, before that task resumes from its clock read.
+    let reference = Store(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    await Task { @MainActor in
+      reference.deliverAction(.r, context: nil)
+      Task { @MainActor in _ = reference.send(.t) }
+    }.value
+    await settle { false }
+    #expect(reference.state.log == ["r", "t"])
+
+    let store = TestStore(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
+    store.exhaustivity = .off
+    // `r`'s anchor runs before the send begins, and its next level after.
+    let send = await Task { @MainActor in
+      store.deliverAction(.r, context: nil)
+      return Task { @MainActor in _ = await store.send(.t) }
+    }.value
+    await send.value
+    store.exhaustivity = exhaustive ? .on : .off
+    #expect(store.state.log == ["r", "t"])
+    await store.finish()
+    #expect(store.state.log == reference.state.log)
+  }
+
+  @Test(
     "A drained walk's value after its clock read comes after jobs queued before its interpreter",
     arguments: [true, false])
   func drainedWalkValueFollowsJobsQueuedBeforeItsInterpreter(exhaustive: Bool) async {
@@ -2543,6 +2575,34 @@ struct TestStoreDeliveryOrderTests {
     await store.send(.t)
     store.exhaustivity = exhaustive ? .on : .off
     #expect(store.state.log == ["r", "z", "rl", "t"])
+    await store.finish()
+    #expect(store.state.log == reference.state.log)
+  }
+
+  @Test(
+    "A drained walk created behind a suspended one starts after that one returns",
+    arguments: [true, false])
+  func drainedWalkBehindSuspendedWalkStartsAfterIt(exhaustive: Bool) async {
+    // The job that delivers `r` also delivers `x`, so a `Store` creates `x`'s
+    // interpreter task right behind `r`'s, and starts its walk only once `r`'s
+    // task has finished, after its clock read: `rl` comes before `xv`, whose
+    // cancel of the throttle then has nothing left to remove.
+    let reference = Store(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    await queueEmission(.r, into: reference, then: { reference.deliverAction(.x, context: nil) })
+      .value
+    await settle { reference.state.log.contains("xv") }
+    reference.send(.t)
+    #expect(reference.state.log == ["r", "x", "rl", "xv", "t"])
+
+    let store = TestStore(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
+    store.exhaustivity = .off
+    await queueEmission(.r, into: store, then: { store.deliverAction(.x, context: nil) }).value
+    await mainActorBarrier()
+    await store.send(.t)
+    store.exhaustivity = exhaustive ? .on : .off
+    #expect(store.state.log == ["r", "x", "rl", "xv", "t"])
     await store.finish()
     #expect(store.state.log == reference.state.log)
   }

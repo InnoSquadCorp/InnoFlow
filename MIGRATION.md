@@ -159,13 +159,16 @@ reduced, and a buffered output as one it has already published:
   admission, a throttle reading its clock) is now removed when the sent
   action cancels its effect, as a `Store` drops it; in 6.0.x it was reduced
   before the sent action. A value the suspended walk itself delivers once it
-  resumes is still reduced before the sent action, behind the jobs queued
-  before the walk's interpreter task first ran. Work that walk starts in
-  another task (a run, a composite child, a timer) can deliver after the
-  send began, as in 6.0.x: its values are then behind the sent action, which
-  can cancel them, although a `Store` typically reduced them before the
-  send. Receive the buffered action, and that work's values, before sending
-  an action that cancels them.
+  resumes comes behind the jobs queued before the walk's interpreter task
+  first ran, and an interpreter walk created behind it starts only after it
+  returns. It is still reduced before the sent action when the walk's next
+  anchor level ran before the send began, and can otherwise come behind
+  it, as in a `Store` that sends right after that task first ran. Work
+  that walk starts in another task (a run, a composite child, a timer) can
+  deliver after the send began, as in 6.0.x: its values are then behind the
+  sent action, which can cancel them, although a `Store` typically reduced
+  them before the send. Receive a buffered action whose effect suspends, and
+  that effect's values, before sending an action that cancels them.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
   `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
   buffered action and output, as before.
