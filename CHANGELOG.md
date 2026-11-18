@@ -151,8 +151,9 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   that drain suspends — a scheduled run waiting for admission or a throttle
   reading its clock lets queued jobs run — stays buffered behind the sent
   action, and the sent action's cancellation removes it when it covers it,
-  as a `Store` drops it; so does a value the suspended walk delivers once it
-  resumes, which a `Store` may have reduced before the send. Before, the order, and with a
+  as a `Store` drops it. A value the suspended walk itself delivers once it
+  resumes is reduced before the sent action, as a `Store`'s walk resumed
+  before the send. Before, the order, and with a
   cancellation the set of received actions and outputs, depended on when
   the test received the first action. Where the `Store` order is itself a
   race, such as a wrapped follow-up of a wrapped follow-up of a run's
@@ -242,8 +243,8 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   admission, and the turn accepts nothing behind it in its branch; a
   `latest` request merged only with unrelated work, such as
   `.merge(.send(.loading), latestRun)`, is still accepted in the turn.
-  `TestStore` applies the same rules, so a test receives the actions a
-  production store reduces.
+  `TestStore` applies the same rules, so these cancellations remove the same
+  actions in a test as in a production store.
 - `TestStore` keeps a buffered effect action or output that a cancellation
   coming after its delivery covers, as a `Store` has already reduced or
   published it: the delivering effect's own `.cancel`

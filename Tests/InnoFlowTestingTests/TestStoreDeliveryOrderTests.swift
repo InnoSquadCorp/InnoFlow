@@ -1021,6 +1021,32 @@ private func queueEmissionOfEarlierEffect<R: Reducer>(
   return Task { @MainActor in store.deliverAction(action, context: context) }
 }
 
+/// Queues a MainActor job that publishes `output` in a context the store
+/// makes now, under `ids`, as a step of an effect started before does.
+@MainActor
+@discardableResult
+private func queueOutputOfEarlierEffect<R: Reducer>(
+  _ output: R.Output,
+  under ids: [AnyEffectID],
+  into store: Store<R>
+) -> Task<Void, Never> {
+  let bridge = store.effectBridge
+  let context = bridge.makeEffectContext(sequence: bridge.nextSequence(), cancellationIDs: ids)
+  return Task { @MainActor in store.deliverOutput(output, context: context) }
+}
+
+/// The same job for a test store.
+@MainActor
+@discardableResult
+private func queueOutputOfEarlierEffect<R: Reducer>(
+  _ output: R.Output,
+  under ids: [AnyEffectID],
+  into store: TestStore<R>
+) -> Task<Void, Never> where R.State: Equatable {
+  let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: ids)
+  return Task { @MainActor in store.deliverOutput(output, context: context) }
+}
+
 /// Returns once every MainActor job queued before the call has run.
 @MainActor
 private func mainActorBarrier() async {
@@ -1437,24 +1463,36 @@ private enum DrainCancelShape: String, CaseIterable, Sendable, CustomTestStringC
   case throttle
   /// The scheduled run; `tt` cancels `y`, then sends `t2`.
   case runThenSend
+  /// The scheduled run; `ti` starts work under `y`'s ID that cancels the
+  /// work in flight first.
+  case runCancelInFlight
+  /// The scheduled run; `tl` requests a `latest` run under `y`'s ID.
+  case runLatest
 
   var testDescription: String { rawValue }
 
-  var sent: DrainCancelFeature.Action { self == .runThenSend ? .tt : .t }
+  var sent: DrainCancelFeature.Action {
+    switch self {
+    case .run, .throttle: .t
+    case .runThenSend: .tt
+    case .runCancelInFlight: .ti
+    case .runLatest: .tl
+    }
+  }
 
   /// What a `Store` reduces: never `y`.
-  var log: [String] { self == .runThenSend ? ["r", "tt", "t2"] : ["r", "t"] }
+  var log: [String] { self == .runThenSend ? ["r", "tt", "t2"] : ["r", sent.rawValue] }
 }
 
-/// `r` returns an effect whose walk suspends; `t` and `tt` cancel `y`'s
-/// effect, `tt` before it sends `t2`.
+/// `r` returns an effect whose walk suspends; `t`, `tt`, `ti` and `tl`
+/// cancel `y`'s effect, `tt` before it sends `t2`.
 private struct DrainCancelFeature: Reducer {
   struct State: Equatable, Sendable {
     var log: [String] = []
   }
 
   enum Action: String, Equatable, Sendable {
-    case r, t, tt, t2, y
+    case r, t, tt, t2, ti, tl, y
   }
 
   let shape: DrainCancelShape
@@ -1467,7 +1505,33 @@ private struct DrainCancelFeature: Reducer {
     case .r: return .run(id: suspendingRunID, policy: .serial(maxPending: 1)) { _, _ in }
     case .t: return .cancel(drainEmitID)
     case .tt: return .concatenate(.cancel(drainEmitID), .send(.t2))
+    case .ti: return EffectTask<Action>.run { _ in }.cancellable(drainEmitID, cancelInFlight: true)
+    case .tl: return .run(id: drainEmitID, policy: .latest) { _, _ in }
     default: return .none
+    }
+  }
+}
+
+/// `r` returns a scheduled run, whose walk suspends; `t` cancels the effect
+/// of `o`, an output whose job was queued before the send.
+private struct DrainCancelOutputFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case r, t
+  }
+
+  enum Output: Equatable, Sendable {
+    case o
+  }
+
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
+    state.log.append(action.rawValue)
+    switch action {
+    case .r: return .run(id: suspendingRunID, policy: .serial(maxPending: 1)) { _, _ in }
+    case .t: return .cancel(drainEmitID)
     }
   }
 }
@@ -1516,58 +1580,6 @@ private struct ThrottleCancelFeature: Reducer {
     case .t: return .cancel(drainThrottleID)
     case .rl: return .none
     }
-  }
-}
-
-/// A `Store` clock whose reads are held until the test releases them, as a
-/// read whose continuation reaches the MainActor after the test's next job.
-private final class HeldClockReads: Sendable {
-  private struct Reads {
-    var isReleased = false
-    var held: [CheckedContinuation<Void, Never>] = []
-    var watchers: [CheckedContinuation<Void, Never>] = []
-  }
-
-  private let reads = Mutex(Reads())
-
-  /// Returns once a read is held.
-  func waitForHeldRead() async {
-    await withCheckedContinuation { watcher in
-      let isHeld = reads.withLock { reads in
-        if reads.held.isEmpty { reads.watchers.append(watcher) }
-        return !reads.held.isEmpty
-      }
-      if isHeld { watcher.resume() }
-    }
-  }
-
-  /// Releases the held reads and every later one.
-  func release() {
-    let held = reads.withLock { reads in
-      reads.isReleased = true
-      defer { reads.held = [] }
-      return reads.held
-    }
-    for read in held { read.resume() }
-  }
-
-  var storeClock: StoreClock {
-    StoreClock(
-      now: { [self] in
-        await withCheckedContinuation { read in
-          let watchers = reads.withLock { reads -> [CheckedContinuation<Void, Never>]? in
-            guard !reads.isReleased else { return nil }
-            reads.held.append(read)
-            defer { reads.watchers = [] }
-            return reads.watchers
-          }
-          guard let watchers else { return read.resume() }
-          for watcher in watchers { watcher.resume() }
-        }
-        return ContinuousClock.now
-      },
-      sleep: { duration in try await Task.sleep(for: duration) }
-    )
   }
 }
 
@@ -2373,7 +2385,9 @@ struct TestStoreDeliveryOrderTests {
   @Test("A send leaves buffered what is delivered while it drains earlier actions")
   func sendLeavesValuesDeliveredDuringItsDrain() async throws {
     // `r`'s interpreter job already ran when `c` is sent, and `y`'s job was
-    // queued before the send: a `Store` reduces `y` after `c`.
+    // queued before the send: a `Store` reduces `y` after `c`, and `rl`, which
+    // `r`'s interpreter delivers once it has read the clock, typically before
+    // `c`.
     let reference = Store(
       reducer: ThrottledDrainFeature(), initialState: .init(),
       clock: .manual(ManualTestClock()))
@@ -2391,16 +2405,16 @@ struct TestStoreDeliveryOrderTests {
     await mainActorBarrier()
     queueEmission(.y, into: store)
     // The send drains `r`; its throttle walk reads the manual clock, and `y`
-    // is delivered while it waits.
+    // is delivered while it waits. The walk keeps its anchor's position until
+    // it returns, so the drain reduces `rl` before `c`.
     await store.send(.c)
-    #expect(store.state.log == ["r", "c"])
+    #expect(store.state.log == ["r", "rl", "c"])
     await store.receive(.y)
-    await store.receive(.rl)
     // The throttle window's timer is the one sleeper; ending the window lets
     // the store become idle.
     try await clock.advance(by: .seconds(1), onceSleepersReach: 1)
     await store.finish()
-    #expect(store.state.log == ["r", "c", "y", "rl"])
+    #expect(store.state.log == ["r", "rl", "c", "y"])
   }
 
   @Test(
@@ -2476,22 +2490,20 @@ struct TestStoreDeliveryOrderTests {
   }
 
   @Test(
-    "A drained walk's value after it suspends is behind the send, which can cancel it",
+    "A drained walk's value after its clock read comes before the send",
     arguments: [true, false])
-  func sentCancelRemovesDrainedWalkValue(exhaustive: Bool) async {
-    // A `Store` whose throttle read resumes after the send reduces `t` first,
-    // and the request `t` cancelled delivers nothing. A test store walks
-    // `r`'s effect while the send drains it, after the send began, and
-    // orders `rl` behind the send.
-    let reads = HeldClockReads()
+  func drainedWalkValueAfterClockReadPrecedesSend(exhaustive: Bool) async {
+    // A `Store` ran `r`'s interpreter task when it reduced `r`, and that task
+    // resumed from its clock read, delivering `rl`, before the test sent `t`.
+    // A test store walks `r`'s effect only while the send drains it; the walk
+    // keeps its anchor's position across the clock read, so `rl` is reduced
+    // before `t`, and `t`'s cancel of the throttle has nothing left to remove.
     let reference = Store(
-      reducer: ThrottleCancelFeature(), initialState: .init(), clock: reads.storeClock)
-    let first = reference.send(.r)
-    await reads.waitForHeldRead()
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    await queueEmission(.r, into: reference).value
+    await settle { reference.state.log.contains("rl") }
     reference.send(.t)
-    reads.release()
-    await first.finish()
-    #expect(reference.state.log == ["r", "t"])
+    #expect(reference.state.log == ["r", "rl", "t"])
 
     let store = TestStore(
       reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
@@ -2500,9 +2512,43 @@ struct TestStoreDeliveryOrderTests {
     await mainActorBarrier()
     await store.send(.t)
     store.exhaustivity = exhaustive ? .on : .off
-    #expect(store.state.log == ["r", "t"])
+    #expect(store.state.log == ["r", "rl", "t"])
     await store.finish()
     #expect(store.state.log == reference.state.log)
+  }
+
+  @Test(
+    "A send's cancel removes an output published while its drain suspends",
+    arguments: [true, false])
+  func sentCancelRemovesOutputPublishedDuringItsDrain(exhaustive: Bool) async {
+    // `o`'s job was queued before the send; a `Store` runs it after the send
+    // has cancelled `o`'s effect, and publishes nothing.
+    let suppressed = Mutex<[Bool]>([])
+    let reference = Store(
+      reducer: DrainCancelOutputFeature(), initialState: .init(),
+      instrumentation: .init(didDeliverOutput: { event in
+        suppressed.withLock { $0.append(event.wasSuppressedByCancellation) }
+      }))
+    await queueEmission(.r, into: reference).value
+    await mainActorBarrier()
+    let referenceOutput = queueOutputOfEarlierEffect(
+      .o, under: [AnyEffectID(drainEmitID)], into: reference)
+    reference.send(.t)
+    await referenceOutput.value
+    #expect(suppressed.withLock { $0 } == [true])
+
+    let store = TestStore(reducer: DrainCancelOutputFeature(), initialState: .init())
+    store.exhaustivity = .off
+    await queueEmission(.r, into: store).value
+    await mainActorBarrier()
+    queueOutputOfEarlierEffect(.o, under: [AnyEffectID(drainEmitID)], into: store)
+    // The drain walks `r`'s scheduled run, which suspends; `o` is published
+    // meanwhile, behind the send.
+    await store.send(.t)
+    store.exhaustivity = exhaustive ? .on : .off
+    #expect(await store.popBufferedOutput() == nil)
+    await store.finish()
+    #expect(store.state.log == ["r", "t"])
   }
 
   @Test(

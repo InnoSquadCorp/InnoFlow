@@ -52,14 +52,19 @@ package import InnoFlowCore
 //   `TestStoreAnchorChain.depth` levels; deeper values share the deepest
 //   position.
 // - Values delivered after the walk first suspends are handled at their
-//   delivery.
+//   delivery. A send's drain is the exception: a drained action whose
+//   anchor ran before the send had its interpreter task run before the
+//   send, and that task resumed from its clock read or admission before the
+//   send too, so its walk keeps the anchor's position until it returns. What
+//   work it started in another task delivers — a run, a composite child, a
+//   timer — is still handled at its delivery.
 // - A cancellation applied while the test reduces a received or sent action
 //   — its reduction, the reduction-turn acceptance and the synchronous part
 //   of its effect walk — removes the covered values a `Store` would have
 //   delivered after that action (after its anchor, once the walk runs),
 //   except the ones its own walk delivered. For a sent action, those are the
-//   values delivered from the send on, including what a drained action's
-//   walk delivers after it first suspends.
+//   values delivered from the send on, such as those of a job queued before
+//   the send, or of work a drained action started in another task.
 // - A cancellation the test issues itself removes every value it covers, as
 //   if it landed first: `cancelEffects(identifiedBy:)`, `cancelAllEffects()`,
 //   the cancellation of a dispatch, and the cancellation of all remaining
@@ -368,15 +373,23 @@ package final class TestStoreFollowedWalk {
   /// The last value the drained effect placed behind the action; the next
   /// one goes behind it.
   var lastFollowUp: TestStoreDelivery?
+  /// Whether the walk stays at its anchor's position across its own
+  /// suspensions, until it returns, instead of until its first suspension.
+  let keepsAnchorAcrossSuspensions: Bool
   /// The anchor has run and the walk has started.
   var isWalking = false
-  /// The walk is still in the MainActor turn in which it started.
+  /// The walk is still where its anchor runs: in the MainActor turn in which
+  /// it started, or until it returns when it keeps its anchor across
+  /// suspensions.
   private(set) var isSynchronous = true
 
   /// Follows the reduction of an action a `Store` handles at `handled`.
-  init(handled: TestStoreDelivery, isDrained: Bool) {
+  init(
+    handled: TestStoreDelivery, isDrained: Bool, keepsAnchorAcrossSuspensions: Bool = false
+  ) {
     self.handled = handled
     self.isDrained = isDrained
+    self.keepsAnchorAcrossSuspensions = keepsAnchorAcrossSuspensions
     anchor = isDrained ? nil : handled.followUpAnchor
     threshold = handled.storeOrder
   }
@@ -441,8 +454,12 @@ extension TestStore {
       }
       return
     }
+    // A `Store` ran this interpreter task before the send began, and it
+    // resumed from a clock read or an admission before the send: what the
+    // walk delivers until it returns is reduced before the sent action.
     defer { entry.finish() }
-    await walkReceivedEffect(reduction.effect, context: reduction.context, of: entry)
+    await walkReceivedEffect(
+      reduction.effect, context: reduction.context, of: entry, keepsAnchorAcrossSuspensions: true)
   }
 
   /// Reduces a deliverable buffered action and runs the reduction-turn
@@ -473,7 +490,8 @@ extension TestStore {
   private func walkReceivedEffect(
     _ effect: ReducerEffect<R.Action, R.Output>,
     context: EffectExecutionContext,
-    of entry: ActionQueue<R.Action>.QueuedAction
+    of entry: ActionQueue<R.Action>.QueuedAction,
+    keepsAnchorAcrossSuspensions: Bool = false
   ) async {
     switch effect.storeHandling {
     case .nothing:
@@ -485,7 +503,9 @@ extension TestStore {
     case .interpreted:
       await walkFollowing(
         effect, context: context,
-        walk: TestStoreFollowedWalk(handled: entry.delivery, isDrained: false))
+        walk: TestStoreFollowedWalk(
+          handled: entry.delivery, isDrained: false,
+          keepsAnchorAcrossSuspensions: keepsAnchorAcrossSuspensions))
     }
   }
 
@@ -571,8 +591,10 @@ extension TestStore {
       // MainActor jobs run in the order they are queued: this one runs at
       // the walk's first suspension, before the walk resumes and before any
       // work the walk started, which ends the synchronous part.
-      Task { @MainActor [weak walk] in
-        walk?.endSynchronousPart()
+      if !walk.keepsAnchorAcrossSuspensions {
+        Task { @MainActor [weak walk] in
+          walk?.endSynchronousPart()
+        }
       }
     }
     walk.isWalking = true

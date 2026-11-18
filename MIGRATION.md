@@ -158,9 +158,13 @@ reduced, and a buffered output as one it has already published:
   reduces buffered actions whose effects suspend (a scheduled run waiting for
   admission, a throttle reading its clock) is now removed when the sent
   action cancels its effect, as a `Store` drops it; in 6.0.x it was reduced
-  before the sent action. A value the suspended walk delivers once it
-  resumes is also behind the send, although a `Store` may have reduced it
-  before the send: receive the buffered action before sending to keep it.
+  before the sent action. A value the suspended walk itself delivers once it
+  resumes is still reduced before the sent action. Work that walk starts in
+  another task (a run, a composite child, a timer) can deliver after the
+  send began, as in 6.0.x: its values are then behind the sent action, which
+  can cancel them, although a `Store` typically reduced them before the
+  send. Receive the buffered action, and that work's values, before sending
+  an action that cancels them.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
   `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
   buffered action and output, as before.

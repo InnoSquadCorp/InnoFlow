@@ -23,7 +23,9 @@ extension TestStore {
   /// MainActor jobs queued before that task have run, and buffers what the
   /// effect delivers before it first suspends where that task runs. For a
   /// buffered action reduced first whose task had not run when the send
-  /// began, that is after the new action is reduced, as in a `Store`.
+  /// began, that is after the new action is reduced, as in a `Store`; one
+  /// whose task had run is walked until it returns, clock read or admission
+  /// included, before the new action is reduced.
   @discardableResult
   public func send(
     _ action: R.Action,
