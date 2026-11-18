@@ -14,10 +14,13 @@ import Testing
 // action until the test receives it. These tests compare what a `Store`
 // reduces with what a `TestStore` lets a test receive, exhaustively and
 // non-exhaustively, for orders a `Store` fixes: a cancellation that comes
-// after a delivery never removes the delivered value, and a received action's
-// synchronous follow-ups, at any depth, precede everything delivered after it.
-// A cancellation the test issues itself is the one exception: it lands before
-// the values it covers.
+// after a delivery never removes the delivered value; a received action's
+// plain follow-ups, at any depth, precede everything delivered after it; and
+// a follow-up a `Store` interprets in a job of its own comes after what was
+// delivered in the received action's MainActor job and before what is
+// delivered in a later one, such as the run's next emission or the next step
+// of a `concatenate` after a run. A cancellation the test issues itself is
+// the one exception to the first rule: it lands before the values it covers.
 
 private let markID = EffectID<String>("delivery-order-mark")
 private let otherID = EffectID<String>("delivery-order-other")
@@ -625,6 +628,252 @@ private struct DrainTimeoutFeature: Reducer {
   }
 }
 
+private let followID = EffectID<String>("delivery-order-follow")
+private let outerID = EffectID<String>("delivery-order-outer")
+
+/// How an action returns its follow-up. A `Store` drains a plain effect with
+/// the reduction and hands a wrapped one to an interpreter job it queues.
+private enum FollowUpWrap: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  case bare
+  case cancellable
+  case animation
+
+  var testDescription: String { rawValue }
+
+  func callAsFunction<Action: Sendable, Output: Sendable>(
+    _ effect: ReducerEffect<Action, Output>
+  ) -> ReducerEffect<Action, Output> {
+    switch self {
+    case .bare: effect
+    case .cancellable: effect.cancellable(followID)
+    case .animation: effect.applyingAnimation(EffectAnimation(description: "test") { $0() })
+    }
+  }
+}
+
+/// `.start` delivers `.a` and `.b` from one `concatenate` job.
+private enum SiblingShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `a` returns the follow-up `f`.
+  case order
+  /// `f` returns the follow-up `g` the same way.
+  case chain
+  /// `a`'s follow-up is also under `followID`, which `b` cancels.
+  case siblingCancelsFollowUp
+  /// The `concatenate` is under `outerID`, which `f` cancels.
+  case followUpCancelsSibling
+
+  var testDescription: String { rawValue }
+
+  /// What a `Store` reduces.
+  func storeLog(_ wrap: FollowUpWrap) -> [String] {
+    let drained = wrap == .bare
+    switch self {
+    case .order: return drained ? ["a", "f", "b"] : ["a", "b", "f"]
+    case .chain: return drained ? ["a", "f", "g", "b"] : ["a", "b", "f", "g"]
+    case .siblingCancelsFollowUp: return ["a", "b"]
+    case .followUpCancelsSibling: return drained ? ["a", "f"] : ["a", "b", "f"]
+    }
+  }
+}
+
+private struct SiblingFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case start, a, b, f, g
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  let shape: SiblingShape
+  let wrap: FollowUpWrap
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    if action != .start { state.log.append(action.rawValue) }
+    switch action {
+    case .start:
+      let siblings = EffectTask<Action>.concatenate(.send(.a), .send(.b))
+      return shape == .followUpCancelsSibling ? siblings.cancellable(outerID) : siblings
+    case .a:
+      let followUp = wrap(EffectTask<Action>.send(.f))
+      return shape == .siblingCancelsFollowUp ? followUp.cancellable(followID) : followUp
+    case .b:
+      return shape == .siblingCancelsFollowUp ? .cancel(followID) : .none
+    case .f:
+      switch shape {
+      case .chain: return wrap(EffectTask<Action>.send(.g))
+      case .followUpCancelsSibling: return .cancel(outerID)
+      case .order, .siblingCancelsFollowUp: return .none
+      }
+    case .g:
+      return .none
+    }
+  }
+}
+
+/// An output of a `concatenate` against a follow-up's cancellation.
+private enum SiblingOutputShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `.concatenate(.send(.a), output(.o)).cancellable(outerID)`; `a` returns
+  /// the follow-up `f`, which cancels `outerID`.
+  case outputBeforeFollowUp
+  /// `.concatenate(.send(.a), .send(.b))`; `a` returns the output `o`, under
+  /// `followID` unless plain, and `b` cancels `followID`.
+  case followUpOutputAfterSibling
+
+  var testDescription: String { rawValue }
+
+  var log: [String] { self == .outputBeforeFollowUp ? ["a", "f"] : ["a", "b"] }
+
+  /// Whether a `Store` publishes `o`.
+  func publishes(_ wrap: FollowUpWrap) -> Bool {
+    (self == .outputBeforeFollowUp) != (wrap == .bare)
+  }
+}
+
+private struct SiblingOutputFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case start, a, b, f
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  enum Output: Equatable, Sendable {
+    case o
+  }
+
+  let shape: SiblingOutputShape
+  let wrap: FollowUpWrap
+
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
+    if action != .start { state.log.append(action.rawValue) }
+    switch (shape, action) {
+    case (.outputBeforeFollowUp, .start):
+      return ReducerEffect<Action, Output>.concatenate(.send(.a), Self.output(.o))
+        .cancellable(outerID)
+    case (.outputBeforeFollowUp, .a):
+      return wrap(ReducerEffect<Action, Output>.send(.f))
+    case (.outputBeforeFollowUp, .f):
+      return .cancel(outerID)
+    case (.followUpOutputAfterSibling, .start):
+      return .concatenate(.send(.a), .send(.b))
+    case (.followUpOutputAfterSibling, .a):
+      return wrap == .bare ? Self.output(.o) : wrap(Self.output(.o)).cancellable(followID)
+    case (.followUpOutputAfterSibling, .b):
+      return .cancel(followID)
+    default:
+      return .none
+    }
+  }
+}
+
+/// `a` publishes `o`; the effect that delivered `a` publishes `p` after it.
+private enum OutputOrderShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `.concatenate(.send(.a), output(.p))`; `a` returns `output(.o)`.
+  case sendThenOutput
+  /// `.concatenate(.run { send(.a) }, output(.p))`; `a` returns `output(.o)`.
+  case runThenOutput
+  /// `.concatenate(.send(.a), output(.p))`; `a` returns `output(.o).cancellable`.
+  case sendThenOutputInterpreted
+
+  var testDescription: String { rawValue }
+
+  /// What a `Store` publishes, in order.
+  var outputs: [OutputOrderFeature.Output] {
+    self == .sendThenOutputInterpreted ? [.p, .o] : [.o, .p]
+  }
+}
+
+private struct OutputOrderFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: Equatable, Sendable {
+    case start
+    case a
+  }
+
+  enum Output: Equatable, Sendable {
+    case o
+    case p
+  }
+
+  let shape: OutputOrderShape
+
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
+    switch action {
+    case .start:
+      return shape == .runThenOutput
+        ? .concatenate(.run { send in await send(.a) }, Self.output(.p))
+        : .concatenate(.send(.a), Self.output(.p))
+    case .a:
+      state.log.append("a")
+      return shape == .sendThenOutputInterpreted
+        ? Self.output(.o).cancellable(followID) : Self.output(.o)
+    }
+  }
+}
+
+/// `w` returns an interpreted follow-up; the effect that delivered `w` goes
+/// on to deliver more in a later MainActor job.
+private enum LaterJobShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `.concatenate(.send(.w), .run { send(.v) })`
+  case runAfterSend
+  /// The same; `v` cancels the follow-up's ID after a `Store` reduced it.
+  case runAfterSendCancels
+  /// `.concatenate(.send(.w), .run { }, .send(.c))`
+  case sendAfterRun
+
+  var testDescription: String { rawValue }
+
+  var storeLog: [String] { self == .sendAfterRun ? ["w", "x", "c"] : ["w", "x", "v"] }
+}
+
+private struct LaterJobFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case start, w, x, v, c
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  enum Output: Equatable, Sendable {
+    case o
+  }
+
+  let shape: LaterJobShape
+  /// `w` publishes `o` under `followID` instead of sending `x`, and `v`
+  /// cancels `followID`.
+  var publishes = false
+
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
+    if action != .start { state.log.append(action.rawValue) }
+    switch action {
+    case .start:
+      return shape == .sendAfterRun
+        ? .concatenate(.send(.w), .run { _ in }, .send(.c))
+        : .concatenate(.send(.w), .run { send in await send(.v) })
+    case .w:
+      return publishes
+        ? Self.output(.o).cancellable(followID)
+        : ReducerEffect<Action, Output>.send(.x).cancellable(followID)
+    case .v:
+      return publishes || shape == .runAfterSendCancels ? .cancel(followID) : .none
+    case .x, .c:
+      return .none
+    }
+  }
+}
+
 /// What a `Store` reduces for `action`, after its effect tree is idle.
 @MainActor
 private func storeLog<R: Reducer>(
@@ -993,5 +1242,160 @@ struct TestStoreDeliveryOrderTests {
     }
     await testStore.finish()
     #expect(testStore.state.log == ["mark"])
+  }
+
+  @Test(
+    "An interpreted follow-up comes after its action's concatenate siblings; a plain one before",
+    arguments: SiblingShape.allCases, FollowUpWrap.allCases)
+  fileprivate func concatenateSiblingOrder(shape: SiblingShape, wrap: FollowUpWrap) async {
+    let feature = SiblingFeature(shape: shape, wrap: wrap)
+    let expected = shape.storeLog(wrap)
+    #expect(await storeLog(feature, .start, state: .init(), log: \.log) == expected)
+
+    for exhaustive in [true, false] {
+      let store = TestStore(reducer: feature, initialState: .init())
+      store.exhaustivity = exhaustive ? .on : .off
+      await store.send(.start)
+      // `.a` and `.b` are both buffered before the test receives `.a`.
+      await waitUntilIdle(store)
+      if exhaustive {
+        var log: [String] = []
+        for entry in expected {
+          log.append(entry)
+          await store.receive(SiblingFeature.Action(entry)) { [log] in $0.log = log }
+        }
+      }
+      await store.finish()
+      #expect(store.state.log == expected)
+    }
+  }
+
+  @Test(
+    "Outputs around an action's concatenate siblings are kept as a Store publishes them",
+    arguments: SiblingOutputShape.allCases, FollowUpWrap.allCases)
+  fileprivate func concatenateSiblingOutputs(shape: SiblingOutputShape, wrap: FollowUpWrap) async {
+    let feature = SiblingOutputFeature(shape: shape, wrap: wrap)
+    let outputStore = Store(reducer: feature, initialState: .init())
+    let captured = outputStore.send(.start, capturingOutputs: .unbounded)
+    var published: [SiblingOutputFeature.Output] = []
+    for await output in captured.outputs { published.append(output) }
+    #expect(published == (shape.publishes(wrap) ? [.o] : []))
+    #expect(outputStore.state.log == shape.log)
+
+    for exhaustive in [true, false] {
+      let store = TestStore(reducer: feature, initialState: .init())
+      store.exhaustivity = exhaustive ? .on : .off
+      await store.send(.start)
+      await waitUntilIdle(store)
+      var log: [String] = []
+      for entry in shape.log {
+        log.append(entry)
+        await store.receive(SiblingOutputFeature.Action(entry)) { [log] in $0.log = log }
+      }
+      #expect(store.unverifiedSnapshot().outputCount == published.count)
+      for output in published {
+        await store.receiveOutput(output, timeout: .zero)
+      }
+      await store.finish()
+    }
+  }
+
+  @Test(
+    "A received action's plain output precedes the outputs its effect publishes later",
+    arguments: OutputOrderShape.allCases, [true, false])
+  fileprivate func receivedActionOutputOrder(shape: OutputOrderShape, exhaustive: Bool) async {
+    let outputStore = Store(reducer: OutputOrderFeature(shape: shape), initialState: .init())
+    let captured = outputStore.send(.start, capturingOutputs: .unbounded)
+    var published: [OutputOrderFeature.Output] = []
+    for await output in captured.outputs { published.append(output) }
+    withExtendedLifetime(outputStore) {}
+    #expect(published == shape.outputs)
+
+    let store = TestStore(reducer: OutputOrderFeature(shape: shape), initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    await store.send(.start)
+    // `.a`, then `.p`, are delivered before the test receives `.a`.
+    await waitUntilIdle(store)
+    await store.receive(.a) { $0.log = ["a"] }
+    for output in shape.outputs {
+      await store.receiveOutput(output, timeout: .zero)
+    }
+    await store.finish()
+  }
+
+  @Test(
+    "An interpreted follow-up precedes what its action's effect delivers in a later job",
+    arguments: LaterJobShape.allCases, [true, false])
+  fileprivate func interpretedFollowUpPrecedesLaterJob(
+    shape: LaterJobShape, exhaustive: Bool
+  ) async {
+    let feature = LaterJobFeature(shape: shape)
+    #expect(await storeLog(feature, .start, state: .init(), log: \.log) == shape.storeLog)
+
+    let store = TestStore(reducer: feature, initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    await store.send(.start)
+    // Everything the effect delivers is buffered before the test receives `.w`.
+    await waitUntilIdle(store)
+    if exhaustive {
+      var log: [String] = []
+      for entry in shape.storeLog {
+        log.append(entry)
+        await store.receive(LaterJobFeature.Action(entry)) { [log] in $0.log = log }
+      }
+    }
+    await store.finish()
+    #expect(store.state.log == shape.storeLog)
+  }
+
+  @Test(
+    "An interpreted follow-up's output survives a cancel delivered in a later job",
+    arguments: [true, false])
+  func interpretedOutputSurvivesLaterJobCancel(exhaustive: Bool) async {
+    let feature = LaterJobFeature(shape: .runAfterSend, publishes: true)
+    let outputStore = Store(reducer: feature, initialState: .init())
+    let captured = outputStore.send(.start, capturingOutputs: .unbounded)
+    var published: [LaterJobFeature.Output] = []
+    for await output in captured.outputs { published.append(output) }
+    #expect(published == [.o])
+    #expect(outputStore.state.log == ["w", "v"])
+
+    let store = TestStore(reducer: feature, initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    await store.send(.start)
+    await waitUntilIdle(store)
+    await store.receive(.w) { $0.log = ["w"] }
+    await store.receive(.v) { $0.log = ["w", "v"] }
+    await store.receiveOutput(.o, timeout: .zero)
+    await store.finish()
+  }
+
+  @Test(
+    "A chain of two interpreted follow-ups is received in a Store's usual order",
+    arguments: [false, true], [true, false])
+  func interpretedChainKeepsUsualOrder(cancelsRun: Bool, exhaustive: Bool) async {
+    let shape = ChainShape(first: .wrapped, second: .wrapped, cancelsRun: cancelsRun)
+    let feature = ChainFeature(shape: shape)
+    // A Store reduces `g1` in a job it queues while it reduces `f1`; the
+    // run's next emission races that job and usually reaches the store first.
+    let usual = ["a1", "f1", "a2", "g1", "f2", "g2"]
+    let chainFirst = cancelsRun ? ["a1", "f1", "g1"] : ["a1", "f1", "g1", "a2", "f2", "g2"]
+    let reduced = await storeLog(feature, .start, state: .init(), log: \.log)
+    #expect(reduced == usual || reduced == chainFirst)
+
+    let store = TestStore(reducer: feature, initialState: .init())
+    store.exhaustivity = exhaustive ? .on : .off
+    await store.send(.start)
+    // Both emissions are buffered before the test receives the first.
+    await waitFor(store) { store.unverifiedSnapshot().actionCount == 2 }
+    if exhaustive {
+      var log: [String] = []
+      for entry in usual {
+        log.append(entry)
+        await store.receive(ChainFeature.Action(entry)) { [log] in $0.log = log }
+      }
+    }
+    await store.finish()
+    #expect(store.state.log == usual)
   }
 }
