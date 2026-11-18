@@ -1064,8 +1064,11 @@ private func settle(until done: @MainActor () -> Bool) async {
 
 /// Holds the MainActor until `clock` has served the reads queued on it before
 /// this one, so a walk suspended on such a read is already queued to resume
-/// ahead of every MainActor job queued after the hold. The deadline only
-/// bounds a stalled executor.
+/// ahead of every MainActor job queued after the hold. A test store's walk
+/// reads the clock from the MainActor before this helper's task exists, so
+/// its read is served first; a `Store`'s order in these tests does not
+/// depend on the hold, which only fixes where the test store's walk resumes.
+/// The deadline only bounds a stalled executor.
 @MainActor
 private func holdUntilClockReadsServed(_ clock: ManualTestClock) {
   let served = ServedFlag()

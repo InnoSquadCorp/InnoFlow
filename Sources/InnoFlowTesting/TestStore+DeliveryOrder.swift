@@ -36,7 +36,8 @@ package import InnoFlowCore
 //   finished only after its anchor ran starts at the next level after that
 //   point, the earliest point at which a `Store` starts it. The
 //   predecessor's completion resumes a `Store`'s walk through the global
-//   executor, which can land behind later jobs, depending on load.
+//   executor, which can land behind later jobs, depending on how soon it
+//   hands the walk back relative to the MainActor's other jobs.
 // - A `send` takes its place, and queues its anchor, when it begins: a
 //   `Store` reduces the sent action, and creates its interpreter task, in
 //   the MainActor job in which the send begins. The send first reduces the
@@ -170,10 +171,10 @@ package final class TestStoreAnchorMarkerCount {
 /// whose interpreter it anchors; a member settles once the synchronous part
 /// of its reduction's walk has finished, or when it leaves the buffer without
 /// being reduced. The test store is a member too while the chain holds its
-/// interpreter tail: the next root walk starts at the chain's level after
-/// the tail, and resumes at the level after that — the earliest points at
-/// which a `Store` starts and resumes it — however late the test receives
-/// the walk's action. The chain queues no marker once no member is
+/// interpreter tail: a root walk that waited for the tail's walk starts at
+/// the chain's level after the tail, and resumes at the level after that —
+/// the earliest points at which a `Store` starts and resumes it — however
+/// late the test receives the walk's action. The chain queues no marker once no member is
 /// unsettled, and at most ``depth`` markers in all.
 @MainActor
 package final class TestStoreAnchorChain {
@@ -276,8 +277,8 @@ package struct TestStoreAnchor {
   /// Where a `Store` starts the walk of the interpreter task anchored here,
   /// once this marker has run, when the walk before it finished at
   /// `predecessor`: here, unless that walk finished only after this anchor
-  /// ran; then, at the earliest, in the job queued when it finished, its
-  /// next level.
+  /// ran; then, at the earliest, in a job queued right after it finished:
+  /// its next level.
   func start(after predecessor: TestStoreAnchor?) -> TestStoreAnchor {
     guard let predecessor, let finished = predecessor.position, let own = position,
       finished >= own
@@ -393,8 +394,8 @@ package final class TestStoreFollowedWalk {
   /// Where a `Store` first runs the interpreter task of an effect it does not
   /// drain.
   let anchor: TestStoreAnchor?
-  /// Where a `Store` starts the walk at the earliest: the anchor, or the job
-  /// queued when the walk created before it finished.
+  /// Where a `Store` starts the walk at the earliest: the anchor, or a job
+  /// queued right after the walk created before it finished.
   private(set) var startAnchor: TestStoreAnchor?
   /// Where a `Store` resumes the walk at the earliest once it has suspended:
   /// the next level after its start, behind every MainActor job queued

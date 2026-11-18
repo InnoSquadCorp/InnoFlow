@@ -22,9 +22,8 @@ extension TestStore {
   /// also under ownership metadata — the send starts that effect where a
   /// `Store` walks it at the earliest: once the MainActor jobs queued before
   /// that task have run and the walk of the task created before it has
-  /// finished. It
-  /// buffers what the effect delivers there, and, once the walk has
-  /// suspended, where a `Store` resumes it at the earliest. A buffered
+  /// finished. It buffers what the effect delivers there, and, once the walk
+  /// has suspended, where a `Store` resumes it at the earliest. A buffered
   /// action reduced first whose walk had not started when the send began,
   /// and every interpreted one reduced after it, is walked after the new
   /// action is reduced, as in a `Store`.

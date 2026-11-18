@@ -153,8 +153,9 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   action, and the sent action's cancellation removes it when it covers it,
   as a `Store` drops it. `TestStore` also follows what a `Store` does when
   an interpreter walk suspends: it walks interpreted effects in the order a
-  `Store` creates their tasks, starts a walk only where the walk before it
-  finished, and keys what a walk delivers after it first suspends where a
+  `Store` creates their tasks, starts a walk that waits for the walk before
+  it right after that walk finished, the earliest point at which a `Store`
+  starts it, and keys what a walk delivers after it first suspends where a
   `Store` resumes it at the earliest, behind the MainActor jobs queued
   before the walk started. A send's drain defers every interpreted walk
   behind one it defers, and a throttle on the default clock suspends to
@@ -166,7 +167,11 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   and outputs, depended on when the test received the first action. Where
   the `Store` order is itself a race, such as a wrapped follow-up of a
   wrapped follow-up of a run's emission against the run's next emission, a
-  test can receive either order. The children of a composite (`merge`,
+  test can receive either order. A `Store` hands a resumed walk, and a walk
+  that waited for the one before it, back to the MainActor from another
+  executor, so where it continues depends on how soon that happens relative
+  to the MainActor's other jobs; the test store takes the earliest point.
+  The children of a composite (`merge`,
   `concatenate`) follow-up stay in delivery order, and work a walk starts in
   another task (a run, a composite and its children, a timer) delivers at
   its delivery, as in 6.0.x: its first values can come after MainActor jobs
