@@ -164,9 +164,13 @@ reduced, and a buffered output as one it has already published:
   `Store` resumes it at the earliest, behind the jobs queued before the walk
   started, instead of at its delivery; and a walk created behind it starts
   only where it finished, as a `Store` starts each root interpreter walk
-  only after the one before it. A test that received those values, or the
-  values of the walk behind it, in delivery order receives them in that
-  order instead. A value a drained walk delivers this way is reduced before
+  only after the one before it. A throttle on a test store without a
+  `ManualTestClock` now suspends to read the clock too, as on a `Store`, so
+  its value comes behind the jobs queued before its walk. A test that
+  received those values, or the values of the walk behind it, in delivery
+  order receives them in that order instead. A walk that suspends more than
+  once (a throttle around a scheduled run, nested throttles) is placed as if
+  it resumed once. A value a drained walk delivers this way is reduced before
   the sent action when that point came before the send began, and can
   otherwise come behind it, as in a `Store` that sends right after the walk
   started. Work a walk starts in another task (a run, a composite child, a

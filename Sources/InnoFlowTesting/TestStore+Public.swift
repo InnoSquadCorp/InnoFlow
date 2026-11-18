@@ -24,8 +24,9 @@ extension TestStore {
   /// run and the walk of the task created before it has finished. It
   /// buffers what the effect delivers there, and, once the walk has
   /// suspended, where a `Store` resumes it at the earliest. A buffered
-  /// action reduced first whose walk had not started when the send began is
-  /// walked after the new action is reduced, as in a `Store`.
+  /// action reduced first whose walk had not started when the send began,
+  /// and every interpreted one reduced after it, is walked after the new
+  /// action is reduced, as in a `Store`.
   @discardableResult
   public func send(
     _ action: R.Action,

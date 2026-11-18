@@ -156,7 +156,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   `Store` creates their tasks, starts a walk only where the walk before it
   finished, and keys what a walk delivers after it first suspends where a
   `Store` resumes it at the earliest, behind the MainActor jobs queued
-  before the walk started. Such a value is reduced before a later send when
+  before the walk started. A send's drain defers every interpreted walk
+  behind one it defers, and a throttle on the default clock suspends to
+  read it, as in a `Store`. A walk that suspends more than once is placed as
+  if it resumed once. Such a value is reduced before a later send when
   that point came before the send began, and otherwise comes behind it, as
   in a `Store` whose send comes right after the walk started. Before, the
   order, and with a cancellation the set of received actions

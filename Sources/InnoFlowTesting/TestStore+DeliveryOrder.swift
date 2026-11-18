@@ -41,8 +41,9 @@ package import InnoFlowCore
 //   buffered values a `Store` handled before that place, then the sent
 //   action, whose plain follow-ups share the place, and only then walks, in
 //   order, the drained actions' effects whose walks had not started when the
-//   send began, also when the drain suspends. Every value delivered from the
-//   send on stays buffered, behind the sent action.
+//   send began and every interpreted one behind them, also when the drain
+//   suspends. Every value delivered from the send on stays buffered, behind
+//   the sent action.
 // - A value delivered outside such a walk is handled at its delivery, a new
 //   event. A plain `.send` or `.output` that a received action's reduction
 //   returns, also under ownership metadata, is drained with the reduction:
@@ -58,7 +59,8 @@ package import InnoFlowCore
 //   that suspends — after a clock read or an admission — behind every
 //   MainActor job queued before it started, at the earliest where the next
 //   level after its start runs, which the test store takes for what the
-//   walk delivers from then on. What work a walk started in another task
+//   walk delivers from then on. A walk that suspends more than once is
+//   placed as if it resumed once. What work a walk started in another task
 //   delivers — a run, a composite child, a timer — is handled at its
 //   delivery.
 // - A cancellation applied while the test reduces a received or sent action
@@ -497,12 +499,13 @@ extension TestStore {
     }
     // A marker that runs while the drain is suspended still runs after the
     // send began. A `Store` starts the walk once the walk created before it
-    // has finished.
+    // has finished, so a walk behind a deferred one is deferred too.
     if reduction.effect.storeHandling == .interpreted,
-      entry.delivery.followUpAnchor.map({ anchor in
-        anchor.ran(before: prepared.order)
-          && anchor.start(after: interpreterTail).ran(before: prepared.order)
-      }) != true
+      !prepared.deferredWalks.isEmpty
+        || entry.delivery.followUpAnchor.map({ anchor in
+          anchor.ran(before: prepared.order)
+            && anchor.start(after: interpreterTail).ran(before: prepared.order)
+        }) != true
     {
       prepared.deferredWalks.append { [self] in
         defer { entry.finish() }

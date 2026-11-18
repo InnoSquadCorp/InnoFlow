@@ -227,7 +227,7 @@ extension TestStore: EffectDriver {
       if let manualClock {
         return await manualClock.now
       }
-      return wallClock.now
+      return await continuousClockNow()
     }
   }
 
@@ -339,4 +339,12 @@ extension TestStore: ReductionTurnCancellationAcceptor {
     }
     return context
   }
+}
+
+/// Reads the continuous clock off the MainActor, as a `Store`'s default clock
+/// does: its `now` is a nonisolated async closure, so a walk that reads it
+/// suspends.
+@concurrent
+private func continuousClockNow() async -> ContinuousClock.Instant {
+  ContinuousClock.now
 }
