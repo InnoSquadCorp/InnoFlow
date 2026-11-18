@@ -184,16 +184,21 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
     until that read's notification plus one more; a selection that is never
     read, or goes unread across two notifications, is released and its key
     path is no longer evaluated. A liveness read (`isAlive`) observes the
-    owner's liveness — the parent `Store`'s release or the `ScopedStore`'s
-    deactivation — and does not retain the selection; its reader is notified
-    when the owner is deactivated, even after the selection was released.
+    owner's liveness — the parent `Store`'s release, and for a `ScopedStore`
+    also its deactivation — and the selection's own deactivation, and does
+    not retain the selection; its reader is notified when the owner is
+    deactivated or its store is released, even after the selection or its
+    `ScopedStore` was released. A `ScopedStore` released while still active
+    deactivates the selections created on it.
     Creating a key-path selection never records an Observation access on the
     parent. Nothing retains a closure-based selection (`dependingOn:`,
     `dependingOnAll:`, a selector, with or without `id:`) after the reading
     body returns, so obtaining one — created, or returned from the `id:`
     cache — records the read of the parent's state that creating it records,
-    as in 6.0.x; a reader that holds it is notified through the selection
-    alone. Selection creation never traps: a selection
+    as in 6.0.x; a cache hit records that Observation access without reading
+    the state, so a reducer can obtain a cached selection of its own store
+    while the store reduces. A reader that holds it is notified through the
+    selection alone. Selection creation never traps: a selection
     created on a projection that is no longer alive reports that through its
     own accessors. Parent
     release invalidates tracked projection liveness and optional reads on

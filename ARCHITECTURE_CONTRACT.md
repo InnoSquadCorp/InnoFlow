@@ -182,9 +182,12 @@ expose the same tiered read contract:
   released, and a released selection leaves its dependency bucket at once, so
   the owner stops evaluating its key path. A liveness read (`isAlive`)
   records its Observation access on the owner's liveness — the parent
-  `Store`'s release or the `ScopedStore`'s deactivation — instead of on the
-  selection, so it never retains the selection, and its reader is notified
-  when the owner is deactivated even after the selection was released. The
+  `Store`'s release, and for a `ScopedStore` also its deactivation — and on
+  the selection's deactivation, never on its value, so it never retains the
+  selection, and its reader is notified when the owner is deactivated or its
+  store is released, even after the selection or the `ScopedStore` it read
+  through was released. A `ScopedStore` released while still active
+  deactivates the selections created on it, which notifies their readers. The
   selection cannot tell a tracked value read from an untracked one: any value
   read starts the retention above.
   Key paths must therefore be valid for every state reachable while a reader
@@ -224,7 +227,9 @@ expose the same tiered read contract:
   `dependingOnAll:`, a selector, with or without `id:`) has no such
   retention, so creating one during a tracked read records a read of the
   parent's state, as in 6.0.x, and so does getting another holder's live
-  selection from the `id:` cache. A view that obtains one in its body is
+  selection from the `id:` cache (a cache hit records that Observation access
+  without reading the state, so a reducer can do it while its own store
+  reduces). A view that obtains one in its body is
   therefore invalidated by any parent change until it holds the selection.
 - A reducer-returned `.cancel`, a `cancelInFlight: true` replacement, a
   newer debounce request and a `latest` lane request are accepted in the

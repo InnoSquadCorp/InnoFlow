@@ -238,8 +238,8 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   that was never read costs nothing after it is dropped; one that was read is
   released after two further value changes. Reading `isAlive` observes the
   owner's liveness and never keeps a selection alive; its reader is notified
-  when the store is released or the row is removed, even after the selection
-  was released. Releasing a selection removes it from its
+  when the store is released or the row is removed, even after the
+  selection, or the `ScopedStore` it read through, was released. Releasing a selection removes it from its
   dependency bucket in place, so releasing many selections of one dependency
   stays linear.
 - Selecting on a `ScopedStore` whose collection element was removed, or whose
@@ -248,6 +248,9 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   deactivated handle. In 6.0.x, creating a closure-based selection or the
   first key-path selection on such a `ScopedStore` trapped in debug builds;
   it now succeeds and reports the absence through the selection.
+- A selection that outlived its `ScopedStore` turned dead without notifying
+  its readers. Releasing a `ScopedStore` that is still active now deactivates
+  the selections created on it, which notifies their readers.
 - Creating a key-path selection no longer records a read of the whole parent
   state, so a view that creates one in its body depends only on that
   selection. A closure-based selection still records that read, as in 6.0.x:
@@ -276,7 +279,7 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
 
 ### Notes
 
-- `SelectedStore.deinit` carries the `@_optimize(none)` workaround for
+- `SelectedStore.deinit` and `ScopedStore.deinit` carry the `@_optimize(none)` workaround for
   swiftlang/swift#88173, like the store deinitializers; see
   `docs/SWIFT_TOOLCHAIN_TRACKING.md`.
 - Because cancellation is delivered synchronously, a task-cancellation

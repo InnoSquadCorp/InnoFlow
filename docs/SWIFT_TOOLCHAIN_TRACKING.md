@@ -18,7 +18,7 @@ When a workaround is removed, delete the matching row, the corresponding source 
   2. Run `swift build -c release` and `swift test -c release` — the original crash reproduces during release builds, not debug.
   3. Run `./scripts/principle-gates.sh` end-to-end on the same toolchain to make sure the wider matrix passes.
   4. If it still reproduces, restore the attribute and update this row's *Retest trigger* to the next reasonable Swift version.
-  5. If it does not reproduce, separately retest `StoreOutputHub.deinit`, `SelectedStore.deinit` and `TestStore.deinit` before removing their workarounds. Remove the warning emitter only after all four release builds pass.
+  5. If it does not reproduce, separately retest `StoreOutputHub.deinit`, `SelectedStore.deinit`, `ScopedStore.deinit` and `TestStore.deinit` before removing their workarounds. Remove the warning emitter only after all five release builds pass.
 
 ### `@_optimize(none)` on `StoreOutputHub.deinit`
 
@@ -36,19 +36,26 @@ When a workaround is removed, delete the matching row, the corresponding source 
 - **Why this is the right surface:** unlike the store deinitializers this one can run often — once for every released selection — but its body is a single optional closure call, so the attribute costs no more than that call staying a call. Do not move more work into this deinitializer while the workaround is in place.
 - **Retest trigger / steps:** identical to `Store.deinit`: remove only this attribute in a temporary checkout, run the optimized build and Release tests, and restore it if the compiler still crashes.
 
+### `@_optimize(none)` on `ScopedStore.deinit`
+
+- **Location:** [`Sources/InnoFlowCore/ScopedStore.swift`](../Sources/InnoFlowCore/ScopedStore.swift) (the `isolated deinit` that deactivates the selections of a scope released while still active)
+- **Symptom:** the same `EarlyPerfInliner` crash family on a generic `@MainActor` class with an isolated deinitializer; the attribute was added together with the deinitializer in 6.1.0.
+- **Why this is the right surface:** the deinitializer runs once for every released `ScopedStore`, including every row. A scope that was already deactivated (a removed row, or a scope whose store was released) returns at once; only a scope released while still active runs `refreshAll()` and `pruneAllObservers()` over its own selections. Do not move more work into this deinitializer while the workaround is in place.
+- **Retest trigger / steps:** identical to `Store.deinit`: remove only this attribute in a temporary checkout, run the optimized build and Release tests, and restore it if the compiler still crashes.
+
 ### `@_optimize(none)` on `TestStore.deinit`
 
 - **Location:** [`Sources/InnoFlowTesting/TestStore.swift`](../Sources/InnoFlowTesting/TestStore.swift)
 - **Symptom:** Same SIL `EarlyPerfInliner` crash as `Store.deinit`. Mirrored attribute keeps the test runtime aligned with the production runtime.
 - **Upstream issue:** [swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173)
-- **Retest trigger / steps:** identical to `Store.deinit`. Retest all four affected deinits before removing the shared warning; one passing deinit does not prove the others are fixed.
+- **Retest trigger / steps:** identical to `Store.deinit`. Retest all five affected deinits before removing the shared warning; one passing deinit does not prove the others are fixed.
 
 ## How the principle gates surface this
 
 [`scripts/principle-gates.sh`](../scripts/principle-gates.sh) reads `swift --version`, parses major/minor, and prints
 
 ```
-[principle-gates] Warning: Swift X.Y detected; retest removing @_optimize(none) from Store, StoreOutputHub, SelectedStore, and TestStore deinits (swiftlang/swift#88173).
+[principle-gates] Warning: Swift X.Y detected; retest removing @_optimize(none) from Store, StoreOutputHub, SelectedStore, ScopedStore, and TestStore deinits (swiftlang/swift#88173).
 ```
 
 when the toolchain is at or above 6.4. The warning is intentionally non-blocking — the workaround stays in source until a maintainer manually verifies the upstream fix.

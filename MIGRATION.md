@@ -36,7 +36,10 @@ A key-path selection is now alive while one of these holds:
 
 Reading `isAlive` keeps nothing alive. It observes the owner instead, so its
 reader is notified when the store is released or the row is removed, even
-after the selection itself was released.
+after the selection, or the `ScopedStore` it read through, was released. A
+`ScopedStore` released while it is still active deactivates the selections
+created on it: their readers are notified, `isAlive` becomes `false` and
+`optionalValue` `nil`. In 6.0.x such selections turned dead silently.
 
 What to check:
 

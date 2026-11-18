@@ -71,7 +71,7 @@ flags, cache keys, and the intentional `InnoFlowCore` recovery path, see
 
 ### Known toolchain workarounds (Swift 6.3)
 
-`Store.deinit`, `StoreOutputHub.deinit`, `SelectedStore.deinit` and `TestStore.deinit`
+`Store.deinit`, `StoreOutputHub.deinit`, `SelectedStore.deinit`, `ScopedStore.deinit` and `TestStore.deinit`
 are annotated with `@_optimize(none)` to
 sidestep a Swift 6.3 release-mode SIL crash in `EarlyPerfInliner`
 ([swiftlang/swift#88173](https://github.com/swiftlang/swift/issues/88173))
