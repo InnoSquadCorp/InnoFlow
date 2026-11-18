@@ -144,15 +144,21 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   emission or a `concatenate` step after a run. `send` and `receive` of an
   action whose effect a `Store` interprets let the MainActor jobs queued
   before that task run before they return. A `send` that first reduces
-  buffered actions reduces the sent action before it starts their wrapped
-  follow-ups, as a `Store` does; before, such a follow-up was reduced ahead
-  of the sent action. Before, the order, and with a
+  buffered actions reduces the sent action before it starts the wrapped
+  follow-ups of those whose interpreter task had not run when the send
+  began, as a `Store` does, also when that drain suspends; before, such a
+  follow-up was reduced ahead of the sent action. Before, the order, and with a
   cancellation the set of received actions and outputs, depended on when
   the test received the first action. Where the `Store` order is itself a
   race, such as a wrapped follow-up of a wrapped follow-up of a run's
   emission against the run's next emission, a test can receive either
   order. The children of a composite (`merge`, `concatenate`) follow-up
   stay in delivery order.
+- In a non-exhaustive `TestStore`, `receiveOutput` first reduces the
+  buffered actions a `Store` reduced before the next buffered output, so a
+  test receives outputs in the order a `Store` publishes them. Before, it
+  could take a later buffered output first and skip the one an earlier
+  buffered action publishes.
 - A collection scope now refreshes only the rows a change can affect instead
   of every row on any change, and rows resolve their positions once per
   structural change instead of each scanning the collection, also when an

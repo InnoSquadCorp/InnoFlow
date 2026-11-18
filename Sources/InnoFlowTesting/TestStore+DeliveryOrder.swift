@@ -32,11 +32,14 @@ package import InnoFlowCore
 // - A received or sent action whose effect a `Store` interprets is walked
 //   only once its anchor has run. The MainActor jobs queued before the anchor
 //   deliver their values first, as they do in a `Store`.
-// - A `send` first reduces the buffered actions delivered before it, which a
-//   `Store` reduced at their delivery, then the sent action, which a `Store`
-//   reduces before any MainActor job queued by then runs. It walks the
-//   drained actions' effects whose anchors have not run only after that, in
-//   anchor order, and leaves buffered every value delivered from the send on.
+// - A `send` takes its place, and queues its anchor, when it begins: a
+//   `Store` reduces the sent action, and creates its interpreter task, in
+//   the MainActor job in which the send begins. The send first reduces the
+//   buffered values a `Store` handled before that place, then the sent
+//   action, whose plain follow-ups share the place, and only then walks, in
+//   anchor order, the drained actions' effects whose anchors had not run
+//   when the send began, also when the drain suspends. Every value
+//   delivered from the send on stays buffered.
 // - A value delivered outside such a walk is handled at its delivery, a new
 //   event. A plain `.send` or `.output` that a received action's reduction
 //   returns, also under ownership metadata, is drained with the reduction:
@@ -82,23 +85,37 @@ package struct TestStoreOrder: Comparable, Sendable {
   /// the current MainActor job: behind every value delivered or anchored
   /// before, ahead of every value delivered or anchored from now on.
   @MainActor
-  package static func now() -> Self {
+  fileprivate static func now() -> Self {
     Self(event: TestStoreEvents.next(), order: 0)
   }
 }
 
-/// The effect walks of the buffered actions a send reduces before the sent
-/// action whose anchors had not run when the send began: a `Store` runs
-/// those interpreter tasks after it reduces the sent action.
+/// What a send prepares before it reduces the sent action. A `Store` reduces
+/// the sent action, and creates its interpreter task, in the MainActor job
+/// in which the send begins, so the send takes its place, and opens its
+/// anchor chain, when it begins, however long the drain before it lasts.
 @MainActor
-package struct TestStoreDeferredWalks {
-  fileprivate var walks: [@MainActor () async -> Void] = []
+package struct TestStorePreparedSend {
+  /// The place of the send: the plain follow-ups of the sent action share
+  /// it, and its anchor is where a `Store` runs the sent action's interpreter.
+  fileprivate let delivery: TestStoreDelivery
+  /// The effect walks of the buffered actions the send drained whose
+  /// interpreter tasks a `Store` runs after it reduces the sent action:
+  /// their anchors had not run when the send began.
+  fileprivate var deferredWalks: [@MainActor () async -> Void] = []
 
-  package init() {}
+  /// Takes the place of a send that begins now.
+  init(markerCount: TestStoreAnchorMarkerCount?) {
+    delivery = .sent(at: .now(), opening: markerCount)
+  }
 
-  /// Runs the walks in order, each once its anchor has run.
-  fileprivate func run() async {
-    for walk in walks {
+  /// The place of the send: every value a `Store` handled before the send is
+  /// ordered before it.
+  var order: TestStoreOrder { delivery.storeOrder }
+
+  /// Runs the deferred walks in order, each once its anchor has run.
+  fileprivate func runDeferredWalks() async {
+    for walk in deferredWalks {
       await walk()
     }
   }
@@ -231,6 +248,11 @@ package struct TestStoreAnchor {
     chain.position(atLevel: level)
   }
 
+  /// Whether the marker ran before `order`'s event.
+  func ran(before order: TestStoreOrder) -> Bool {
+    position.map { $0 < order.event } ?? false
+  }
+
   func wait() async {
     await chain.waitForMarker(atLevel: level)
   }
@@ -267,6 +289,17 @@ package final class TestStoreDelivery {
     order = Self.lastOrder
     self.storeOrder = storeOrder(order)
     self.followUpAnchor = followUpAnchor
+  }
+
+  /// The place of an action the test sends at `order`, which opens its own
+  /// anchor chain: a `Store` reduces it, and creates its interpreter task,
+  /// in the MainActor job in which the send begins.
+  static func sent(
+    at order: TestStoreOrder, opening markerCount: TestStoreAnchorMarkerCount?
+  ) -> TestStoreDelivery {
+    .init(
+      storeOrder: { _ in order },
+      followUpAnchor: TestStoreAnchorChain(markerCount: markerCount).first)
   }
 
   /// A value a `Store` handles at its delivery. An action opens its own
@@ -319,43 +352,36 @@ package final class TestStoreDelivery {
 /// follows, while the synchronous part of that walk lasts.
 @MainActor
 package final class TestStoreFollowedWalk {
-  /// The delivery of the received action; `nil` for a sent action.
-  let received: TestStoreDelivery?
-  /// The chain a sent action is the member of.
-  private let sentChain: TestStoreAnchorChain?
+  /// Where a `Store` handles the action: the delivery of the received
+  /// action, or the place of the send.
+  let handled: TestStoreDelivery
+  /// Whether the action was received from the buffer. Only a received
+  /// action's reduction removes covered values a `Store` delivered after it.
+  let isReceived: Bool
   /// Whether a `Store` drains the effect the reduction returned with the
   /// reduction, instead of creating an interpreter task for it.
   let isDrained: Bool
   /// Where a `Store` runs the interpreter of an effect it does not drain.
   let anchor: TestStoreAnchor?
-  /// The order behind which a cancellation applied during the reduction
-  /// removes covered values: the received action's own, then the anchor's
-  /// once the walk runs.
+  /// The order behind which a cancellation applied during the reduction of
+  /// a received action removes covered values: the action's own, then the
+  /// anchor's once the walk runs.
   var threshold: TestStoreOrder?
-  /// The last value the drained effect placed behind the received action;
-  /// the next one goes behind it.
+  /// The last value the drained effect placed behind the action; the next
+  /// one goes behind it.
   var lastFollowUp: TestStoreDelivery?
   /// The anchor has run and the walk has started.
   var isWalking = false
   /// The walk is still in the MainActor turn in which it started.
   private(set) var isSynchronous = true
 
-  /// Follows the reduction of a received action.
-  init(received: TestStoreDelivery, isDrained: Bool) {
-    self.received = received
-    sentChain = nil
+  /// Follows the reduction of an action a `Store` handles at `handled`.
+  init(handled: TestStoreDelivery, isReceived: Bool, isDrained: Bool) {
+    self.handled = handled
+    self.isReceived = isReceived
     self.isDrained = isDrained
-    anchor = isDrained ? nil : received.followUpAnchor
-    threshold = received.storeOrder
-  }
-
-  /// Follows the reduction of a sent action whose effect a `Store`
-  /// interprets: its interpreter task is created at the reduction.
-  init(sentChain: TestStoreAnchorChain) {
-    received = nil
-    self.sentChain = sentChain
-    isDrained = false
-    anchor = sentChain.first
+    anchor = isDrained ? nil : handled.followUpAnchor
+    threshold = isReceived ? handled.storeOrder : nil
   }
 
   /// The synchronous part of the walk has finished: values delivered from now
@@ -363,11 +389,7 @@ package final class TestStoreFollowedWalk {
   func endSynchronousPart() {
     guard isSynchronous else { return }
     isSynchronous = false
-    if let received {
-      received.settle()
-    } else {
-      sentChain?.settleMember()
-    }
+    handled.settle()
   }
 }
 
@@ -395,13 +417,14 @@ extension TestStore {
 
   /// Reduces a buffered action that a send drains before it reduces the sent
   /// action. A `Store` reduced that action at its delivery, but runs the
-  /// interpreter task it created then only after the sent action, when that
-  /// task has not run yet: such a walk is added to `deferred` instead, still
-  /// anchored where that task runs, and keeps the action's activity lease.
+  /// interpreter task it created then after the sent action when that task
+  /// had not run when the send began: such a walk is deferred in `prepared`
+  /// instead, still anchored where that task runs, and keeps the action's
+  /// activity lease.
   package func reduceBufferedActionBeforeSend(
     _ entry: ActionQueue<R.Action>.QueuedAction,
     location: TestStoreSourceLocation,
-    deferring deferred: inout TestStoreDeferredWalks
+    preparing prepared: inout TestStorePreparedSend
   ) async {
     guard
       let reduction = reduceAndAccept(
@@ -410,10 +433,12 @@ extension TestStore {
       entry.finish()
       return
     }
+    // A marker that runs while the drain is suspended still runs after the
+    // send began.
     if reduction.effect.storeHandling == .interpreted,
-      entry.delivery.followUpAnchor?.position == nil
+      entry.delivery.followUpAnchor?.ran(before: prepared.order) != true
     {
-      deferred.walks.append { [self] in
+      prepared.deferredWalks.append { [self] in
         defer { entry.finish() }
         await walkReceivedEffect(reduction.effect, context: reduction.context, of: entry)
       }
@@ -459,42 +484,51 @@ extension TestStore {
     case .drained:
       await walkFollowing(
         effect, context: context,
-        walk: TestStoreFollowedWalk(received: entry.delivery, isDrained: true))
+        walk: TestStoreFollowedWalk(handled: entry.delivery, isReceived: true, isDrained: true))
     case .interpreted:
       await walkFollowing(
         effect, context: context,
-        walk: TestStoreFollowedWalk(received: entry.delivery, isDrained: false))
+        walk: TestStoreFollowedWalk(handled: entry.delivery, isReceived: true, isDrained: false))
     }
   }
 
   /// Walks the effect a sent action's reduction returned, with the
-  /// cancellation that effect requests already accepted. A `Store` creates
-  /// an interpreter task for an effect it does not drain at the reduction;
-  /// the walk waits until that task would run.
+  /// cancellation that effect requests already accepted, at the place of the
+  /// send: a `Store` drains a plain `.send` or `.output` with the send, and
+  /// runs an interpreter task for any other effect where the send's anchor
+  /// runs.
   ///
-  /// - Parameter deferred: The walks of the buffered actions the send reduced
-  ///   first whose interpreter tasks a `Store` runs after the sent action's
-  ///   reduction, ahead of the one it creates for the sent action.
+  /// - Parameter prepared: The place of the send, taken when it began, and
+  ///   the walks of the buffered actions it drained whose interpreter tasks a
+  ///   `Store` runs after the sent action's reduction, ahead of the sent
+  ///   action's own. A send that drained nothing may pass `nil`.
   package func walkSentEffect(
     _ effect: ReducerEffect<R.Action, R.Output>,
     location: TestStoreSourceLocation,
     flowTaskTracker: FlowTaskTracker?,
-    after deferred: TestStoreDeferredWalks = .init()
+    prepared: TestStorePreparedSend? = nil
   ) async {
+    let prepared = prepared ?? TestStorePreparedSend(markerCount: queue.anchorMarkerCount)
     let context = reductionTurnContext(
       for: effect, location: location, flowTaskTracker: flowTaskTracker)
-    guard effect.storeHandling == .interpreted else {
-      // A `Store` handles a drained follow-up of a sent action at its
-      // delivery, during the send, before any interpreter task runs.
-      await walker.walk(effect, context: context, awaited: false)
-      await deferred.run()
-      return
+    switch effect.storeHandling {
+    case .nothing:
+      prepared.delivery.settle()
+      await prepared.runDeferredWalks()
+    case .drained:
+      // Before any interpreter task runs, and before any job a suspended
+      // drain let run.
+      await walkFollowing(
+        effect, context: context,
+        walk: TestStoreFollowedWalk(handled: prepared.delivery, isReceived: false, isDrained: true))
+      await prepared.runDeferredWalks()
+    case .interpreted:
+      await prepared.runDeferredWalks()
+      await walkFollowing(
+        effect, context: context,
+        walk: TestStoreFollowedWalk(
+          handled: prepared.delivery, isReceived: false, isDrained: false))
     }
-    // The `Store` creates the interpreter task at the reduction, behind the
-    // ones of the actions the send reduced first.
-    let chain = TestStoreAnchorChain(markerCount: queue.anchorMarkerCount)
-    await deferred.run()
-    await walkFollowing(effect, context: context, walk: TestStoreFollowedWalk(sentChain: chain))
   }
 
   /// The anchor markers this store has queued, for its deliveries and sends.
@@ -553,9 +587,9 @@ extension TestStore {
       queue.enqueue(action, context: context)
       return
     }
-    if walk.isDrained, let received = walk.received {
+    if walk.isDrained {
       walk.lastFollowUp = queue.enqueue(
-        action, context: context, delivery: .drained(after: received, isAction: true),
+        action, context: context, delivery: .drained(after: walk.handled, isAction: true),
         placement: .front(behind: walk.lastFollowUp))
     } else if let anchor = walk.anchor, let position = anchor.position {
       queue.enqueue(
@@ -574,8 +608,8 @@ extension TestStore {
       return
     }
     let delivery: TestStoreDelivery
-    if walk.isDrained, let received = walk.received {
-      delivery = .drained(after: received, isAction: false)
+    if walk.isDrained {
+      delivery = .drained(after: walk.handled, isAction: false)
     } else if let anchor = walk.anchor, let position = anchor.position {
       delivery = .interpreted(at: anchor, position: position, isAction: false)
     } else {
@@ -606,7 +640,7 @@ extension TestStore {
       threshold = received.storeOrder
       ownSequence = nil
     } else if let issuer, let walk = followedWalks[issuer], walk.isWalking, walk.isSynchronous,
-      walk.received != nil, let walkThreshold = walk.threshold
+      walk.isReceived, let walkThreshold = walk.threshold
     {
       // Once the walk runs, only its own cancellations belong to the reduction.
       threshold = walkThreshold

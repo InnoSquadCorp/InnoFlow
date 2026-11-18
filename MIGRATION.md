@@ -132,9 +132,10 @@ reduced, and a buffered output as one it has already published:
   is delivered before they return: an exhaustive test receives that
   emission before the wrapped follow-up. A `send` that first reduces
   buffered actions (in a non-exhaustive store, or after reporting them in an
-  exhaustive one) reduces the sent action before it starts their effects,
-  so their wrapped follow-ups come after the sent action; in 6.0.x such a
-  follow-up was reduced first. Where the
+  exhaustive one) reduces the sent action before it starts the effects of
+  those whose interpreter task had not run when the send began, so their
+  wrapped follow-ups come after the sent action; in 6.0.x such a follow-up
+  was reduced first. Where the
   `Store` order is a race — a run's next emission against a wrapped
   follow-up of a wrapped follow-up of its previous emission — a test can
   receive either order; accept both with `receive(where:)` or use a
@@ -144,6 +145,10 @@ reduced, and a buffered output as one it has already published:
   emission before a wrapped follow-up of its previous one — must swap the
   two receives. The children of a composite (`merge`, `concatenate`)
   follow-up stay in delivery order.
+- In a non-exhaustive store, `receiveOutput` first reduces the buffered
+  actions a `Store` reduced before the next buffered output. A test that
+  received a later output before the one an earlier buffered action
+  publishes must receive the two in the order a `Store` publishes them.
 - A cancellation applied while the test reduces a received action still
   removes the covered actions buffered behind it, and the covered outputs a
   `Store` would publish after it.

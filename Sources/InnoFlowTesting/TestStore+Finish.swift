@@ -272,6 +272,7 @@ extension TestStore {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
           markTerminalVerificationHandled(terminalVerificationRevision)
+          action.finish()
           return .timedOut(snapshot)
         }
         reportSkippedAction(

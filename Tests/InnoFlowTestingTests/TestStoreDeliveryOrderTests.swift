@@ -183,6 +183,32 @@ private struct OutputFeature: Reducer {
   }
 }
 
+/// `start` runs an effect that sends `a` and then publishes `o2`; `a`
+/// publishes `o1`. A `Store` publishes `o1` when it reduces `a`, before `o2`.
+private struct OutputBehindActionFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: Equatable, Sendable {
+    case start, a
+  }
+
+  enum Output: Equatable, Sendable {
+    case o1, o2
+  }
+
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
+    switch action {
+    case .start:
+      return .concatenate(.run { send in await send(.a) }, Self.output(.o2))
+    case .a:
+      state.log.append("a")
+      return Self.output(.o1)
+    }
+  }
+}
+
 private struct ScopedParentFeature: Reducer {
   struct ChildState: Equatable, Sendable {
     var log: [String] = []
@@ -1286,6 +1312,73 @@ private struct DeepSendDrainFeature: Reducer {
   }
 }
 
+/// What a drain that suspends lets run before the sent action is reduced.
+private enum SuspendedDrainShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// The anchor of `x`, delivered before the send; `t` cancels `x`'s
+  /// follow-up, so a `Store` never reduces `x2`.
+  case laterAnchor
+  /// The same anchor, whose marker queues the next level's while the drain
+  /// waits; `u`'s interpreter job comes before that level, as a `Store`
+  /// creates it with the send.
+  case laterChain
+  /// The job that delivers `y`, queued before the send; `c`'s plain
+  /// follow-up `c2` is drained with the send, ahead of that job.
+  case emission
+
+  var testDescription: String { rawValue }
+
+  var sent: SuspendingDrainFeature.Action {
+    switch self {
+    case .laterAnchor: .t
+    case .laterChain: .u
+    case .emission: .c
+    }
+  }
+
+  /// What a `Store` reduces, and how much of it a test store reduces during
+  /// the send.
+  var log: [String] {
+    switch self {
+    case .laterAnchor: ["r", "x", "t"]
+    case .laterChain: ["r", "x", "u", "x2", "u2", "x3"]
+    case .emission: ["r", "c", "c2", "y"]
+    }
+  }
+
+  var reducedBySend: Int { self == .emission ? 2 : 3 }
+}
+
+private let suspendingRunID = EffectID<String>("delivery-order-suspending-run")
+private let laterFollowID = EffectID<String>("delivery-order-later-follow")
+
+/// `r` returns a scheduled run, whose walk suspends while it waits for
+/// admission; `x`, `x2` and `u` return a wrapped send of the next action;
+/// `t` cancels `x`'s follow-up; `c` returns `.send(.c2)`.
+private struct SuspendingDrainFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case r, x, x2, x3, t, u, u2, c, c2, y
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    state.log.append(action.rawValue)
+    switch action {
+    case .r: return .run(id: suspendingRunID, policy: .serial(maxPending: 1)) { _, _ in }
+    case .x: return EffectTask<Action>.send(.x2).cancellable(laterFollowID)
+    case .x2: return EffectTask<Action>.send(.x3).cancellable(otherID)
+    case .t: return .cancel(laterFollowID)
+    case .u: return EffectTask<Action>.send(.u2).cancellable(markID)
+    case .c: return .send(.c2)
+    default: return .none
+    }
+  }
+}
+
 private let drainThrottleID = EffectID<String>("delivery-order-drain-throttle")
 
 /// `r` returns a throttled `.send(.rl)`, whose walk reads the clock first.
@@ -1505,6 +1598,26 @@ struct TestStoreDeliveryOrderTests {
     await waitUntilIdle(store)
     await store.receiveOutput(.done, timeout: .zero)
     await store.finish()
+  }
+
+  @Test("A non-exhaustive output receive reduces the actions a Store reduced before that output")
+  func offOutputReceiveReducesEarlierActionsFirst() async {
+    let reference = Store(reducer: OutputBehindActionFeature(), initialState: .init())
+    let captured = reference.send(.start, capturingOutputs: .unbounded)
+    var expected: [OutputBehindActionFeature.Output] = []
+    for await output in captured.outputs { expected.append(output) }
+    withExtendedLifetime(reference) {}
+    #expect(expected == [.o1, .o2])
+
+    let store = TestStore(reducer: OutputBehindActionFeature(), initialState: .init())
+    store.exhaustivity = .off
+    await store.send(.start)
+    // `a` and `o2` are both buffered before the test asks for an output.
+    await waitUntilIdle(store)
+    await store.receiveOutput(.o1)
+    await store.receiveOutput(.o2)
+    await store.finish()
+    #expect(store.state.log == ["a"])
   }
 
   @Test("A scoped receive gets a child action its effect's own cancel has passed")
@@ -2057,8 +2170,60 @@ struct TestStoreDeliveryOrderTests {
     #expect(store.state.log == expected)
   }
 
+  @Test(
+    "A send whose drain suspends keeps the place where the send began",
+    arguments: SuspendedDrainShape.allCases, [true, false])
+  fileprivate func suspendedDrainKeepsTheSendPlace(
+    shape: SuspendedDrainShape, exhaustive: Bool
+  ) async {
+    // `r`'s interpreter job ran before the send. A `Store` reduces the sent
+    // action, and creates its interpreter job, in the job in which the send
+    // begins, before the jobs queued by then: `x`'s interpreter job, which
+    // finds its follow-up cancelled or creates the job that reduces `x3`, or
+    // the job that delivers `y`.
+    let sent = shape.sent
+    let reference = Store(reducer: SuspendingDrainFeature(), initialState: .init())
+    await queueEmission(.r, into: reference).value
+    await mainActorBarrier()
+    let referenceEmission: Task<Void, Never>?
+    switch shape {
+    case .laterAnchor, .laterChain:
+      reference.deliverAction(.x, context: nil)
+      referenceEmission = nil
+    case .emission:
+      referenceEmission = queueEmission(.y, into: reference)
+    }
+    reference.send(sent)
+    await referenceEmission?.value
+    await settle { reference.state.log.count >= shape.log.count }
+    await mainActorBarrier()
+    #expect(reference.state.log == shape.log)
+
+    let store = TestStore(reducer: SuspendingDrainFeature(), initialState: .init())
+    store.exhaustivity = .off
+    store.deliverAction(.r, context: nil)
+    await mainActorBarrier()
+    switch shape {
+    case .laterAnchor, .laterChain: store.deliverAction(.x, context: nil)
+    case .emission: queueEmission(.y, into: store)
+    }
+    // The drain walks `r`'s scheduled run, which suspends while it waits for
+    // admission; the queued job runs meanwhile.
+    await store.send(sent)
+    store.exhaustivity = exhaustive ? .on : .off
+    let atSend = Array(shape.log.prefix(shape.reducedBySend))
+    #expect(store.state.log == atSend)
+    var log = atSend
+    for entry in shape.log.dropFirst(atSend.count) {
+      log.append(entry)
+      await store.receive(SuspendingDrainFeature.Action(entry)) { [log] in $0.log = log }
+    }
+    await store.finish()
+    #expect(store.state.log == shape.log)
+  }
+
   @Test("A send leaves buffered what is delivered while it drains earlier actions")
-  func sendLeavesValuesDeliveredDuringItsDrain() async {
+  func sendLeavesValuesDeliveredDuringItsDrain() async throws {
     // `r`'s interpreter job already ran when `c` is sent, and `y`'s job was
     // queued before the send: a `Store` reduces `y` after `c`.
     let reference = Store(
@@ -2083,7 +2248,9 @@ struct TestStoreDeliveryOrderTests {
     #expect(store.state.log == ["r", "c"])
     await store.receive(.y)
     await store.receive(.rl)
-    await clock.advance(by: .seconds(1))
+    // The throttle window's timer is the one sleeper; ending the window lets
+    // the store become idle.
+    try await clock.advance(by: .seconds(1), onceSleepersReach: 1)
     await store.finish()
     #expect(store.state.log == ["r", "c", "y", "rl"])
   }

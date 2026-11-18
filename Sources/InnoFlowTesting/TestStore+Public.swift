@@ -22,8 +22,8 @@ extension TestStore {
   /// also under ownership metadata — the send starts that effect once the
   /// MainActor jobs queued before that task have run, and buffers what the
   /// effect delivers before it first suspends where that task runs. For a
-  /// buffered action reduced first whose task has not run yet, that is after
-  /// the new action is reduced, as in a `Store`.
+  /// buffered action reduced first whose task had not run when the send
+  /// began, that is after the new action is reduced, as in a `Store`.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -57,7 +57,7 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
-    let deferredWalks = await prepareForSend(location: location)
+    let prepared = await prepareForSend(location: location)
     let dispatch = makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousState = state
@@ -80,7 +80,7 @@ extension TestStore {
     )
 
     await walkSentEffect(
-      effect, location: location, flowTaskTracker: dispatch.tracker, after: deferredWalks)
+      effect, location: location, flowTaskTracker: dispatch.tracker, prepared: prepared)
     return dispatch.task
   }
 

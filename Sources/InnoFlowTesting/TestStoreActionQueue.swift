@@ -277,6 +277,11 @@ package final class ActionQueue<Action: Sendable> {
     return received
   }
 
+  /// Where a `Store` handles the first buffered value, if any.
+  var firstBufferedStoreOrder: TestStoreOrder? {
+    headIndex < buffer.count ? buffer[headIndex].delivery.storeOrder : nil
+  }
+
   /// Removes and returns the first buffered value when `isEligible` accepts it.
   func popBuffered(if isEligible: (QueuedAction) -> Bool = { _ in true }) -> QueuedAction? {
     guard headIndex < buffer.count, isEligible(buffer[headIndex]) else { return nil }

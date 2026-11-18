@@ -5,28 +5,28 @@
 import Foundation
 
 extension TestStore {
-  /// Reduces the buffered actions a `Store` reduced before an action the
-  /// test sends now: those delivered before the send, with the values their
-  /// reductions drain and the values of interpreter tasks that already ran.
+  /// Takes the place of an action the test sends now, and reduces the
+  /// buffered actions a `Store` reduced before it: those delivered before
+  /// the send, with the values their reductions drain and the values of
+  /// interpreter tasks that ran before the send began.
   ///
-  /// - Returns: The walks of the drained actions whose interpreter tasks a
-  ///   `Store` runs after it reduces the sent action; the send runs them
-  ///   after its reduction.
+  /// - Returns: The place of the send, and the walks of the drained actions
+  ///   whose interpreter tasks a `Store` runs after it reduces the sent
+  ///   action; the send runs them after its reduction.
   package func prepareForSend(
     location: TestStoreSourceLocation
-  ) async -> TestStoreDeferredWalks {
+  ) async -> TestStorePreparedSend {
     noteTestInteraction(location: location)
+    // A `Store` reduces the sent action in the MainActor job in which the
+    // send begins, before any job queued by then runs, even when this drain
+    // suspends: values delivered or anchored from now on stay buffered.
+    var prepared = TestStorePreparedSend(markerCount: queue.anchorMarkerCount)
     let deadline = wallClock.now.advanced(by: effectTimeout)
     var skippedActionCount = 0
     var skippedActionDescriptions: [String] = []
     var didDrainAction = false
-    // A `Store` reduces the sent action in the current MainActor job, before
-    // any job queued now runs: values delivered or anchored from now on stay
-    // buffered.
-    let sendOrder = TestStoreOrder.now()
-    var deferred = TestStoreDeferredWalks()
 
-    while let action = popBufferedQueuedAction(before: sendOrder) {
+    while let action = popBufferedQueuedAction(before: prepared.order) {
       // Give one already-buffered action a chance to recover even when the
       // configured timeout is zero, then bound recursive synchronous sends.
       if didDrainAction, wallClock.now >= deadline {
@@ -52,17 +52,17 @@ extension TestStore {
           location
         )
         action.finish()
-        return deferred
+        return prepared
       }
       if skippedActionDescriptions.count < 20 {
         skippedActionDescriptions.append(String(describing: action.action))
       }
       skippedActionCount += 1
-      await reduceBufferedActionBeforeSend(action, location: location, deferring: &deferred)
+      await reduceBufferedActionBeforeSend(action, location: location, preparing: &prepared)
       didDrainAction = true
     }
 
-    guard skippedActionCount > 0 else { return deferred }
+    guard skippedActionCount > 0 else { return prepared }
 
     let actionList = formattedSkippedActions(
       skippedActionDescriptions,
@@ -81,7 +81,7 @@ extension TestStore {
       )
 
     case .off(let showSkippedAssertions):
-      guard showSkippedAssertions else { return deferred }
+      guard showSkippedAssertions else { return prepared }
       warningReporter(
         """
         TestStore skipped \(skippedActionCount) effect action(s) before sending a new action:
@@ -92,7 +92,7 @@ extension TestStore {
         location
       )
     }
-    return deferred
+    return prepared
   }
 
   private func formattedSkippedActions(

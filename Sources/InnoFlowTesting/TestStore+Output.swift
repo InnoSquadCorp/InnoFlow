@@ -9,8 +9,10 @@ extension TestStore {
   /// Receives the next reducer output and verifies its exact value.
   ///
   /// In non-exhaustive mode, skips mismatches under one total timeout, just
-  /// like `receive`, and advances intermediate FIFO actions and their effects.
-  /// An already-buffered match can be received with `.zero`.
+  /// like `receive`, and advances intermediate FIFO actions and their effects:
+  /// a buffered action a `Store` reduced before it published the next
+  /// buffered output is reduced first. An already-buffered match can be
+  /// received with `.zero`.
   public func receiveOutput(
     _ expectedOutput: R.Output,
     timeout: Duration? = nil,
@@ -139,6 +141,17 @@ extension TestStore {
 
       // Capture before inspecting either queue; waiting never consumes a value.
       let revision = finishActivity.snapshot.revision
+      // A `Store` reduced a buffered action keyed before the next buffered
+      // output before it published that output, and what the action's
+      // reduction publishes comes first: reduce it, then check again.
+      if !exhaustivity.isOn, let outputOrder = outputQueue.firstBufferedStoreOrder,
+        let action = popBufferedQueuedAction(before: outputOrder)
+      {
+        reportSkippedAction(action.action, context: "receiving an output", location: location)
+        await applyUnassertedAction(action, location: location)
+        didProgress = true
+        continue
+      }
       let queuedOutput: ActionQueue<R.Output>.QueuedAction
       if let buffered = outputQueue.popBuffered() {
         queuedOutput = buffered
