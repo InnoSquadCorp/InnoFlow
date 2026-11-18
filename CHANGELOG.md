@@ -129,12 +129,20 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   the window to end, as in 6.0.x. Before, an ID cancellation always
   reset the window, and the outcome of a dispatch cancellation depended on
   whether the cancelled dispatch's effect had been interpreted yet.
-- `TestStore` queues the actions that a received action's effect delivers
-  synchronously right behind that action, at every depth: a follow-up chain,
-  a Scope delegate chain, and the follow-up of a run's emission against the
-  next run of a `concatenate` are received in the order a `Store` reduces
-  them. Before, the order, and with a cancellation the set of received
-  actions, depended on when the test received the first action.
+- `TestStore` keeps buffered actions and outputs in the order a `Store`
+  handles them. A plain `.send` or `.output` follow-up of a received action
+  is queued right behind it, at every depth: a follow-up chain and a Scope
+  delegate chain are received before the actions delivered after the
+  chain's first action, and such an output before the outputs published
+  after the action. A wrapped follow-up (`.cancellable`, `.animation`, …),
+  which a `Store` interprets in a MainActor job of its own, is queued behind
+  what was delivered in the received action's MainActor turn, such as the
+  later sends of the same `concatenate`, and ahead of what is delivered
+  later, such as the emitting run's next emission or a `concatenate` step
+  after a run. Before, the order, and with a cancellation the set of
+  received actions and outputs, depended on when the test received the
+  first action. The children of a composite (`merge`, `concatenate`)
+  follow-up stay in delivery order.
 - A collection scope now refreshes only the rows a change can affect instead
   of every row on any change, and rows resolve their positions once per
   structural change instead of each scanning the collection, also when an

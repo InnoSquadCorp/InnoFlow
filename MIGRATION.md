@@ -117,12 +117,20 @@ reduced, and a buffered output as one it has already published:
   effect of a buffered output (including closing an optional child). In 6.0.x
   the value was dropped. Add the missing `receive` or `receiveOutput` to an
   exhaustive test.
-- The actions a received action's effect delivers synchronously are queued
-  right behind it, ahead of everything buffered earlier, at any depth. Receive
-  a follow-up chain before the actions delivered after its first action. In
-  6.0.x the order depended on timing; a test that received a later action
-  first, for example the target before the `.send` follow-up of an action it
-  received as a mismatch, must swap the two receives.
+- A plain `.send` or `.output` follow-up of a received action is queued
+  right behind it, at any depth: receive a follow-up chain before the actions
+  delivered after its first action, and a plain output before the outputs
+  published after the action. A wrapped follow-up (`.cancellable`,
+  `.animation`, …) is queued behind the values delivered in the received
+  action's MainActor turn — the job that delivered that turn's first value
+  and the jobs already queued then — such as the later sends of the same
+  `concatenate` (as in 6.0.x), and ahead of the values delivered later, such
+  as the emitting run's next emission or a `concatenate` step after a run.
+  In 6.0.x the order depended on timing; a test that received a later action
+  first — for example the target before the `.send` follow-up of an action
+  it received as a mismatch, or a run's next emission before a wrapped
+  follow-up of its previous one — must swap the two receives. The children
+  of a composite (`merge`, `concatenate`) follow-up stay in delivery order.
 - A cancellation applied while the test reduces a received action still
   removes the covered actions buffered behind it, and the covered outputs a
   `Store` would publish after it.
