@@ -84,9 +84,7 @@ actor TestStoreRunBridge<Action: Sendable> {
       guard endpoint.isTaskActive(token: token), endpoint.shouldProceed(context: context) else {
         return
       }
-      // The run is not blocked until the action is reduced; the token lets
-      // the reduction's synchronous follow-ups go ahead of its next emission.
-      queue.enqueue(action, context: context, runToken: token)
+      queue.enqueue(action, context: context)
       endpoint.didEnqueueAction()
     }
   }

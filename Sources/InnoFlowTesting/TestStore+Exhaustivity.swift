@@ -19,6 +19,7 @@ extension TestStore {
       // configured timeout is zero, then bound recursive synchronous sends.
       if didDrainAction, wallClock.now >= deadline {
         let sequence = markCancelledAll()
+        purgeDeliveries(cancelledBy: nil, upTo: sequence)
         cancelAllEffectsSynchronously(upTo: sequence)
         let actionList = formattedSkippedActions(
           skippedActionDescriptions,

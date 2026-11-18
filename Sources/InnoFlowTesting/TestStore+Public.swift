@@ -457,14 +457,20 @@ extension TestStore {
     }
   }
 
+  /// Cancels the effects identified by `id` and removes every buffered action
+  /// and output they delivered, as if the cancellation landed before them.
   public func cancelEffects<ID: Hashable & Sendable>(identifiedBy id: EffectID<ID>) async {
     let erasedID = AnyEffectID(id)
     let sequence = markCancelled(id: erasedID)
+    purgeDeliveries(cancelledBy: erasedID, upTo: sequence)
     cancelEffectsSynchronously(identifiedBy: erasedID, upTo: sequence)
   }
 
+  /// Cancels every effect and removes every buffered action and output they
+  /// delivered, as if the cancellation landed before them.
   public func cancelAllEffects() async {
     let sequence = markCancelledAll()
+    purgeDeliveries(cancelledBy: nil, upTo: sequence)
     cancelAllEffectsSynchronously(upTo: sequence)
   }
 

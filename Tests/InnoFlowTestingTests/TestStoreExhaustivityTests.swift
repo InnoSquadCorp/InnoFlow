@@ -286,14 +286,16 @@ struct TestStoreExhaustivityTests {
     #expect(failures.count == 1)
     #expect(failures[0].contains("Received unexpected action"))
 
-    await store.receive(.target, timeout: .zero) {
-      $0.events.append("target")
-    }
+    // A Store reduces the mismatch's plain follow-up right after it, before
+    // the target was even delivered.
     await store.receive(.followUp, timeout: .zero) {
       $0.events.append("followUp")
     }
+    await store.receive(.target, timeout: .zero) {
+      $0.events.append("target")
+    }
 
-    #expect(store.state.events == ["unexpected", "target", "followUp"])
+    #expect(store.state.events == ["unexpected", "followUp", "target"])
     #expect(failures.count == 1)
   }
 

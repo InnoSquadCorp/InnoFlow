@@ -29,7 +29,7 @@ extension TestStore: EffectDriver {
   package func deliverOutput(_ output: R.Output, context: EffectExecutionContext?) {
     guard shouldProceed(context: context) else { return }
     noteUnverifiedWorkAfterTerminalVerification()
-    outputQueue.enqueue(output, context: context, tracksActivity: false)
+    enqueueDeliveredOutput(output, context: context)
     finishActivity.noteProgress()
   }
 
@@ -57,8 +57,6 @@ extension TestStore: EffectDriver {
   }
 
   package func cancelEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
-    // What this sequence delivered earlier, a Store has already reduced.
-    settleDeliveries(of: context)
     // The reduction turn released every earlier sequence; the request's own
     // sequence is completed here, in declaration order.
     _ = context?.cancellationScope?.consumeAcceptedCancellation(.all(id))
@@ -67,7 +65,6 @@ extension TestStore: EffectDriver {
   }
 
   package func cancelInFlightEffects(id: AnyEffectID, context: EffectExecutionContext?) async {
-    settleDeliveries(of: context)
     // An in-flight request never covers its own sequence, so a request the
     // reduction turn accepted has nothing left to apply.
     if context?.cancellationScope?.consumeAcceptedCancellation(.inFlight(id)) == true {

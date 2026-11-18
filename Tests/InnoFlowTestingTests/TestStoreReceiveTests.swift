@@ -263,14 +263,17 @@ struct TestStoreReceiveTests {
   func expiredDeadlinePreservesValidActionAfterStaleBuffer() async {
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let cancellationID = AnyEffectID(StaticEffectID("receive-buffered-deadline"))
-    let sequence = store.nextSequence()
-    let staleContext = store.makeEffectContext(
-      sequence: sequence,
+    // Cancelling its dispatch invalidates the action but leaves it buffered.
+    let dispatch = FlowTaskTracker()
+    _ = dispatch.beginActivity()
+    let staleContext = store.effectBoundaries.makeContext(
+      sequence: store.nextSequence(),
       cancellationIDs: [cancellationID],
-      potentialCancellationIDs: [cancellationID]
+      potentialCancellationIDs: [cancellationID],
+      flowTaskTracker: dispatch
     )
     store.deliverAction(.ignored, context: staleContext)
-    _ = store.markCancelled(id: cancellationID, upTo: sequence)
+    dispatch.cancel()
     store.deliverAction(.value(21), context: nil)
 
     let timedOut = await store.receiveResult(timeout: .zero) { action in
@@ -294,11 +297,14 @@ struct TestStoreReceiveTests {
   func invalidatedActionsDoNotResetReceiveDeadline() async {
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let cancellationID = AnyEffectID(StaticEffectID("receive-total-deadline"))
-    let sequence = store.nextSequence()
-    let staleContext = store.makeEffectContext(
-      sequence: sequence,
+    // Cancelling its dispatch invalidates the action handed to the waiter.
+    let dispatch = FlowTaskTracker()
+    _ = dispatch.beginActivity()
+    let staleContext = store.effectBoundaries.makeContext(
+      sequence: store.nextSequence(),
       cancellationIDs: [cancellationID],
-      potentialCancellationIDs: [cancellationID]
+      potentialCancellationIDs: [cancellationID],
+      flowTaskTracker: dispatch
     )
     let totalTimeout = Duration.seconds(5)
     let minimumConsumedBudget = Duration.milliseconds(50)
@@ -325,7 +331,7 @@ struct TestStoreReceiveTests {
 
     try? await Task.sleep(for: .milliseconds(100))
     store.deliverAction(.ignored, context: staleContext)
-    _ = store.markCancelled(id: cancellationID, upTo: sequence)
+    dispatch.cancel()
 
     let didInstallSecondWaiter = await waitUntil {
       observedTimeouts.count == 2 && store.queue.pendingWaiterCount == 1

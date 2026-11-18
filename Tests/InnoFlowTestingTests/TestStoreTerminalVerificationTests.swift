@@ -99,12 +99,15 @@ struct TestStoreTerminalVerificationTests {
 
     await store?.send(.idle)
     if let store {
-      let sequence = store.nextSequence()
+      // Cancelling its dispatch invalidates the action but leaves it buffered.
+      let dispatch = FlowTaskTracker()
+      _ = dispatch.beginActivity()
       store.queue.enqueue(
         .response,
-        context: store.makeEffectContext(sequence: sequence)
+        context: store.effectBoundaries.makeContext(
+          sequence: store.nextSequence(), flowTaskTracker: dispatch)
       )
-      _ = store.markCancelledAll(upTo: sequence)
+      dispatch.cancel()
     }
 
     store = nil

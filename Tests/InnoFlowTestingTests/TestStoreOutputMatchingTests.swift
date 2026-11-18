@@ -99,16 +99,20 @@ struct TestStoreOutputMatchingTests {
     let store = TestStore(reducer: IntegerOutputFeature())
     var failures: [String] = []
     store.assertionFailureReporter = { message, _, _ in failures.append(message) }
+    // Cancelling its dispatch invalidates output 1 but leaves it buffered; a
+    // cancellation of its effect alone would not, because a Store already
+    // published it.
+    let dispatch = FlowTaskTracker()
     let registry = EffectCancellationScopeRegistry()
     let (scope, lease) = registry.makeScopeAndInterpreterLease(
       sequence: 1, potentialCancellationIDs: []
     )
     let context = EffectExecutionContext.managedRoot(
-      cancellationScope: scope, interpreterLease: lease, sequence: 1
+      cancellationScope: scope, interpreterLease: lease, sequence: 1, flowTaskTracker: dispatch
     )
     store.deliverOutput(1, context: context)
     store.deliverOutput(2, context: nil)
-    scope.cancelAll()
+    dispatch.cancel()
 
     await store.receiveOutput(2, timeout: .zero)
 
