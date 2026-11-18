@@ -162,14 +162,17 @@ reduced, and a buffered output as one it has already published:
 - A walk that suspends — a throttle reading its clock, a scheduled run
   waiting for admission — now keys what it delivers afterwards where a
   `Store` resumes it at the earliest, behind the jobs queued before the walk
-  started, instead of at its delivery; and a walk created behind it starts
-  right after it finished, the earliest point at which a `Store` starts it:
-  a `Store` starts each root interpreter walk only after the one before it,
-  and hands a resumed walk, and a walk that waited, back to the MainActor
-  from another executor, so where they continue depends on how soon that
-  happens relative to the MainActor's other jobs. A throttle on a test store
-  without a `ManualTestClock` now suspends to read the clock too, as on a
-  `Store`, so its value comes behind the jobs queued before its walk. A test
+  started, instead of at its delivery. A walk created before it started,
+  such as one delivered in the same job, waits for it and starts right
+  after it finished, the earliest point at which a `Store` starts it; a
+  walk created after it started starts where its own interpreter task runs,
+  as in a `Store` that resumed the earlier walk at the earliest. A `Store`
+  starts each root interpreter walk only after the one before it, and hands
+  a resumed walk, and a walk that waited, back to the MainActor from another
+  executor, so where they continue depends on how soon that happens relative
+  to the MainActor's other jobs. A throttle on a test store without a
+  `ManualTestClock` now suspends to read the clock too, as on a `Store`, so
+  its value comes behind the jobs queued before its walk. A test
   that received those values, or the values of the walk behind it, in
   delivery order receives them in that order instead. A walk that suspends
   more than once (a throttle around a scheduled run, nested throttles) is
