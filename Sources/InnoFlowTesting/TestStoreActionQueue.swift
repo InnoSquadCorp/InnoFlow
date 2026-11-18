@@ -63,33 +63,27 @@ package final class TestStoreDispatchActivity: Sendable {
 ///
 /// A `Store` reduces an effect action, and publishes an output, the moment an
 /// effect delivers it. A test store buffers the value until the test receives
-/// it, so a cancellation applied in between decides from this record whether
-/// a `Store` would already have handled the value.
+/// it; this record places the value in the `Store` schedule the test store
+/// models, so a cancellation applied in between can tell whether a `Store`
+/// would have handled the value before that cancellation.
 @MainActor
 package final class TestStoreDelivery {
   private static var lastOrder: UInt64 = 0
 
   /// The order every buffered action and output of every test store shares.
   package let order: UInt64
-  /// The run that emitted the action, when a run emitted it.
-  package let runToken: UUID?
-  /// The continuation of the effect sequence that delivered the value has
-  /// moved past it, so a `Store` has certainly handled it: only a
-  /// cancellation applied while the test reduces an earlier received action,
-  /// or the end of its dispatch, still removes it.
-  package var isSettled = false
-  /// A cancellation applied while the test reduced an earlier received action
-  /// covered the value, which a `Store` would therefore never have delivered.
+  /// Where a `Store` handles the value in the modeled schedule: at its own
+  /// delivery, or, for a value the synchronous part of a received action's
+  /// effect walk delivered, right after that action.
+  package let storeOrder: UInt64
+  /// A cancellation removed the value before the test received it.
   package var isWithdrawn = false
 
-  init(runToken: UUID?) {
+  init(storeOrder: UInt64? = nil) {
     Self.lastOrder &+= 1
     order = Self.lastOrder
-    self.runToken = runToken
+    self.storeOrder = storeOrder ?? order
   }
-
-  /// Every delivery recorded so far has an order below this one.
-  package static var nextOrder: UInt64 { lastOrder &+ 1 }
 }
 
 @MainActor
@@ -113,15 +107,30 @@ package final class ActionQueue<Action: Sendable> {
         tracksActivity ? (context?.flowTaskTracker).map(TestStoreDispatchActivity.init) : nil
     }
 
-    /// Whether the test may still receive the value. A settled value ignores
-    /// later cancellation of its effect, but not the end of its dispatch.
+    /// Whether the test may still receive the value: no cancellation removed
+    /// it and its dispatch was not cancelled. Other cancellation of its effect
+    /// does not matter, because a `Store` has already handled the value.
     @MainActor package var isDeliverable: Bool {
-      guard !delivery.isWithdrawn else { return false }
-      guard !delivery.isSettled else { return context?.flowTaskTracker?.isCancelled != true }
-      return context?.shouldProceed ?? true
+      !delivery.isWithdrawn && context?.flowTaskTracker?.isCancelled != true
+    }
+
+    /// Whether a cancellation of `id`, or of every effect when `id` is `nil`,
+    /// up to the sequence `boundary` covers the effect that delivered the value.
+    @MainActor func isCovered(byCancellationOf id: AnyEffectID?, upTo boundary: UInt64) -> Bool {
+      guard let scope = context?.cancellationScope, scope.sequence <= boundary else { return false }
+      return id.map { context?.cancellationIDs.contains($0) == true } ?? true
     }
 
     func finish() { activity?.finish() }
+  }
+
+  /// Where a value no waiter takes is buffered.
+  enum Placement {
+    /// Behind every buffered value.
+    case back
+    /// Ahead of every buffered value, except `predecessor` and the values
+    /// ahead of it while `predecessor` is still buffered.
+    case front(behind: TestStoreDelivery?)
   }
 
   private struct Waiter {
@@ -156,29 +165,27 @@ package final class ActionQueue<Action: Sendable> {
     }
   }
 
-  /// Buffered values and values already resumed to a waiter that has not run.
-  func forEachPending(_ body: (QueuedAction) -> Void) {
-    handedOff.forEach(body)
-    forEachBuffered(body)
-  }
-
   // Internal diagnostics hook for verifying forwarded wait budgets without
   // coupling tests to scheduler-dependent wall-clock completion thresholds.
   var waitTimeoutObserver: ((Duration) -> Void)?
 
-  /// Delivers a value to the first waiter, or buffers it. A value buffered
-  /// with `aheadOfRun` goes before the first buffered value that run emitted.
+  /// Delivers a value to the first waiter, or buffers it at `placement`.
+  ///
+  /// - Parameter storeOrder: Where a `Store` handles the value, when that is
+  ///   not at its own delivery.
+  /// - Returns: The record of the delivery.
+  @discardableResult
   func enqueue(
     _ action: Action,
     context: EffectExecutionContext?,
     tracksActivity: Bool = true,
-    runToken: UUID? = nil,
-    aheadOfRun anchor: UUID? = nil
-  ) {
+    storeOrder: UInt64? = nil,
+    placement: Placement = .back
+  ) -> TestStoreDelivery {
     let queuedAction = QueuedAction(
       action: action,
       context: context,
-      delivery: TestStoreDelivery(runToken: runToken),
+      delivery: TestStoreDelivery(storeOrder: storeOrder),
       tracksActivity: tracksActivity
     )
     while !waiters.isEmpty {
@@ -190,15 +197,33 @@ package final class ActionQueue<Action: Sendable> {
       }
       handedOff.append(queuedAction)
       head.continuation.resume(returning: queuedAction)
-      return
+      return queuedAction.delivery
     }
 
-    if let anchor,
-      let index = buffer[headIndex...].firstIndex(where: { $0.delivery.runToken == anchor })
-    {
-      buffer.insert(queuedAction, at: index)
-    } else {
+    switch placement {
+    case .back:
       buffer.append(queuedAction)
+    case .front(let predecessor):
+      let index =
+        predecessor.flatMap { predecessor in
+          buffer[headIndex...].firstIndex { $0.delivery === predecessor }.map { $0 + 1 }
+        } ?? headIndex
+      buffer.insert(queuedAction, at: index)
+    }
+    return queuedAction.delivery
+  }
+
+  /// Withdraws the pending values `predicate` selects: removes the buffered
+  /// ones and marks each one withdrawn, so a waiter already handed one
+  /// discards it. The predicate learns whether a value is still buffered.
+  func withdraw(where predicate: (QueuedAction, _ isBuffered: Bool) -> Bool) {
+    for entry in handedOff where predicate(entry, false) {
+      entry.delivery.isWithdrawn = true
+    }
+    removeBuffered { entry in
+      guard predicate(entry, true) else { return false }
+      entry.delivery.isWithdrawn = true
+      return true
     }
   }
 

@@ -5,49 +5,47 @@
 import Foundation
 package import InnoFlowCore
 
-// A `Store` reduces an effect action the moment an effect delivers it: an
-// interpreter `.send` is reduced in the interpreter's MainActor turn, and a
-// run's `await send(action)` returns only after the reduction, once the
-// reduced action's effect job is queued. A test store buffers the action at
-// the same points instead and reduces it when the test receives it. A
-// buffered action is therefore one a `Store` would already have reduced, and
-// the bookkeeping below keeps a later cancellation, and the order of
-// follow-up work, consistent with that:
+// A `Store` reduces an effect action, and publishes an output, the moment an
+// effect delivers it: an interpreter `.send` is reduced in the interpreter's
+// MainActor turn, and a run's `await send(action)` returns only after the
+// reduction. A test store buffers the value at the same points instead and
+// reduces an action when the test receives it. The test store models the
+// `Store` schedule in which every value was handled at its delivery, and the
+// values the synchronous part of a received action's effect walk delivers
+// were handled right after that action:
 //
-// - The continuation of the effect sequence that delivered a value does not
-//   remove it with a cancellation it applies later. Once that continuation has
-//   applied one, the value is settled: a `Store` has certainly handled it, and
-//   later cancellation of its effect no longer removes it.
+// - Those values go to the front of the buffer, right behind the received
+//   action, in delivery order. For a bare `.send` this is the only order a
+//   `Store` has; for any other effect it is one a `Store` can produce.
+//   Outputs stay in the order they are delivered.
 // - A cancellation applied while the test reduces a received action — its
 //   reduction, the reduction-turn acceptance and the synchronous part of its
-//   effect walk — removes every covered value behind it, settled or not: a
-//   `Store` reduced that action before any of them was delivered.
-// - The actions the synchronous part of that walk delivers go ahead of the
-//   actions the received action's run emitted after it.
+//   effect walk — removes the covered values a `Store` would have delivered
+//   after that action, except the ones its own walk delivered.
+// - A cancellation the test issues itself removes every value it covers, as
+//   if it landed first: `cancelEffects(identifiedBy:)`, `cancelAllEffects()`,
+//   the cancellation of a dispatch, and the cancellation of all remaining
+//   work when a drain times out or `finish()` fails.
 //
-// Every other cancellation keeps removing the covered values it finds, which
-// is the `Store` schedule where the cancellation lands first; interleavings a
-// `Store` does not order stay in delivery order.
+// No other cancellation removes a delivered value; a `Store` has already
+// reduced or published it.
 
 /// The buffered action a test store is reducing, while that reduction lasts.
 @MainActor
 package final class TestStoreReceivedReduction {
-  /// The delivery order of the received action.
-  let receivedOrder: UInt64
-  /// Every value delivered before this reduction began has a lower order.
-  let startOrder: UInt64
-  /// The run that emitted the received action.
-  let emittingRun: UUID?
+  /// Where a `Store` handles the received action in the modeled schedule.
+  let storeOrder: UInt64
   /// The sequence of the effect the reduction returned, once it exists.
   var effectSequence: UInt64?
+  /// The last value the walk placed at the front of the buffer; the next one
+  /// goes behind it.
+  var lastFollowUp: TestStoreDelivery?
   /// Whether the reduction and the walk of its effect are still in the
   /// MainActor turn in which they started.
   var isSynchronous = true
 
-  init(receivedOrder: UInt64, emittingRun: UUID?) {
-    self.receivedOrder = receivedOrder
-    startOrder = TestStoreDelivery.nextOrder
-    self.emittingRun = emittingRun
+  init(storeOrder: UInt64) {
+    self.storeOrder = storeOrder
   }
 }
 
@@ -70,10 +68,7 @@ extension TestStore {
     let previousState = state
     willReduce(previousState)
 
-    let reduction = TestStoreReceivedReduction(
-      receivedOrder: entry.delivery.order,
-      emittingRun: entry.delivery.runToken
-    )
+    let reduction = TestStoreReceivedReduction(storeOrder: entry.delivery.storeOrder)
     receivedReduction = reduction
     // MainActor jobs run in the order they are queued: this one runs at the
     // walk's first suspension, before the walk resumes and before any work
@@ -94,34 +89,42 @@ extension TestStore {
     await walker.walk(effect, context: context, awaited: false)
   }
 
-  /// Buffers an effect action, ahead of the received action's later run
-  /// emissions when the synchronous part of its walk delivers it.
-  func enqueueDeliveredAction(_ action: R.Action, context: EffectExecutionContext?) {
-    var anchor: UUID?
-    if let reduction = receivedReduction, reduction.isSynchronous,
+  /// The received reduction whose synchronous walk is delivering a value of
+  /// `context`. Work queued on the MainActor before the reduction began can
+  /// run at the walk's first suspension; its values belong to other effects.
+  private func followedReduction(
+    deliveringIn context: EffectExecutionContext?
+  ) -> TestStoreReceivedReduction? {
+    guard let reduction = receivedReduction, reduction.isSynchronous,
       let sequence = reduction.effectSequence, context?.sequence == sequence
-    {
-      anchor = reduction.emittingRun
-    }
-    queue.enqueue(action, context: context, aheadOfRun: anchor)
+    else { return nil }
+    return reduction
   }
 
-  /// Settles every pending value the sequence of `context` delivered: its
-  /// continuation is about to apply a cancellation, so it has moved past them.
-  package func settleDeliveries(of context: EffectExecutionContext?) {
-    guard let sequence = context?.sequence else { return }
-    func settle<Value>(_ entry: ActionQueue<Value>.QueuedAction) {
-      guard entry.context?.sequence == sequence, !entry.delivery.isSettled else { return }
-      guard entry.isDeliverable else { return }
-      entry.delivery.isSettled = true
+  /// Buffers an effect action. One the synchronous part of a received
+  /// action's walk delivers goes right behind that action, after the ones
+  /// that walk delivered before it.
+  func enqueueDeliveredAction(_ action: R.Action, context: EffectExecutionContext?) {
+    guard let reduction = followedReduction(deliveringIn: context) else {
+      queue.enqueue(action, context: context)
+      return
     }
-    queue.forEachPending(settle)
-    outputQueue.forEachPending(settle)
+    reduction.lastFollowUp = queue.enqueue(
+      action, context: context, storeOrder: reduction.storeOrder,
+      placement: .front(behind: reduction.lastFollowUp))
   }
 
-  /// Removes the buffered values a cancellation covers when the test applies
-  /// it while reducing a received action: they come after that action, which
-  /// a `Store` reduced before they were delivered.
+  /// Buffers an output in delivery order, recording where a `Store` handles it.
+  func enqueueDeliveredOutput(_ output: R.Output, context: EffectExecutionContext?) {
+    outputQueue.enqueue(
+      output, context: context, tracksActivity: false,
+      storeOrder: followedReduction(deliveringIn: context)?.storeOrder)
+  }
+
+  /// Removes the delivered values a cancellation covers when the test applies
+  /// it while reducing a received action: a `Store` reduced that action
+  /// before it delivered them. The values the reduction's own walk delivered
+  /// stay, as do the outputs a `Store` published before the action.
   ///
   /// - Parameters:
   ///   - id: The cancelled identifier; `nil` cancels every effect.
@@ -137,21 +140,25 @@ extension TestStore {
     if let sequence = reduction.effectSequence, issuer != sequence { return }
 
     func isCovered<Value>(_ entry: ActionQueue<Value>.QueuedAction) -> Bool {
-      guard entry.delivery.order < reduction.startOrder, !entry.delivery.isWithdrawn,
-        let scope = entry.context?.cancellationScope, scope.sequence <= boundary
-      else { return false }
-      return id.map { entry.context?.cancellationIDs.contains($0) == true } ?? true
+      let isOwnDelivery =
+        reduction.effectSequence != nil && entry.context?.sequence == reduction.effectSequence
+      return !isOwnDelivery && entry.isCovered(byCancellationOf: id, upTo: boundary)
     }
-    func withdraw<Value>(_ entry: ActionQueue<Value>.QueuedAction) -> Bool {
-      entry.delivery.isWithdrawn = true
-      return true
+    // A buffered action is behind the received one, which was the oldest; a
+    // value handed to a waiter, and an output, may be ahead of it.
+    queue.withdraw { entry, isBuffered in
+      (isBuffered || entry.delivery.storeOrder > reduction.storeOrder) && isCovered(entry)
     }
-    // The received action was the oldest buffered one, so every buffered
-    // action is behind it; outputs are behind it when delivered after it.
-    queue.removeBuffered { isCovered($0) && withdraw($0) }
-    outputQueue.removeBuffered {
-      $0.delivery.order > reduction.receivedOrder && isCovered($0) && withdraw($0)
+    outputQueue.withdraw { entry, _ in
+      entry.delivery.storeOrder > reduction.storeOrder && isCovered(entry)
     }
+  }
+
+  /// Removes every delivered value a cancellation the test issues covers: the
+  /// test chooses the `Store` schedule in which that cancellation lands first.
+  package func purgeDeliveries(cancelledBy id: AnyEffectID?, upTo boundary: UInt64) {
+    queue.withdraw { entry, _ in entry.isCovered(byCancellationOf: id, upTo: boundary) }
+    outputQueue.withdraw { entry, _ in entry.isCovered(byCancellationOf: id, upTo: boundary) }
   }
 }
 
