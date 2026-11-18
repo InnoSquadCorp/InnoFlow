@@ -54,10 +54,13 @@ package import InnoFlowCore
 // - Values delivered after the walk first suspends are handled at their
 //   delivery. A send's drain is the exception: a drained action whose
 //   anchor ran before the send had its interpreter task run before the
-//   send, and that task resumed from its clock read or admission before the
-//   send too, so its walk keeps the anchor's position until it returns. What
-//   work it started in another task delivers — a run, a composite child, a
-//   timer — is still handled at its delivery.
+//   send, and a `Store` resumes that task, after its clock read or
+//   admission, behind every MainActor job queued before it first ran — where
+//   the anchor's next level runs — and, at the earliest, before the send. The
+//   test store follows that walk until it returns, at the next level's
+//   position once it first suspends. What work it started in another task
+//   delivers — a run, a composite child, a timer — is still handled at its
+//   delivery.
 // - A cancellation applied while the test reduces a received or sent action
 //   — its reduction, the reduction-turn acceptance and the synchronous part
 //   of its effect walk — removes the covered values a `Store` would have
@@ -373,25 +376,41 @@ package final class TestStoreFollowedWalk {
   /// The last value the drained effect placed behind the action; the next
   /// one goes behind it.
   var lastFollowUp: TestStoreDelivery?
-  /// Whether the walk stays at its anchor's position across its own
-  /// suspensions, until it returns, instead of until its first suspension.
-  let keepsAnchorAcrossSuspensions: Bool
+  /// Whether the walk is followed past its first suspension, until it
+  /// returns, instead of only in its synchronous part.
+  let followsResumption: Bool
+  /// Where a `Store` resumes the walk's interpreter task at the earliest once
+  /// the walk has suspended: the anchor's next level, behind every MainActor
+  /// job queued before that task first ran.
+  private(set) var resumedAnchor: TestStoreAnchor?
   /// The anchor has run and the walk has started.
   var isWalking = false
-  /// The walk is still where its anchor runs: in the MainActor turn in which
-  /// it started, or until it returns when it keeps its anchor across
-  /// suspensions.
+  /// The walk is still followed: in the MainActor turn in which it started,
+  /// or until it returns when it follows its resumption.
   private(set) var isSynchronous = true
 
   /// Follows the reduction of an action a `Store` handles at `handled`.
-  init(
-    handled: TestStoreDelivery, isDrained: Bool, keepsAnchorAcrossSuspensions: Bool = false
-  ) {
+  init(handled: TestStoreDelivery, isDrained: Bool, followsResumption: Bool = false) {
     self.handled = handled
     self.isDrained = isDrained
-    self.keepsAnchorAcrossSuspensions = keepsAnchorAcrossSuspensions
+    self.followsResumption = followsResumption
     anchor = isDrained ? nil : handled.followUpAnchor
     threshold = handled.storeOrder
+  }
+
+  /// Where a `Store` handles what the walk delivers now.
+  var deliveryAnchor: TestStoreAnchor? {
+    resumedAnchor ?? anchor
+  }
+
+  /// The walk has reached its first suspension: its synchronous part ends,
+  /// unless it follows its resumption, which the next level's position takes.
+  func didReachFirstSuspension() {
+    guard isSynchronous else { return }
+    guard followsResumption else { return endSynchronousPart() }
+    guard let next = anchor?.next, let position = next.position else { return }
+    resumedAnchor = next
+    threshold = TestStoreDelivery.walkThreshold(at: position)
   }
 
   /// The synchronous part of the walk has finished: values delivered from now
@@ -454,12 +473,13 @@ extension TestStore {
       }
       return
     }
-    // A `Store` ran this interpreter task before the send began, and it
-    // resumed from a clock read or an admission before the send: what the
-    // walk delivers until it returns is reduced before the sent action.
+    // A `Store` ran this interpreter task before the send began, and resumed
+    // it from a clock read or an admission, at the earliest, before the
+    // send: what the walk delivers until it returns is reduced before the
+    // sent action.
     defer { entry.finish() }
     await walkReceivedEffect(
-      reduction.effect, context: reduction.context, of: entry, keepsAnchorAcrossSuspensions: true)
+      reduction.effect, context: reduction.context, of: entry, followsResumption: true)
   }
 
   /// Reduces a deliverable buffered action and runs the reduction-turn
@@ -491,7 +511,7 @@ extension TestStore {
     _ effect: ReducerEffect<R.Action, R.Output>,
     context: EffectExecutionContext,
     of entry: ActionQueue<R.Action>.QueuedAction,
-    keepsAnchorAcrossSuspensions: Bool = false
+    followsResumption: Bool = false
   ) async {
     switch effect.storeHandling {
     case .nothing:
@@ -504,8 +524,7 @@ extension TestStore {
       await walkFollowing(
         effect, context: context,
         walk: TestStoreFollowedWalk(
-          handled: entry.delivery, isDrained: false,
-          keepsAnchorAcrossSuspensions: keepsAnchorAcrossSuspensions))
+          handled: entry.delivery, isDrained: false, followsResumption: followsResumption))
     }
   }
 
@@ -590,11 +609,9 @@ extension TestStore {
       }
       // MainActor jobs run in the order they are queued: this one runs at
       // the walk's first suspension, before the walk resumes and before any
-      // work the walk started, which ends the synchronous part.
-      if !walk.keepsAnchorAcrossSuspensions {
-        Task { @MainActor [weak walk] in
-          walk?.endSynchronousPart()
-        }
+      // work the walk started.
+      Task { @MainActor [weak walk] in
+        walk?.didReachFirstSuspension()
       }
     }
     walk.isWalking = true
@@ -626,7 +643,7 @@ extension TestStore {
       walk.lastFollowUp = queue.enqueue(
         action, context: context, delivery: .drained(after: walk.handled, isAction: true),
         placement: .front(behind: walk.lastFollowUp))
-    } else if let anchor = walk.anchor, let position = anchor.position {
+    } else if let anchor = walk.deliveryAnchor, let position = anchor.position {
       queue.enqueue(
         action, context: context,
         delivery: .interpreted(at: anchor, position: position, isAction: true),
@@ -645,7 +662,7 @@ extension TestStore {
     let delivery: TestStoreDelivery
     if walk.isDrained {
       delivery = .drained(after: walk.handled, isAction: false)
-    } else if let anchor = walk.anchor, let position = anchor.position {
+    } else if let anchor = walk.deliveryAnchor, let position = anchor.position {
       delivery = .interpreted(at: anchor, position: position, isAction: false)
     } else {
       delivery = .delivered(opening: nil)

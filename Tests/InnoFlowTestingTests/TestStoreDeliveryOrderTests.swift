@@ -1563,22 +1563,25 @@ private struct ScopedDrainCancelParent: Reducer {
 }
 
 /// `r` returns a throttled `.send(.rl)`, delivered once the walk has read
-/// the clock; `t` cancels the throttle.
+/// the clock, and `rc` a throttled cancel of `z`'s effect; `t` cancels the
+/// throttle.
 private struct ThrottleCancelFeature: Reducer {
   struct State: Equatable, Sendable {
     var log: [String] = []
   }
 
   enum Action: String, Equatable, Sendable {
-    case r, rl, t
+    case r, rc, rl, t, z
   }
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     state.log.append(action.rawValue)
     switch action {
     case .r: return EffectTask<Action>.send(.rl).throttle(drainThrottleID, for: .seconds(1))
+    case .rc:
+      return EffectTask<Action>.cancel(drainEmitID).throttle(drainThrottleID, for: .seconds(1))
     case .t: return .cancel(drainThrottleID)
-    case .rl: return .none
+    case .rl, .z: return .none
     }
   }
 }
@@ -2513,6 +2516,70 @@ struct TestStoreDeliveryOrderTests {
     await store.send(.t)
     store.exhaustivity = exhaustive ? .on : .off
     #expect(store.state.log == ["r", "rl", "t"])
+    await store.finish()
+    #expect(store.state.log == reference.state.log)
+  }
+
+  @Test(
+    "A drained walk's value after its clock read comes after jobs queued before its interpreter",
+    arguments: [true, false])
+  func drainedWalkValueFollowsJobsQueuedBeforeItsInterpreter(exhaustive: Bool) async {
+    // The job that delivers `r` queues the job that delivers `z` right after
+    // it, behind `r`'s interpreter task: a `Store` runs that task, which
+    // suspends to read the clock, then `z`'s job, and only then the task's
+    // continuation, which delivers `rl`.
+    let reference = Store(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    await queueEmission(.r, into: reference, then: { queueEmission(.z, into: reference) }).value
+    await settle { reference.state.log.contains("rl") }
+    reference.send(.t)
+    #expect(reference.state.log == ["r", "z", "rl", "t"])
+
+    let store = TestStore(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
+    store.exhaustivity = .off
+    await queueEmission(.r, into: store, then: { queueEmission(.z, into: store) }).value
+    await mainActorBarrier()
+    await store.send(.t)
+    store.exhaustivity = exhaustive ? .on : .off
+    #expect(store.state.log == ["r", "z", "rl", "t"])
+    await store.finish()
+    #expect(store.state.log == reference.state.log)
+  }
+
+  @Test(
+    "A drained walk's cancel after its clock read keeps what jobs queued before it delivered",
+    arguments: [true, false])
+  func drainedWalkCancelKeepsValuesOfJobsQueuedBeforeIt(exhaustive: Bool) async {
+    // `rc`'s throttle cancels `z`'s effect once it has read the clock. `z`'s
+    // job is queued behind `rc`'s interpreter task, so a `Store` reduces `z`
+    // before that task resumes and cancels.
+    let ids = [AnyEffectID(drainEmitID)]
+    let reference = Store(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+    let referenceContext = reference.effectBridge.makeEffectContext(
+      sequence: reference.effectBridge.nextSequence(), cancellationIDs: ids)
+    await queueEmission(
+      .rc, into: reference,
+      then: { Task { @MainActor in reference.deliverAction(.z, context: referenceContext) } }
+    ).value
+    await settle { reference.state.log.contains("z") }
+    reference.send(.t)
+    #expect(reference.state.log == ["rc", "z", "t"])
+
+    let store = TestStore(
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
+    store.exhaustivity = .off
+    let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: ids)
+    await queueEmission(
+      .rc, into: store, then: { Task { @MainActor in store.deliverAction(.z, context: context) } }
+    ).value
+    await mainActorBarrier()
+    // The drain walks `rc`; its cancel, after the clock read, comes behind
+    // `z`.
+    await store.send(.t)
+    store.exhaustivity = exhaustive ? .on : .off
+    #expect(store.state.log == ["rc", "z", "t"])
     await store.finish()
     #expect(store.state.log == reference.state.log)
   }

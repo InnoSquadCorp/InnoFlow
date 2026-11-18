@@ -159,7 +159,8 @@ reduced, and a buffered output as one it has already published:
   admission, a throttle reading its clock) is now removed when the sent
   action cancels its effect, as a `Store` drops it; in 6.0.x it was reduced
   before the sent action. A value the suspended walk itself delivers once it
-  resumes is still reduced before the sent action. Work that walk starts in
+  resumes is still reduced before the sent action, behind the jobs queued
+  before the walk's interpreter task first ran. Work that walk starts in
   another task (a run, a composite child, a timer) can deliver after the
   send began, as in 6.0.x: its values are then behind the sent action, which
   can cancel them, although a `Store` typically reduced them before the

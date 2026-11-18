@@ -152,8 +152,9 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   reading its clock lets queued jobs run — stays buffered behind the sent
   action, and the sent action's cancellation removes it when it covers it,
   as a `Store` drops it. A value the suspended walk itself delivers once it
-  resumes is reduced before the sent action, as a `Store`'s walk resumed
-  before the send. Before, the order, and with a
+  resumes is reduced before the sent action, behind the MainActor jobs
+  queued before the walk's interpreter task first ran, where a `Store`
+  resumes that task at the earliest. Before, the order, and with a
   cancellation the set of received actions and outputs, depended on when
   the test received the first action. Where the `Store` order is itself a
   race, such as a wrapped follow-up of a wrapped follow-up of a run's
