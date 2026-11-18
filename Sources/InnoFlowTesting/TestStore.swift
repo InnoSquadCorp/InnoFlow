@@ -111,7 +111,15 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package var followedWalks: [UInt64: TestStoreFollowedWalk] = [:]
   /// Where the last interpreted walk the store followed finished: a `Store`
   /// starts a root interpreter walk only once the one before it has finished.
-  package var interpreterTail: TestStoreAnchor?
+  /// The tail's chain keeps queueing levels while it holds the tail, so the
+  /// next walk finds the levels where a `Store` starts and resumes it.
+  package var interpreterTail: TestStoreAnchor? {
+    didSet {
+      guard interpreterTail?.chain !== oldValue?.chain else { return }
+      interpreterTail?.chain.addMember()
+      oldValue?.chain.settleMember()
+    }
+  }
 
   package var walker: EffectWalker<TestStore<R>> {
     EffectWalker(driver: self)

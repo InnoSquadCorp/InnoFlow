@@ -173,11 +173,14 @@ reduced, and a buffered output as one it has already published:
   it resumed once. A value a drained walk delivers this way is reduced before
   the sent action when that point came before the send began, and can
   otherwise come behind it, as in a `Store` that sends right after the walk
-  started. Work a walk starts in another task (a run, a composite child, a
-  timer) can deliver after a send began, as in 6.0.x: its values are then
-  behind the sent action, which can cancel them, although a `Store`
-  typically reduced them before the send. Receive those values before
-  sending an action that cancels them.
+  started. Work a walk starts in another task (a run, a composite and its
+  children, a timer) delivers at its delivery, as in 6.0.x: its values can
+  come behind MainActor jobs and walks that a `Store` runs after them, such
+  as a job queued right after the walk started, which a `concatenate`'s
+  leading sends precede in a `Store`; and when that work delivers after a
+  send began, its values are behind the sent action, which can cancel them,
+  although a `Store` typically reduced them before the send. Receive those
+  values before sending an action that cancels them.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
   `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
   buffered action and output, as before.

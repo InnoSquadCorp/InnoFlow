@@ -1062,6 +1062,30 @@ private func settle(until done: @MainActor () -> Bool) async {
   }
 }
 
+/// Holds the MainActor until `clock` has served the reads queued on it before
+/// this one, so a walk suspended on such a read is already queued to resume
+/// ahead of every MainActor job queued after the hold. The deadline only
+/// bounds a stalled executor.
+@MainActor
+private func holdUntilClockReadsServed(_ clock: ManualTestClock) {
+  let served = ServedFlag()
+  // The lowest priority: the clock serves every read queued before this one.
+  Task.detached(priority: .background) {
+    _ = await clock.now
+    served.set()
+  }
+  let deadline = ContinuousClock.now.advanced(by: .seconds(5) * testWaitScale)
+  while !served.isSet, ContinuousClock.now < deadline {}
+}
+
+private final class ServedFlag: Sendable {
+  private let value = Mutex(false)
+
+  var isSet: Bool { value.withLock { $0 } }
+
+  func set() { value.withLock { $0 = true } }
+}
+
 /// What the interpreted follow-up of `pong` competes with: `x`, delivered by
 /// a job queued before `ping` was sent.
 private enum CompetingShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
@@ -1603,6 +1627,59 @@ private struct ThrottleCancelFeature: Reducer {
     case .ty: return .cancel(deferredChainID)
     case .rl, .z, .xl, .yv, .n: return .none
     }
+  }
+}
+
+/// `r`'s throttled effect only publishes an output, so once its walk returns,
+/// nothing it delivered keeps its anchor chain going. `x` and `xc` wait for
+/// that walk: `x` sends `xv` once it has read the clock, and `xc` cancels
+/// `z`'s effect.
+private struct EndedChainFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case r, x, xv, xc, z, end
+  }
+
+  enum Output: Equatable, Sendable {
+    case ro
+  }
+
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, Output> {
+    state.log.append(action.rawValue)
+    switch action {
+    case .r:
+      return ReducerEffect<Action, Output>.output(.ro)
+        .throttle(drainThrottleID, for: .seconds(1))
+    case .x:
+      return ReducerEffect<Action, Output>.send(.xv).throttle(waitThrottleID, for: .seconds(1))
+    case .xc:
+      return ReducerEffect<Action, Output>.cancel(markID)
+        .throttle(waitThrottleID, for: .seconds(1))
+    case .end: return .merge(.cancel(drainThrottleID), .cancel(waitThrottleID))
+    case .xv, .z: return .none
+    }
+  }
+}
+
+/// The action whose walk waits for `r`'s in `EndedChainFeature`.
+private enum EndedChainShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `x` sends `xv` once it has read the clock.
+  case x
+  /// `xc` cancels `z`'s effect once it has read the clock.
+  case xc
+
+  var testDescription: String { rawValue }
+
+  var action: EndedChainFeature.Action {
+    self == .x ? .x : .xc
+  }
+
+  /// What a `Store` reduces.
+  var storeLog: [String] {
+    self == .x ? ["r", "x", "z", "xv"] : ["r", "xc", "z"]
   }
 }
 
@@ -2850,6 +2927,73 @@ struct TestStoreDeliveryOrderTests {
     await store.send(.t) { $0.log = ["r", "z", "rl", "t"] }
     await store.finish()
     #expect(store.state.log == ["r", "z", "rl", "t"])
+  }
+
+  @Test(
+    "A walk behind one whose chain ended resumes behind the jobs queued before it started",
+    arguments: EndedChainShape.allCases, [true, false])
+  fileprivate func walkBehindEndedChainResumesBehindEarlierJobs(
+    shape: EndedChainShape, exhaustive: Bool
+  ) async {
+    // One job delivers `r` and `shape`'s action, then queues the receive of
+    // `r` and a job that waits until `r`'s clock read is served, then queues
+    // a job that queues the one delivering `z`. A `Store` starts the waiting
+    // walk in the job queued when `r`'s interpreter task finishes, and
+    // resumes it after its own clock read, behind `z`'s job: `z` comes before
+    // `xv`, and `xc`'s cancel of `z`'s effect comes late. `r` then has nothing
+    // left in its anchor chain, which goes on all the same.
+    let ids = [AnyEffectID(markID)]
+    let referenceClock = ManualTestClock()
+    let reference = Store(
+      reducer: EndedChainFeature(), initialState: .init(), clock: .manual(referenceClock))
+    let referenceContext = reference.effectBridge.makeEffectContext(
+      sequence: reference.effectBridge.nextSequence(), cancellationIDs: ids)
+    await Task { @MainActor in
+      reference.deliverAction(.r, context: nil)
+      reference.deliverAction(shape.action, context: nil)
+      Task { @MainActor in
+        holdUntilClockReadsServed(referenceClock)
+        Task { @MainActor in
+          Task { @MainActor in reference.deliverAction(.z, context: referenceContext) }
+        }
+      }
+    }.value
+    // `xv` comes only after `x`'s clock read, which leaves the MainActor.
+    #expect(
+      await waitUntil(pollInterval: .milliseconds(1)) {
+        reference.state.log.count == shape.storeLog.count
+      })
+    await settle { false }
+    #expect(reference.state.log == shape.storeLog)
+    reference.send(.end)
+
+    let clock = ManualTestClock()
+    let store = TestStore(reducer: EndedChainFeature(), initialState: .init(), clock: clock)
+    store.exhaustivity = exhaustive ? .on : .off
+    let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: ids)
+    let receive = TaskBox()
+    await Task { @MainActor in
+      store.deliverAction(.r, context: nil)
+      store.deliverAction(shape.action, context: nil)
+      receive.task = Task { @MainActor in await store.receive(.r) { $0.log = ["r"] } }
+      Task { @MainActor in
+        holdUntilClockReadsServed(clock)
+        Task { @MainActor in
+          Task { @MainActor in store.deliverAction(.z, context: context) }
+        }
+      }
+    }.value
+    await receive.task?.value
+    await store.receive(shape.action) { $0.log = ["r", shape.rawValue] }
+    await store.receive(.z) { $0.log = ["r", shape.rawValue, "z"] }
+    if shape == .x {
+      await store.receive(.xv) { $0.log = ["r", "x", "z", "xv"] }
+    }
+    await store.receiveOutput(.ro)
+    // Ends both throttle windows.
+    await store.send(.end) { $0.log = shape.storeLog + ["end"] }
+    await store.finish()
+    #expect(store.state.log == shape.storeLog + ["end"])
   }
 
   @Test(

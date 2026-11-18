@@ -53,16 +53,19 @@ package import InnoFlowCore
 // - A `Store` creates the interpreter task of an interpreted value while the
 //   interpreter that delivered it runs. A marker therefore queues the marker
 //   of the next level when it runs, while an action of its chain has not
-//   finished its walk, up to `TestStoreAnchorChain.depth` levels; deeper
-//   values share the deepest position.
+//   finished its walk or the last walk the test store followed finished on
+//   the chain, up to `TestStoreAnchorChain.depth` levels; deeper values
+//   share the deepest position.
 // - The test store follows a walk until it returns. A `Store` resumes a walk
 //   that suspends — after a clock read or an admission — behind every
 //   MainActor job queued before it started, at the earliest where the next
 //   level after its start runs, which the test store takes for what the
 //   walk delivers from then on. A walk that suspends more than once is
 //   placed as if it resumed once. What work a walk started in another task
-//   delivers — a run, a composite child, a timer — is handled at its
-//   delivery.
+//   delivers — a run, a composite and its children, a timer — is handled at
+//   its delivery, a known limitation: a `Store` starts that work while the
+//   walk runs, and can handle its first values before MainActor jobs placed
+//   ahead of them here.
 // - A cancellation applied while the test reduces a received or sent action
 //   — its reduction, the reduction-turn acceptance and the synchronous part
 //   of its effect walk — removes the covered values a `Store` would have
@@ -164,8 +167,12 @@ package final class TestStoreAnchorMarkerCount {
 /// while the marker before it runs. The chain's members are the actions
 /// whose interpreter it anchors; a member settles once the synchronous part
 /// of its reduction's walk has finished, or when it leaves the buffer without
-/// being reduced. The chain queues no marker once no member is unsettled, and
-/// at most ``depth`` markers in all.
+/// being reduced. The test store is a member too while the chain holds its
+/// interpreter tail: a `Store` starts the next root walk in the job queued
+/// when the tail's walk finished, and resumes it in the job queued while
+/// that one runs, however late the test receives the walk's action. The
+/// chain queues no marker once no member is unsettled, and at most ``depth``
+/// markers in all.
 @MainActor
 package final class TestStoreAnchorChain {
   /// The deepest level that gets a marker of its own; deeper follow-ups
@@ -192,11 +199,11 @@ package final class TestStoreAnchorChain {
     TestStoreAnchor(chain: self, level: 1)
   }
 
-  fileprivate func addMember() {
+  func addMember() {
     unsettledMemberCount += 1
   }
 
-  fileprivate func settleMember() {
+  func settleMember() {
     unsettledMemberCount -= 1
   }
 
@@ -208,9 +215,9 @@ package final class TestStoreAnchorChain {
   /// end the wait: the marker is already queued.
   fileprivate func waitForMarker(atLevel level: Int) async {
     guard positions.count < level else { return }
-    // The waiting action is an unsettled member, so a marker that is still
-    // queued goes on to `level`. Only a chain whose markers have all run
-    // needs the next one now.
+    // The waiting action, or the interpreter tail the chain holds, is an
+    // unsettled member, so a marker that is still queued goes on to `level`.
+    // Only a chain whose markers have all run needs the next one now.
     if queuedLevels < level, positions.count == queuedLevels {
       queueMarker()
     }
@@ -390,9 +397,6 @@ package final class TestStoreFollowedWalk {
   /// the next level after its start, behind every MainActor job queued
   /// before the walk started.
   private(set) var resumedAnchor: TestStoreAnchor?
-  /// Another chain whose levels the walk uses, which keeps queueing them
-  /// while the walk runs.
-  private var borrowedChain: TestStoreAnchorChain?
   /// The order behind which a cancellation applied during the reduction
   /// removes covered values: where `handled` is, then the position where the
   /// walk delivers.
@@ -419,13 +423,11 @@ package final class TestStoreFollowedWalk {
     resumedAnchor ?? startAnchor
   }
 
-  /// The walk will start at `start`, a level of another chain when it waits
-  /// for its predecessor: that chain keeps queueing levels until it returns.
+  /// The walk will start at `start`: its anchor, or, when it waits for its
+  /// predecessor, a level of the chain that holds the interpreter tail, which
+  /// keeps queueing levels while it does.
   func prepare(toStartAt start: TestStoreAnchor) {
     startAnchor = start
-    guard let anchor, start.chain !== anchor.chain else { return }
-    start.chain.addMember()
-    borrowedChain = start.chain
   }
 
   /// The start's marker has run: the walk delivers there.
@@ -437,7 +439,11 @@ package final class TestStoreFollowedWalk {
 
   /// The walk has reached its first suspension: from now on it delivers where
   /// a `Store` resumes it at the earliest. That marker was queued when the
-  /// start's ran, before the walk began, so it has run.
+  /// start's ran, before the walk began, so it has run: the start's chain
+  /// had an unsettled member then — the walk's own action, the action of the
+  /// walk before it, or the test store while the chain held the interpreter
+  /// tail. Only walks running concurrently on one store can find it missing;
+  /// the walk then keeps delivering at its start.
   func didReachFirstSuspension() {
     guard isSynchronous, resumedAnchor == nil, let next = startAnchor?.next,
       let position = next.position
@@ -452,8 +458,6 @@ package final class TestStoreFollowedWalk {
     guard isSynchronous else { return }
     isSynchronous = false
     handled.settle()
-    borrowedChain?.settleMember()
-    borrowedChain = nil
   }
 }
 

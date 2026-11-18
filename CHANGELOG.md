@@ -167,7 +167,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   the `Store` order is itself a race, such as a wrapped follow-up of a
   wrapped follow-up of a run's emission against the run's next emission, a
   test can receive either order. The children of a composite (`merge`,
-  `concatenate`) follow-up stay in delivery order.
+  `concatenate`) follow-up stay in delivery order, and work a walk starts in
+  another task (a run, a composite and its children, a timer) delivers at
+  its delivery, as in 6.0.x: its first values can come after MainActor jobs
+  that a `Store` runs after them.
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered
