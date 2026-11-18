@@ -147,7 +147,12 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   buffered actions reduces the sent action before it starts the wrapped
   follow-ups of those whose interpreter task had not run when the send
   began, as a `Store` does, also when that drain suspends; before, such a
-  follow-up was reduced ahead of the sent action. Before, the order, and with a
+  follow-up was reduced ahead of the sent action. A value delivered while
+  that drain suspends — a scheduled run waiting for admission or a throttle
+  reading its clock lets queued jobs run — stays buffered behind the sent
+  action, and the sent action's cancellation removes it when it covers it,
+  as a `Store` drops it; so does a value the suspended walk delivers once it
+  resumes, which a `Store` may have reduced before the send. Before, the order, and with a
   cancellation the set of received actions and outputs, depended on when
   the test received the first action. Where the `Store` order is itself a
   race, such as a wrapped follow-up of a wrapped follow-up of a run's
@@ -244,11 +249,13 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   published it: the delivering effect's own `.cancel`
   (`.concatenate(.send(a).cancellable(id), .cancel(id))`, a run under `id`
   followed by `.cancel(id)`, the same inside a `merge`), another dispatch's
-  effect, or a `send` whose reduction cancels the effect of a buffered output.
-  A cancellation applied while the test reduces a received action still
-  removes the covered values a `Store` would have delivered after it, and a
-  cancellation the test issues (`cancelEffects`, `cancelAllEffects`, a
-  dispatch's `cancel()`) still removes every covered value, as in 6.0.x.
+  effect, or a `send` whose reduction cancels the effect of an output
+  buffered before the send. A cancellation applied while the test reduces a
+  received or sent action still removes the covered values a `Store` would
+  have delivered after it — for a sent action, every value delivered from
+  the send on — and a cancellation the test issues (`cancelEffects`,
+  `cancelAllEffects`, a dispatch's `cancel()`) still removes every covered
+  value, as in 6.0.x.
 - Cancelling a queued serial request through its dispatch returns its queue
   capacity at once: a pending request that can no longer proceed no longer
   counts toward `maxPending` or `pendingRequestCount`. Before, the next

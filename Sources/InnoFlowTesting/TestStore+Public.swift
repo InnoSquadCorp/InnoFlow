@@ -62,11 +62,11 @@ extension TestStore {
     defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousState = state
 
-    let effect = reduceAction(
-      action,
-      source: .send,
-      location: location
-    )
+    let (effect, context) = reduceSentAction(
+      at: prepared, location: location, flowTaskTracker: dispatch.tracker
+    ) {
+      reduceAction(action, source: .send, location: location)
+    }
     assertStateTransition(
       from: previousState,
       expectedStateMutation: updateExpectedState.map { update in
@@ -79,8 +79,7 @@ extension TestStore {
       location: location
     )
 
-    await walkSentEffect(
-      effect, location: location, flowTaskTracker: dispatch.tracker, prepared: prepared)
+    await walkSentEffect(effect, context: context, prepared: prepared)
     return dispatch.task
   }
 
@@ -622,8 +621,12 @@ extension TestStore {
     flowTaskTracker: FlowTaskTracker? = nil,
     location: TestStoreSourceLocation
   ) async {
+    let context = reductionTurnContext(
+      for: effect, location: location,
+      flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker)
     await walkSentEffect(
-      effect, location: location, flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker)
+      effect, context: context,
+      prepared: TestStorePreparedSend(markerCount: queue.anchorMarkerCount))
   }
 
   package func walkScopedEffect(_ effect: ReducerEffect<R.Action, R.Output>) async {

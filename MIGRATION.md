@@ -114,7 +114,8 @@ reduced, and a buffered output as one it has already published:
   delivering effect's own `.cancel` (`.concatenate(.send(a).cancellable(id),
   .cancel(id))`, a run under `id` followed by `.cancel(id)`, the same inside a
   `merge`), another dispatch's effect, or a `send` whose reduction cancels the
-  effect of a buffered output (including closing an optional child). In 6.0.x
+  effect of an output buffered before the send (including closing an
+  optional child). In 6.0.x
   the value was dropped. Add the missing `receive` or `receiveOutput` to an
   exhaustive test.
 - A plain `.send` or `.output` follow-up of a received action is queued
@@ -150,9 +151,16 @@ reduced, and a buffered output as one it has already published:
   that output publishes the expected one: it reduces that action first, as a
   skipped action. Receiving outputs in the order a `Store` publishes them no
   longer loses the later one.
-- A cancellation applied while the test reduces a received action still
-  removes the covered actions buffered behind it, and the covered outputs a
-  `Store` would publish after it.
+- A cancellation applied while the test reduces a received or sent action
+  still removes the covered actions buffered behind it, and the covered
+  outputs a `Store` would publish after it. For a sent action those are the
+  values delivered from the send on: a value delivered while the send first
+  reduces buffered actions whose effects suspend (a scheduled run waiting for
+  admission, a throttle reading its clock) is now removed when the sent
+  action cancels its effect, as a `Store` drops it; in 6.0.x it was reduced
+  before the sent action. A value the suspended walk delivers once it
+  resumes is also behind the send, although a `Store` may have reduced it
+  before the send: receive the buffered action before sending to keep it.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
   `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
   buffered action and output, as before.

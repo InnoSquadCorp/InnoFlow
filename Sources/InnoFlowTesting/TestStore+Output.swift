@@ -12,8 +12,9 @@ extension TestStore {
   /// like `receive`, and advances intermediate FIFO actions and their effects.
   /// Before it skips a buffered output, it reduces the buffered actions a
   /// `Store` reduced before it published that output, so an output that
-  /// comes after the expected one is never skipped. An already-buffered match
-  /// can be received with `.zero`.
+  /// comes after the expected one is never skipped. A `.zero` timeout
+  /// examines only the output at the head of the buffer: a match there is
+  /// received.
   public func receiveOutput(
     _ expectedOutput: R.Output,
     timeout: Duration? = nil,

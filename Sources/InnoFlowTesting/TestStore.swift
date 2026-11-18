@@ -103,8 +103,9 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let runScheduler = EffectRunScheduler()
   package var invariants: [TestStoreInvariant<R.State>] = []
   package var phaseCoverageObserver: (any PhaseMapRuntimeObserver)?
-  /// The delivery of the buffered action the test is reducing, until the
-  /// reduction-turn acceptance of its effect has run.
+  /// The delivery of the buffered action the test is reducing, or the place
+  /// of the action it sends, until the reduction-turn acceptance of its
+  /// effect has run.
   package var reducingAction: TestStoreDelivery?
   /// The reductions whose effect walk the store follows, by effect sequence.
   package var followedWalks: [UInt64: TestStoreFollowedWalk] = [:]

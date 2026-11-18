@@ -105,11 +105,11 @@ where Root.State: Equatable {
     // post-reduction case is handled by the failable expected-state updater.
     _ = stateReader(previousRootState)
 
-    let effect = parent.applyScopedAction(
-      actionEmbedder(action),
-      source: .scopedSend,
-      location: location
-    )
+    let (effect, context) = parent.reduceSentAction(
+      at: prepared, location: location, flowTaskTracker: dispatch.tracker
+    ) {
+      parent.applyScopedAction(actionEmbedder(action), source: .scopedSend, location: location)
+    }
     parent.assertStateTransition(
       from: previousRootState,
       expectedStateMutation: rootStateUpdater(from: updateExpectedState),
@@ -120,8 +120,7 @@ where Root.State: Equatable {
       location: location
     )
 
-    await parent.walkSentEffect(
-      effect, location: location, flowTaskTracker: dispatch.tracker, prepared: prepared)
+    await parent.walkSentEffect(effect, context: context, prepared: prepared)
     return dispatch.task
   }
 
