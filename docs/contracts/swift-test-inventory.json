@@ -96,7 +96,7 @@
     "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift": "df0a0ddca65ba7a62246f819161463b17c90e5d9263bc75d47f7cd730ada3634",
     "Tests/InnoFlowTestingTests/TestEffectLedgerConsistencyTests.swift": "c27296d445409c72e821e96a10a949a8680f814d216d68eeb3423242f0198e39",
     "Tests/InnoFlowTestingTests/TestStoreDefaultsTests.swift": "7656e44ec0d6f3505ef0132ee50c121b032fc15b3251a1f3d5f70096d1bf1c23",
-    "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift": "670187f6121f330c4ca224d8ecc74af9ad7bec94be0531f0f61c7b48f1050ec8",
+    "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift": "8d3d4907db9a61bb3890ceea82470de8e3c24a94e41ac7619e29f689294ceb05",
     "Tests/InnoFlowTestingTests/TestStoreDispatchConsistencyTests.swift": "8c37763f1487dc2c86a0454ee0676aada314541a79b9b5eef5a04b8ae15e6a64",
     "Tests/InnoFlowTestingTests/TestStoreEffectAlgebraTests.swift": "e3261cad028774016850e2a9d9e7f3695bee28751ed8bc160db17e9a262223bd",
     "Tests/InnoFlowTestingTests/TestStoreExhaustivityTests.swift": "1dec66ef4dcb36c5abe724dcf5db7821bac07154d3f1ad829a2fd4dddd1b2d3e",
@@ -7786,7 +7786,7 @@
       "displayName": "An interpreted follow-up comes after its action's concatenate siblings; a plain one before",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/concatenateSiblingOrder(shape:wrap:)",
-      "line": 1247,
+      "line": 1521,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7795,7 +7795,7 @@
       "displayName": "Outputs around an action's concatenate siblings are kept as a Store publishes them",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/concatenateSiblingOutputs(shape:wrap:)",
-      "line": 1273,
+      "line": 1547,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7804,7 +7804,7 @@
       "displayName": "A delegate chain of a child's emission precedes the child's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/delegateChainPrecedesNextEmission(stopsAfterFirst:exhaustive:)",
-      "line": 1123,
+      "line": 1397,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7813,7 +7813,7 @@
       "displayName": "Cancelling the dispatch removes a buffered action its effect's own cancel has passed",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/dispatchCancelRemovesDeliveredAction()",
-      "line": 1056,
+      "line": 1330,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7822,7 +7822,7 @@
       "displayName": "A follow-up's cancel removes an output delivered after its chain began",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpCancelRemovesLaterOutput(exhaustive:)",
-      "line": 1196,
+      "line": 1470,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7831,7 +7831,7 @@
       "displayName": "A received action's follow-up chain precedes its run's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpChainPrecedesNextEmission(shape:exhaustive:)",
-      "line": 1098,
+      "line": 1372,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7840,7 +7840,7 @@
       "displayName": "A follow-up of a run's emission precedes the next run of the same concatenate",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpPrecedesNextConcatenatedRun(shape:exhaustive:)",
-      "line": 1150,
+      "line": 1424,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7849,16 +7849,34 @@
       "displayName": "Follow-ups of a run's emission precede the run's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpPrecedesNextEmission(secondCancelsFollowUp:exhaustive:)",
-      "line": 966,
+      "line": 1240,
       "target": "InnoFlowTestingTests"
     },
     {
-      "attribute": "@Test(\n    \"A chain of two interpreted follow-ups is received in a Store's usual order\",\n    arguments: [false, true], [true, false])",
+      "attribute": "@Test(\n    \"A chain of two interpreted follow-ups is received in an order a Store has\",\n    arguments: [false, true], [true, false])",
       "conditionalContexts": [],
-      "displayName": "A chain of two interpreted follow-ups is received in a Store's usual order",
+      "displayName": "A chain of two interpreted follow-ups is received in an order a Store has",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
-      "identifier": "TestStoreDeliveryOrderTests/interpretedChainKeepsUsualOrder(cancelsRun:exhaustive:)",
-      "line": 1373,
+      "identifier": "TestStoreDeliveryOrderTests/interpretedChainFollowsTheRace(cancelsRun:exhaustive:)",
+      "line": 1647,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"An interpreted follow-up comes after a job queued behind its action's delivery job\",\n    arguments: InterveningDelivery.allCases, [true, false])",
+      "conditionalContexts": [],
+      "displayName": "An interpreted follow-up comes after a job queued behind its action's delivery job",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpAfterLaterQueuedJob(delivery:exhaustive:)",
+      "line": 1738,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A received action's interpreted follow-up comes after a job queued before its delivery\",\n    arguments: CompetingShape.allCases, ReceiveMode.all)",
+      "conditionalContexts": [],
+      "displayName": "A received action's interpreted follow-up comes after a job queued before its delivery",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpAfterQueuedJob(shape:mode:)",
+      "line": 1687,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7867,7 +7885,7 @@
       "displayName": "An interpreted follow-up precedes what its action's effect delivers in a later job",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpPrecedesLaterJob(shape:exhaustive:)",
-      "line": 1326,
+      "line": 1600,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7876,7 +7894,25 @@
       "displayName": "An interpreted follow-up's output survives a cancel delivered in a later job",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedOutputSurvivesLaterJobCancel(exhaustive:)",
-      "line": 1351,
+      "line": 1625,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A nested interpreted follow-up comes after an emission queued while its chain ran\",\n    arguments: [true, false])",
+      "conditionalContexts": [],
+      "displayName": "A nested interpreted follow-up comes after an emission queued while its chain ran",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/nestedFollowUpAfterQueuedEmission(exhaustive:)",
+      "line": 1859,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"An interpreted follow-up's own follow-up comes after its siblings' follow-ups\",\n    arguments: [true, false])",
+      "conditionalContexts": [],
+      "displayName": "An interpreted follow-up's own follow-up comes after its siblings' follow-ups",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/nestedFollowUpsKeepInterpreterOrder(exhaustive:)",
+      "line": 1837,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7885,7 +7921,7 @@
       "displayName": "Another dispatch's cancel after the delivery keeps the delivered action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/otherDispatchCancelKeepsDeliveredAction(exhaustive:)",
-      "line": 1219,
+      "line": 1493,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7894,7 +7930,7 @@
       "displayName": "An output delivered before its effect's own cancel is received",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/outputBeforeOwnCancelIsReceived(exhaustive:)",
-      "line": 1071,
+      "line": 1345,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7903,7 +7939,7 @@
       "displayName": "An output delivered before a received action survives that action's cancel",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/outputBeforeReceivedActionSurvivesItsCancel(exhaustive:)",
-      "line": 1176,
+      "line": 1450,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7912,7 +7948,7 @@
       "displayName": "An effect's own later cancel keeps an action it already delivered",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/ownCancelKeepsEarlierDelivery(shape:exhaustive:)",
-      "line": 915,
+      "line": 1189,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7921,7 +7957,7 @@
       "displayName": "A received action's plain output precedes the outputs its effect publishes later",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/receivedActionOutputOrder(shape:exhaustive:)",
-      "line": 1303,
+      "line": 1577,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7930,7 +7966,7 @@
       "displayName": "A received action's cancel removes actions buffered behind it",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/receivedCancelRemovesActionsBehindIt(markCancels:exhaustive:)",
-      "line": 990,
+      "line": 1264,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7939,7 +7975,16 @@
       "displayName": "A scoped receive gets a child action its effect's own cancel has passed",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/scopedReceiveGetsDeliveredAction()",
-      "line": 1088,
+      "line": 1362,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A scoped send's interpreted follow-up comes after a job queued before the send\",\n    arguments: SentFollowUpShape.allCases, [true, false])",
+      "conditionalContexts": [],
+      "displayName": "A scoped send's interpreted follow-up comes after a job queued before the send",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/scopedSentFollowUpAfterQueuedJob(shape:exhaustive:)",
+      "line": 1809,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7948,7 +7993,16 @@
       "displayName": "A send that times out draining removes the buffered actions it did not reduce",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sendDrainTimeoutRemovesRemainingActions()",
-      "line": 1038,
+      "line": 1312,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A sent action's interpreted follow-up comes after a job queued before the send\",\n    arguments: SentFollowUpShape.allCases, [true, false])",
+      "conditionalContexts": [],
+      "displayName": "A sent action's interpreted follow-up comes after a job queued before the send",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/sentFollowUpAfterQueuedJob(shape:exhaustive:)",
+      "line": 1782,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7957,7 +8011,16 @@
       "displayName": "A test-issued cancel removes a covered buffered action whatever its effect did since",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/testIssuedCancelRemovesCoveredAction(shape:cancelsAll:)",
-      "line": 1013,
+      "line": 1287,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"A delivered action left unreceived queues a bounded number of anchor markers\")",
+      "conditionalContexts": [],
+      "displayName": "A delivered action left unreceived queues a bounded number of anchor markers",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/unreceivedActionBoundsAnchorMarkers()",
+      "line": 1889,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7966,7 +8029,7 @@
       "displayName": "A receive that waits while the effect cancels itself still gets the action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/waitingReceiveGetsActionBeforeOwnCancel()",
-      "line": 935,
+      "line": 1209,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7975,7 +8038,7 @@
       "displayName": "Work that cancels a timer under its own ID keeps its delivered action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/workCancellingTimerKeepsItsAction(exhaustive:)",
-      "line": 945,
+      "line": 1219,
       "target": "InnoFlowTestingTests"
     },
     {

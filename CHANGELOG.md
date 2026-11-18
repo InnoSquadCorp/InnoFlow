@@ -135,14 +135,21 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   delegate chain are received before the actions delivered after the
   chain's first action, and such an output before the outputs published
   after the action. A wrapped follow-up (`.cancellable`, `.animation`, …),
-  which a `Store` interprets in a MainActor job of its own, is queued behind
-  what was delivered in the received action's MainActor turn, such as the
-  later sends of the same `concatenate`, and ahead of what is delivered
-  later, such as the emitting run's next emission or a `concatenate` step
-  after a run. Before, the order, and with a cancellation the set of
-  received actions and outputs, depended on when the test received the
-  first action. The children of a composite (`merge`, `concatenate`)
-  follow-up stay in delivery order.
+  which a `Store` interprets in a MainActor task it creates while it handles
+  the action, is queued where that task runs: `TestStore` queues a marker
+  task at the same point and starts the effect once the marker has run. The
+  follow-up of an action received or sent while a run's emission was
+  already on its way to the MainActor is therefore received after that
+  emission, and a follow-up of a run's emission before the run's next
+  emission or a `concatenate` step after a run. `send` and `receive` of an
+  action whose effect a `Store` interprets let the MainActor jobs queued
+  before that task run before they return. Before, the order, and with a
+  cancellation the set of received actions and outputs, depended on when
+  the test received the first action. Where the `Store` order is itself a
+  race, such as a wrapped follow-up of a wrapped follow-up of a run's
+  emission against the run's next emission, a test can receive either
+  order. The children of a composite (`merge`, `concatenate`) follow-up
+  stay in delivery order.
 - A collection scope now refreshes only the rows a change can affect instead
   of every row on any change, and rows resolve their positions once per
   structural change instead of each scanning the collection, also when an

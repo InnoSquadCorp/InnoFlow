@@ -15,6 +15,12 @@ extension TestStore {
   /// emit warnings according to ``exhaustivity``. Recovery is bounded by the
   /// store's effect timeout so a recursively emitted action cannot block the
   /// send forever.
+  ///
+  /// When the reduction returns an effect a `Store` interprets in a MainActor
+  /// task it creates — anything but `.none` or a plain `.send` or `.output` —
+  /// the send starts that effect once the MainActor jobs queued before that
+  /// task have run, and buffers what the effect delivers before it first
+  /// suspends where that task runs.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -74,6 +80,13 @@ extension TestStore {
     return dispatch.task
   }
 
+  /// Receives the next buffered effect action, requires it to equal
+  /// `expectedAction`, and verifies its state transition.
+  ///
+  /// A received action's effect starts where a `Store` would start it, as
+  /// for ``send(_:assert:fileID:filePath:line:column:)``: an effect the
+  /// `Store` interprets in a MainActor task of its own starts once the
+  /// MainActor jobs queued before that task have run.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,

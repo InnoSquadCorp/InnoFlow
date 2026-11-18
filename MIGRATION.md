@@ -121,16 +121,25 @@ reduced, and a buffered output as one it has already published:
   right behind it, at any depth: receive a follow-up chain before the actions
   delivered after its first action, and a plain output before the outputs
   published after the action. A wrapped follow-up (`.cancellable`,
-  `.animation`, …) is queued behind the values delivered in the received
-  action's MainActor turn — the job that delivered that turn's first value
-  and the jobs already queued then — such as the later sends of the same
-  `concatenate` (as in 6.0.x), and ahead of the values delivered later, such
-  as the emitting run's next emission or a `concatenate` step after a run.
-  In 6.0.x the order depended on timing; a test that received a later action
-  first — for example the target before the `.send` follow-up of an action
-  it received as a mismatch, or a run's next emission before a wrapped
-  follow-up of its previous one — must swap the two receives. The children
-  of a composite (`merge`, `concatenate`) follow-up stay in delivery order.
+  `.animation`, …) is queued where the `Store`'s interpreter task for it
+  runs: behind what was delivered before that task — the later sends of the
+  same `concatenate` (as in 6.0.x), and a run emission whose MainActor job
+  was already queued when the action was delivered or sent — and ahead of
+  what is delivered later, such as the emitting run's next emission or a
+  `concatenate` step after a run. `send` and `receive` of an action whose
+  effect is not `.none` or a plain `.send` or `.output` now start that
+  effect only once that task would run, so a MainActor job queued before it,
+  such as a run's emission, is delivered before they return: an exhaustive
+  test receives that emission before the wrapped follow-up. Where the
+  `Store` order is a race — a run's next emission against a wrapped
+  follow-up of a wrapped follow-up of its previous emission — a test can
+  receive either order; accept both with `receive(where:)` or use a
+  non-exhaustive store. In 6.0.x the order depended on timing; a test that
+  received a later action first — for example the target before the `.send`
+  follow-up of an action it received as a mismatch, or a run's next
+  emission before a wrapped follow-up of its previous one — must swap the
+  two receives. The children of a composite (`merge`, `concatenate`)
+  follow-up stay in delivery order.
 - A cancellation applied while the test reduces a received action still
   removes the covered actions buffered behind it, and the covered outputs a
   `Store` would publish after it.

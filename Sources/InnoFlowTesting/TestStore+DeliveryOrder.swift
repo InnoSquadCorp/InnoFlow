@@ -166,11 +166,15 @@ package final class TestStoreAnchorChain {
 
   private func markerDidRun(level: Int) {
     positions.append(TestStoreEvents.next())
-    for waiter in waiters.removeValue(forKey: level) ?? [] {
-      waiter.resume()
-    }
+    // A `Store` creates the next level's interpreter tasks in this job, so
+    // they run before anything a resumed walk's caller queues afterwards.
+    // Queue the marker before resuming the walks, however soon a resumed
+    // continuation reaches the MainActor.
     if unsettledMemberCount > 0, queuedLevels < Self.depth {
       queueMarker()
+    }
+    for waiter in waiters.removeValue(forKey: level) ?? [] {
+      waiter.resume()
     }
   }
 }
