@@ -7,15 +7,23 @@ import Observation
 import Testing
 import os
 
+@testable import InnoFlowCoreTestSupport
+
 // Locks which read keeps a selection alive and which tracker notifies its
 // reader:
 // - a liveness read (`isAlive`) observes the owner's liveness and retains
 //   nothing, so a selection that is also read for its value follows the value
 //   rule, and a liveness reader is notified when the owner is deactivated even
 //   after the selection was released;
+// - a liveness read through a scope observes the parent store's release too,
+//   so its reader is notified when the store is released even after the scope
+//   itself was released;
+// - a selection that outlives its scope is deactivated when the scope is
+//   released, which notifies its readers;
 // - obtaining a closure-based selection from the `id:` cache records the same
-//   read of the owner that creating one records, so its reader is notified
-//   after the holder that created it lets go.
+//   read of the owner that creating one records, without reading the owner's
+//   state, so a reducer can obtain one while its own store reduces, and its
+//   reader is notified after the holder that created it lets go.
 
 private let keyPathEvaluations = OSAllocatedUnfairLock(initialState: 0)
 
@@ -100,13 +108,44 @@ private let retentionChildPath = CasePath<RetentionFeature.Action, RetentionFeat
   }
 )
 
+private typealias RetentionChildScope = ScopedStore<
+  RetentionFeature, RetentionFeature.State.Child, RetentionFeature.ChildAction
+>
+
+/// One call site, so a body that scopes again gets the cached scope.
+@MainActor
+private func childScope(of store: Store<RetentionFeature>) -> RetentionChildScope {
+  store.scope(state: \.child, action: retentionChildPath)
+}
+
+/// `RetentionFeature` as a closure reducer that runs `read.body` while it
+/// reduces `.touchOther`: inside the reduction, which holds exclusive access
+/// to the store's state.
+private typealias ReadingFeature = Reduce<
+  RetentionFeature.State, RetentionFeature.Action, Never
+>
+
+@MainActor
+private final class ReductionTimeRead {
+  var body: (@MainActor () -> Void)?
+}
+
+private func reading(_ read: ReductionTimeRead) -> ReadingFeature {
+  Reduce { state, action in
+    if case .touchOther = action {
+      MainActor.assumeIsolated { read.body?() }
+    }
+    return RetentionFeature().reduce(into: &state, action: action)
+  }
+}
+
 /// One call site per kind, shared by the holder and the reader, like a helper
 /// or a view that two places use.
 @MainActor
-private func sharedSelection(
+private func sharedSelection<R: Reducer>(
   _ kind: ProjectionRetentionTests.SharedSelectionKind,
-  of store: Store<RetentionFeature>
-) -> SelectedStore<Int> {
+  of store: Store<R>
+) -> SelectedStore<Int> where R.State == RetentionFeature.State {
   switch kind {
   case .dependingOn:
     store.select(dependingOn: \.count, id: "shared") { $0 * 2 }
@@ -120,9 +159,9 @@ private func sharedSelection(
 }
 
 @MainActor
-private func sharedSelection(
+private func sharedSelection<R: Reducer>(
   _ kind: ProjectionRetentionTests.SharedSelectionKind,
-  of row: ScopedStore<RetentionFeature, RetentionRow, RetentionFeature.RowAction>
+  of row: ScopedStore<R, RetentionRow, RetentionFeature.RowAction>
 ) -> SelectedStore<Int> {
   switch kind {
   case .dependingOn:
@@ -150,6 +189,23 @@ struct ProjectionRetentionTests {
       notifications.withLock { $0 += 1 }
     }
     return notifications
+  }
+
+  /// Polls until `condition` holds. The deadline is a failure backstop scaled
+  /// with `INNOFLOW_TEST_WAIT_SCALE`, reported where the wait was written.
+  private func waitUntil(
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ condition: @MainActor () -> Bool
+  ) async {
+    let deadline = ContinuousClock.now.advanced(by: scaledTestDeadline(.seconds(10)))
+    while !condition() {
+      guard ContinuousClock.now < deadline else {
+        Issue.record(
+          "The awaited condition was not reached in time", sourceLocation: sourceLocation)
+        return
+      }
+      try? await Task.sleep(for: .milliseconds(2))
+    }
   }
 
   // MARK: Liveness reads
@@ -278,6 +334,91 @@ struct ProjectionRetentionTests {
     #expect(selection.optionalValue == nil)
   }
 
+  @Test(
+    "A liveness read through a single scope is notified when the store is released",
+    arguments: [false, true]
+  )
+  func singleScopeLivenessReadIsNotifiedByTheReleasedStore(holdsScope: Bool) {
+    var store: Store<RetentionFeature>? = Store(reducer: RetentionFeature(), initialState: .init())
+    var scope: RetentionChildScope? = childScope(of: store!)
+    weak let weakScope = scope
+    var isAlive: Bool?
+    let notifications = track {
+      // Like a body: it gets the scope from the scope cache and keeps
+      // neither the scope nor the selection.
+      isAlive = childScope(of: store!).select(\RetentionFeature.State.Child.number).isAlive
+    }
+    #expect(isAlive == true)
+    if !holdsScope {
+      scope = nil
+      #expect(weakScope == nil)
+    }
+
+    store!.send(.child(.bump))
+    #expect(notifications.withLock { $0 } == 0)
+
+    store = nil
+    #expect(notifications.withLock { $0 } == 1)
+    withExtendedLifetime(scope) {}
+  }
+
+  @Test(
+    "A selection that outlives its scope is deactivated, which notifies its reader",
+    arguments: [false, true]
+  )
+  func selectionOutlivingItsScopeIsDeactivated(readsValue: Bool) {
+    let store = Store(reducer: RetentionFeature(), initialState: .init())
+    var scope: RetentionChildScope? = childScope(of: store)
+    let selection = scope!.select(\RetentionFeature.State.Child.number)
+    let notifications = track {
+      if readsValue {
+        _ = selection.optionalValue
+      } else {
+        _ = selection.isAlive
+      }
+    }
+    weak let weakScope = scope
+    scope = nil
+    #expect(weakScope == nil)
+    #expect(notifications.withLock { $0 } == 1)
+    #expect(selection.isAlive == false)
+    #expect(selection.optionalValue == nil)
+
+    store.send(.child(.bump))
+    #expect(notifications.withLock { $0 } == 1)
+  }
+
+  @Test("A scope released off the main actor deactivates its selection on the main actor")
+  func scopeReleasedOffTheMainActorDeactivatesItsSelection() async {
+    let store = Store(reducer: RetentionFeature(), initialState: .init())
+    let held = OSAllocatedUnfairLock<RetentionChildScope?>(initialState: childScope(of: store))
+    let selection = held.withLock { $0 }!.select(\RetentionFeature.State.Child.number)
+    let notifications = track { _ = selection.optionalValue }
+
+    // The last reference goes away on another executor, so the scope's
+    // isolated deinitializer runs on the main actor afterwards.
+    await Task.detached { held.withLock { $0 = nil } }.value
+    await waitUntil { notifications.withLock { $0 } == 1 }
+    #expect(selection.isAlive == false)
+    #expect(selection.optionalValue == nil)
+    withExtendedLifetime(store) {}
+  }
+
+  @Test("A liveness reader of a removed row is not notified again when the store is released")
+  func removedRowLivenessReaderIsNotNotifiedByTheStoreRelease() {
+    var store: Store<RetentionFeature>? = Store(reducer: RetentionFeature(), initialState: .init())
+    let row = store!.scope(collection: \.rows, action: retentionRowPath)[1]
+    let selection = row.select(\RetentionRow.value)
+    store!.send(.remove(1))
+    #expect(row.isAlive == false)
+
+    let rowNotifications = track { _ = row.isAlive }
+    let selectionNotifications = track { _ = selection.isAlive }
+    store = nil
+    #expect(rowNotifications.withLock { $0 } == 0)
+    #expect(selectionNotifications.withLock { $0 } == 0)
+  }
+
   // MARK: Semantic-ID cache hits
 
   @Test(
@@ -320,6 +461,42 @@ struct ProjectionRetentionTests {
     store.send(.row(id: 0, action: .increment))
     #expect(notifications.withLock { $0 } == 1)
     withExtendedLifetime(row) {}
+  }
+
+  @Test(
+    "A reducer gets another holder's id: selection while its own store reduces",
+    arguments: SharedSelectionKind.allCases, [false, true]
+  )
+  func sharedSelectionObtainedWhileTheStoreReduces(kind: SharedSelectionKind, onRow: Bool) {
+    let read = ReductionTimeRead()
+    let store = Store(reducer: reading(read), initialState: .init())
+    let row = store.scope(collection: \.rows, action: retentionRowPath)[0]
+    var holder: SelectedStore<Int>? =
+      onRow ? sharedSelection(kind, of: row) : sharedSelection(kind, of: store)
+    let heldID = holder.map(ObjectIdentifier.init)
+    let obtainedID = OSAllocatedUnfairLock<ObjectIdentifier?>(initialState: nil)
+    let notifications = OSAllocatedUnfairLock(initialState: 0)
+    read.body = { [weak store, weak row] in
+      guard let store, let row else { return }
+      withObservationTracking {
+        let shared = onRow ? sharedSelection(kind, of: row) : sharedSelection(kind, of: store)
+        obtainedID.withLock { $0 = ObjectIdentifier(shared) }
+        _ = shared.requireAlive()
+      } onChange: {
+        notifications.withLock { $0 += 1 }
+      }
+    }
+    // `.touchOther` leaves the selected value unchanged.
+    store.send(.touchOther)
+    read.body = nil
+    #expect(obtainedID.withLock { $0 } == heldID)
+    #expect(notifications.withLock { $0 } == 0)
+
+    weak let weakHolder = holder
+    holder = nil
+    #expect(weakHolder == nil)
+    store.send(onRow ? .row(id: 0, action: .increment) : .increment)
+    #expect(notifications.withLock { $0 } == 1)
   }
 
   @Test("Control: a reader whose id: selection is still held is notified through it")
