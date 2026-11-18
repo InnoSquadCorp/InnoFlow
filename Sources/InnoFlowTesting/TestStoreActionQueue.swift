@@ -59,33 +59,6 @@ package final class TestStoreDispatchActivity: Sendable {
   deinit { finish() }
 }
 
-/// What a test store knows about one delivered effect action or output.
-///
-/// A `Store` reduces an effect action, and publishes an output, the moment an
-/// effect delivers it. A test store buffers the value until the test receives
-/// it; this record places the value in the `Store` schedule the test store
-/// models, so a cancellation applied in between can tell whether a `Store`
-/// would have handled the value before that cancellation.
-@MainActor
-package final class TestStoreDelivery {
-  private static var lastOrder: UInt64 = 0
-
-  /// The order every buffered action and output of every test store shares.
-  package let order: UInt64
-  /// Where a `Store` handles the value in the modeled schedule: at its own
-  /// delivery, or, for a value the synchronous part of a received action's
-  /// effect walk delivered, right after that action.
-  package let storeOrder: UInt64
-  /// A cancellation removed the value before the test received it.
-  package var isWithdrawn = false
-
-  init(storeOrder: UInt64? = nil) {
-    Self.lastOrder &+= 1
-    order = Self.lastOrder
-    self.storeOrder = storeOrder ?? order
-  }
-}
-
 @MainActor
 package final class ActionQueue<Action: Sendable> {
   package struct QueuedAction: Sendable {
@@ -131,6 +104,8 @@ package final class ActionQueue<Action: Sendable> {
     /// Ahead of every buffered value, except `predecessor` and the values
     /// ahead of it while `predecessor` is still buffered.
     case front(behind: TestStoreDelivery?)
+    /// Ahead of the first buffered value a `Store` handles after this one.
+    case ordered
   }
 
   private struct Waiter {
@@ -140,6 +115,8 @@ package final class ActionQueue<Action: Sendable> {
     let resolution: ActionQueueWaiterResolution
   }
 
+  /// The delivery turns this queue shares with the other queue of its store.
+  let turns: TestStoreDeliveryTurns
   private var buffer: [QueuedAction] = []
   private var headIndex = 0
   // Waiters intentionally use an ordered array instead of a dictionary so
@@ -149,6 +126,10 @@ package final class ActionQueue<Action: Sendable> {
   private var waiters: [Waiter] = []
   /// Values resumed to a waiter that has not run yet; they are still pending.
   private var handedOff: [QueuedAction] = []
+
+  package init(turns: TestStoreDeliveryTurns = .init()) {
+    self.turns = turns
+  }
 
   package var pendingWaiterCount: Int {
     waiters.count
@@ -171,21 +152,21 @@ package final class ActionQueue<Action: Sendable> {
 
   /// Delivers a value to the first waiter, or buffers it at `placement`.
   ///
-  /// - Parameter storeOrder: Where a `Store` handles the value, when that is
-  ///   not at its own delivery.
+  /// - Parameter delivery: Where a `Store` handles the value; by default at
+  ///   its own delivery. It is recorded before a waiter is resumed.
   /// - Returns: The record of the delivery.
   @discardableResult
   func enqueue(
     _ action: Action,
     context: EffectExecutionContext?,
     tracksActivity: Bool = true,
-    storeOrder: UInt64? = nil,
+    delivery: TestStoreDelivery? = nil,
     placement: Placement = .back
   ) -> TestStoreDelivery {
     let queuedAction = QueuedAction(
       action: action,
       context: context,
-      delivery: TestStoreDelivery(storeOrder: storeOrder),
+      delivery: delivery ?? .delivered(in: turns),
       tracksActivity: tracksActivity
     )
     while !waiters.isEmpty {
@@ -208,6 +189,11 @@ package final class ActionQueue<Action: Sendable> {
         predecessor.flatMap { predecessor in
           buffer[headIndex...].firstIndex { $0.delivery === predecessor }.map { $0 + 1 }
         } ?? headIndex
+      buffer.insert(queuedAction, at: index)
+    case .ordered:
+      let storeOrder = queuedAction.delivery.storeOrder
+      let index =
+        buffer[headIndex...].firstIndex { $0.delivery.storeOrder > storeOrder } ?? buffer.endIndex
       buffer.insert(queuedAction, at: index)
     }
     return queuedAction.delivery
