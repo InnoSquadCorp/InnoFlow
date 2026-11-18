@@ -1600,7 +1600,7 @@ struct TestStoreDeliveryOrderTests {
     await store.finish()
   }
 
-  @Test("A non-exhaustive output receive reduces the actions a Store reduced before that output")
+  @Test("A non-exhaustive output receive never skips an output after the expected one")
   func offOutputReceiveReducesEarlierActionsFirst() async {
     let reference = Store(reducer: OutputBehindActionFeature(), initialState: .init())
     let captured = reference.send(.start, capturingOutputs: .unbounded)
@@ -1612,7 +1612,8 @@ struct TestStoreDeliveryOrderTests {
     let store = TestStore(reducer: OutputBehindActionFeature(), initialState: .init())
     store.exhaustivity = .off
     await store.send(.start)
-    // `a` and `o2` are both buffered before the test asks for an output.
+    // `a` and `o2` are both buffered before the test asks for `o1`, which
+    // reducing `a` publishes ahead of `o2`.
     await waitUntilIdle(store)
     await store.receiveOutput(.o1)
     await store.receiveOutput(.o2)

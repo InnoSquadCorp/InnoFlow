@@ -154,11 +154,11 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   emission against the run's next emission, a test can receive either
   order. The children of a composite (`merge`, `concatenate`) follow-up
   stay in delivery order.
-- In a non-exhaustive `TestStore`, `receiveOutput` first reduces the
-  buffered actions a `Store` reduced before the next buffered output, so a
-  test receives outputs in the order a `Store` publishes them. Before, it
-  could take a later buffered output first and skip the one an earlier
-  buffered action publishes.
+- In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
+  buffered output that a `Store` publishes after the expected one: before it
+  skips a buffered output that does not match, it reduces the buffered
+  actions a `Store` reduced before that output. Before, a test that received
+  outputs in the order a `Store` publishes them could lose the later one.
 - A collection scope now refreshes only the rows a change can affect instead
   of every row on any change, and rows resolve their positions once per
   structural change instead of each scanning the collection, also when an

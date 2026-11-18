@@ -277,9 +277,9 @@ package final class ActionQueue<Action: Sendable> {
     return received
   }
 
-  /// Where a `Store` handles the first buffered value, if any.
-  var firstBufferedStoreOrder: TestStoreOrder? {
-    headIndex < buffer.count ? buffer[headIndex].delivery.storeOrder : nil
+  /// Puts a value just taken from the head of the buffer back at its head.
+  func restoreFirst(_ queuedAction: QueuedAction) {
+    buffer.insert(queuedAction, at: headIndex)
   }
 
   /// Removes and returns the first buffered value when `isEligible` accepts it.

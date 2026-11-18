@@ -145,10 +145,11 @@ reduced, and a buffered output as one it has already published:
   emission before a wrapped follow-up of its previous one — must swap the
   two receives. The children of a composite (`merge`, `concatenate`)
   follow-up stay in delivery order.
-- In a non-exhaustive store, `receiveOutput` first reduces the buffered
-  actions a `Store` reduced before the next buffered output. A test that
-  received a later output before the one an earlier buffered action
-  publishes must receive the two in the order a `Store` publishes them.
+- In a non-exhaustive store, `receiveOutput` keeps a buffered output it
+  would have skipped when a buffered action that a `Store` reduced before
+  that output publishes the expected one: it reduces that action first, as a
+  skipped action. Receiving outputs in the order a `Store` publishes them no
+  longer loses the later one.
 - A cancellation applied while the test reduces a received action still
   removes the covered actions buffered behind it, and the covered outputs a
   `Store` would publish after it.
