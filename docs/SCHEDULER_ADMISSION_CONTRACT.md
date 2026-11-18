@@ -39,7 +39,10 @@ request the lane rejects, or whose own tree already cancelled its lane ID,
 completes without awaiting, so the turn keeps accepting the cancellations
 behind it, and the interpreter later reports exactly that outcome without
 consulting the lane again. A request the lane admits awaits its run, so the
-interpreter admits it against the lane it meets then.
+interpreter admits it against the lane it meets then. A request whose outcome
+depends on the order of `merge` children (another branch requests the same
+lane, or cancels or requests the cancellation of one of its IDs) is not
+decided in the turn at all; its admission decides it.
 
 ## Lifecycle observations
 

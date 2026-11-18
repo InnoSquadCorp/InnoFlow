@@ -254,7 +254,17 @@ expose the same tiered read contract:
   later reports exactly that decision: a request the lane rejects, or whose
   own tree already cancelled its lane identifier, completes without awaiting,
   so a cancellation after it in a `concatenate` is still accepted in the
-  turn; a request the lane admits awaits its run. A `latest` lane displaced
+  turn; a request the lane admits awaits its run. A lane request whose
+  outcome depends on the order in which the interpreter runs `merge`
+  children is not decided in the turn: one that shares its lane with a lane
+  request in another branch of an enclosing `merge`, or whose identifiers
+  another branch cancels or requests the cancellation of, wherever that work
+  lies in its branch. The turn then accepts no `latest` replacement for it
+  and nothing behind it in its branch, and its admission decides it; work
+  whose context another branch's `.cancel` covers is treated the same way.
+  A `latest` request merged only with work that touches neither its lane nor
+  its identifiers, such as `.merge(.send(.loading), latestRun)`, is still
+  accepted in the turn. A `latest` lane displaced
   in a reduction turn stays the open `latest` lane under its identifier until
   its replacement is admitted or can no longer proceed, so a request with
   another policy meets a conflicting lane. A throttled subtree is the exception: whether it runs depends on its window,

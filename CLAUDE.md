@@ -109,8 +109,8 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    immediate outputs; already-applied state changes are not rolled back.
    Cancellation a reducer returns (`.cancel`, `cancelInFlight: true`, a newer
    debounce request, a `latest` lane request) is accepted in the MainActor
-   turn of that reduction when the interpreter would reach it without awaiting
-   asynchronous work: tokens of every earlier effect are marked and their
+   turn of that reduction when the interpreter reaches it without awaiting
+   asynchronous work in every order it may run `merge` children: tokens of every earlier effect are marked and their
    MainActor-owned work is released before `send` returns, so the cancelled
    work can no longer have an action reduced. The effect that issued the
    request keeps its declaration order: an earlier `concatenate` sibling of a
@@ -126,7 +126,16 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    applies, and the interpreter reports exactly that decision later: a
    request the lane rejects, or whose own tree cancelled its lane ID first,
    completes without awaiting, so a later sibling is still accepted in the
-   turn. A `latest` lane displaced in a reduction turn stays the open
+   turn. A lane request whose outcome depends on the order of `merge`
+   children is not decided in the turn: one that shares its lane with a
+   lane request in another branch of an enclosing `merge`, or whose IDs
+   another branch cancels or requests the cancellation of, wherever that
+   work lies in its branch. The turn accepts no `latest` replacement for it
+   and nothing behind it in its branch; its admission decides it. Work whose
+   context another branch's `.cancel` covers is treated the same way. A
+   `latest` request merged only with work that touches neither its lane nor
+   its IDs, such as `.merge(.send(.loading), latestRun)`, is still accepted
+   in the turn. A `latest` lane displaced in a reduction turn stays the open
    `latest` lane under its ID until its replacement is admitted or can no
    longer proceed. A throttled subtree is accepted when its window admits it. `Store` and
    `TestStore` share this acceptance through
@@ -135,7 +144,8 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    dispatch ownership". A dispatch whose effect is cancelled before it was
    interpreted still records the cancellation in diagnostics, and so does a
    dispatch whose declared work an ID cancellation releases before that work
-   is registered, when the interpreter skips the work.
+   is registered, when the interpreter skips the work, including a throttle
+   request whose ID is cancelled while its clock is read.
    No suspension may separate cancellation acceptance from releasing that
    work, with or without diagnostics. All Store effect bookkeeping, including
    run tasks, is MainActor-isolated: `cancelEffects(identifiedBy:)` and
@@ -720,7 +730,7 @@ Do not leave the rule enforced only by prose.
 
 ### Runtime completion and result mapping
 
-A throttle window fires the newest trailing request that can still proceed: cancelling the newest request — through its dispatch or through an ID only it carries — gives the window, with its timer, back to the request it replaced (a bounded number of superseded requests is retained), independent of whether the cancelled effect had been interpreted; the window resets only when no retained request can still proceed. The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
+A throttle window fires the newest trailing request that can still proceed: cancelling the newest request — through its dispatch or through an ID only it carries — gives the window, with its timer, back to the request it replaced (a bounded number of superseded requests is retained), independent of whether the cancelled effect had been interpreted; the window resets only when no retained request can still proceed. A request that a cancellation removes from a window no longer holds its dispatch: the dispatch, and the interpreter frame of an awaited request, are released at once, while the window keeps its timer for the requests it still holds. The runtime owns shared throttle completion even when callers discard every handle. Dispatch observers detach independently on cancellation; they never cancel another dispatch's shared timer. Completion and cleanup are idempotent. `perform` maps directly thrown CancellationError to failure unless authoritative cancellation was accepted; general run/AsyncSequence cancellation remains a separate contract.
 
 ### Testing dispatch ownership
 

@@ -122,7 +122,8 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   When the newest request is cancelled — through its dispatch or through an
   ID only it carries — the window falls back to the request it replaced (the
   window keeps the newest request and up to seven it replaced) instead of
-  firing nothing, and keeps its timer. Before, an ID cancellation always
+  firing nothing, and keeps its timer. The request the cancellation removed
+  no longer holds its dispatch, which finishes once its own work is done. Before, an ID cancellation always
   reset the window, and the outcome of a dispatch cancellation depended on
   whether the cancelled dispatch's effect had been interpreted yet.
 - `TestStore` queues the actions that a received action's effect delivers
@@ -201,7 +202,12 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   if the lane changed before the interpreter reached it. A `latest` lane
   displaced in the turn stays the open `latest` lane until its replacement
   is admitted, so a request with another policy is rejected as conflicting
-  instead of taking the lane over.
+  instead of taking the lane over. A lane request whose outcome depends on
+  the order of `merge` children — another branch requests the same lane, or
+  cancels or requests the cancellation of one of its IDs — is decided by its
+  admission, and the turn accepts nothing behind it in its branch; a
+  `latest` request merged only with unrelated work, such as
+  `.merge(.send(.loading), latestRun)`, is still accepted in the turn.
   `TestStore` applies the same rules, so a test receives the actions a
   production store reduces.
 - `TestStore` delivers an effect action that the delivering effect cancels
@@ -220,9 +226,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
 - `StoreDiagnostics` records `cancellationRequested` for a dispatch whose
   declared work an ID cancellation released before that work was registered:
   the issuing effect's own `.cancel` interpreted before a `merge` sibling
-  registered its work, or a cancellation that landed while an earlier
-  `concatenate` sibling was still running. Before, the work was skipped
-  without a record.
+  registered its work, a cancellation that landed while an earlier
+  `concatenate` sibling was still running, or one that landed while a
+  throttle request read its clock. Before, the work was skipped without a
+  record.
 - Release pending scheduled requests in the same turn as cancellation
   acceptance. With `StoreDiagnostics` enabled, `cancelEffects(identifiedBy:)`
   and `cancelAllEffects()` suspended between marking cancellation and

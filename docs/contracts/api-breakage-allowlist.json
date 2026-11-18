@@ -205,6 +205,18 @@
       "source": "Sources/InnoFlowCore/StoreCaches.swift",
       "declaration": "package final class CollectionScopeCacheBucket",
       "reason": "The package collection-scope cache advances its revision only through its indexing methods, for the same reason."
+    },
+    {
+      "message": "API breakage: func ThrottleStateMap.setTrailingTask(_:completion:for:) has parameter 1 type change from InnoFlowCore.FlowTaskCompletion? to InnoFlowCore.ThrottleWindowCompletion?",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package final class ThrottleStateMap<Action: Sendable, Output: Sendable>",
+      "reason": "A throttle window's completion holds each request it serves separately, so a cancellation that removes a request from the window releases only that request's dispatch; no consumer can reach the package throttle state."
+    },
+    {
+      "message": "API breakage: func ThrottleStateMap.trailingCompletion(for:) has return type change from InnoFlowCore.FlowTaskCompletion? to InnoFlowCore.ThrottleWindowCompletion?",
+      "source": "Sources/InnoFlowCore/EffectDriver.swift",
+      "declaration": "package final class ThrottleStateMap<Action: Sendable, Output: Sendable>",
+      "reason": "A throttle window's completion holds each request it serves separately, so a cancellation that removes a request from the window releases only that request's dispatch; no consumer can reach the package throttle state."
     }
   ]
 }
