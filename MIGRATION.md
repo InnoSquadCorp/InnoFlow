@@ -108,20 +108,27 @@ its next `send` cancels through a composite effect (for example
 `Store`.
 
 `TestStore` now treats a buffered effect action as one a `Store` has already
-reduced:
+reduced, and a buffered output as one it has already published:
 
-- A cancellation that the delivering effect applies afterwards no longer
-  removes it. `.concatenate(.send(a).cancellable(id), .cancel(id))`, a run
-  under `id` followed by `.cancel(id)`, and the same shapes inside a `merge`
-  now let the test receive `a`; in 6.0.x the action was dropped. Add the
-  missing `receive` to an exhaustive test of such an effect.
+- A cancellation that comes after the delivery no longer removes it: the
+  delivering effect's own `.cancel` (`.concatenate(.send(a).cancellable(id),
+  .cancel(id))`, a run under `id` followed by `.cancel(id)`, the same inside a
+  `merge`), another dispatch's effect, or a `send` whose reduction cancels the
+  effect of a buffered output (including closing an optional child). In 6.0.x
+  the value was dropped. Add the missing `receive` or `receiveOutput` to an
+  exhaustive test.
 - The actions a received action's effect delivers synchronously are queued
-  ahead of the later emissions of the run that emitted the received action.
-  Receive them in that order; in 6.0.x the order depended on timing.
+  right behind it, ahead of everything buffered earlier, at any depth. Receive
+  a follow-up chain before the actions delivered after its first action. In
+  6.0.x the order depended on timing; a test that received a later action
+  first, for example the target before the `.send` follow-up of an action it
+  received as a mismatch, must swap the two receives.
+- A cancellation applied while the test reduces a received action still
+  removes the covered actions buffered behind it, and the covered outputs a
+  `Store` would publish after it.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
-  `cancelAllEffects()`, a dispatch's `cancel()`, or a `send` whose reduction
-  cancels — still removes covered actions the delivering effect has not moved
-  past, as before.
+  `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
+  buffered action and output, as before.
 
 Cancelling a queued serial request through its dispatch now returns its
 capacity at once; the next request is no longer rejected with `queueFull`

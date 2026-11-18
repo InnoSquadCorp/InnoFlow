@@ -127,11 +127,11 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   reset the window, and the outcome of a dispatch cancellation depended on
   whether the cancelled dispatch's effect had been interpreted yet.
 - `TestStore` queues the actions that a received action's effect delivers
-  synchronously ahead of the actions that the run which emitted the received
-  action sent after it, the order in which a `Store` reduces them. Before,
-  the order depended on whether the test received the first action before
-  the run emitted the next one. Interleavings a `Store` does not order stay
-  in delivery order.
+  synchronously right behind that action, at every depth: a follow-up chain,
+  a Scope delegate chain, and the follow-up of a run's emission against the
+  next run of a `concatenate` are received in the order a `Store` reduces
+  them. Before, the order, and with a cancellation the set of received
+  actions, depended on when the test received the first action.
 - A collection scope now refreshes only the rows a change can affect instead
   of every row on any change, and rows resolve their positions once per
   structural change instead of each scanning the collection, also when an
@@ -210,14 +210,16 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   `.merge(.send(.loading), latestRun)`, is still accepted in the turn.
   `TestStore` applies the same rules, so a test receives the actions a
   production store reduces.
-- `TestStore` delivers an effect action that the delivering effect cancels
-  afterwards, as a `Store` reduces it: `.concatenate(.send(a).cancellable(id),
-  .cancel(id))`, a run under `id` followed by `.cancel(id)` in a
-  `concatenate`, and the same inside a `merge`. A cancellation applied while
-  the test reduces an earlier received action still removes the action, and
-  a cancellation the test issues (`cancelEffects`, `cancelAllEffects`, a
-  dispatch's `cancel()`, a `send`) removes the actions the delivering effect
-  has not moved past yet.
+- `TestStore` keeps a buffered effect action or output that a cancellation
+  coming after its delivery covers, as a `Store` has already reduced or
+  published it: the delivering effect's own `.cancel`
+  (`.concatenate(.send(a).cancellable(id), .cancel(id))`, a run under `id`
+  followed by `.cancel(id)`, the same inside a `merge`), another dispatch's
+  effect, or a `send` whose reduction cancels the effect of a buffered output.
+  A cancellation applied while the test reduces a received action still
+  removes the covered values a `Store` would have delivered after it, and a
+  cancellation the test issues (`cancelEffects`, `cancelAllEffects`, a
+  dispatch's `cancel()`) still removes every covered value, as in 6.0.x.
 - Cancelling a queued serial request through its dispatch returns its queue
   capacity at once: a pending request that can no longer proceed no longer
   counts toward `maxPending` or `pendingRequestCount`. Before, the next
