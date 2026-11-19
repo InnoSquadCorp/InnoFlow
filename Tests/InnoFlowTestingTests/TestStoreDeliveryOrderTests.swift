@@ -2510,8 +2510,9 @@ struct TestStoreDeliveryOrderTests {
     await mainActorBarrier()
     queueEmission(.y, into: store)
     // The send drains `r`; its throttle walk reads the manual clock, and `y`
-    // is delivered while it waits. The walk keeps its anchor's position until
-    // it returns, so the drain reduces `rl` before `c`.
+    // is delivered while it waits. What the walk delivers afterwards is placed
+    // at the level after its start, which ran before the send began, so the
+    // drain reduces `rl` before `c`.
     await store.send(.c)
     #expect(store.state.log == ["r", "rl", "c"])
     await store.receive(.y)
@@ -2600,9 +2601,10 @@ struct TestStoreDeliveryOrderTests {
   func drainedWalkValueAfterClockReadPrecedesSend(exhaustive: Bool) async {
     // A `Store` ran `r`'s interpreter task when it reduced `r`, and that task
     // resumed from its clock read, delivering `rl`, before the test sent `t`.
-    // A test store walks `r`'s effect only while the send drains it; the walk
-    // keeps its anchor's position across the clock read, so `rl` is reduced
-    // before `t`, and `t`'s cancel of the throttle has nothing left to remove.
+    // A test store walks `r`'s effect only while the send drains it; what the
+    // walk delivers after the clock read is placed at the level after its
+    // start, which ran before the send began, so `rl` is reduced before `t`,
+    // and `t`'s cancel of the throttle has nothing left to remove.
     let reference = Store(
       reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
     await queueEmission(.r, into: reference).value

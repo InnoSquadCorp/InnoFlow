@@ -160,24 +160,27 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   before the walk started. A send's drain defers every interpreted walk
   behind one it defers, and a throttle on the default clock suspends to
   read it, as in a `Store`. A walk that suspends more than once is placed as
-  if it resumed once. Such a value is reduced before a later send when
-  that point came before the send began, and otherwise comes behind it, as
-  in a `Store` whose send comes right after the walk started. Before, the
-  order, and with a cancellation the set of received actions
-  and outputs, depended on when the test received the first action. Where
-  the `Store` order is itself a race, such as a wrapped follow-up of a
-  wrapped follow-up of a run's emission against the run's next emission, a
-  test can receive either order. A `Store` hands a resumed walk, and a walk
-  that waited for the one before it, back to the MainActor from another
-  executor, so where it continues depends on how soon that happens relative
-  to the MainActor's other jobs; apart from a walk that suspends more than
-  once and the walks behind it, and follow-ups more than four interpreter
-  levels deep, which share the fourth level's position, the test store takes
-  the earliest point. The children of a composite (`merge`, `concatenate`)
-  follow-up stay in delivery order, and work a walk starts in another task
-  (a run, a composite and its children, a timer) delivers at its delivery,
-  as in 6.0.x: its first values can come after MainActor jobs that a
-  `Store` runs after them.
+  if it resumed once. What a walk delivers after it first suspends is
+  reduced before a later send when its resumption point came before the send
+  began, and otherwise comes behind it, as in a `Store` whose send comes
+  right after the walk started. Before, the order, and with a cancellation
+  the set of received actions and outputs, depended on when the test
+  received the first action. Where the `Store` order is itself a race, such
+  as a wrapped follow-up of a wrapped follow-up of a run's emission against
+  the run's next emission, a test can receive either order. A `Store` hands
+  a resumed walk, and a walk that waited for the one before it, back to the
+  MainActor from another executor, so where it continues depends on how soon
+  that happens relative to the MainActor's other jobs; the test store takes
+  the earliest point. Two limitations are the exception, and can place a
+  value before jobs a `Store` runs first: a walk that suspends more than
+  once, and the walks behind it; and positions more than four interpreter
+  jobs behind a delivery or send — a follow-up that deep, or a walk that
+  starts or resumes there after others waited in turn — which share the
+  fourth job's position. The children of a composite (`merge`,
+  `concatenate`) follow-up stay in delivery order, and work a walk starts in
+  another task (a run, a composite and its children, a timer) delivers at
+  its delivery, as in 6.0.x: its first values can come after MainActor jobs
+  that a `Store` runs after them.
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered

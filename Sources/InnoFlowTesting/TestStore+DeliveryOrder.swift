@@ -58,8 +58,8 @@ package import InnoFlowCore
 //   interpreter that delivered it runs. A marker therefore queues the marker
 //   of the next level when it runs, while an action of its chain has not
 //   finished its walk or the last walk the test store followed finished on
-//   the chain, up to `TestStoreAnchorChain.depth` levels; deeper values
-//   share the deepest position.
+//   the chain, up to `TestStoreAnchorChain.depth` levels; deeper positions,
+//   a walk's start or resumption among them, share the deepest one.
 // - The test store follows a walk until it returns. A `Store` resumes a walk
 //   that suspends — after a clock read or an admission — behind every
 //   MainActor job queued before it started, at the earliest where the next
@@ -179,8 +179,8 @@ package final class TestStoreAnchorMarkerCount {
 /// markers in all.
 @MainActor
 package final class TestStoreAnchorChain {
-  /// The deepest level that gets a marker of its own; deeper follow-ups
-  /// share its position.
+  /// The deepest level that gets a marker of its own; deeper positions — a
+  /// follow-up's, or a walk's start or resumption — share its position.
   package static let depth = 4
 
   /// The levels whose marker is queued.
@@ -260,7 +260,7 @@ package struct TestStoreAnchor {
   package let level: Int
 
   /// Where a `Store` runs the interpreter task it creates while this one
-  /// runs.
+  /// runs. The deepest level stands for every deeper one.
   var next: TestStoreAnchor {
     TestStoreAnchor(chain: chain, level: min(level + 1, TestStoreAnchorChain.depth))
   }
