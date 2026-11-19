@@ -131,7 +131,10 @@ reduced, and a buffered output as one it has already published:
   that is not `.none` or a plain `.send` or `.output` only once that task
   would run, so a MainActor job queued before it, such as a run's emission,
   is delivered before they return: an exhaustive test receives that
-  emission before the wrapped follow-up. A `send` that first reduces
+  emission before the wrapped follow-up. The bullet on suspended walks below
+  adds two things: a follow-up whose interpreter task waits for the one
+  created before it starts later, and two limitations can place a value
+  before jobs a `Store` runs first. A `send` that first reduces
   buffered actions (in a non-exhaustive store, or after reporting them in an
   exhaustive one) reduces the sent action before it starts the effects of
   those whose interpreter task had not run when the send began, so their
@@ -178,18 +181,18 @@ reduced, and a buffered output as one it has already published:
   throttle around a scheduled run, nested throttles) is placed as if it
   resumed once, and the walks behind it start there; and positions more than
   four interpreter jobs behind a delivery or send — a follow-up that deep, or
-  a walk that starts or resumes there after others waited in turn — share the
-  fourth job's position. A value a drained walk delivers after its first
-  suspension is reduced before the sent action when its resumption point came
-  before the send began, and can otherwise come behind it, as in a `Store`
-  that sends right after the walk started. Work a walk starts in another task
-  (a run, a composite and its children, a timer) delivers at its delivery, as
-  in 6.0.x: its values can come behind MainActor jobs and walks that a `Store`
-  runs after them, such as a job queued right after the walk started, which a
-  `concatenate`'s leading sends precede in a `Store`; and when that work
-  delivers after a send began, its values are behind the sent action, which
-  can cancel them, although a `Store` typically reduced them before the send.
-  Receive those values before sending an action that cancels them.
+  a walk that starts or resumes there — share the fourth job's position. A
+  value a drained walk delivers after its first suspension is reduced before
+  the sent action when its resumption point came before the send began, and
+  can otherwise come behind it, as in a `Store` that sends right after the
+  walk started. Work a walk starts in another task (a run, a composite and its
+  children, a timer) delivers at its delivery, as in 6.0.x: its values can
+  come behind MainActor jobs and walks that a `Store` runs after them, such as
+  a job queued right after the walk started, which a `concatenate`'s leading
+  sends precede in a `Store`; and when that work delivers after a send began,
+  its values are behind the sent action, which can cancel them, although a
+  `Store` typically reduced them before the send. Receive those values before
+  sending an action that cancels them.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
   `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
   buffered action and output, as before.

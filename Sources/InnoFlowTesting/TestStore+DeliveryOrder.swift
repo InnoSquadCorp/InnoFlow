@@ -59,17 +59,20 @@ package import InnoFlowCore
 //   of the next level when it runs, while an action of its chain has not
 //   finished its walk or the last walk the test store followed finished on
 //   the chain, up to `TestStoreAnchorChain.depth` levels; deeper positions,
-//   a walk's start or resumption among them, share the deepest one.
+//   a walk's start or resumption among them, share the deepest one, a known
+//   limitation: what is placed there can come before jobs a `Store` runs
+//   first.
 // - The test store follows a walk until it returns. A `Store` resumes a walk
 //   that suspends — after a clock read or an admission — behind every
 //   MainActor job queued before it started, at the earliest where the next
 //   level after its start runs, which the test store takes for what the
 //   walk delivers from then on. A walk that suspends more than once is
-//   placed as if it resumed once. What work a walk started in another task
-//   delivers — a run, a composite and its children, a timer — is handled at
-//   its delivery, a known limitation: a `Store` starts that work while the
-//   walk runs, and can handle its first values before MainActor jobs placed
-//   ahead of them here.
+//   placed as if it resumed once, and the walks behind it start there, a
+//   known limitation: both can come before jobs a `Store` runs first. What
+//   work a walk started in another task delivers — a run, a composite and
+//   its children, a timer — is handled at its delivery, a known limitation:
+//   a `Store` starts that work while the walk runs, and can handle its first
+//   values before MainActor jobs placed ahead of them here.
 // - A cancellation applied while the test reduces a received or sent action
 //   — its reduction, the reduction-turn acceptance and the synchronous part
 //   of its effect walk — removes the covered values a `Store` would have
@@ -275,11 +278,13 @@ package struct TestStoreAnchor {
     position.map { $0 < order.event } ?? false
   }
 
-  /// Where a `Store` starts the walk of the interpreter task anchored here,
-  /// once this marker has run, when the walk before it finished at
+  /// Where the test store starts the walk of the interpreter task anchored
+  /// here, once this marker has run, when the walk before it finished at
   /// `predecessor`: here, unless that walk finished only after this anchor
-  /// ran; then, at the earliest, in a job queued right after it finished:
-  /// its next level.
+  /// ran; then at its next level, a job queued right after it finished.
+  /// Short of the two limitations in this file's header — a walk that
+  /// suspends more than once, and ``TestStoreAnchorChain/depth`` — that is
+  /// the earliest job in which a `Store` starts the walk.
   func start(after predecessor: TestStoreAnchor?) -> TestStoreAnchor {
     guard let predecessor, let finished = predecessor.position, let own = position,
       finished >= own
@@ -395,12 +400,14 @@ package final class TestStoreFollowedWalk {
   /// Where a `Store` first runs the interpreter task of an effect it does not
   /// drain.
   let anchor: TestStoreAnchor?
-  /// Where a `Store` starts the walk at the earliest: the anchor, or a job
-  /// queued right after the walk created before it finished.
+  /// Where the test store starts the walk: the anchor, or the next level
+  /// after the walk created before it finished
+  /// (``TestStoreAnchor/start(after:)``).
   private(set) var startAnchor: TestStoreAnchor?
-  /// Where a `Store` resumes the walk at the earliest once it has suspended:
-  /// the next level after its start, behind every MainActor job queued
-  /// before the walk started.
+  /// Where the walk delivers once it has suspended: the next level after its
+  /// start (``TestStoreAnchor/next``). Short of the two limitations in this
+  /// file's header, that is behind every MainActor job queued before the
+  /// walk started, where a `Store` resumes the walk at the earliest.
   private(set) var resumedAnchor: TestStoreAnchor?
   /// The order behind which a cancellation applied during the reduction
   /// removes covered values: where `handled` is, then the position where the
@@ -442,13 +449,13 @@ package final class TestStoreFollowedWalk {
     }
   }
 
-  /// The walk has reached its first suspension: from now on it delivers where
-  /// a `Store` resumes it at the earliest. That marker was queued when the
-  /// start's ran, before the walk began, so it has run: the start's chain
-  /// had an unsettled member then — the walk's own action, the action of the
-  /// walk before it, or the test store while the chain held the interpreter
-  /// tail. Only walks running concurrently on one store can find it missing;
-  /// the walk then keeps delivering at its start.
+  /// The walk has reached its first suspension: from now on it delivers at
+  /// ``resumedAnchor``, the next level after its start. That marker was
+  /// queued when the start's ran, before the walk began, so it has run: the
+  /// start's chain had an unsettled member then — the walk's own action, the
+  /// action of the walk before it, or the test store while the chain held
+  /// the interpreter tail. Only walks running concurrently on one store can
+  /// find it missing; the walk then keeps delivering at its start.
   func didReachFirstSuspension() {
     guard isSynchronous, resumedAnchor == nil, let next = startAnchor?.next,
       let position = next.position

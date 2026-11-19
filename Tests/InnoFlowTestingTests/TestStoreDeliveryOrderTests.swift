@@ -22,8 +22,15 @@ import Testing
 // it, such as the rest of the received action's job or an emission already
 // on its way when the action was delivered or sent, and before the jobs
 // queued after it, such as the run's next emission or the next step of a
-// `concatenate` after a run. A cancellation the test issues itself is the
-// one exception to the first rule: it lands before the values it covers.
+// `concatenate` after a run. The last rule holds unless the interpreter task
+// created before it has not finished, because it suspended or still waits
+// for its own predecessor: the task awaits it, and where it then starts, like
+// where a suspended walk resumes, is a race in a `Store`; those tests compare
+// with the earliest point a `Store` reaches. Two known limitations of the
+// test store are outside these tests: a walk that suspends more than once,
+// with the walks behind it, and positions past the fourth interpreter level
+// behind a delivery or send. A cancellation the test issues itself is the one
+// exception to the first rule: it lands before the values it covers.
 //
 // A test queues a MainActor job ahead of its next statement by creating a
 // MainActor task that delivers through the store's effect driver, as the
@@ -2599,8 +2606,9 @@ struct TestStoreDeliveryOrderTests {
     "A drained walk's value after its clock read comes before the send",
     arguments: [true, false])
   func drainedWalkValueAfterClockReadPrecedesSend(exhaustive: Bool) async {
-    // A `Store` ran `r`'s interpreter task when it reduced `r`, and that task
-    // resumed from its clock read, delivering `rl`, before the test sent `t`.
+    // A `Store` created `r`'s interpreter task when it reduced `r`; that task
+    // ran and resumed from its clock read, delivering `rl`, before the test
+    // sent `t`.
     // A test store walks `r`'s effect only while the send drains it; what the
     // walk delivers after the clock read is placed at the level after its
     // start, which ran before the send began, so `rl` is reduced before `t`,

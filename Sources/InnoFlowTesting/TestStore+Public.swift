@@ -24,10 +24,11 @@ extension TestStore {
   /// that task have run and the walk of the task created before it has
   /// finished. It buffers what the effect delivers there, and, once the walk
   /// has first suspended, where a `Store` resumes it at the earliest. Two
-  /// limitations are the exception: a walk that suspends more than once is
-  /// placed as if it resumed once, and the walks behind it start there; and
-  /// positions more than four interpreter jobs behind a delivery or send
-  /// share the fourth job's position. A buffered action reduced first whose
+  /// limitations are the exception, and can place a value before jobs a
+  /// `Store` runs first: a walk that suspends more than once is placed as if
+  /// it resumed once, and the walks behind it start there; and positions
+  /// more than four interpreter jobs behind a delivery or send share the
+  /// fourth job's position. A buffered action reduced first whose
   /// walk had not started when the send began, and every interpreted one
   /// reduced after it, is walked after the new action is reduced, as in a
   /// `Store`.
@@ -97,7 +98,12 @@ extension TestStore {
   /// earliest, as for ``send(_:assert:fileID:filePath:line:column:)``: an
   /// effect the `Store` interprets in a MainActor task of its own starts once
   /// the MainActor jobs queued before that task have run and the walk of the
-  /// task created before it has finished.
+  /// task created before it has finished. The same two limitations are the
+  /// exception, and can place a value before jobs a `Store` runs first: a
+  /// walk that suspends more than once is placed as if it resumed once, and
+  /// the walks behind it start there; and positions more than four
+  /// interpreter jobs behind a delivery or send share the fourth job's
+  /// position.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,

@@ -175,12 +175,11 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   value before jobs a `Store` runs first: a walk that suspends more than
   once, and the walks behind it; and positions more than four interpreter
   jobs behind a delivery or send — a follow-up that deep, or a walk that
-  starts or resumes there after others waited in turn — which share the
-  fourth job's position. The children of a composite (`merge`,
-  `concatenate`) follow-up stay in delivery order, and work a walk starts in
-  another task (a run, a composite and its children, a timer) delivers at
-  its delivery, as in 6.0.x: its first values can come after MainActor jobs
-  that a `Store` runs after them.
+  starts or resumes there — which share the fourth job's position. The
+  children of a composite (`merge`, `concatenate`) follow-up stay in
+  delivery order, and work a walk starts in another task (a run, a composite
+  and its children, a timer) delivers at its delivery, as in 6.0.x: its
+  first values can come after MainActor jobs that a `Store` runs after them.
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered
