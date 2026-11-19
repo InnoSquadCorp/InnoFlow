@@ -170,12 +170,14 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   test can receive either order. A `Store` hands a resumed walk, and a walk
   that waited for the one before it, back to the MainActor from another
   executor, so where it continues depends on how soon that happens relative
-  to the MainActor's other jobs; the test store takes the earliest point.
-  The children of a composite (`merge`,
-  `concatenate`) follow-up stay in delivery order, and work a walk starts in
-  another task (a run, a composite and its children, a timer) delivers at
-  its delivery, as in 6.0.x: its first values can come after MainActor jobs
-  that a `Store` runs after them.
+  to the MainActor's other jobs; apart from a walk that suspends more than
+  once and the walks behind it, and follow-ups more than four interpreter
+  levels deep, which share the fourth level's position, the test store takes
+  the earliest point. The children of a composite (`merge`, `concatenate`)
+  follow-up stay in delivery order, and work a walk starts in another task
+  (a run, a composite and its children, a timer) delivers at its delivery,
+  as in 6.0.x: its first values can come after MainActor jobs that a
+  `Store` runs after them.
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered

@@ -159,34 +159,34 @@ reduced, and a buffered output as one it has already published:
   admission, a throttle reading its clock) is now removed when the sent
   action cancels its effect, as a `Store` drops it; in 6.0.x it was reduced
   before the sent action.
-- A walk that suspends — a throttle reading its clock, a scheduled run
-  waiting for admission — now keys what it delivers afterwards where a
-  `Store` resumes it at the earliest, behind the jobs queued before the walk
-  started, instead of at its delivery. A walk created before it started,
-  such as one delivered in the same job, waits for it and starts right
-  after it finished, the earliest point at which a `Store` starts it; a
-  walk created after it started starts where its own interpreter task runs,
-  as in a `Store` that resumed the earlier walk at the earliest. A `Store`
-  starts each root interpreter walk only after the one before it, and hands
-  a resumed walk, and a walk that waited, back to the MainActor from another
-  executor, so where they continue depends on how soon that happens relative
-  to the MainActor's other jobs. A throttle on a test store without a
+- A walk that suspends — a throttle reading its clock, a scheduled run waiting
+  for admission — now keys what it delivers afterwards where a `Store` resumes
+  it at the earliest, behind the jobs queued before the walk started, instead
+  of at its delivery. A walk starts at the earliest point at which a `Store`
+  starts it: where a `Store` runs its interpreter task, or, when the walk
+  created just before it finishes only later, right after that walk finished.
+  A `Store` starts each root interpreter walk only after the one before it,
+  and hands a resumed walk, and a walk that waited, back to the MainActor from
+  another executor, so where they continue depends on how soon that happens
+  relative to the MainActor's other jobs. A throttle on a test store without a
   `ManualTestClock` now suspends to read the clock too, as on a `Store`, so
-  its value comes behind the jobs queued before its walk. A test
-  that received those values, or the values of the walk behind it, in
-  delivery order receives them in that order instead. A walk that suspends
-  more than once (a throttle around a scheduled run, nested throttles) is
-  placed as if it resumed once. A value a drained walk delivers this way is
-  reduced before the sent action when that point came before the send began,
-  and can otherwise come behind it, as in a `Store` that sends right after
-  the walk started. Work a walk starts in another task (a run, a composite
-  and its children, a timer) delivers at its delivery, as in 6.0.x: its
-  values can come behind MainActor jobs and walks that a `Store` runs after
-  them, such as a job queued right after the walk started, which a
+  its value comes behind the jobs queued before its walk. A test that received
+  those values, or the values of the walk behind it, in delivery order
+  receives them in that order instead. A walk that suspends more than once (a
+  throttle around a scheduled run, nested throttles) is placed as if it
+  resumed once, and the walk behind it starts there; both, and follow-ups more
+  than four interpreter levels deep, which share the fourth level's position,
+  can come before jobs a `Store` runs first. A value a drained walk delivers
+  this way is reduced before the sent action when that point came before the
+  send began, and can otherwise come behind it, as in a `Store` that sends
+  right after the walk started. Work a walk starts in another task (a run, a
+  composite and its children, a timer) delivers at its delivery, as in 6.0.x:
+  its values can come behind MainActor jobs and walks that a `Store` runs
+  after them, such as a job queued right after the walk started, which a
   `concatenate`'s leading sends precede in a `Store`; and when that work
   delivers after a send began, its values are behind the sent action, which
-  can cancel them, although a `Store` typically reduced them before the
-  send. Receive those values before sending an action that cancels them.
+  can cancel them, although a `Store` typically reduced them before the send.
+  Receive those values before sending an action that cancels them.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
   `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
   buffered action and output, as before.

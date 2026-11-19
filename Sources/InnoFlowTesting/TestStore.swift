@@ -112,8 +112,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   /// Where the last interpreted walk the store followed finished: a `Store`
   /// starts a root interpreter walk only once the one before it has finished.
   /// The tail's chain keeps queueing levels while it holds the tail, so a
-  /// walk that waited for the tail's walk finds the levels where a `Store`
-  /// starts and resumes it at the earliest.
+  /// walk that waited for the tail's walk finds the levels where the test
+  /// store starts and resumes it.
   package var interpreterTail: TestStoreAnchor? {
     didSet {
       guard interpreterTail?.chain !== oldValue?.chain else { return }

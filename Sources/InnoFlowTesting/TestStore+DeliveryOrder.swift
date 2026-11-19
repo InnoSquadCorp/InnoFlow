@@ -13,9 +13,10 @@ package import InnoFlowCore
 // the values the synchronous part of that walk delivers are handled where
 // that task runs. MainActor tasks run in the order they are created, so such
 // a value is handled where a MainActor task created while the action was
-// handled runs, unless the interpreter task created before it is still
-// suspended — a throttle reading its clock, a scheduled run waiting for
-// admission — which the task awaits before it walks.
+// handled runs, unless the interpreter task created before it has not
+// finished — it suspended, as a throttle reading its clock or a scheduled
+// run waiting for admission does, or it still waits for the one before it —
+// which the task awaits before it walks.
 //
 // A test store buffers the values at the same points instead, reduces an
 // action when the test receives it, and keeps each buffer in the order in
@@ -171,11 +172,11 @@ package final class TestStoreAnchorMarkerCount {
 /// whose interpreter it anchors; a member settles once the synchronous part
 /// of its reduction's walk has finished, or when it leaves the buffer without
 /// being reduced. The test store is a member too while the chain holds its
-/// interpreter tail: a root walk that waited for the tail's walk starts at
-/// the chain's level after the tail, and resumes at the level after that —
-/// the earliest points at which a `Store` starts and resumes it — however
-/// late the test receives the walk's action. The chain queues no marker once no member is
-/// unsettled, and at most ``depth`` markers in all.
+/// interpreter tail: the test store starts a root walk that waited for the
+/// tail's walk at the chain's level after the tail, and resumes it at the
+/// level after that, however late the test receives the walk's action. The
+/// chain queues no marker once no member is unsettled, and at most ``depth``
+/// markers in all.
 @MainActor
 package final class TestStoreAnchorChain {
   /// The deepest level that gets a marker of its own; deeper follow-ups
