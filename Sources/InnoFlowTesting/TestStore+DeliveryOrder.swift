@@ -35,10 +35,11 @@ package import InnoFlowCore
 //   before has finished. The test store walks interpreted effects in that
 //   order, and records where each walk finished: a walk whose predecessor
 //   finished only after its anchor ran starts at the next level after that
-//   point, the earliest point at which a `Store` starts it. The
-//   predecessor's completion resumes a `Store`'s walk through the global
-//   executor, which can land behind later jobs, depending on how soon it
-//   hands the walk back relative to the MainActor's other jobs.
+//   point, the earliest point at which a `Store` starts it, short of the
+//   two limitations below. The predecessor's completion resumes a `Store`'s
+//   walk through the global executor, which can land behind later jobs,
+//   depending on how soon it hands the walk back relative to the MainActor's
+//   other jobs.
 // - A `send` takes its place, and queues its anchor, when it begins: a
 //   `Store` reduces the sent action, and creates its interpreter task, in
 //   the MainActor job in which the send begins. The send first reduces the
@@ -66,9 +67,10 @@ package import InnoFlowCore
 //   that suspends — after a clock read or an admission — behind every
 //   MainActor job queued before it started, at the earliest where the next
 //   level after its start runs, which the test store takes for what the
-//   walk delivers from then on. A walk that suspends more than once is
-//   placed as if it resumed once, and the walks behind it start there, a
-//   known limitation: both can come before jobs a `Store` runs first. What
+//   walk delivers from then on, short of the depth limit above. A walk that
+//   suspends more than once is placed as if it resumed once, and the walks
+//   behind it start right behind that place, a known limitation: both can
+//   come before jobs a `Store` runs first. What
 //   work a walk started in another task delivers — a run, a composite and
 //   its children, a timer — is handled at its delivery, a known limitation:
 //   a `Store` starts that work while the walk runs, and can handle its first
@@ -280,8 +282,9 @@ package struct TestStoreAnchor {
 
   /// Where the test store starts the walk of the interpreter task anchored
   /// here, once this marker has run, when the walk before it finished at
-  /// `predecessor`: here, unless that walk finished only after this anchor
-  /// ran; then at its next level, a job queued right after it finished.
+  /// `predecessor`: here, unless that walk finished at or after the point
+  /// where this anchor ran; then at its next level, a job queued right after
+  /// it finished.
   /// Short of the two limitations in this file's header — a walk that
   /// suspends more than once, and ``TestStoreAnchorChain/depth`` — that is
   /// the earliest job in which a `Store` starts the walk.
@@ -430,7 +433,8 @@ package final class TestStoreFollowedWalk {
     threshold = handled.storeOrder
   }
 
-  /// Where a `Store` handles what the walk delivers now.
+  /// Where the test store places what the walk delivers now:
+  /// ``resumedAnchor`` once it has suspended, ``startAnchor`` before.
   var deliveryAnchor: TestStoreAnchor? {
     resumedAnchor ?? startAnchor
   }

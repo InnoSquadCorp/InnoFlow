@@ -26,11 +26,14 @@ import Testing
 // created before it has not finished, because it suspended or still waits
 // for its own predecessor: the task awaits it, and where it then starts, like
 // where a suspended walk resumes, is a race in a `Store`; those tests compare
-// with the earliest point a `Store` reaches. Two known limitations of the
-// test store are outside these tests: a walk that suspends more than once,
-// with the walks behind it, and positions past the fourth interpreter level
-// behind a delivery or send. A cancellation the test issues itself is the one
-// exception to the first rule: it lands before the values it covers.
+// with the earliest point a `Store` reaches. The test store's two known
+// limitations — a walk that suspends more than once, with the walks behind
+// it, and positions past the fourth interpreter level behind a delivery or
+// send — change no order these tests assert, although a walk here can reach
+// such a position where nothing competes with it, as in
+// `sentWalkWaitsForSuspendedWalkBeforeIt`. A cancellation the test issues
+// itself is the one exception to the first rule: it lands before the values
+// it covers.
 //
 // A test queues a MainActor job ahead of its next statement by creating a
 // MainActor task that delivers through the store's effect driver, as the

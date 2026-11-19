@@ -179,20 +179,20 @@ reduced, and a buffered output as one it has already published:
   receives them in that order instead. Two limitations can place a value
   before jobs a `Store` runs first: a walk that suspends more than once (a
   throttle around a scheduled run, nested throttles) is placed as if it
-  resumed once, and the walks behind it start there; and positions more than
-  four interpreter jobs behind a delivery or send — a follow-up that deep, or
-  a walk that starts or resumes there — share the fourth job's position. A
-  value a drained walk delivers after its first suspension is reduced before
-  the sent action when its resumption point came before the send began, and
-  can otherwise come behind it, as in a `Store` that sends right after the
-  walk started. Work a walk starts in another task (a run, a composite and its
-  children, a timer) delivers at its delivery, as in 6.0.x: its values can
-  come behind MainActor jobs and walks that a `Store` runs after them, such as
-  a job queued right after the walk started, which a `concatenate`'s leading
-  sends precede in a `Store`; and when that work delivers after a send began,
-  its values are behind the sent action, which can cancel them, although a
-  `Store` typically reduced them before the send. Receive those values before
-  sending an action that cancels them.
+  resumed once, and the walks behind it start right behind that place; and
+  positions more than four interpreter jobs behind a delivery or send — a
+  follow-up that deep, or a walk that starts or resumes there — share the
+  fourth job's position. A value a drained walk delivers after its first
+  suspension is reduced before the sent action when its resumption point came
+  before the send began, and can otherwise come behind it, as in a `Store`
+  that sends right after the walk started. Work a walk starts in another task
+  (a run, a composite and its children, a timer) delivers at its delivery, as
+  in 6.0.x: its values can come behind MainActor jobs and walks that a `Store`
+  runs after them, such as a job queued right after the walk started, which a
+  `concatenate`'s leading sends precede in a `Store`; and when that work
+  delivers after a send began, its values are behind the sent action, which
+  can cancel them, although a `Store` typically reduced them before the send.
+  Receive those values before sending an action that cancels them.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
   `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
   buffered action and output, as before.
