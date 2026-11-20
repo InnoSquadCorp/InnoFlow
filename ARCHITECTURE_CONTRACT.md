@@ -267,7 +267,8 @@ expose the same tiered read contract:
   admits or rejects differently once another branch has requested the
   cancellation of an identifier carried by a request holding the lane (a
   `latest` lane's running request or the request it is held for, or a
-  serial lane's pending request), wherever that work lies in its branch. The turn then accepts no `latest` replacement for it
+  serial lane's pending request), wherever that work lies in its branch. The
+  turn then accepts no `latest` replacement for it
   and nothing behind it in its branch, and its admission decides it; work
   whose context another branch's `.cancel` covers is treated the same way,
   even when the work's own path cancelled that identifier first.

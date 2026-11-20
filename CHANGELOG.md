@@ -122,7 +122,8 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   When the newest request is cancelled — through its dispatch or through an
   ID only it carries — the window falls back to the newest request it
   retains that can still proceed (the window keeps the newest request and up
-  to seven it replaced) instead of firing nothing, and keeps its timer. A request an ID cancellation removed
+  to seven it replaced) instead of firing nothing, and keeps its timer. A
+  request an ID cancellation removed
   no longer holds its dispatch, which finishes once its own work is done; a
   request removed through its dispatch while an interpreter frame awaits it,
   and a leading opener another request superseded as owner, still wait for
@@ -262,7 +263,8 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   `merge` children — another branch requests the same lane, cancels or
   requests the cancellation of one of its IDs, or requests the cancellation
   of an ID carried by a request that holds its lane, without which the lane
-  admits or rejects it differently — is decided by its admission, and the turn accepts nothing behind it in its branch; a
+  admits or rejects it differently — is decided by its admission, and the
+  turn accepts nothing behind it in its branch; a
   `latest` request merged only with unrelated work, such as
   `.merge(.send(.loading), latestRun)`, is still accepted in the turn.
   `TestStore` applies the same rules, so these cancellations remove the same

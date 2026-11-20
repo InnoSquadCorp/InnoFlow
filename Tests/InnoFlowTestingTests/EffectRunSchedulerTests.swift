@@ -676,6 +676,61 @@ struct EffectRunAdmissionCancellationTests {
     scheduler.cancelAll()
   }
 
+  enum HeldLaneRelease: String, CaseIterable, Sendable {
+    /// No interpreter of the request's scope is left. A frozen copy of its
+    /// context, like a started run's, keeps the scope alive.
+    case interpreterGone
+    /// The request's dispatch finished without reaching its admission.
+    case dispatchFinished
+    /// The request's admission turned it away.
+    case admissionTurnedAway
+  }
+
+  @Test(
+    "A held lane closes once its request can no longer be admitted",
+    arguments: HeldLaneRelease.allCases)
+  func heldLaneClosesOnceItsRequestCanNoLongerBeAdmitted(release: HeldLaneRelease) async {
+    let store = Store(reducer: SameDispatchLatestFeature())
+    let scheduler = store.effectBridge.runScheduler
+    let lane = AnyEffectID(StaticEffectID("held-lane-release"))
+    let tracker = FlowTaskTracker()
+    let activity = tracker.beginActivity()
+    let sequence = store.effectBridge.nextSequence()
+    var accepted: EffectExecutionContext? = store.effectBridge.makeEffectContext(
+      sequence: sequence, cancellationIDs: [lane], potentialCancellationIDs: [lane],
+      flowTaskTracker: tracker)
+    scheduler.holdLatestLane(id: lane, successor: accepted!)
+    #expect(scheduler.laneView(for: lane)?.policy == .latest)
+
+    var frozen: EffectExecutionContext?
+    switch release {
+    case .interpreterGone:
+      frozen = accepted?.frozenForExecution()
+      accepted = nil
+    case .dispatchFinished:
+      tracker.endActivity(activity)
+    case .admissionTurnedAway:
+      let context = accepted!
+      let turnedAway = Task { @MainActor in
+        await scheduler.admit(
+          id: lane, policy: .latest, cancellationIDs: context.cancellationIDs,
+          sequence: sequence, dispatchID: nil, onCancellation: { _, _ in }, onStart: { _ in },
+          onPendingExit: { _ in }, context: context)
+      }
+      turnedAway.cancel()
+      guard case .terminal(.cancelledBeforeStart) = await turnedAway.value else {
+        Issue.record("A request whose task was cancelled must be turned away")
+        scheduler.cancelAll()
+        return
+      }
+    }
+    #expect(scheduler.laneView(for: lane) == nil)
+
+    withExtendedLifetime((accepted, frozen)) {}
+    tracker.endActivity(activity)
+    scheduler.cancelAll()
+  }
+
   @Test("A lane held for a latest request that can no longer proceed is closed")
   func laneHeldForCancelledLatestRequestIsClosed() async {
     let store = Store(reducer: SameDispatchLatestFeature())
@@ -733,9 +788,9 @@ struct EffectRunAdmissionCancellationTests {
     let lane = AnyEffectID(StaticEffectID("merged-lane"))
 
     // The task is cancelled before it starts. The reduction turn accepts the
-    // merged `latest` request and holds the closed lane for it, but the walk
-    // in the cancelled task never reaches the request's admission, and the
-    // dispatch finishes without it.
+    // merged `latest` request and holds the closed lane for it, but the
+    // cancelled task never walks the effect: no interpreter of the request is
+    // left, and the dispatch finishes without it.
     let cancelledSend = Task { @MainActor in _ = await store.send(.mergedLatest) }
     cancelledSend.cancel()
     await cancelledSend.value

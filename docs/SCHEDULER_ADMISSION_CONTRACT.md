@@ -52,8 +52,9 @@ lane admits or rejects differently once another branch has requested the
 cancellation of an ID carried by a request holding the lane: a `latest`
 lane's running request, the request a held lane waits for, or a serial lane's
 pending request. A running serial or drop request keeps its slot when it is
-cancelled, so it changes no answer, and a request the lane admits or rejects
-for the same reason either way is decided in the turn.
+cancelled, and a throttle releases no work under its ID, so neither changes an
+answer, and a request the lane admits or rejects for the same reason either
+way is decided in the turn.
 
 ## Lifecycle observations
 

@@ -694,6 +694,12 @@ private struct MergeOrderFeature: Reducer {
     /// `merge(.send(.loading), latest request)`, the request under the owner
     /// ID.
     case loadUnderOwner
+    /// `merge(concatenate(drop request 6, .cancel(workID)), a throttle under
+    /// the owner ID)`, or the same branches the other way round.
+    case throttleHolder(ownerFirst: Bool)
+    /// `merge(concatenate(.cancel(lane), drop request 6, .cancel(workID)),
+    /// .cancel(owner))`: the request's own branch cancels its lane ID first.
+    case ownCancelThenRequest
     case loading
     case pad
     case admission
@@ -778,6 +784,18 @@ private struct MergeOrderFeature: Reducer {
 
     case .loadUnderOwner:
       return .merge(.send(.loading), request(1, .latest).cancellable(mergeOwnerID))
+
+    case .throttleHolder(let ownerFirst):
+      let requestThenCancel = EffectTask<Action>.concatenate(
+        request(6, .dropWhileRunning), .cancel(workID))
+      let throttle = EffectTask<Action>.send(.pad).throttle(mergeOwnerID, for: .seconds(1))
+      return ownerFirst
+        ? .merge(throttle, requestThenCancel) : .merge(requestThenCancel, throttle)
+
+    case .ownCancelThenRequest:
+      return .merge(
+        .concatenate(.cancel(mergeLaneID), request(6, .dropWhileRunning), .cancel(workID)),
+        .cancel(mergeOwnerID))
 
     case .otherPolicy:
       return request(2, .dropWhileRunning)
@@ -1524,6 +1542,39 @@ struct ReducerCancellationAcceptanceTests {
       serialLane.pass(dropRequest, recordedFor: [lane], policy: .dropWhileRunning)
         == [.completed(.rejected(.conflictingPolicy))])
     #expect(Set(serialLane.accepted) == [.all(AnyEffectID(workID)), .all(owner)])
+
+    // A throttle under the owner ID releases no work, so the `latest` lane
+    // keeps its running request whatever the order, and rejects the drop
+    // request as conflicting: the cancel behind it is accepted in the turn.
+    let throttledOwner = TurnPassRecorder()
+    throttledOwner.lanes = [
+      lane: EffectRunLaneView(
+        policy: .latest, holderSequence: 0, pendingCount: 0, ownerCancellationIDs: [owner])
+    ]
+    let throttled = effect(.throttleHolder(ownerFirst: ownerFirst), of: feature)
+    #expect(
+      throttledOwner.pass(throttled, recordedFor: [lane], policy: .dropWhileRunning)
+        == [.completed(.rejected(.conflictingPolicy))])
+    #expect(throttledOwner.accepted == [.all(AnyEffectID(workID))])
+  }
+
+  @Test("The reduction turn decides a lane request its own branch cancelled, whatever its lane")
+  func passDecidesRequestItsOwnBranchCancelled() {
+    let lane = AnyEffectID(mergeLaneID)
+    let owner = AnyEffectID(mergeOwnerID)
+    // The other branch's cancel would close the lane, but the request's own
+    // branch cancelled its lane ID first: it completes whatever the lane is,
+    // so the cancel behind it is accepted in the turn.
+    let recorder = TurnPassRecorder()
+    recorder.lanes = [
+      lane: EffectRunLaneView(
+        policy: .latest, holderSequence: 0, pendingCount: 0, ownerCancellationIDs: [owner])
+    ]
+    let effect = effect(.ownCancelThenRequest, of: mergeOrderFeature())
+    #expect(
+      recorder.pass(effect, recordedFor: [lane], policy: .dropWhileRunning)
+        == [.completed(.cancelledBeforeStart)])
+    #expect(Set(recorder.accepted) == [.all(lane), .all(AnyEffectID(workID)), .all(owner)])
   }
 
   @Test(
@@ -1750,8 +1801,21 @@ struct ReducerCancellationAcceptanceTests {
     gate.release(2)
     await latest.finish()
     await other.finish()
-    // The closed lane kept nothing of the cancelled request alive.
+  }
+
+  @Test("A lane held for a latest request keeps nothing of the request alive")
+  func laneHeldForCancelledLatestRequestRetainsNothing() async {
+    let store = Store(reducer: mergeOrderFeature(), initialState: .init())
+
+    // Nothing opens the lane afterwards, so the scheduler still has the held
+    // entry when the metrics are read.
+    let latest = store.send(.load)
+    latest.cancel()
+    await latest.finish()
+
     #expect(await waitUntil { store.effectBridge.cancellationScopeMetrics.liveScopes == 0 })
+    #expect(store.effectBridge.cancellationScopeMetrics.liveExactTokens == 0)
+    #expect(store.runLane(for: AnyEffectID(mergeLaneID)) == nil)
   }
 
   @Test(

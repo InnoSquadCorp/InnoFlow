@@ -133,7 +133,8 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    admits or rejects differently once another branch has requested the
    cancellation of an ID carried by a request holding the lane (a `latest`
    lane's running request or the request it is held for, or a serial lane's
-   pending request), wherever that work lies in its branch. The turn accepts no `latest` replacement for it
+   pending request), wherever that work lies in its branch. The turn accepts
+   no `latest` replacement for it
    and nothing behind it in its branch; its admission decides it. Work whose
    context another branch's `.cancel` covers is treated the same way, even
    when the work's own path cancelled that ID first, so a cancellation behind

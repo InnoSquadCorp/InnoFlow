@@ -81,10 +81,11 @@ extension ReductionTurnCancellationAcceptor {
   /// running request, or the request a held lane waits for), without which a
   /// request with another policy meets no lane, or a pending request of a
   /// full serial lane, without which a serial request is queued. A request
-  /// the lane admits or rejects either way is decided. Another branch's work
-  /// counts wherever it is in that branch, also behind asynchronous work.
-  /// Everything the pass does decide therefore holds in every order the
-  /// interpreter may pick.
+  /// the lane admits or rejects either way is decided, and so is one whose
+  /// lane another branch only throttles under a holder's ID: a throttle
+  /// releases no work. Another branch's work counts wherever it is in that
+  /// branch, also behind asynchronous work. Everything the pass does decide
+  /// therefore holds in every order the interpreter may pick.
   package func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
@@ -295,6 +296,10 @@ private struct EffectFootprint {
   /// `cancelInFlight: true`, a `latest` lane request, a debounce or a
   /// throttle request.
   var cancellationIDs: Set<AnyEffectID> = []
+  /// IDs under which the subtree can release work another effect owns: the
+  /// cancellation requests above except a throttle request, which only
+  /// decides its own window.
+  var releasedIDs: Set<AnyEffectID> = []
 
   mutating func collect<Action, Output>(_ effect: ReducerEffect<Action, Output>) {
     switch effect.operation {
@@ -304,16 +309,23 @@ private struct EffectFootprint {
       laneIDs.insert(id)
       if case .latest = policy {
         cancellationIDs.insert(id)
+        releasedIDs.insert(id)
       }
     case .cancel(let id):
       cancelledIDs.insert(id)
       cancellationIDs.insert(id)
+      releasedIDs.insert(id)
     case .cancellable(let nested, let id, let cancelInFlight):
       if cancelInFlight {
         cancellationIDs.insert(id)
+        releasedIDs.insert(id)
       }
       collect(nested)
-    case .debounce(let nested, let id, _), .throttle(let nested, let id, _, _, _):
+    case .debounce(let nested, let id, _):
+      cancellationIDs.insert(id)
+      releasedIDs.insert(id)
+      collect(nested)
+    case .throttle(let nested, let id, _, _, _):
       cancellationIDs.insert(id)
       collect(nested)
     case .merge(let children), .concatenate(let children):
@@ -339,6 +351,7 @@ private struct MergeBranches {
   private var lanes: [AnyEffectID: Holders] = [:]
   private var cancelled: [AnyEffectID: Holders] = [:]
   private var cancellations: [AnyEffectID: Holders] = [:]
+  private var released: [AnyEffectID: Holders] = [:]
 
   init<Action, Output>(_ branches: [ReducerEffect<Action, Output>]) {
     for (index, branch) in branches.enumerated() {
@@ -347,6 +360,7 @@ private struct MergeBranches {
       Self.add(footprint.laneIDs, branch: index, to: &lanes)
       Self.add(footprint.cancelledIDs, branch: index, to: &cancelled)
       Self.add(footprint.cancellationIDs, branch: index, to: &cancellations)
+      Self.add(footprint.releasedIDs, branch: index, to: &released)
     }
   }
 
@@ -394,6 +408,12 @@ private struct MergeBranches {
   func otherBranch(than branch: Int, requestsCancellationOf id: AnyEffectID) -> Bool {
     Self.another(than: branch, in: cancellations, holds: id)
   }
+
+  /// Whether a branch other than `branch` can release work another effect
+  /// owns under `id`.
+  func otherBranch(than branch: Int, releasesWorkUnder id: AnyEffectID) -> Bool {
+    Self.another(than: branch, in: released, holds: id)
+  }
 }
 
 /// What the other branches of the `merge` nodes enclosing a node touch: work
@@ -427,20 +447,22 @@ private struct MergeSiblings {
     }
   }
 
-  /// Whether another branch requests any cancellation of `id`.
-  func requestsCancellation(of id: AnyEffectID) -> Bool {
-    levels.contains { $0.branches.otherBranch(than: $0.branch, requestsCancellationOf: id) }
+  /// Whether another branch can release work another effect owns under
+  /// `id`.
+  func releaseWork(under id: AnyEffectID) -> Bool {
+    levels.contains { $0.branches.otherBranch(than: $0.branch, releasesWorkUnder: id) }
   }
 
   /// Whether another branch can change what `lane` answers a request with
-  /// `policy`: it requests any cancellation of an ID carried by a request
-  /// that holds the lane, and the lane admits or rejects the request
-  /// differently once that request is gone.
+  /// `policy`: it can release an ID carried by a request that holds the lane
+  /// (a `.cancel`, `cancelInFlight: true`, a debounce or a `latest` lane
+  /// request under that ID; a throttle releases nothing), and the lane admits
+  /// or rejects the request differently once that request is gone.
   func mayChangeAdmission(
     policy: EffectExecutionPolicy.Kind, sequence: UInt64, lane: EffectRunLaneView?
   ) -> Bool {
     guard let lane, !levels.isEmpty else { return false }
-    let laneWithoutCancelledHolders = lane.afterCancellation(of: requestsCancellation(of:))
+    let laneWithoutCancelledHolders = lane.afterCancellation(of: releaseWork(under:))
     guard laneWithoutCancelledHolders != lane else { return false }
     return !EffectRunScheduler.decide(policy: policy, sequence: sequence, lane: lane)
       .hasSameOutcome(
