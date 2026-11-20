@@ -727,7 +727,9 @@ struct EffectRunAdmissionCancellationTests {
     #expect(scheduler.laneView(for: lane) == nil)
 
     withExtendedLifetime((accepted, frozen)) {}
-    tracker.endActivity(activity)
+    if release != .dispatchFinished {
+      tracker.endActivity(activity)
+    }
     scheduler.cancelAll()
   }
 

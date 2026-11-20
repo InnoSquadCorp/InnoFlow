@@ -37,7 +37,7 @@
     "Tests/InnoFlowCoreTests/ProjectionRegistrationBoundaryTests.swift": "af0de33dc011a489094e0ea59bfbb642fda8d0501a66840deb74d03e75841b73",
     "Tests/InnoFlowCoreTests/ProjectionReleaseScalingTests.swift": "f2824201b30660b6c985e6feee59b3a34a3084a689c524fd8f367fd53ffa6bd8",
     "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift": "8be09c09c0a3d232607c1503a481759fad52533f8830ee09803bd9d25638d47b",
-    "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "8d9447b9088900c0230f5ea1077211c497f51731004b298c71b9859f9f9f7aaa",
+    "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "642b462392887dbde53676fdc587b72f295b052b4510ede76cdad26f40172f5c",
     "Tests/InnoFlowCoreTests/ReducerCompositionPerfTests.swift": "24efa0ec44f6b760bd382fe71d4df54107d2294271431107f85e2ea25d2e1abb",
     "Tests/InnoFlowCoreTests/RunLaneSnapshotConsistencyTests.swift": "e66c242be821db94376435d588b1ed891be1d3b0693d70b8e4fa3bf165cc708b",
     "Tests/InnoFlowCoreTests/SnapshotBoundaryConsistencyTests.swift": "aee8ab7d6bf54ec3e837c43c21f32efe53e6e447de395c067540388ea5145b12",
@@ -75,7 +75,7 @@
     "Tests/InnoFlowTestingTests/DispatchDiagnosticsTests.swift": "b30a71d786ac7f378ad7ce44ced799a73c272146b14e43b6b84383a6a93653e4",
     "Tests/InnoFlowTestingTests/DispatchIdentityConsistencyTests.swift": "ff533b58a3ad604db8fbe339737e82127f57d44c495626140d5634d62c3cd145",
     "Tests/InnoFlowTestingTests/EffectIsolationConsistencyTests.swift": "cc18e57a223d1de5081d7ae172d744229755874fe086674b19e59839f679cbc7",
-    "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift": "47bcea7d42e315cbe2b972322a79c96cc163e48c182a5beb0b69caed7ed40376",
+    "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift": "9e42da76eb7e630b5449d1de5cdd4e61979d1ffdb9c1c34f5f80d06788f372fe",
     "Tests/InnoFlowTestingTests/EffectTaskPerformTests.swift": "35349c14488a07636161b787a9ca88ba5311e7f845e625c2fc8dda8158d268ec",
     "Tests/InnoFlowTestingTests/EffectTaskRunSequenceErrorTests.swift": "7fad0bc3713454e530f1748336dcac1cc09ad49dbeb55bd5dd0aab8455027384",
     "Tests/InnoFlowTestingTests/ExplorerFirstDiagnosticConsistencyTests.swift": "8fe30098a8408275c5a8d9f5d1dd0e3736d97494cf4be4f88996600b62c71acb",
@@ -1426,7 +1426,7 @@
       "displayName": "A cancel that follows a sibling its own effect cancelled is still accepted in the turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelAfterSkippedSiblingDropsQueuedEmission()",
-      "line": 900,
+      "line": 941,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1435,7 +1435,7 @@
       "displayName": "A cancel behind a lane request the lane does not admit is accepted in the reduction turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelBehindRejectedLaneRequest(trigger:)",
-      "line": 1365,
+      "line": 1406,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1444,7 +1444,7 @@
       "displayName": "cancelInFlight replacement drops the predecessor's queued emission",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelInFlightReplacementDropsPredecessorEmission()",
-      "line": 1162,
+      "line": 1203,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1453,7 +1453,7 @@
       "displayName": "A cancel does not pre-empt an earlier concatenated sibling of the effect that returned it",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelKeepsEarlierSiblingOfItsOwnEffect(action:)",
-      "line": 884,
+      "line": 925,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1462,7 +1462,7 @@
       "displayName": "A newer debounce request supersedes a predecessor whose timer already expired",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/debounceReplacementSupersedesExpiredPredecessorTimer()",
-      "line": 1180,
+      "line": 1221,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1471,7 +1471,7 @@
       "displayName": "A dispatch replaced before its effect was interpreted records the cancellation",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/dispatchReplacedInTheSameTurnRecordsCancellation()",
-      "line": 1089,
+      "line": 1130,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1480,7 +1480,7 @@
       "displayName": "A lane held for a latest request whose dispatch is cancelled is closed",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneHeldForCancelledLatestRequestIsClosed()",
-      "line": 1780,
+      "line": 1864,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1489,7 +1489,7 @@
       "displayName": "A lane held for a latest request keeps nothing of the request alive",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneHeldForCancelledLatestRequestRetainsNothing()",
-      "line": 1806,
+      "line": 1890,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1498,7 +1498,7 @@
       "displayName": "A lane whose replacement was cancelled before admission reopens as a new lane",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneReopenedAfterCancelledReplacementIsNew()",
-      "line": 1035,
+      "line": 1076,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1507,7 +1507,7 @@
       "displayName": "A lane request meets the same lane whichever merge branch cancels the request it is held for",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneRequestIgnoresBranchOrderOfHeldRequestCancel(ownerFirst:)",
-      "line": 1853,
+      "line": 1962,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1516,7 +1516,7 @@
       "displayName": "A lane request meets the same lane whichever merge branch cancels a request holding it",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneRequestIgnoresBranchOrderOfHolderCancel(latestLane:ownerFirst:)",
-      "line": 1893,
+      "line": 2002,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1525,7 +1525,7 @@
       "displayName": "A lane request the reduction turn passes keeps the admission of that turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneRequestKeepsTheAdmissionOfItsTurn()",
-      "line": 1404,
+      "line": 1445,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1534,7 +1534,7 @@
       "displayName": "A latest lane request drops the emission of the run it replaces",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestLaneReplacementDropsPredecessorEmission()",
-      "line": 914,
+      "line": 955,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1543,7 +1543,7 @@
       "displayName": "A latest replacement cancelled before interpretation still releases its predecessor",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestReplacementCancelledBeforeInterpretationReleasesPredecessor()",
-      "line": 954,
+      "line": 995,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1552,7 +1552,7 @@
       "displayName": "A latest replacement accepted in its reduction turn keeps the lane's identity",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestReplacementKeepsLaneIdentity()",
-      "line": 984,
+      "line": 1025,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1561,7 +1561,7 @@
       "displayName": "A latest request accepted for a closed lane holds the lane until it is admitted",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestRequestAcceptedForClosedLaneHoldsItsLane(concatenated:)",
-      "line": 1743,
+      "line": 1827,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1570,7 +1570,7 @@
       "displayName": "A latest request is accepted in its turn whichever merge branch cancels its lane's owner",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestRequestAcceptedWhicheverBranchCancelsItsLaneOwner(ownerFirst:)",
-      "line": 1821,
+      "line": 1905,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1579,7 +1579,16 @@
       "displayName": "A latest request merged with a send is still accepted in its reduction turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestRequestMergedWithSendIsAcceptedInTheTurn()",
-      "line": 1717,
+      "line": 1801,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A latest request whose own ID another branch throttles still holds its lane\")",
+      "conditionalContexts": [],
+      "displayName": "A latest request whose own ID another branch throttles still holds its lane",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/latestRequestThrottledUnderItsOwnIDHoldsItsLane()",
+      "line": 1937,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1588,7 +1597,7 @@
       "displayName": "A cancel leading a concatenation is accepted before its later siblings are delivered",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/leadingCancelInConcatenationDropsQueuedEmission()",
-      "line": 1148,
+      "line": 1189,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1597,7 +1606,7 @@
       "displayName": "A lane request another merge branch can reorder is decided by its admission alone",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/orderDependentLaneRequestIsDecidedByAdmission(shape:)",
-      "line": 1652,
+      "line": 1736,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1606,7 +1615,7 @@
       "displayName": "Control: an own cancel after its own work completed records nothing",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/ownCancelAfterCompletedWorkRecordsNothing()",
-      "line": 1350,
+      "line": 1391,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1615,7 +1624,7 @@
       "displayName": "A dispatch whose own cancel releases its own work records the cancellation",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/ownCancelOfOwnWorkRecordsCancellation()",
-      "line": 1063,
+      "line": 1104,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1624,7 +1633,7 @@
       "displayName": "An own cancel records the cancellation whether or not its work registered first",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/ownCancelRecordsCancellationInEitherOrder(cancelFirst:)",
-      "line": 1294,
+      "line": 1335,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1633,7 +1642,7 @@
       "displayName": "A partly interpreted dispatch records the cancellation of work it had not reached",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/partlyInterpretedDispatchRecordsSkippedWork(cancelledBy:)",
-      "line": 1324,
+      "line": 1365,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1642,7 +1651,7 @@
       "displayName": "The reduction turn still decides a latest request merged with work on no lane",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsLatestRequestMergedWithSend()",
-      "line": 1596,
+      "line": 1680,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1651,7 +1660,7 @@
       "displayName": "The reduction turn accepts no latest request another merge branch can reject",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsNoOrderDependentLatestRequest(shape:)",
-      "line": 1580,
+      "line": 1664,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1660,7 +1669,7 @@
       "displayName": "The reduction turn accepts nothing that another merge branch's cancel may skip",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsNothingASiblingCancelMaySkip(cancelFirst:)",
-      "line": 1626,
+      "line": 1710,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1669,7 +1678,7 @@
       "displayName": "The reduction turn decides no lane request another merge branch can reorder",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesNoOrderDependentLaneRequest(laneIsBusy:)",
-      "line": 1443,
+      "line": 1484,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1678,7 +1687,7 @@
       "displayName": "The reduction turn decides no lane request whose lane another merge branch can change",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesNoRequestWhoseLaneASiblingCanChange(ownerFirst:)",
-      "line": 1473,
+      "line": 1514,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1687,7 +1696,7 @@
       "displayName": "The reduction turn decides a lane request its lane answers alike without the cancelled holder",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestItsLaneAnswersAlike(ownerFirst:)",
-      "line": 1510,
+      "line": 1551,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1696,7 +1705,16 @@
       "displayName": "The reduction turn decides a lane request its own branch cancelled, whatever its lane",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestItsOwnBranchCancelled()",
-      "line": 1561,
+      "line": 1645,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"The reduction turn decides a lane request whose own ID another branch only throttles\",\n    arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "The reduction turn decides a lane request whose own ID another branch only throttles",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestWhoseOwnIDAnotherBranchThrottles(ownerFirst:)",
+      "line": 1624,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1705,7 +1723,16 @@
       "displayName": "The reduction turn still decides a request whose merge siblings touch other IDs",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestWhoseSiblingsTouchOtherIDs()",
-      "line": 1607,
+      "line": 1691,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"The reduction turn defers a lane request whose holder another branch can release\",\n    arguments: MergeOrderFeature.Release.allCases)",
+      "conditionalContexts": [],
+      "displayName": "The reduction turn defers a lane request whose holder another branch can release",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/passDefersRequestWhoseHolderAnotherBranchReleases(release:)",
+      "line": 1602,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1714,7 +1741,7 @@
       "displayName": "A reducer-returned cancel drops an emission already queued for MainActor",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/reducerReturnedCancelDropsQueuedEmission()",
-      "line": 1134,
+      "line": 1175,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1723,7 +1750,7 @@
       "displayName": "A reducer-returned cancel returns pending lane capacity before send returns",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/reducerReturnedCancelReleasesPendingLaneRequestsSynchronously(diagnosticsEnabled:)",
-      "line": 1212,
+      "line": 1253,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1732,7 +1759,7 @@
       "displayName": "A request a lane with another policy rejects leaves that lane's work running",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/requestRejectedByLaneWithAnotherPolicyLeavesItRunning(policy:)",
-      "line": 932,
+      "line": 973,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1741,7 +1768,7 @@
       "displayName": "Control: the store-level cancel API drops an emission already queued for MainActor",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/storeLevelCancelDropsQueuedEmission()",
-      "line": 1120,
+      "line": 1161,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1750,7 +1777,7 @@
       "displayName": "The store-level cancel API releases pending lane capacity before its first suspension",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/storeLevelCancelReleasesPendingLaneRequestsBeforeSuspending(diagnosticsEnabled:)",
-      "line": 1244,
+      "line": 1285,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1759,7 +1786,7 @@
       "displayName": "A replacement superseded before admission hands the lane's identity to the newer one",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/supersededReplacementHandsLaneIdentityOn()",
-      "line": 1007,
+      "line": 1048,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1768,7 +1795,7 @@
       "displayName": "A throttle request cancelled during its clock read records the cancellation",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/throttleCancelledDuringClockReadRecordsCancellation(throughOwnerID:)",
-      "line": 1949,
+      "line": 2058,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1777,7 +1804,7 @@
       "displayName": "Control: a throttle request nothing cancels during its clock read records nothing",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/throttleNotCancelledDuringClockReadRecordsNothing()",
-      "line": 1973,
+      "line": 2082,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -5635,7 +5662,7 @@
       "displayName": "A queued request cancelled through its dispatch frees its slot before the next admission",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/dispatchCancelledQueuedRequestFreesItsSlot()",
-      "line": 830,
+      "line": 832,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5662,7 +5689,7 @@
       "displayName": "A lane held for a latest request that can no longer proceed is closed",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/laneHeldForCancelledLatestRequestIsClosed()",
-      "line": 734,
+      "line": 736,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5680,7 +5707,7 @@
       "displayName": "A merged serial request cannot reopen a latest lane its latest sibling replaced",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/mergedSerialAndLatestOnOpenLatestLane(latestFirst:)",
-      "line": 761,
+      "line": 763,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5689,7 +5716,7 @@
       "displayName": "A cancellation handler that re-enters the store finds its request already cancelled",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/reentrantCancellationHandlerSeesFinalSchedulerState()",
-      "line": 920,
+      "line": 922,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5698,7 +5725,7 @@
       "displayName": "TestStore closes a lane held for a latest request whose send's task was cancelled",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/testStoreClosesLaneHeldForRequestOfCancelledSend()",
-      "line": 783,
+      "line": 785,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5707,7 +5734,7 @@
       "displayName": "TestStore frees a dispatch-cancelled queued request's slot before the next send",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/testStoreDispatchCancelledQueuedRequestFreesItsSlot()",
-      "line": 874,
+      "line": 876,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5716,7 +5743,7 @@
       "displayName": "TestStore rejects a merged serial request on a latest lane its sibling replaced",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/testStoreMergedSerialAndLatestOnOpenLatestLane(latestFirst:)",
-      "line": 806,
+      "line": 808,
       "target": "InnoFlowTestingTests"
     },
     {

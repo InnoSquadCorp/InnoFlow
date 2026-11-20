@@ -46,15 +46,15 @@ interpreter admits it against the lane it meets then. A request whose outcome
 depends on the order of `merge` children (another branch requests the same
 lane, or requests the cancellation of one of its IDs) is not decided in the
 turn at all; its admission decides it. Requesting the cancellation of an ID
-means a `.cancel`, a `cancelInFlight: true` boundary, a `latest` lane request,
-a debounce or a throttle under that ID. The same holds for a request that the
+means a `.cancel`, a `cancelInFlight: true` boundary, a `latest` lane request
+or a debounce under that ID; a throttle decides only its own window and
+requests no cancellation. The same holds for a request that the
 lane admits or rejects differently once another branch has requested the
 cancellation of an ID carried by a request holding the lane: a `latest`
 lane's running request, the request a held lane waits for, or a serial lane's
 pending request. A running serial or drop request keeps its slot when it is
-cancelled, and a throttle releases no work under its ID, so neither changes an
-answer, and a request the lane admits or rejects for the same reason either
-way is decided in the turn.
+cancelled, so it changes no answer, and a request the lane admits or rejects
+for the same reason either way is decided in the turn.
 
 ## Lifecycle observations
 
