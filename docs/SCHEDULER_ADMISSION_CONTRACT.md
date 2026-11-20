@@ -28,10 +28,12 @@ through the same terminal transition as an explicit cancellation. Completing an
 old or already removed ticket cannot remove a newer lane.
 
 A `latest` request accepted in a reduction turn holds its lane as the open
-`latest` lane under its ID until the request is admitted or can no longer
-proceed: a lane it displaced keeps its identity, a lane that was closed gets
-one when the request opens it, and a request with another policy is rejected
-as conflicting.
+`latest` lane under its ID until the request is admitted or can no longer be
+admitted (it was cancelled, its dispatch finished without reaching its
+admission, or its admission turned it away): a lane it displaced keeps its
+identity, a lane that was closed gets one when the request opens it, and a
+request with another policy is rejected as conflicting. The held lane keeps
+nothing of the request alive.
 
 The reduction turn that returns an effect decides each lane request it reaches
 without awaiting against the lane state of that turn, with the same rule
@@ -42,10 +44,16 @@ behind it, and the interpreter later reports exactly that outcome without
 consulting the lane again. A request the lane admits awaits its run, so the
 interpreter admits it against the lane it meets then. A request whose outcome
 depends on the order of `merge` children (another branch requests the same
-lane, cancels or requests the cancellation of one of its IDs, or requests the
-cancellation of an ID carried by a request that holds the lane: a `latest`
+lane, or requests the cancellation of one of its IDs) is not decided in the
+turn at all; its admission decides it. Requesting the cancellation of an ID
+means a `.cancel`, a `cancelInFlight: true` boundary, a `latest` lane request,
+a debounce or a throttle under that ID. The same holds for a request that the
+lane admits or rejects differently once another branch has requested the
+cancellation of an ID carried by a request holding the lane: a `latest`
 lane's running request, the request a held lane waits for, or a serial lane's
-pending request) is not decided in the turn at all; its admission decides it.
+pending request. A running serial or drop request keeps its slot when it is
+cancelled, so it changes no answer, and a request the lane admits or rejects
+for the same reason either way is decided in the turn.
 
 ## Lifecycle observations
 

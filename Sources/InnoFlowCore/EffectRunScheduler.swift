@@ -63,23 +63,40 @@ package struct EffectRunLaneView: Sendable, Equatable {
   package var holderSequence: UInt64
   /// Pending requests that can still proceed.
   package var pendingCount: Int
-  /// The IDs whose cancellation changes this view at once: those of a
-  /// `latest` lane's running request, of the `latest` request a held lane
-  /// waits for, and of a serial lane's pending requests. A running serial or
-  /// drop request keeps its slot when it is cancelled, so its IDs are not
-  /// among them.
-  package var holderCancellationIDs: Set<AnyEffectID>
+  /// The IDs of the request whose cancellation closes the lane at once: a
+  /// `latest` lane's running request, or the `latest` request a held lane
+  /// waits for. Empty for a serial or drop lane, whose running request keeps
+  /// its slot when it is cancelled.
+  package var ownerCancellationIDs: Set<AnyEffectID>
+  /// The IDs of each pending request that can still proceed. Cancelling one
+  /// of them frees its slot at once.
+  package var pendingCancellationIDs: [Set<AnyEffectID>]
 
   package init(
     policy: EffectExecutionPolicy.Kind,
     holderSequence: UInt64,
     pendingCount: Int,
-    holderCancellationIDs: Set<AnyEffectID> = []
+    ownerCancellationIDs: Set<AnyEffectID> = [],
+    pendingCancellationIDs: [Set<AnyEffectID>] = []
   ) {
     self.policy = policy
     self.holderSequence = holderSequence
     self.pendingCount = pendingCount
-    self.holderCancellationIDs = holderCancellationIDs
+    self.ownerCancellationIDs = ownerCancellationIDs
+    self.pendingCancellationIDs = pendingCancellationIDs
+  }
+
+  /// The lane a request meets once every ID `isCancelled` selects has been
+  /// cancelled: no lane when the request that owns the lane carries one, and
+  /// otherwise the lane without the pending requests that carry one.
+  package func afterCancellation(of isCancelled: (AnyEffectID) -> Bool) -> EffectRunLaneView? {
+    guard !ownerCancellationIDs.contains(where: isCancelled) else { return nil }
+    let remaining = pendingCancellationIDs.filter { !$0.contains(where: isCancelled) }
+    guard remaining.count != pendingCancellationIDs.count else { return self }
+    var lane = self
+    lane.pendingCount -= pendingCancellationIDs.count - remaining.count
+    lane.pendingCancellationIDs = remaining
+    return lane
   }
 }
 
@@ -94,6 +111,20 @@ package enum EffectRunLaneDecision: Sendable, Equatable {
   case reject(EffectAdmissionRejection)
   /// An older `latest` request meets a lane a newer request holds.
   case superseded
+
+  /// Whether the lane admits the request, which then awaits its run.
+  package var admitsRequest: Bool {
+    switch self {
+    case .open, .replace, .queue: true
+    case .reject, .superseded: false
+    }
+  }
+
+  /// Whether both decisions give the request the same outcome: the lane
+  /// admits it, rejects it for the same reason, or a newer request holds it.
+  package func hasSameOutcome(as other: EffectRunLaneDecision) -> Bool {
+    (admitsRequest && other.admitsRequest) || self == other
+  }
 }
 
 /// The admission a reduction turn decided for one lane request that the
@@ -170,9 +201,20 @@ package final class EffectRunScheduler {
     /// The identity of the lane the turn displaced; `nil` when no lane was
     /// open, so the request opens a new one.
     let diagnosticID: EffectRunLaneID?
-    /// The newest request accepted for the lane. Frozen, so it holds no
-    /// interpreter lease.
-    var successor: EffectExecutionContext
+    /// The sequence and IDs of the newest request accepted for the lane.
+    let sequence: UInt64
+    let cancellationIDs: Set<AnyEffectID>
+    /// Whether that request can still be admitted. The check keeps nothing
+    /// of the request alive, so a lane held for a request that was cancelled
+    /// or abandoned retains neither its dispatch nor its cancellation scope.
+    let canStillBeAdmitted: @Sendable () -> Bool
+
+    init(diagnosticID: EffectRunLaneID?, successor: EffectExecutionContext, sequence: UInt64) {
+      self.diagnosticID = diagnosticID
+      self.sequence = sequence
+      self.cancellationIDs = Set(successor.cancellationIDs)
+      self.canStillBeAdmitted = successor.makeUnretainedProceedCheck()
+    }
   }
 
   private var requests: [UUID: Request] = [:]
@@ -183,8 +225,9 @@ package final class EffectRunScheduler {
   /// is admitted, such a lane is the open `latest` lane under its ID: the
   /// request opens it, under the displaced lane's identity if there was one,
   /// and a request with another policy meets a conflicting lane. Once the
-  /// request can no longer proceed the lane is closed, and the next lane
-  /// under that ID is new.
+  /// request can no longer be admitted — it was cancelled, its dispatch
+  /// finished without reaching it, or its admission turned it away — the
+  /// lane is closed, and the next lane under that ID is new.
   private var heldLatestLanes: [AnyEffectID: HeldLatestLane] = [:]
 
   package init() {}
@@ -219,29 +262,25 @@ package final class EffectRunScheduler {
   /// can no longer proceed are not counted. Side-effect free.
   package func laneView(for id: AnyEffectID) -> EffectRunLaneView? {
     if let lane = lanes[id] {
-      var holderCancellationIDs: Set<AnyEffectID> = []
-      if lane.policy == .latest, let running = requests[lane.running] {
-        holderCancellationIDs = running.cancellationIDs
-      }
-      var pendingCount = 0
-      for token in lane.pending {
-        guard let request = requests[token], request.canProceed else { continue }
-        pendingCount += 1
-        holderCancellationIDs.formUnion(request.cancellationIDs)
+      let running = requests[lane.running]
+      let pendingCancellationIDs = lane.pending.compactMap { token -> Set<AnyEffectID>? in
+        guard let request = requests[token], request.canProceed else { return nil }
+        return request.cancellationIDs
       }
       return EffectRunLaneView(
         policy: lane.policy,
-        holderSequence: requests[lane.running]?.sequence ?? 0,
-        pendingCount: pendingCount,
-        holderCancellationIDs: holderCancellationIDs
+        holderSequence: running?.sequence ?? 0,
+        pendingCount: pendingCancellationIDs.count,
+        ownerCancellationIDs: lane.policy == .latest ? running?.cancellationIDs ?? [] : [],
+        pendingCancellationIDs: pendingCancellationIDs
       )
     }
-    if let held = heldLatestLanes[id], held.successor.shouldProceed {
+    if let held = heldLatestLanes[id], held.canStillBeAdmitted() {
       return EffectRunLaneView(
         policy: .latest,
-        holderSequence: held.successor.sequence ?? 0,
+        holderSequence: held.sequence,
         pendingCount: 0,
-        holderCancellationIDs: Set(held.successor.cancellationIDs)
+        ownerCancellationIDs: held.cancellationIDs
       )
     }
     return nil
@@ -259,7 +298,7 @@ package final class EffectRunScheduler {
   package func holdLatestLane(id: AnyEffectID, successor: EffectExecutionContext) {
     guard let sequence = successor.sequence else { return }
     if !heldLatestLanes.isEmpty {
-      heldLatestLanes = heldLatestLanes.filter { $0.value.successor.shouldProceed }
+      heldLatestLanes = heldLatestLanes.filter { $0.value.canStillBeAdmitted() }
     }
     guard let lane = lanes[id] else {
       // No lane is open. A newer request, accepted before the previous one
@@ -267,7 +306,8 @@ package final class EffectRunScheduler {
       // for a closed lane holds a lane with no identity yet.
       heldLatestLanes[id] = HeldLatestLane(
         diagnosticID: heldLatestLanes[id]?.diagnosticID,
-        successor: successor.frozenForExecution()
+        successor: successor,
+        sequence: sequence
       )
       return
     }
@@ -277,7 +317,8 @@ package final class EffectRunScheduler {
     lanes.removeValue(forKey: id)
     heldLatestLanes[id] = HeldLatestLane(
       diagnosticID: lane.diagnosticID,
-      successor: successor.frozenForExecution()
+      successor: successor,
+      sequence: sequence
     )
     let displacedRequests = displace(lane)
     deliverCancellation(to: displacedRequests)
@@ -388,6 +429,12 @@ package final class EffectRunScheduler {
     // enclosing structural context. A cancelled deferred request must never
     // reserve capacity or supersede a newer live request.
     guard !Task.isCancelled, context?.shouldProceed != false else {
+      // The request a lane is held for is turned away: the lane is closed.
+      if kind == .latest, let held = heldLatestLanes[id], held.sequence == sequence,
+        held.cancellationIDs == Set(cancellationIDs + [id])
+      {
+        heldLatestLanes.removeValue(forKey: id)
+      }
       onAdmissionLifecycle(nil, .cancelledBeforeStart)
       return .terminal(.cancelledBeforeStart)
     }

@@ -261,8 +261,8 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   the lane over. A lane request whose outcome depends on the order of
   `merge` children — another branch requests the same lane, cancels or
   requests the cancellation of one of its IDs, or requests the cancellation
-  of an ID carried by a request that holds its lane — is decided by its
-  admission, and the turn accepts nothing behind it in its branch; a
+  of an ID carried by a request that holds its lane, without which the lane
+  admits or rejects it differently — is decided by its admission, and the turn accepts nothing behind it in its branch; a
   `latest` request merged only with unrelated work, such as
   `.merge(.send(.loading), latestRun)`, is still accepted in the turn.
   `TestStore` applies the same rules, so these cancellations remove the same

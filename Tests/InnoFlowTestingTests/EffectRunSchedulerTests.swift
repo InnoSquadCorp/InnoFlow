@@ -656,6 +656,8 @@ struct EffectRunAdmissionCancellationTests {
     #expect(scheduler.laneView(for: lane) == nil)
     scheduler.holdLatestLane(id: lane, successor: accepted)
     #expect(scheduler.laneView(for: lane)?.policy == .latest)
+    // Cancelling the accepted request closes the held lane.
+    #expect(scheduler.laneView(for: lane)?.ownerCancellationIDs == [lane])
     #expect(scheduler.snapshots(limit: 1).isEmpty)
 
     let laterSequence = store.effectBridge.nextSequence()
@@ -721,6 +723,29 @@ struct EffectRunAdmissionCancellationTests {
     #expect(store.state.admissions.contains(rejected))
     #expect(store.state.admissions.contains(.init(request: 3, admission: .started)))
     #expect(store.state.completed == [3])
+  }
+
+  @Test("TestStore closes a lane held for a latest request whose send's task was cancelled")
+  func testStoreClosesLaneHeldForRequestOfCancelledSend() async {
+    let probe = ScheduledRunProbe()
+    let store = TestStore(reducer: MergedLaneFeature(probe: probe))
+    store.exhaustivity = .off
+    let lane = AnyEffectID(StaticEffectID("merged-lane"))
+
+    // The task is cancelled before it starts. The reduction turn accepts the
+    // merged `latest` request and holds the closed lane for it, but the walk
+    // in the cancelled task never reaches the request's admission, and the
+    // dispatch finishes without it.
+    let cancelledSend = Task { @MainActor in _ = await store.send(.mergedLatest) }
+    cancelledSend.cancel()
+    await cancelledSend.value
+    #expect(store.runLane(for: lane) == nil)
+
+    await store.send(.drop)
+    #expect(await waitUntilAsync { await probe.startedValues() == [4] })
+    await probe.release(4)
+    await store.finish()
+    #expect(store.state.admissions.contains(.init(request: 4, admission: .started)))
   }
 
   @Test(
@@ -888,6 +913,11 @@ private struct MergedLaneFeature: Reducer {
   enum Action: Equatable, Sendable {
     case open
     case merged(latestFirst: Bool)
+    /// `merge(.send(.marker), latest request 3)`.
+    case mergedLatest
+    /// Drop request 4.
+    case drop
+    case marker
     case admission(Int, EffectAdmission)
     case completed(Int)
   }
@@ -918,6 +948,15 @@ private struct MergedLaneFeature: Reducer {
       let serial = request(2, .serial(maxPending: 4))
       let latest = request(3, .latest)
       return latestFirst ? .merge(latest, serial) : .merge(serial, latest)
+
+    case .mergedLatest:
+      return .merge(.send(.marker), request(3, .latest))
+
+    case .drop:
+      return request(4, .dropWhileRunning)
+
+    case .marker:
+      return .none
 
     case .admission(let request, let admission):
       state.admissions.append(.init(request: request, admission: admission))

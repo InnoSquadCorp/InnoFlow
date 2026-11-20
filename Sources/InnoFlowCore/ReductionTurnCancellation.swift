@@ -76,13 +76,15 @@ extension ReductionTurnCancellationAcceptor {
   /// covers work whose context another branch can cancel (`.cancel` of one
   /// of its IDs), and a lane request that shares its lane with a lane request
   /// in another branch, whose IDs another branch requests any cancellation
-  /// of, or whose lane another branch can change: it requests any
-  /// cancellation of an ID carried by a request that holds the lane (a
-  /// `latest` lane's running request, the request a held lane waits for, or
-  /// a serial lane's pending request). Another branch's work counts wherever
-  /// it is in that branch, also behind asynchronous work. Everything the
-  /// pass does decide therefore holds in every order the interpreter may
-  /// pick.
+  /// of, or whose lane answers differently once another branch has cancelled
+  /// a request that holds it: the request that owns a `latest` lane (its
+  /// running request, or the request a held lane waits for), without which a
+  /// request with another policy meets no lane, or a pending request of a
+  /// full serial lane, without which a serial request is queued. A request
+  /// the lane admits or rejects either way is decided. Another branch's work
+  /// counts wherever it is in that branch, also behind asynchronous work.
+  /// Everything the pass does decide therefore holds in every order the
+  /// interpreter may pick.
   package func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
@@ -132,16 +134,22 @@ extension ReductionTurnCancellationAcceptor {
       guard let enclosingProceeds = proceeds(context) else { return false }
       guard enclosingProceeds else { return true }
       let scheduledContext = EffectExecutionContext.withCancellation(id, on: context)
-      let lane = runLane(for: id)
       // Another branch can change the lane, or cancel the request, before
       // the interpreter admits it or after: only admission can decide it.
       guard
-        !siblings.mayReorder(
-          laneRequest: id,
-          cancellationIDs: scheduledContext.cancellationIDs,
-          laneHolderIDs: lane?.holderCancellationIDs ?? []),
+        !siblings.mayReorder(laneRequest: id, cancellationIDs: scheduledContext.cancellationIDs),
         let requestProceeds = proceeds(scheduledContext)
       else { return false }
+      let lane = runLane(for: id)
+      // So can a branch that cancels a request holding the lane, when the
+      // lane answers this request differently without it. A request its own
+      // tree cancelled completes whatever the lane is.
+      if requestProceeds,
+        siblings.mayChangeAdmission(
+          policy: policy.kind, sequence: scheduledContext.sequence ?? 0, lane: lane)
+      {
+        return false
+      }
       let admission = admitInReductionTurn(
         id: id,
         policy: policy.kind,
@@ -236,11 +244,12 @@ extension ReductionTurnCancellationAcceptor {
   /// Decides a lane request against `lane`, the lane it meets now, with the
   /// rule admission applies.
   ///
-  /// The request is order-independent, so nothing else in this tree can
-  /// change its lane first: an earlier request on the same lane in the same
-  /// branch either completed without changing the lane or was admitted,
-  /// which stops the scan before this one, and no other branch requests the
-  /// lane or cancels a request that holds it.
+  /// The request is order-independent, so no other lane request or
+  /// cancellation of this tree can change its admission first: an earlier
+  /// request on the same lane in the same branch either completed without
+  /// changing the lane or was admitted, which stops the scan before this
+  /// one, and no other branch requests the lane or cancels a request whose
+  /// loss changes what the lane answers.
   private func admitInReductionTurn(
     id: AnyEffectID,
     policy: EffectExecutionPolicy.Kind,
@@ -408,21 +417,34 @@ private struct MergeSiblings {
 
   /// Whether another branch can decide a lane request first or last: it
   /// requests the same lane, or requests any cancellation of one of the
-  /// request's IDs or of an ID carried by a request that holds the lane
-  /// (`laneHolderIDs`), which changes the lane the request meets.
-  func mayReorder(
-    laneRequest lane: AnyEffectID,
-    cancellationIDs: [AnyEffectID],
-    laneHolderIDs: Set<AnyEffectID>
-  ) -> Bool {
+  /// request's IDs.
+  func mayReorder(laneRequest lane: AnyEffectID, cancellationIDs: [AnyEffectID]) -> Bool {
     levels.contains { level in
       level.branches.otherBranch(than: level.branch, requestsLane: lane)
         || cancellationIDs.contains {
           level.branches.otherBranch(than: level.branch, requestsCancellationOf: $0)
         }
-        || laneHolderIDs.contains {
-          level.branches.otherBranch(than: level.branch, requestsCancellationOf: $0)
-        }
     }
+  }
+
+  /// Whether another branch requests any cancellation of `id`.
+  func requestsCancellation(of id: AnyEffectID) -> Bool {
+    levels.contains { $0.branches.otherBranch(than: $0.branch, requestsCancellationOf: id) }
+  }
+
+  /// Whether another branch can change what `lane` answers a request with
+  /// `policy`: it requests any cancellation of an ID carried by a request
+  /// that holds the lane, and the lane admits or rejects the request
+  /// differently once that request is gone.
+  func mayChangeAdmission(
+    policy: EffectExecutionPolicy.Kind, sequence: UInt64, lane: EffectRunLaneView?
+  ) -> Bool {
+    guard let lane, !levels.isEmpty else { return false }
+    let laneWithoutCancelledHolders = lane.afterCancellation(of: requestsCancellation(of:))
+    guard laneWithoutCancelledHolders != lane else { return false }
+    return !EffectRunScheduler.decide(policy: policy, sequence: sequence, lane: lane)
+      .hasSameOutcome(
+        as: EffectRunScheduler.decide(
+          policy: policy, sequence: sequence, lane: laneWithoutCancelledHolders))
   }
 }
