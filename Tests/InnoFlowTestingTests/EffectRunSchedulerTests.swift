@@ -584,7 +584,7 @@ struct EffectRunSchedulerTests {
 @Suite("Effect run admission after cancellation", .timeLimit(.minutes(5)))
 @MainActor
 struct EffectRunAdmissionCancellationTests {
-  // MARK: Displaced latest lanes
+  // MARK: Latest lanes held for an accepted request
 
   @Test("A displaced latest lane is still the open latest lane until its replacement is admitted")
   func displacedLatestLaneConflictsUntilReplacementIsAdmitted() async {
@@ -611,7 +611,7 @@ struct EffectRunAdmissionCancellationTests {
     let replacementSequence = store.effectBridge.nextSequence()
     let replacement = store.effectBridge.makeEffectContext(
       sequence: replacementSequence, cancellationIDs: [lane], potentialCancellationIDs: [lane])
-    scheduler.displaceLatestLane(id: lane, successor: replacement)
+    scheduler.holdLatestLane(id: lane, successor: replacement)
     #expect(scheduler.snapshots(limit: 1).isEmpty)
 
     let laterSequence = store.effectBridge.nextSequence()
@@ -632,6 +632,72 @@ struct EffectRunAdmissionCancellationTests {
       return
     }
     #expect(scheduler.snapshots(limit: 1).first?.id == laneIdentity)
+    scheduler.cancelAll()
+  }
+
+  @Test("A latest request accepted for a closed lane holds the lane until it is admitted")
+  func latestRequestAcceptedForClosedLaneHoldsTheLane() async {
+    let store = Store(reducer: SameDispatchLatestFeature())
+    let scheduler = store.effectBridge.runScheduler
+    let lane = AnyEffectID(StaticEffectID("held-closed-latest-lane"))
+    func admit(
+      _ policy: EffectExecutionPolicy, sequence: UInt64, context: EffectExecutionContext? = nil
+    ) async -> EffectRunScheduler.Plan {
+      await scheduler.admit(
+        id: lane, policy: policy, cancellationIDs: [], sequence: sequence, dispatchID: nil,
+        onCancellation: { _, _ in }, onStart: { _ in }, onPendingExit: { _ in },
+        context: context)
+    }
+
+    // The request's reduction turn accepts it while no lane is open.
+    let acceptedSequence = store.effectBridge.nextSequence()
+    let accepted = store.effectBridge.makeEffectContext(
+      sequence: acceptedSequence, cancellationIDs: [lane], potentialCancellationIDs: [lane])
+    #expect(scheduler.laneView(for: lane) == nil)
+    scheduler.holdLatestLane(id: lane, successor: accepted)
+    #expect(scheduler.laneView(for: lane)?.policy == .latest)
+    #expect(scheduler.snapshots(limit: 1).isEmpty)
+
+    let laterSequence = store.effectBridge.nextSequence()
+    let serial = await admit(.serial(maxPending: 4), sequence: laterSequence)
+    #expect(rejection(serial) == .conflictingPolicy)
+    let drop = await admit(.dropWhileRunning, sequence: laterSequence)
+    #expect(rejection(drop) == .conflictingPolicy)
+
+    guard case .accepted = await admit(.latest, sequence: acceptedSequence, context: accepted)
+    else {
+      Issue.record("The accepted request must open the lane held for it")
+      scheduler.cancelAll()
+      return
+    }
+    #expect(scheduler.snapshots(limit: 1).count == 1)
+    scheduler.cancelAll()
+  }
+
+  @Test("A lane held for a latest request that can no longer proceed is closed")
+  func laneHeldForCancelledLatestRequestIsClosed() async {
+    let store = Store(reducer: SameDispatchLatestFeature())
+    let scheduler = store.effectBridge.runScheduler
+    let lane = AnyEffectID(StaticEffectID("held-then-cancelled-latest-lane"))
+
+    let acceptedSequence = store.effectBridge.nextSequence()
+    let accepted = store.effectBridge.makeEffectContext(
+      sequence: acceptedSequence, cancellationIDs: [lane], potentialCancellationIDs: [lane])
+    scheduler.holdLatestLane(id: lane, successor: accepted)
+    #expect(scheduler.laneView(for: lane)?.policy == .latest)
+
+    // The accepted request is cancelled before the lane admits it.
+    _ = store.effectBridge.markCancelled(id: lane, upTo: acceptedSequence)
+    #expect(scheduler.laneView(for: lane) == nil)
+    let drop = await scheduler.admit(
+      id: lane, policy: .dropWhileRunning, cancellationIDs: [],
+      sequence: store.effectBridge.nextSequence(), dispatchID: nil,
+      onCancellation: { _, _ in }, onStart: { _ in }, onPendingExit: { _ in })
+    guard case .accepted = drop else {
+      Issue.record("A request with another policy must open the closed lane")
+      scheduler.cancelAll()
+      return
+    }
     scheduler.cancelAll()
   }
 

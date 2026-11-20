@@ -60,8 +60,10 @@ What to check:
 Closure-based selections — `select(dependingOn:)`, `select(dependingOnAll:)`
 and `select { … }`, with or without `id:` — keep the 6.0.x behavior: the owner
 does not retain one for its reader, so creating one during a tracked read
-records a read of the owner's state. A view that creates one in its body is
-invalidated by any state change until it holds the selection. Getting
+records a read of the owner's state (a `dependingOnAll:` selection with no
+dependency reads no state and records none). A view that creates one in its
+body is invalidated by any state change until it holds the selection and
+reads that handle instead of obtaining it again. Getting
 another holder's live selection through the same `id:` records that read
 too; in 6.0.x such a reader stopped updating once the holder released the
 selection. Key-path selections no longer record that read.
@@ -85,7 +87,9 @@ the dispatch that returned the request is cancelled before its effect runs.
 A `latest` request that a lane with another policy rejects replaces nothing,
 as in 6.0.x. `runLaneSnapshots()` does not list the lane between that turn and
 the replacement's admission; the replacement keeps the lane's identity, and
-until then a request with another policy meets the lane as conflicting.
+until then a request with another policy meets the lane as conflicting. The
+same holds when no lane was open: the accepted request holds the lane it
+will open.
 
 The reduction turn decides every lane request it reaches against the lane
 state of that turn, and the request later reports exactly that decision. A
@@ -95,9 +99,11 @@ the turn too; the request stays rejected even if the lane finished before
 the interpreter reached it. In 6.0.x such a request was admitted against the
 lane it met at that later point.
 
-Two lane requests for one ID in different branches of one `merge`, or a lane
-request whose IDs another branch cancels or requests the cancellation of, are
-decided by admission, in
+Two lane requests for one ID in different branches of one `merge`, a lane
+request whose IDs another branch cancels or requests the cancellation of, and
+a lane request whose lane holds a request that carries an ID another branch
+requests the cancellation of (a `latest` lane's running or accepted request,
+a serial lane's pending request) are decided by admission, in
 whatever order the interpreter reaches them; a `latest` request among them
 releases its predecessors when it is admitted, not in the reduction turn.
 Use `concatenate` when the order matters.
@@ -212,7 +218,9 @@ the main thread is waiting to do, such as a lock the caller holds or
 
 When the newest trailing request of a throttle window is cancelled before the
 window closes — its dispatch is cancelled, or an ID only it carries is
-cancelled — the window now fires the request it replaced. In 6.0.x an ID
+cancelled — the window now fires the newest request it retains that can
+still proceed: the one the cancelled request replaced, unless that one was
+cancelled as well. In 6.0.x an ID
 cancellation fired nothing, and a dispatch cancellation fired nothing if the
 cancelled dispatch's effect had already been interpreted, and the replaced
 request otherwise. A window keeps the newest request and up to seven it

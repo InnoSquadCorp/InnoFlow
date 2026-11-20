@@ -53,11 +53,13 @@ package func shouldAdmitDelayedScope(
 /// awaited request.
 ///
 /// The window's timer is shared by the dispatches whose requests it holds,
-/// but each request waits through an entry of its own. A request that a
+/// but each request waits through an entry of its own. A request that an ID
 /// cancellation removes from the window is released at once, so its
 /// dispatch's waiting stays scoped to its own work, while the window keeps
 /// its timer for the requests that remain. The timer's task completes the
-/// window when it returns, which releases every request still held.
+/// window when it returns, which releases every request still held: also a
+/// request the window no longer retains, and one its dispatch's cancellation
+/// removed.
 package final class ThrottleWindowCompletion: Sendable {
   private struct Entry {
     /// The completion the request's dispatch tracks.

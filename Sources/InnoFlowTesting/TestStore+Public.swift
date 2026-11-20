@@ -28,10 +28,18 @@ extension TestStore {
   /// `Store` runs first: a walk that suspends more than once is placed as if
   /// it resumed once, and the walks behind it start right behind that place;
   /// and positions more than four interpreter jobs behind a delivery or send
-  /// share the fourth job's position. A buffered action reduced first whose
-  /// walk had not started when the send began, and every interpreted one
-  /// reduced after it, is walked after the new action is reduced, as in a
-  /// `Store`.
+  /// share the fourth job's position. A third limitation concerns work the
+  /// walk starts in another task (a run, a `merge` or `concatenate` and its
+  /// children, a timer): what that work delivers is buffered at its
+  /// delivery, which can be behind jobs a `Store` runs after it. A buffered
+  /// action reduced first whose walk had not started when the send began,
+  /// and every interpreted one reduced after it, is walked after the new
+  /// action is reduced, as in a `Store`.
+  ///
+  /// These rules describe sends and receives a test awaits one after
+  /// another. A call that begins in another task while an earlier one is
+  /// still walking an effect does not wait for that walk, so what it
+  /// delivers can come before values a `Store` handles first.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -103,7 +111,9 @@ extension TestStore {
   /// walk that suspends more than once is placed as if it resumed once, and
   /// the walks behind it start right behind that place; and positions more
   /// than four interpreter jobs behind a delivery or send share the fourth
-  /// job's position.
+  /// job's position. The third applies as well: what work the walk starts in
+  /// another task delivers is buffered at its delivery, which can be behind
+  /// jobs a `Store` runs after it.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,

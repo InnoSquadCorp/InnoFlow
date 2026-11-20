@@ -37,8 +37,8 @@ import Testing
 //
 // A test queues a MainActor job ahead of its next statement by creating a
 // MainActor task that delivers through the store's effect driver, as the
-// MainActor job of a run's emission does: created MainActor tasks run in the
-// order they are created, so no blocking or sleeping is needed.
+// MainActor job of a run's emission does: MainActor tasks start in the order
+// they are created, so no blocking or sleeping is needed.
 
 private let markID = EffectID<String>("delivery-order-mark")
 private let otherID = EffectID<String>("delivery-order-other")
@@ -969,7 +969,7 @@ private let nestedID = EffectID<String>("delivery-order-nested")
 
 /// Queues a MainActor job that delivers `action` through the store's effect
 /// driver under `ids`, as the MainActor job of a run's emission does, and
-/// then runs `next` in the same job. MainActor tasks run in the order they
+/// then runs `next` in the same job. MainActor tasks start in the order they
 /// are created, so the job runs after every job queued before it and before
 /// every job queued after it, without blocking or sleeping.
 @MainActor
@@ -1063,11 +1063,34 @@ private func mainActorBarrier() async {
   await Task { @MainActor in }.value
 }
 
-/// Lets a `Store` run the MainActor jobs it queues, one level of interpreter
-/// tasks per barrier, until `done` holds.
+/// Waits until `done` holds, one MainActor barrier at a time: a `Store` runs
+/// one level of the interpreter tasks it queued per barrier, and work it
+/// started on another executor, such as a clock read, gets back to the
+/// MainActor in between. The deadline only reports a condition that never
+/// holds, where the wait was written, so the test does not go on as if the
+/// event had happened.
 @MainActor
-private func settle(until done: @MainActor () -> Bool) async {
-  for _ in 0..<16 where !done() {
+private func settle(
+  sourceLocation: SourceLocation = #_sourceLocation,
+  until done: @MainActor () -> Bool
+) async {
+  let deadline = ContinuousClock.now.advanced(by: .seconds(5) * testWaitScale)
+  while !done() {
+    guard ContinuousClock.now < deadline else {
+      Issue.record("The awaited condition was not reached in time", sourceLocation: sourceLocation)
+      return
+    }
+    await mainActorBarrier()
+  }
+}
+
+/// Runs the MainActor jobs queued so far and the jobs they queue, sixteen
+/// levels deep, which is more than any chain of jobs these tests queue. For
+/// work that stays on the MainActor: work on another executor is awaited
+/// through its event first.
+@MainActor
+private func drainMainActorJobs() async {
+  for _ in 0..<16 {
     await mainActorBarrier()
   }
 }
@@ -1078,9 +1101,11 @@ private func settle(until done: @MainActor () -> Bool) async {
 /// reads the clock from the MainActor before this helper's task exists, so
 /// its read is served first; a `Store`'s order in these tests does not
 /// depend on the hold, which only fixes where the test store's walk resumes.
-/// The deadline only bounds a stalled executor.
+/// The deadline bounds a stalled executor, which is reported.
 @MainActor
-private func holdUntilClockReadsServed(_ clock: ManualTestClock) {
+private func holdUntilClockReadsServed(
+  _ clock: ManualTestClock, sourceLocation: SourceLocation = #_sourceLocation
+) {
   let served = ServedFlag()
   // The priority of the jobs that read the clock: an actor serves the jobs of
   // one priority in the order they were queued. A lower one would starve
@@ -1091,6 +1116,9 @@ private func holdUntilClockReadsServed(_ clock: ManualTestClock) {
   }
   let deadline = ContinuousClock.now.advanced(by: .seconds(5) * testWaitScale)
   while !served.isSet, ContinuousClock.now < deadline {}
+  if !served.isSet {
+    Issue.record("The clock did not serve the reads queued on it", sourceLocation: sourceLocation)
+  }
 }
 
 private final class ServedFlag: Sendable {
@@ -2239,11 +2267,14 @@ struct TestStoreDeliveryOrderTests {
     await referenceEmission.value
     await ping.finish()
     #expect(reference.state.log == shape.log)
-    var iterator = published.makeAsyncIterator()
+    // Collected in a task of its own: a missing output fails the comparison
+    // instead of suspending the test on the store's open output stream.
     var referenceOutputs: [CompetingFollowUpFeature.Output] = []
-    for _ in outputs {
-      if let output = await iterator.next() { referenceOutputs.append(output) }
+    let collecting = Task { @MainActor in
+      for await output in published { referenceOutputs.append(output) }
     }
+    await waitUntil { referenceOutputs.count >= outputs.count }
+    collecting.cancel()
     #expect(referenceOutputs == outputs)
 
     let store = TestStore(reducer: feature, initialState: .init())
@@ -2642,13 +2673,17 @@ struct TestStoreDeliveryOrderTests {
     // The job that delivers `r` queues the job that sends `t` right behind
     // `r`'s interpreter task: a `Store` reduces `t`, whose cancel of the
     // throttle skips `rl`, before that task resumes from its clock read.
+    let referenceClock = ManualTestClock()
     let reference = Store(
-      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(referenceClock))
     await Task { @MainActor in
       reference.deliverAction(.r, context: nil)
       Task { @MainActor in _ = reference.send(.t) }
     }.value
-    await settle { false }
+    // `r`'s interpreter task resumes from its clock read on the MainActor.
+    // This read is served after that one, so the task has resumed by now.
+    _ = await referenceClock.now
+    await drainMainActorJobs()
     #expect(reference.state.log == ["r", "t"])
 
     let store = TestStore(
@@ -2759,7 +2794,7 @@ struct TestStoreDeliveryOrderTests {
         Task { @MainActor in store.deliverAction(.z, context: context) }
       }
     }.value
-    await settle { false }
+    await drainMainActorJobs()
     await store.send(.t)
     store.exhaustivity = exhaustive ? .on : .off
     #expect(store.state.log == ["r", "xz", "rl", "z", "xzv", "t"])
@@ -2842,7 +2877,7 @@ struct TestStoreDeliveryOrderTests {
     store.exhaustivity = .off
     await store.send(.t)
     await store.finish()
-    #expect(Array(store.state.log.prefix(6)) == reference.state.log)
+    #expect(store.state.log == reference.state.log + ["t"])
   }
 
   @Test(
@@ -2863,7 +2898,7 @@ struct TestStoreDeliveryOrderTests {
       reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
     store.exhaustivity = exhaustive ? .on : .off
     await queueEmission(.r, into: store, then: { store.deliverAction(.x, context: nil) }).value
-    await settle { false }
+    await drainMainActorJobs()
     await store.receive(.r) { $0.log = ["r"] }
     if exhaustive {
       await store.receive(.x) { $0.log = ["r", "x"] }
@@ -2873,7 +2908,7 @@ struct TestStoreDeliveryOrderTests {
       await store.send(.n)
     }
     await store.finish()
-    #expect(Array(store.state.log.prefix(4)) == reference.state.log)
+    #expect(store.state.log == reference.state.log + (exhaustive ? [] : ["n"]))
   }
 
   @Test(
@@ -2983,7 +3018,7 @@ struct TestStoreDeliveryOrderTests {
       await waitUntil(pollInterval: .milliseconds(1)) {
         reference.state.log.count == shape.storeLog.count
       })
-    await settle { false }
+    await drainMainActorJobs()
     #expect(reference.state.log == shape.storeLog)
     reference.send(.end)
 

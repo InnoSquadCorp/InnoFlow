@@ -27,10 +27,11 @@ count, even before its cancellation reaches the scheduler, and it is released
 through the same terminal transition as an explicit cancellation. Completing an
 old or already removed ticket cannot remove a newer lane.
 
-A `latest` lane displaced in a reduction turn remains the open `latest` lane
-under its ID until its replacement is admitted or can no longer proceed: the
-replacement keeps the lane's identity, and a request with another policy is
-rejected as conflicting.
+A `latest` request accepted in a reduction turn holds its lane as the open
+`latest` lane under its ID until the request is admitted or can no longer
+proceed: a lane it displaced keeps its identity, a lane that was closed gets
+one when the request opens it, and a request with another policy is rejected
+as conflicting.
 
 The reduction turn that returns an effect decides each lane request it reaches
 without awaiting against the lane state of that turn, with the same rule
@@ -41,8 +42,10 @@ behind it, and the interpreter later reports exactly that outcome without
 consulting the lane again. A request the lane admits awaits its run, so the
 interpreter admits it against the lane it meets then. A request whose outcome
 depends on the order of `merge` children (another branch requests the same
-lane, or cancels or requests the cancellation of one of its IDs) is not
-decided in the turn at all; its admission decides it.
+lane, cancels or requests the cancellation of one of its IDs, or requests the
+cancellation of an ID carried by a request that holds the lane: a `latest`
+lane's running request, the request a held lane waits for, or a serial lane's
+pending request) is not decided in the turn at all; its admission decides it.
 
 ## Lifecycle observations
 
