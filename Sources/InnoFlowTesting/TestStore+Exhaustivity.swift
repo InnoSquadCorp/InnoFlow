@@ -26,7 +26,11 @@ extension TestStore {
     var skippedActionDescriptions: [String] = []
     var didDrainAction = false
 
-    while let action = popBufferedQueuedAction(before: prepared.order) {
+    while true {
+      // A composite task the test store follows can still buffer a value a
+      // `Store` handled before the send.
+      await followedTasks.settle()
+      guard let action = popBufferedQueuedAction(before: prepared.order) else { break }
       // Give one already-buffered action a chance to recover even when the
       // configured timeout is zero, then bound recursive synchronous sends.
       if didDrainAction, wallClock.now >= deadline {

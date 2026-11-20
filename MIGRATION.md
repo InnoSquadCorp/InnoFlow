@@ -131,10 +131,11 @@ reduced, and a buffered output as one it has already published:
   that is not `.none` or a plain `.send` or `.output` only once that task
   would run, so a MainActor job queued before it, such as a run's emission,
   is delivered before they return: an exhaustive test receives that
-  emission before the wrapped follow-up. The bullet on suspended walks below
-  adds two things: a follow-up whose interpreter task waits for the one
-  created before it starts later, and two limitations can place a value
-  before jobs a `Store` runs first. A `send` that first reduces
+  emission before the wrapped follow-up. The bullets on suspended walks and
+  composite tasks below add three things: a follow-up whose interpreter task
+  waits for the one created before it starts later, the children of a
+  composite come where a `Store` walks them, and two exceptions can place a
+  value before jobs a `Store` runs first. A `send` that first reduces
   buffered actions (in a non-exhaustive store, or after reporting them in an
   exhaustive one) reduces the sent action before it starts the effects of
   those whose interpreter task had not run when the send began, so their
@@ -147,8 +148,7 @@ reduced, and a buffered output as one it has already published:
   received a later action first — for example the target before the `.send`
   follow-up of an action it received as a mismatch, or a run's next
   emission before a wrapped follow-up of its previous one — must swap the
-  two receives. The children of a composite (`merge`, `concatenate`)
-  follow-up stay in delivery order.
+  two receives.
 - In a non-exhaustive store, `receiveOutput` keeps a buffered output it
   would have skipped when a buffered action that a `Store` reduced before
   that output publishes the expected one: it reduces that action first, as a
@@ -163,36 +163,50 @@ reduced, and a buffered output as one it has already published:
   action cancels its effect, as a `Store` drops it; in 6.0.x it was reduced
   before the sent action.
 - A walk that suspends — a throttle reading its clock, a scheduled run waiting
-  for admission — now keys what it delivers after its first suspension where a
-  `Store` resumes it at the earliest, behind the jobs queued before the walk
-  started, instead of at its delivery. Apart from the two limitations below, a
-  walk starts at the earliest point at which a `Store` starts it: where a
-  `Store` runs its interpreter task, or, when the walk created just before it
-  finishes only later, right after that walk finished. A `Store` starts each
-  root interpreter walk only after the one before it, and hands a resumed
-  walk, and a walk that waited, back to the MainActor from another executor,
-  so where they continue depends on how soon that happens relative to the
-  MainActor's other jobs. A throttle on a test store without a
-  `ManualTestClock` now suspends to read the clock too, as on a `Store`, so
-  its value comes behind the jobs queued before its walk. A test that received
-  those values, or the values of the walk behind it, in delivery order
-  receives them in that order instead. Two limitations can place a value
-  before jobs a `Store` runs first: a walk that suspends more than once (a
-  throttle around a scheduled run, nested throttles) is placed as if it
-  resumed once, and the walks behind it start right behind that place; and
-  positions more than four interpreter jobs behind a delivery or send — a
-  follow-up that deep, or a walk that starts or resumes there — share the
-  fourth job's position. A value a drained walk delivers after its first
-  suspension is reduced before the sent action when its resumption point came
-  before the send began, and can otherwise come behind it, as in a `Store`
-  that sends right after the walk started. Work a walk starts in another task
-  (a run, a composite and its children, a timer) delivers at its delivery, as
-  in 6.0.x: its values can come behind MainActor jobs and walks that a `Store`
-  runs after them, such as a job queued right after the walk started, which a
-  `concatenate`'s leading sends precede in a `Store`; and when that work
-  delivers after a send began, its values are behind the sent action, which
-  can cancel them, although a `Store` typically reduced them before the send.
-  Receive those values before sending an action that cancels them.
+  for admission — now keys what it delivers after each suspension where a
+  `Store` resumes it at the earliest, behind the jobs queued before it
+  suspended, one level deeper per suspension (nested throttles, a throttle
+  around a scheduled run), instead of at its delivery. Short of the depth
+  limit below, a walk starts at the earliest point at which a `Store` starts
+  it: where a `Store` runs its interpreter task, or, when the walk created
+  just before it finishes only later, right after that walk finished. A
+  `Store` starts each root interpreter walk only after the one before it,
+  and hands a resumed walk, and a walk that waited, back to the MainActor
+  from another executor, so where they continue depends on how soon that
+  happens relative to the MainActor's other jobs. A throttle on a test store
+  without a `ManualTestClock` now suspends to read the clock too, as on a
+  `Store`, so its value comes behind the jobs queued before its walk. A test
+  that received those values, or the values of the walk behind it, in
+  delivery order receives them in that order instead. A value a drained walk
+  delivers after a suspension is reduced before the sent action when its
+  resumption point came before the send began, and can otherwise come behind
+  it, as in a `Store` that sends right after the walk started.
+- The tasks in which a `concatenate` or a `merge` walks its children now
+  deliver where a `Store` runs them at the earliest, instead of at their
+  delivery: a `concatenate`'s children in the job a `Store` queues while the
+  walk that starts it runs, and each child of a `merge` three jobs later, in
+  declaration order, where a `Store`'s `merge` children race each other.
+  What such a task delivers before it awaits other work therefore comes
+  before the jobs a `Store` runs after it, also when the test receives late:
+  the leading sends of a `concatenate` come before a run emission whose job
+  is queued behind that task, and a run emission's composite follow-up
+  before a later `merge` step of the emitting `concatenate`. A test that
+  received those values after later ones receives them in that order
+  instead. `send` and `receive` return without waiting for those tasks; the
+  next call that takes a buffered value — `receive`, `receiveOutput`, a
+  `send`'s drain, `finish()` — waits for them first. Work a walk awaits or
+  leaves to another task — a run, a timer, the children of an awaited
+  `merge` — and what a composite task delivers once it awaited such work
+  still deliver at their delivery, as in 6.0.x: their values can come behind
+  MainActor jobs and walks that a `Store` runs after them; and when that
+  work delivers after a send began, its values are behind the sent action,
+  which can cancel them, although a `Store` typically reduced them before
+  the send. Receive those values before sending an action that cancels
+  them. Positions more than sixteen interpreter jobs behind a delivery or
+  send — a follow-up that deep, a composite task, or a walk that starts or
+  resumes there — share the sixteenth job's position, and can come before
+  jobs a `Store` runs first; an action the test never receives queues
+  sixteen anchor markers.
 - A cancellation the test issues — `cancelEffects(identifiedBy:)`,
   `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
   buffered action and output, as before.

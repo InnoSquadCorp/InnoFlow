@@ -78,6 +78,9 @@ extension TestStore {
 
     while true {
       guard !Task.isCancelled else { return .cancelled }
+      // A composite task the test store follows can still buffer a value
+      // ahead of the ones buffered now.
+      await followedTasks.settle()
 
       let queuedAction: ActionQueue<R.Action>.QueuedAction
       if didDiscardInvalidatedAction, wallClock.now >= deadline {

@@ -107,18 +107,19 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   /// of the action it sends, until the reduction-turn acceptance of its
   /// effect has run.
   package var reducingAction: TestStoreDelivery?
-  /// The reductions whose effect walk the store follows, by effect sequence.
-  package var followedWalks: [UInt64: TestStoreFollowedWalk] = [:]
-  /// Where the last interpreted walk the store followed finished: a `Store`
-  /// starts a root interpreter walk only once the one before it has finished.
-  /// The tail's chain keeps queueing levels while it holds the tail, so a
-  /// walk that waited for the tail's walk finds the levels where the test
-  /// store starts and resumes it.
-  package var interpreterTail: TestStoreAnchor? {
+  /// The followed composite tasks whose walks have not finished: the store
+  /// takes nothing from a buffer until they have.
+  package let followedTasks = TestStoreFollowedTasks()
+  /// Where the last root interpreter walk the store followed finished: a
+  /// `Store` starts a root interpreter walk only once the one before it has
+  /// finished. The tail's chain keeps queueing levels while it holds the
+  /// tail, so a walk that waited for the tail's walk finds the levels where
+  /// the test store starts and resumes it.
+  package var interpreterTail: TestStoreInterpreterTail? {
     didSet {
-      guard interpreterTail?.chain !== oldValue?.chain else { return }
-      interpreterTail?.chain.addMember()
-      oldValue?.chain.settleMember()
+      guard interpreterTail?.anchor.chain !== oldValue?.anchor.chain else { return }
+      interpreterTail?.anchor.chain.addMember()
+      oldValue?.anchor.chain.settleMember()
     }
   }
 

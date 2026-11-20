@@ -96,7 +96,7 @@
     "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift": "df0a0ddca65ba7a62246f819161463b17c90e5d9263bc75d47f7cd730ada3634",
     "Tests/InnoFlowTestingTests/TestEffectLedgerConsistencyTests.swift": "c27296d445409c72e821e96a10a949a8680f814d216d68eeb3423242f0198e39",
     "Tests/InnoFlowTestingTests/TestStoreDefaultsTests.swift": "7656e44ec0d6f3505ef0132ee50c121b032fc15b3251a1f3d5f70096d1bf1c23",
-    "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift": "c3f394a7cda8558a1374dcc5e0f71dcfddc6583bf609b2981a20de3a05fa4dc7",
+    "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift": "1bfbb93577d40148042cec7d12e12abe3488ef9513caa36e21506fbbff267108",
     "Tests/InnoFlowTestingTests/TestStoreDispatchConsistencyTests.swift": "8c37763f1487dc2c86a0454ee0676aada314541a79b9b5eef5a04b8ae15e6a64",
     "Tests/InnoFlowTestingTests/TestStoreEffectAlgebraTests.swift": "e3261cad028774016850e2a9d9e7f3695bee28751ed8bc160db17e9a262223bd",
     "Tests/InnoFlowTestingTests/TestStoreExhaustivityTests.swift": "1dec66ef4dcb36c5abe724dcf5db7821bac07154d3f1ad829a2fd4dddd1b2d3e",
@@ -7781,12 +7781,21 @@
       "target": "InnoFlowTestingTests"
     },
     {
+      "attribute": "@Test(\n    \"A composite's tasks deliver where a Store runs them, before the jobs queued after them\",\n    arguments: CompositeShape.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "A composite's tasks deliver where a Store runs them, before the jobs queued after them",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/compositeTasksDeliverWhereAStoreRunsThem(shape:late:)",
+      "line": 3629,
+      "target": "InnoFlowTestingTests"
+    },
+    {
       "attribute": "@Test(\n    \"An interpreted follow-up comes after its action's concatenate siblings; a plain one before\",\n    arguments: SiblingShape.allCases, FollowUpWrap.allCases)",
       "conditionalContexts": [],
       "displayName": "An interpreted follow-up comes after its action's concatenate siblings; a plain one before",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/concatenateSiblingOrder(shape:wrap:)",
-      "line": 2057,
+      "line": 2521,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7795,7 +7804,16 @@
       "displayName": "Outputs around an action's concatenate siblings are kept as a Store publishes them",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/concatenateSiblingOutputs(shape:wrap:)",
-      "line": 2083,
+      "line": 2547,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"Positions more than four interpreter jobs behind a delivery keep their order\",\n    arguments: DeepShape.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "Positions more than four interpreter jobs behind a delivery keep their order",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/deepPositionsKeepTheirOrder(shape:late:)",
+      "line": 3686,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7804,7 +7822,7 @@
       "displayName": "A deferred walk starts only once the suspended walk before it finishes",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/deferredWalkWaitsForSuspendedWalkBeforeIt(exhaustive:)",
-      "line": 2770,
+      "line": 3234,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7813,7 +7831,7 @@
       "displayName": "A delegate chain of a child's emission precedes the child's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/delegateChainPrecedesNextEmission(stopsAfterFirst:exhaustive:)",
-      "line": 1933,
+      "line": 2397,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7822,7 +7840,7 @@
       "displayName": "Cancelling the dispatch removes a buffered action its effect's own cancel has passed",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/dispatchCancelRemovesDeliveredAction()",
-      "line": 1845,
+      "line": 2309,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7831,7 +7849,7 @@
       "displayName": "A drained walk behind a deferred one is deferred too",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkBehindDeferredWalkIsDeferred(exhaustive:)",
-      "line": 2879,
+      "line": 3343,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7840,7 +7858,7 @@
       "displayName": "A drained walk created behind a suspended one starts after that one returns",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkBehindSuspendedWalkStartsAfterIt(exhaustive:)",
-      "line": 2696,
+      "line": 3160,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7849,7 +7867,7 @@
       "displayName": "A drained walk's cancel after its clock read keeps what jobs queued before it delivered",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkCancelKeepsValuesOfJobsQueuedBeforeIt(exhaustive:)",
-      "line": 3019,
+      "line": 3483,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7858,7 +7876,7 @@
       "displayName": "A drained walk's value after its clock read comes before the send",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkValueAfterClockReadPrecedesSend(exhaustive:)",
-      "line": 2608,
+      "line": 3072,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7867,7 +7885,7 @@
       "displayName": "A drained walk's value after its clock read comes after jobs queued before its interpreter",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkValueFollowsJobsQueuedBeforeItsInterpreter(exhaustive:)",
-      "line": 2669,
+      "line": 3133,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7876,7 +7894,7 @@
       "displayName": "A drained walk's value after its clock read is behind a send right after its interpreter ran",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkValueFollowsSendRightAfterItsInterpreter(exhaustive:)",
-      "line": 2638,
+      "line": 3102,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7885,7 +7903,7 @@
       "displayName": "A follow-up's cancel removes an output delivered after its chain began",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpCancelRemovesLaterOutput(exhaustive:)",
-      "line": 2006,
+      "line": 2470,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7894,7 +7912,7 @@
       "displayName": "A received action's follow-up chain precedes its run's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpChainPrecedesNextEmission(shape:exhaustive:)",
-      "line": 1908,
+      "line": 2372,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7903,7 +7921,7 @@
       "displayName": "A follow-up of a run's emission precedes the next run of the same concatenate",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpPrecedesNextConcatenatedRun(shape:exhaustive:)",
-      "line": 1960,
+      "line": 2424,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7912,7 +7930,7 @@
       "displayName": "Follow-ups of a run's emission precede the run's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpPrecedesNextEmission(secondCancelsFollowUp:exhaustive:)",
-      "line": 1755,
+      "line": 2219,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7921,7 +7939,7 @@
       "displayName": "A chain of two interpreted follow-ups is received in an order a Store has",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedChainFollowsTheRace(cancelsRun:exhaustive:)",
-      "line": 2183,
+      "line": 2647,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7930,7 +7948,7 @@
       "displayName": "An interpreted follow-up comes after a job queued behind its action's delivery job",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpAfterLaterQueuedJob(delivery:exhaustive:)",
-      "line": 2274,
+      "line": 2738,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7939,7 +7957,7 @@
       "displayName": "A received action's interpreted follow-up comes after a job queued before its delivery",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpAfterQueuedJob(shape:mode:)",
-      "line": 2223,
+      "line": 2687,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7948,7 +7966,7 @@
       "displayName": "An interpreted follow-up precedes what its action's effect delivers in a later job",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpPrecedesLaterJob(shape:exhaustive:)",
-      "line": 2136,
+      "line": 2600,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7957,7 +7975,7 @@
       "displayName": "An interpreted follow-up's output survives a cancel delivered in a later job",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedOutputSurvivesLaterJobCancel(exhaustive:)",
-      "line": 2161,
+      "line": 2625,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7966,7 +7984,7 @@
       "displayName": "A nested interpreted follow-up comes after an emission queued while its chain ran",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/nestedFollowUpAfterQueuedEmission(exhaustive:)",
-      "line": 3112,
+      "line": 3576,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7975,7 +7993,7 @@
       "displayName": "An interpreted follow-up's own follow-up comes after its siblings' follow-ups",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/nestedFollowUpsKeepInterpreterOrder(exhaustive:)",
-      "line": 3090,
+      "line": 3554,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7984,7 +8002,7 @@
       "displayName": "A non-exhaustive output receive never skips an output after the expected one",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/offOutputReceiveReducesEarlierActionsFirst()",
-      "line": 1877,
+      "line": 2341,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7993,7 +8011,7 @@
       "displayName": "Another dispatch's cancel after the delivery keeps the delivered action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/otherDispatchCancelKeepsDeliveredAction(exhaustive:)",
-      "line": 2029,
+      "line": 2493,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8002,7 +8020,7 @@
       "displayName": "An output delivered before its effect's own cancel is received",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/outputBeforeOwnCancelIsReceived(exhaustive:)",
-      "line": 1860,
+      "line": 2324,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8011,7 +8029,7 @@
       "displayName": "An output delivered before a received action survives that action's cancel",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/outputBeforeReceivedActionSurvivesItsCancel(exhaustive:)",
-      "line": 1986,
+      "line": 2450,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8020,7 +8038,7 @@
       "displayName": "An effect's own later cancel keeps an action it already delivered",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/ownCancelKeepsEarlierDelivery(shape:exhaustive:)",
-      "line": 1704,
+      "line": 2168,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8029,7 +8047,7 @@
       "displayName": "A received action's plain output precedes the outputs its effect publishes later",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/receivedActionOutputOrder(shape:exhaustive:)",
-      "line": 2113,
+      "line": 2577,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8038,7 +8056,25 @@
       "displayName": "A received action's cancel removes actions buffered behind it",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/receivedCancelRemovesActionsBehindIt(markCancels:exhaustive:)",
-      "line": 1779,
+      "line": 2243,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A walk that suspends more than once resumes behind the jobs queued before each suspension\",\n    arguments: SuspensionShape.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "A walk that suspends more than once resumes behind the jobs queued before each suspension",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/repeatedSuspensionResumesAtEachLevel(shape:late:)",
+      "line": 3664,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A run emission's composite follow-up comes before a later merge step of its concatenate\",\n    arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "A run emission's composite follow-up comes before a later merge step of its concatenate",
+      "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
+      "identifier": "TestStoreDeliveryOrderTests/runEmissionCompositeFollowUpPrecedesLaterMergeStep(late:)",
+      "line": 3710,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8047,7 +8083,7 @@
       "displayName": "A scoped receive gets a child action its effect's own cancel has passed",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/scopedReceiveGetsDeliveredAction()",
-      "line": 1898,
+      "line": 2362,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8056,7 +8092,7 @@
       "displayName": "A scoped send's cancel removes what is delivered while its drain suspends",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/scopedSentCancelRemovesValuesDeliveredDuringItsDrain(exhaustive:)",
-      "line": 2581,
+      "line": 3045,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8065,7 +8101,7 @@
       "displayName": "A scoped send's interpreted follow-up comes after a job queued before the send",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/scopedSentFollowUpAfterQueuedJob(shape:exhaustive:)",
-      "line": 2345,
+      "line": 2809,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8074,7 +8110,7 @@
       "displayName": "A send that times out draining removes the buffered actions it did not reduce",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sendDrainTimeoutRemovesRemainingActions()",
-      "line": 1827,
+      "line": 2291,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8083,7 +8119,7 @@
       "displayName": "A send leaves buffered what is delivered while it drains earlier actions",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sendLeavesValuesDeliveredDuringItsDrain()",
-      "line": 2500,
+      "line": 2964,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8092,7 +8128,7 @@
       "displayName": "A send reduces the sent action before the interpreted effects of the actions it drains",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sendReducesSentActionBeforeDrainedInterpreters(shape:viaScope:)",
-      "line": 2373,
+      "line": 2837,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8101,7 +8137,7 @@
       "displayName": "A send's cancel removes an output published while its drain suspends",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentCancelRemovesOutputPublishedDuringItsDrain(exhaustive:)",
-      "line": 3056,
+      "line": 3520,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8110,7 +8146,7 @@
       "displayName": "A send's cancel removes what is delivered while its drain suspends",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentCancelRemovesValuesDeliveredDuringItsDrain(shape:exhaustive:)",
-      "line": 2536,
+      "line": 3000,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8119,7 +8155,7 @@
       "displayName": "A sent action's interpreted follow-up comes after a job queued before the send",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentFollowUpAfterQueuedJob(shape:exhaustive:)",
-      "line": 2318,
+      "line": 2782,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8128,7 +8164,7 @@
       "displayName": "A sent action's interpreter comes before the follow-ups of the actions its send drains",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentInterpreterPrecedesDrainedFollowUps(exhaustive:)",
-      "line": 2420,
+      "line": 2884,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8137,7 +8173,7 @@
       "displayName": "The sent walk starts only once the suspended walk before it finishes",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentWalkWaitsForSuspendedWalkBeforeIt(exhaustive:)",
-      "line": 2808,
+      "line": 3272,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8146,7 +8182,7 @@
       "displayName": "A send whose drain suspends keeps the place where the send began",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/suspendedDrainKeepsTheSendPlace(shape:exhaustive:)",
-      "line": 2448,
+      "line": 2912,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8155,7 +8191,7 @@
       "displayName": "A test-issued cancel removes a covered buffered action whatever its effect did since",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/testIssuedCancelRemovesCoveredAction(shape:cancelsAll:)",
-      "line": 1802,
+      "line": 2266,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8164,7 +8200,7 @@
       "displayName": "A throttle reading the default clock suspends as in a Store",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/throttleOnDefaultClockSuspends(exhaustive:)",
-      "line": 2925,
+      "line": 3389,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8173,7 +8209,7 @@
       "displayName": "A delivered action left unreceived queues a bounded number of anchor markers",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/unreceivedActionBoundsAnchorMarkers()",
-      "line": 3142,
+      "line": 3606,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8182,7 +8218,7 @@
       "displayName": "A receive that waits while the effect cancels itself still gets the action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/waitingReceiveGetsActionBeforeOwnCancel()",
-      "line": 1724,
+      "line": 2188,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8191,7 +8227,7 @@
       "displayName": "A walk waiting for a suspended one starts behind the jobs queued before that one resumed",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/waitingWalkStartsBehindJobsQueuedBeforeResumption(exhaustive:)",
-      "line": 2724,
+      "line": 3188,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8200,7 +8236,7 @@
       "displayName": "A walk behind one whose chain ended resumes behind the jobs queued before it started",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/walkBehindEndedChainResumesBehindEarlierJobs(shape:exhaustive:)",
-      "line": 2951,
+      "line": 3415,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8209,7 +8245,7 @@
       "displayName": "A walk created behind a received walk that suspended starts after it",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/walkBehindReceivedSuspendedWalkStartsAfterIt(exhaustive:)",
-      "line": 2848,
+      "line": 3312,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8218,7 +8254,7 @@
       "displayName": "Work that cancels a timer under its own ID keeps its delivered action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/workCancellingTimerKeepsItsAction(exhaustive:)",
-      "line": 1734,
+      "line": 2198,
       "target": "InnoFlowTestingTests"
     },
     {

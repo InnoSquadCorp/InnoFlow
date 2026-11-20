@@ -111,7 +111,7 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
 - Removed the start gates in front of `Store` run and composite tasks, the
   unused deferred-mapping effect operation, and the driver branches for
   awaited composition that the interpreter never selected. `TestStore` keeps
-  its own start gate.
+  its own start gate in front of run tasks.
 - A canonical `static let`/`static var` `<name>CasePath` (or `<name>ActionPath`
   for an `id:action:` case) declared in the `Action` body now takes precedence
   over synthesis for every case shape, as it already did for `Output`. 6.0.x
@@ -155,15 +155,24 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   an interpreter walk suspends: it walks interpreted effects in the order a
   `Store` creates their tasks, starts a walk that waits for the walk before
   it right after that walk finished, the earliest point at which a `Store`
-  starts it, and keys what a walk delivers after it first suspends where a
+  starts it, and keys what a walk delivers after each suspension where a
   `Store` resumes it at the earliest, behind the MainActor jobs queued
-  before the walk started. A send's drain defers every interpreted walk
-  behind one it defers, and a throttle on the default clock suspends to
-  read it, as in a `Store`. A walk that suspends more than once is placed as
-  if it resumed once. What a walk delivers after it first suspends is
-  reduced before a later send when its resumption point came before the send
-  began, and otherwise comes behind it, as in a `Store` whose send comes
-  right after the walk started. Before, the order, and with a cancellation
+  before it suspended, one level deeper per suspension — nested throttles,
+  a throttle around a scheduled run. A send's drain defers every
+  interpreted walk behind one it defers, and a throttle on the default clock
+  suspends to read it, as in a `Store`. What a walk delivers after a
+  suspension is reduced before a later send when its resumption point came
+  before the send began, and otherwise comes behind it, as in a `Store`
+  whose send comes right after the walk started. The tasks in which a
+  `Store` walks the children of a `concatenate` or `merge` are followed
+  too: a `concatenate`'s children are keyed where its task runs, the next
+  level after the walk that starts it, and a `merge`'s children three
+  levels deeper, in declaration order, where a `Store`'s children race.
+  Until such a task awaits other work, what it delivers comes before the
+  jobs a `Store` runs after it — the leading sends of a `concatenate`, and
+  a run emission's composite follow-up ahead of a later `merge` step of the
+  emitting `concatenate` — and a test store takes no buffered value while
+  such a task is pending. Before, the order, and with a cancellation
   the set of received actions and outputs, depended on when the test
   received the first action. Where the `Store` order is itself a race, such
   as a wrapped follow-up of a wrapped follow-up of a run's emission against
@@ -171,15 +180,16 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   a resumed walk, and a walk that waited for the one before it, back to the
   MainActor from another executor, so where it continues depends on how soon
   that happens relative to the MainActor's other jobs; the test store takes
-  the earliest point. Two limitations are the exception, and can place a
-  value before jobs a `Store` runs first: a walk that suspends more than
-  once, and the walks behind it; and positions more than four interpreter
-  jobs behind a delivery or send — a follow-up that deep, or a walk that
-  starts or resumes there — which share the fourth job's position. The
-  children of a composite (`merge`, `concatenate`) follow-up stay in
-  delivery order, and work a walk starts in another task (a run, a composite
-  and its children, a timer) delivers at its delivery, as in 6.0.x: its
-  first values can come after MainActor jobs that a `Store` runs after them.
+  the earliest point. Two exceptions can place a value before jobs a
+  `Store` runs first: positions more than sixteen interpreter jobs behind a
+  delivery or send — a follow-up that deep, a composite task, or a walk
+  that starts or resumes there — share the sixteenth job's position; and
+  work a walk awaits or leaves to another task (a run, a timer, the
+  children of an awaited `merge`), and what a composite task delivers once
+  it awaited such work, delivers at its delivery, as in 6.0.x. An action the
+  test never receives queues sixteen anchor markers, each a MainActor task
+  of about 5 µs on the local benchmark; an action the test receives as it
+  arrives queues one.
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered

@@ -255,6 +255,9 @@ extension TestStore {
         markTerminalVerificationHandled(terminalVerificationRevision)
         return .cancelled
       }
+      // A composite task the test store follows can still buffer a value
+      // ahead of the ones buffered now.
+      await followedTasks.settle()
 
       if exhaustivity.isOn {
         // Snapshot both queues before cancellation invalidates either side.
