@@ -65,6 +65,22 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
+    await send(action, assert: updateExpectedState, location: location, didReduce: { _ in })
+  }
+
+  /// Sends `action` and verifies its state transition.
+  ///
+  /// - Parameter didReduce: Runs with the state right before the sent
+  ///   action's reduction, right after that reduction and its state
+  ///   assertion. The buffered actions the send reduces first have been
+  ///   reduced by then, so the two states differ by that one reduction.
+  @discardableResult
+  func send(
+    _ action: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)?,
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void
+  ) async -> TestStoreDispatch {
     let prepared = await prepareForSend(location: location)
     let dispatch = makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
@@ -86,6 +102,7 @@ extension TestStore {
       eventDescription: "mismatch after action.",
       location: location
     )
+    didReduce(previousState)
 
     await walkSentEffect(effect, context: context, prepared: prepared)
     return dispatch.task
@@ -376,11 +393,20 @@ extension TestStore {
     }
   }
 
-  private func receiveExact(
+  /// Receives the next buffered effect action, requires it to equal
+  /// `expectedAction`, and verifies its state transition.
+  ///
+  /// - Parameter didReduce: Runs with the state right before the received
+  ///   action's reduction, right after that reduction and its state
+  ///   assertion. A non-exhaustive store has reduced the actions it skips by
+  ///   then, so the two states differ by that one reduction. It does not run
+  ///   when `expectedAction` is not received.
+  func receiveExact(
     _ expectedAction: R.Action,
     timeout: Duration?,
     assert updateExpectedState: ((inout R.State) -> Void)?,
-    location: TestStoreSourceLocation
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void = { _ in }
   ) async where R.Action: Equatable {
     let result = await receiveMatchingResult(timeout: timeout, location: location) { action in
       action == expectedAction ? .matched(()) : .mismatched
@@ -391,7 +417,8 @@ extension TestStore {
       await applyReceivedAction(
         action,
         assert: updateExpectedState,
-        location: location
+        location: location,
+        didReduce: didReduce
       )
 
     case .mismatched(let action):
@@ -427,7 +454,8 @@ extension TestStore {
   private func applyReceivedAction(
     _ queuedAction: ActionQueue<R.Action>.QueuedAction,
     assert updateExpectedState: ((inout R.State) -> Void)?,
-    location: TestStoreSourceLocation
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void = { _ in }
   ) async {
     await reduceReceivedAction(
       queuedAction, source: .receive, location: location,
@@ -444,6 +472,7 @@ extension TestStore {
           eventDescription: "mismatch after receiving action.",
           location: location
         )
+        didReduce(previousState)
       })
   }
 

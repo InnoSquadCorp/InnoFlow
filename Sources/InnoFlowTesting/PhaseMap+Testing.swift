@@ -53,6 +53,12 @@ package func assertPhaseMapCovers<State: Sendable, Action: Sendable, Phase: Hash
 }
 
 extension TestStore {
+  /// Sends an action and verifies that the phase transition its reduction
+  /// makes is one the phase map declares.
+  ///
+  /// The transition is checked against the map's derived graph as
+  /// `send(_:tracking:through:assert:)` checks it: across the reduction of
+  /// `action` alone, after the buffered effect actions a send reduces first.
   @discardableResult
   public func send<Phase: Hashable & Sendable>(
     _ action: R.Action,
@@ -98,6 +104,13 @@ extension TestStore {
     )
   }
 
+  /// Receives an action from an effect and verifies that the phase transition
+  /// its reduction makes is one the phase map declares.
+  ///
+  /// The transition is checked against the map's derived graph as
+  /// `receive(_:tracking:through:assert:)` checks it: across the reduction of
+  /// `expectedAction` alone, after the actions a non-exhaustive store skips,
+  /// and not at all when `expectedAction` is not received.
   public func receive<Phase: Hashable & Sendable>(
     _ expectedAction: R.Action,
     through phaseMap: PhaseMap<R.State, R.Action, Phase>,
