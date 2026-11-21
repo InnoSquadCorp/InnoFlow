@@ -129,11 +129,14 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    turn. A lane request whose outcome depends on the order of `merge`
    children is not decided in the turn: one that shares its lane with a
    lane request in another branch of an enclosing `merge`, whose IDs
-   another branch cancels or requests the cancellation of, or that its lane
-   admits or rejects differently once another branch has requested the
-   cancellation of an ID carried by a request holding the lane (a `latest`
-   lane's running request or the request it is held for, or a serial lane's
-   pending request), wherever that work lies in its branch. The turn accepts
+   another branch cancels, or that its lane admits or rejects differently
+   once another branch has requested the cancellation of an ID carried by a
+   request holding the lane (a `latest` lane's running request or the
+   request it is held for, or a serial lane's pending request), wherever
+   that work lies in its branch. A request that cancels in flight
+   (`cancelInFlight: true`, a debounce, a `latest` lane request) covers only
+   sequences issued before its own, so it counts only against the requests
+   holding a lane; a throttle requests no cancellation. The turn accepts
    no `latest` replacement for it
    and nothing behind it in its branch; its admission decides it. Work whose
    context another branch's `.cancel` covers is treated the same way, even

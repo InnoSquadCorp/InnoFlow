@@ -75,18 +75,21 @@ extension ReductionTurnCancellationAcceptor {
   /// scan of its branch stops there and the interpreter decides it. That
   /// covers work whose context another branch can cancel (`.cancel` of one
   /// of its IDs), and a lane request that shares its lane with a lane request
-  /// in another branch, whose IDs another branch requests any cancellation
-  /// of, or whose lane answers differently once another branch has cancelled
-  /// a request that holds it: the request that owns a `latest` lane (its
+  /// in another branch, whose IDs another branch cancels, or whose lane
+  /// answers differently once another branch has requested the cancellation
+  /// of a request that holds it: the request that owns a `latest` lane (its
   /// running request, or the request a held lane waits for), without which a
   /// request with another policy meets no lane, or a pending request of a
   /// full serial lane, without which a serial request is queued. A request
   /// the lane admits or rejects either way is decided. A cancellation request
   /// is a `.cancel`, `cancelInFlight: true`, a debounce or a `latest` lane
-  /// request; a throttle decides only its own window and requests none.
-  /// Another branch's work counts wherever it is in that branch, also behind
-  /// asynchronous work. Everything the pass does decide therefore holds in
-  /// every order the interpreter may pick.
+  /// request; a throttle decides only its own window and requests none. All
+  /// but `.cancel` cancel in flight: they cover only sequences issued before
+  /// their own, so under a lane request's own IDs they change nothing, while
+  /// they can release a request that holds its lane. Another branch's work
+  /// counts wherever it is in that branch, also behind asynchronous work.
+  /// Everything the pass does decide therefore holds in every order the
+  /// interpreter may pick.
   package func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
@@ -422,14 +425,14 @@ private struct MergeSiblings {
   }
 
   /// Whether another branch can decide a lane request first or last: it
-  /// requests the same lane, or requests any cancellation of one of the
-  /// request's IDs. A throttle under one of them changes nothing.
+  /// requests the same lane, or cancels one of the request's IDs. A request
+  /// that cancels in flight (`cancelInFlight: true`, a debounce, a `latest`
+  /// lane request) covers only sequences issued before its own, and a
+  /// throttle decides only its own window, so neither changes the request.
   func mayReorder(laneRequest lane: AnyEffectID, cancellationIDs: [AnyEffectID]) -> Bool {
     levels.contains { level in
       level.branches.otherBranch(than: level.branch, requestsLane: lane)
-        || cancellationIDs.contains {
-          level.branches.otherBranch(than: level.branch, releasesWorkUnder: $0)
-        }
+        || cancellationIDs.contains { level.branches.otherBranch(than: level.branch, cancels: $0) }
     }
   }
 

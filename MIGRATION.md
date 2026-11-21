@@ -100,11 +100,11 @@ the interpreter reached it. In 6.0.x such a request was admitted against the
 lane it met at that later point.
 
 Two lane requests for one ID in different branches of one `merge`, a lane
-request whose IDs another branch cancels or requests the cancellation of, and
-a lane request that its lane admits or rejects differently once another
-branch has requested the cancellation of an ID carried by a request holding
-the lane (a `latest` lane's running or accepted request, a serial lane's
-pending request) are decided by admission, in
+request whose IDs another branch cancels, and a lane request that its lane
+admits or rejects differently once another branch has requested the
+cancellation of an ID carried by a request holding the lane (a `latest`
+lane's running or accepted request, a serial lane's pending request) are
+decided by admission, in
 whatever order the interpreter reaches them; a `latest` request among them
 releases its predecessors when it is admitted, not in the reduction turn.
 Use `concatenate` when the order matters.
