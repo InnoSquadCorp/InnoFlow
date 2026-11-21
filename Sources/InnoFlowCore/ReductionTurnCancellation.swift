@@ -87,12 +87,13 @@ extension ReductionTurnCancellationAcceptor {
   /// but `.cancel` cancel in flight: their ID cancellation covers only
   /// sequences issued before their own, so under a lane request's own IDs
   /// they cannot cancel the request, while they can release a request that
-  /// holds its lane. A debounce still replaces a pending debounce of its own
-  /// sequence, but the pass never decides work inside a debounce, and a
-  /// `latest` request displaces its own lane's requests, which the
-  /// shared-lane rule covers. Another branch's work counts wherever it is in
-  /// that branch, also behind asynchronous work. Everything the pass does
-  /// decide therefore holds in every order the interpreter may pick.
+  /// holds its lane. Within one sequence a debounce still replaces a pending
+  /// debounce under its ID and a `latest` request displaces its own lane's
+  /// requests, but the pass decides no work inside a debounce and no request
+  /// whose lane another branch requests. Another branch's work counts
+  /// wherever it is in that branch, also behind asynchronous work.
+  /// Everything the pass does decide therefore holds in every order the
+  /// interpreter may pick.
   package func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
@@ -432,8 +433,9 @@ private struct MergeSiblings {
   /// cancellation of a request that cancels in flight (`cancelInFlight:
   /// true`, a debounce, a `latest` lane request) covers only sequences issued
   /// before its own, and a throttle decides only its own window, so neither
-  /// cancels the request. The `.cancel` check restates the one in
-  /// `proceeds`, which the pass runs first.
+  /// cancels the request. The `.cancel` check restates `proceeds`: the pass
+  /// has checked the enclosing IDs with `proceeds(context)` already, and
+  /// checks the lane ID with `proceeds(scheduledContext)` in the same guard.
   func mayReorder(laneRequest lane: AnyEffectID, cancellationIDs: [AnyEffectID]) -> Bool {
     levels.contains { level in
       level.branches.otherBranch(than: level.branch, requestsLane: lane)

@@ -271,15 +271,16 @@ expose the same tiered read contract:
   replacement for such a request
   and nothing behind it in its branch, and its admission decides it; work
   whose context another branch's `.cancel` covers is treated the same way,
-  even when the work's own path cancelled that identifier first. A request
-  that cancels in flight (`cancelInFlight: true`, a debounce, a `latest` lane
-  request) cancels work under its identifier only in sequences issued before
-  its own, so in another branch it counts against the requests holding a
-  lane, not against a lane request's own identifiers. Within one sequence a
-  debounce still replaces a pending debounce under its identifier, but the
-  turn decides no work inside a debounce, and a `latest` request displaces
-  its own lane's requests, which the shared-lane rule covers; a throttle
-  requests no cancellation.
+  even when the work's own path cancelled that identifier first. The
+  identifier cancellation of a request that cancels in flight
+  (`cancelInFlight: true`, a debounce, a `latest` lane request) covers only
+  sequences issued before its own, so in another branch such a request counts
+  against the requests holding a lane, not against a lane request's own
+  identifiers. Within one sequence a debounce still replaces a pending
+  debounce under its identifier and a `latest` request displaces its own
+  lane's requests, but the turn decides no work inside a debounce and no
+  request whose lane another branch requests; a throttle requests no
+  cancellation.
   A `latest` request merged only with work that touches neither its lane nor
   its identifiers, such as `.merge(.send(.loading), latestRun)`, is still
   accepted in the turn. A `latest` request accepted in a reduction turn

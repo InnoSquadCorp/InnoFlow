@@ -1668,6 +1668,8 @@ struct ReducerCancellationAcceptanceTests {
       accepted.insert(.inFlight(owner))
     }
     #expect(Set(recorder.accepted) == accepted)
+    // Each acceptance is recorded once.
+    #expect(recorder.accepted.count == accepted.count)
     #expect(recorder.replacedLanes == (sibling == .latestLane ? [owner] : []))
   }
 

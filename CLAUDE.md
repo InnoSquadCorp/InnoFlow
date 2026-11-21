@@ -138,15 +138,15 @@ These rules are source-of-truth and are enforced by macro diagnostics, tests, an
    decides it. Work whose
    context another branch's `.cancel` covers is treated the same way, even
    when the work's own path cancelled that ID first, so a cancellation behind
-   it is accepted when the interpreter reaches it. A request that cancels in
-   flight (`cancelInFlight: true`, a debounce, a `latest` lane request)
-   cancels work under its ID only in sequences issued before its own, so in
-   another branch it counts against the requests holding a lane, not
-   against a lane request's own IDs. Within one sequence a debounce still
-   replaces a pending debounce under its ID, but the turn decides no work
-   inside a debounce, and a `latest` request displaces its own lane's
-   requests, which the shared-lane rule covers; a throttle requests no
-   cancellation. A
+   it is accepted when the interpreter reaches it. The ID cancellation of a
+   request that cancels in flight (`cancelInFlight: true`, a debounce, a
+   `latest` lane request) covers only sequences issued before its own, so in
+   another branch such a request counts against the requests holding a
+   lane, not against a lane request's own IDs. Within one sequence a
+   debounce still replaces a pending debounce under its ID and a `latest`
+   request displaces its own lane's requests, but the turn decides no work
+   inside a debounce and no request whose lane another branch requests; a
+   throttle requests no cancellation. A
    `latest` request merged only with work that touches neither its lane nor
    its IDs, such as `.merge(.send(.loading), latestRun)`, is still accepted
    in the turn. A `latest` request accepted in a reduction turn holds its
