@@ -184,8 +184,9 @@ reduced, and a buffered output as one it has already published:
 - The tasks in which a `concatenate` or a `merge` walks its children now
   deliver where a `Store` runs them at the earliest, instead of at their
   delivery: a `concatenate`'s children in the job a `Store` queues while the
-  walk that starts it runs, and each child of a `merge` three jobs later, in
-  declaration order, where a `Store`'s `merge` children race each other.
+  walk that starts it runs, and each child of a `merge` two jobs later, in
+  declaration order: the earliest point, where an optimized `Store` walks it
+  (a debug build a job later) and the children race each other.
   What such a task delivers before it awaits other work therefore comes
   before the jobs a `Store` runs after it, also when the test receives late:
   the leading sends of a `concatenate` come before a run emission whose job

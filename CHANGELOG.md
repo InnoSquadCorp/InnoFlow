@@ -166,8 +166,9 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   whose send comes right after the walk started. The tasks in which a
   `Store` walks the children of a `concatenate` or `merge` are followed
   too: a `concatenate`'s children are keyed where its task runs, the next
-  level after the walk that starts it, and a `merge`'s children three
-  levels deeper, in declaration order, where a `Store`'s children race.
+  level after the walk that starts it, and a `merge`'s children two levels
+  deeper, in declaration order: the earliest point, where an optimized
+  `Store` walks them (a debug build a job later) and the children race.
   Until such a task awaits other work, what it delivers comes before the
   jobs a `Store` runs after it — the leading sends of a `concatenate`, and
   a run emission's composite follow-up ahead of a later `merge` step of the

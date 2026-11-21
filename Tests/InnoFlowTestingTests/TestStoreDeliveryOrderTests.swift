@@ -1869,8 +1869,8 @@ private enum CompositeShape: String, CaseIterable, Sendable, CustomTestStringCon
     case .followUpChainAndComposite:
       ["p", "z1", "a", "b", "z2", "a2", "z3", "a3", "c1", "c2", "z4"]
     case .followUpCancelsChain: ["p", "z1", "a", "b"]
-    case .merge: ["p", "z1", "z2", "z3", "a", "b", "z4"]
-    case .mergeWithComposite: ["p", "z1", "z2", "z3", "c", "z4", "a", "b"]
+    case .merge: ["p", "z1", "z2", "a", "b", "z3", "z4"]
+    case .mergeWithComposite: ["p", "z1", "z2", "c", "z3", "a", "b", "z4"]
     case .throttledConcatenate: ["p", "z1", "z2", "a", "b", "z3", "z4"]
     case .concatenateWithThrottle: ["p", "z1", "a", "z2", "a2", "b", "c", "z3", "z4"]
     case .concatenateCancelsAfterClockRead: ["p", "z1", "a", "z2"]
@@ -1891,8 +1891,7 @@ private enum CompositeShape: String, CaseIterable, Sendable, CustomTestStringCon
   /// can come after later jobs.
   var storePrefix: Int {
     switch self {
-    case .merge, .mergeWithComposite: 4
-    case .throttledConcatenate: 3
+    case .merge, .mergeWithComposite, .throttledConcatenate: 3
     case .concatenateWithThrottle: 5
     default: log.count
     }
@@ -1901,11 +1900,12 @@ private enum CompositeShape: String, CaseIterable, Sendable, CustomTestStringCon
   /// The other orders a `Store` keeps in every run: it hands a `merge`'s
   /// children, and a walk that read the clock, back to the MainActor from
   /// another executor, behind the jobs queued by then, at the earliest
-  /// where the test store places them.
+  /// where the test store places them. A debug build walks a `merge`'s
+  /// child a job later than an optimized one.
   var storeOrders: [(earlier: String, later: String)] {
     switch self {
-    case .merge: [("z3", "a"), ("z3", "b")]
-    case .mergeWithComposite: [("z3", "c"), ("z4", "a"), ("a", "b")]
+    case .merge: [("z2", "a"), ("z2", "b")]
+    case .mergeWithComposite: [("z2", "c"), ("z3", "a"), ("a", "b")]
     case .throttledConcatenate: [("z2", "a"), ("a", "b")]
     case .concatenateWithThrottle: [("a2", "b"), ("b", "c")]
     default: []
@@ -2136,15 +2136,16 @@ private struct DeepFeature: Reducer {
   }
 }
 
-/// `p` runs a `concatenate` that awaits a run emitting `a`, then `merge`s
-/// `m1` and `m2`; `a` returns `.concatenate(.send(.f1), .send(.f2))`.
+/// `p` runs a `concatenate` that awaits a run emitting `a`, then a `merge`
+/// step that sends `m` (its second child, an empty run, keeps it a `merge`);
+/// `a` returns `.concatenate(.send(.f1), .send(.f2))`.
 private struct RunEmissionFollowUpFeature: Reducer {
   struct State: Equatable, Sendable {
     var log: [String] = []
   }
 
   enum Action: String, Equatable, Sendable {
-    case p, a, f1, f2, m1, m2
+    case p, a, f1, f2, m
 
     init(_ entry: String) { self = Self(rawValue: entry)! }
   }
@@ -2153,7 +2154,7 @@ private struct RunEmissionFollowUpFeature: Reducer {
     state.log.append(action.rawValue)
     switch action {
     case .p:
-      return .concatenate(.run { send in await send(.a) }, .merge(.send(.m1), .send(.m2)))
+      return .concatenate(.run { send in await send(.a) }, .merge(.send(.m), .run { _ in }))
     case .a:
       return .concatenate(.send(.f1), .send(.f2))
     default:
@@ -3633,8 +3634,8 @@ struct TestStoreDeliveryOrderTests {
     shape: CompositeShape, late: Bool
   ) async {
     // A `Store` walks a `concatenate`'s children in a MainActor task it
-    // creates while the walk that starts it runs, and a `merge`'s child in a
-    // task that reaches the MainActor two hops later; everything such a task
+    // creates while the walk that starts it runs, and a `merge`'s child once
+    // a task group has handed it to the MainActor; everything such a task
     // delivers before it awaits other work, and the interpreter tasks of
     // that, comes before the jobs queued after the task.
     let feature = CompositeFeature(shape: shape)
@@ -3715,7 +3716,7 @@ struct TestStoreDeliveryOrderTests {
     // emission, and that task creates the follow-up's task, before the run
     // has returned and the `merge` step's children have reached the
     // MainActor.
-    let expected = ["p", "a", "f1", "f2", "m1", "m2"]
+    let expected = ["p", "a", "f1", "f2", "m"]
     let reference = Store(reducer: RunEmissionFollowUpFeature(), initialState: .init())
     reference.send(.p)
     #expect(

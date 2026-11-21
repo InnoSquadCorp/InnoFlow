@@ -73,9 +73,10 @@ package import InnoFlowCore
 //   for each suspension.
 // - A `Store` walks the children of an unawaited `concatenate` in a MainActor
 //   task it creates while the walk that starts it runs, and each child of an
-//   unawaited `merge` in a task that reaches the MainActor two hops later,
-//   three levels deeper; the children of a `merge` race each other there,
-//   and the test store starts them in declaration order. The test store
+//   unawaited `merge` once a task group has handed it to the MainActor, two
+//   levels deeper at the earliest — an optimized build walks it there, a
+//   debug build a job later; the children of a `merge` race each other, and
+//   the test store starts them in declaration order. The test store
 //   follows such a task's walk until it returns or awaits other work, as
 //   above, and takes nothing from a buffer until every one it follows has.
 //   What work delivers that a walk started and awaits or leaves to run in
@@ -673,12 +674,14 @@ package final class TestStoreFollowedWalk {
   /// Follows the walks of the `count` children of an unawaited `merge` that
   /// the walk delivering a value of `context` into `store` starts now. A
   /// `Store` creates one MainActor task there, in which a task group hands
-  /// every child to the MainActor from another executor twice: to check that
-  /// the effect can proceed, then to walk the child. A child's walk therefore
-  /// starts three MainActor jobs behind the creating one at the earliest,
-  /// each queued while the one before it runs, and the children race each
-  /// other; the test store starts them there, in declaration order. `nil`
-  /// for every child when no followed walk is starting them.
+  /// every child to the MainActor from another executor to check that the
+  /// effect can proceed, then walks the child: an optimized build walks it
+  /// in that job, two MainActor jobs behind the creating one, each queued
+  /// while the one before it runs; a debug build hands the child back to
+  /// another executor in between and walks it a job later. The children race
+  /// each other; the test store starts them two jobs behind, the earliest
+  /// point, in declaration order. `nil` for every child when no followed walk
+  /// is starting them.
   static func ofConcurrentChildren(
     _ count: Int, in store: AnyObject, context: EffectExecutionContext?
   ) -> [TestStoreFollowedWalk?] {
@@ -688,7 +691,7 @@ package final class TestStoreFollowedWalk {
     let order = TestStoreStartOrder()
     return (0..<count).map { index in
       TestStoreFollowedWalk(
-        at: place.anchor.advanced(by: 3),
+        at: place.anchor.advanced(by: 2),
         rank: place.rank.appending(UInt64(index)).appending(TestStoreRank.last),
         creator: creator, turn: (order, index))
     }
