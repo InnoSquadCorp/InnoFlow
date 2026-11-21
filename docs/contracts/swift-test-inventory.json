@@ -103,6 +103,7 @@
     "Tests/InnoFlowTestingTests/TestStoreInvariantTests.swift": "4bddc01f51664ae447d232ccc3553988f184a9b5deef8f904668e1b33d772702",
     "Tests/InnoFlowTestingTests/TestStoreOutputMatchingTests.swift": "a3ed81f58ae9fcf9cbd839b9cbe218f28478d3f8331689f0c36025a6070dc560",
     "Tests/InnoFlowTestingTests/TestStoreOwnerFrameworkReportingTests.swift": "5bb16c055a57e8765b88098ddc8552aadccb855d695ae8249e463ca4c44ad47e",
+    "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift": "d2cf97d67c2ffb93a6e8d7fdadfbe5c76631c9f58070159ffa9ea3ed026ad3b5",
     "Tests/InnoFlowTestingTests/TestStoreReceiveTests.swift": "f86b4b0a0769d9ec468813f91a06cc5432a6a5379fac5ad9035fb0699cc84eec",
     "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift": "d8fc7f9a8961beae99e64603b5e02cd73cddeeddf4ddea23edc2b9789c24d0e4",
     "Tests/InnoFlowTestingTests/TestStoreTerminalVerificationTests.swift": "4926a48338f468b90835c4dd47fa4afa0fea67cb70c349a8fd640ab215c0566e",
@@ -9110,6 +9111,132 @@
       "file": "Tests/InnoFlowTestingTests/TestStoreOwnerFrameworkReportingTests.swift",
       "identifier": "TestStoreOwnerFrameworkReportingTests/storeRecordsSwiftTestingOwner()",
       "line": 107,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"an exhaustive receive that gets another action checks no transition\",\n    arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "an exhaustive receive that gets another action checks no transition",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/exhaustiveReceiveOfAnotherActionChecksNoTransition(usesTimeout:)",
+      "line": 232,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"an exhaustive send behind an unreceived action reports that action only\")",
+      "conditionalContexts": [],
+      "displayName": "an exhaustive send behind an unreceived action reports that action only",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/exhaustiveSendBehindUnreceivedActionReportsItOnly()",
+      "line": 127,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"a map-owned phase passes a receive behind a skipped action\",\n    arguments: Lead.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "a map-owned phase passes a receive behind a skipped action",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/mappedReceiveBehindLeadingAction(lead:usesTimeout:)",
+      "line": 253,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"a map-owned phase passes a send behind a drained action\", arguments: Lead.allCases)",
+      "conditionalContexts": [],
+      "displayName": "a map-owned phase passes a send behind a drained action",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/mappedSendBehindLeadingAction(lead:)",
+      "line": 278,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"a phase failure follows the state assertion of the same reduction\")",
+      "conditionalContexts": [],
+      "displayName": "a phase failure follows the state assertion of the same reduction",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/phaseFailureFollowsStateAssertion()",
+      "line": 300,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"a phase failure is recorded at the helper's call site by the default reporter\")",
+      "conditionalContexts": [],
+      "displayName": "a phase failure is recorded at the helper's call site by the default reporter",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/phaseFailureUsesCallSite()",
+      "line": 324,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"receive checks the received action's transition, not the skipped action's with it\",\n    arguments: Lead.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "receive checks the received action's transition, not the skipped action's with it",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/receiveBehindLeadingActionAllowsEachAllowedStep(lead:usesTimeout:)",
+      "line": 146,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"receive reports a transition the graph does not allow behind a skipped action\",\n    arguments: Lead.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "receive reports a transition the graph does not allow behind a skipped action",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/receiveBehindLeadingActionReportsIllegalStep(lead:usesTimeout:)",
+      "line": 166,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"receive reports a transition back to the phase a skipped action left\",\n    arguments: Lead.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "receive reports a transition back to the phase a skipped action left",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/receiveBehindLeadingActionReportsIllegalStepBack(lead:usesTimeout:)",
+      "line": 189,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"receive does not check the transition of the action it skips\",\n    arguments: Lead.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "receive does not check the transition of the action it skips",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/receiveChecksNoTransitionOfLeadingAction(lead:usesTimeout:)",
+      "line": 212,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"send checks the sent action's transition, not the drained action's with it\",\n    arguments: Lead.allCases)",
+      "conditionalContexts": [],
+      "displayName": "send checks the sent action's transition, not the drained action's with it",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/sendBehindLeadingActionAllowsEachAllowedStep(lead:)",
+      "line": 47,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"send reports a transition the graph does not allow behind a drained action\",\n    arguments: Lead.allCases)",
+      "conditionalContexts": [],
+      "displayName": "send reports a transition the graph does not allow behind a drained action",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/sendBehindLeadingActionReportsIllegalStep(lead:)",
+      "line": 66,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\n    \"send reports a transition back to the phase a drained action left\",\n    arguments: Lead.allCases)",
+      "conditionalContexts": [],
+      "displayName": "send reports a transition back to the phase a drained action left",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/sendBehindLeadingActionReportsIllegalStepBack(lead:)",
+      "line": 88,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"send does not check the transition of the action it drains\", arguments: Lead.allCases)",
+      "conditionalContexts": [],
+      "displayName": "send does not check the transition of the action it drains",
+      "file": "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift",
+      "identifier": "TestStorePhaseTransitionTests/sendChecksNoTransitionOfLeadingAction(lead:)",
+      "line": 110,
       "target": "InnoFlowTestingTests"
     },
     {

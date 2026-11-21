@@ -275,6 +275,35 @@ A clock wait deadline (`waitTimeout:` or `timeout:`) and a `TestStore`
 `effectTimeout:` above one day are clamped to one day. In 6.0.x an extreme
 `TestStore` deadline such as `.seconds(Int64.max)` trapped at its first wait.
 
+### TestStore phase helpers
+
+`send` and `receive` with `tracking:through:`, or with `through:` a
+`PhaseMap`, keep their signatures. They now check the transition their action
+makes: from the phase right before that action is reduced to the phase right
+after. In 6.0.x they compared the phase before the call with the phase after
+it, which also spans the buffered actions a `send` reduces first and the
+actions a non-exhaustive `receive` skips.
+
+What to check:
+
+- A test that failed with `Illegal phase transition detected` for a
+  transition no single action makes — `From: idle`, `To: loaded` where one
+  action enters `loading` and the next enters `loaded` — now passes. A
+  workaround that received every action, or dropped `through:`, is no longer
+  needed.
+- A test on a non-exhaustive store can newly fail. Behind a drained or
+  skipped action, the helper's action is checked from the phase that action
+  entered, so a transition the graph does not allow is reported even when
+  the combined transition is allowed or ends in the phase the call began in.
+  Correct the reducer or the graph.
+- The helpers do not check the transitions of the actions a call reduces on
+  the way. In 6.0.x such a transition was part of the one the helper
+  checked, and a failure named the helper's own action. Receive such an
+  action through a helper to check its transition.
+- An exhaustive `receive` that gets another action reports the unexpected
+  action only. In 6.0.x it also reported that action's transition, under the
+  expected action's name, when the graph did not allow it.
+
 ## 6.0.2
 
 No runtime or public API migration from the existing 6.0.1 tag is required.
