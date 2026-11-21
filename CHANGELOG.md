@@ -120,9 +120,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   helper synthesized under the complementary condition.
 - A throttle window fires the newest trailing request that can still proceed.
   When the newest request is cancelled — through its dispatch or through an
-  ID only it carries — the window falls back to the request it replaced (the
-  window keeps the newest request and up to seven it replaced) instead of
-  firing nothing, and keeps its timer. A request an ID cancellation removed
+  ID only it carries — the window falls back to the newest request it
+  retains that can still proceed (the window keeps the newest request and up
+  to seven it replaced) instead of firing nothing, and keeps its timer. A
+  request an ID cancellation removed
   no longer holds its dispatch, which finishes once its own work is done; a
   request removed through its dispatch while an interpreter frame awaits it,
   and a leading opener another request superseded as owner, still wait for
@@ -265,13 +266,16 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   request it reaches against the lane state of that turn: a request the lane
   rejects completes without awaiting, so a cancellation after it is accepted
   in the turn as well, and the request is reported with that rejection even
-  if the lane changed before the interpreter reached it. A `latest` lane
-  displaced in the turn stays the open `latest` lane until its replacement
-  is admitted, so a request with another policy is rejected as conflicting
-  instead of taking the lane over. A lane request whose outcome depends on
-  the order of `merge` children — another branch requests the same lane, or
-  cancels or requests the cancellation of one of its IDs — is decided by its
-  admission, and the turn accepts nothing behind it in its branch; a
+  if the lane changed before the interpreter reached it. The lane of a
+  `latest` request accepted in the turn, one it displaced or one that was
+  closed, stays the open `latest` lane until the request is admitted, so a
+  request with another policy is rejected as conflicting instead of taking
+  the lane over. A lane request whose outcome depends on the order of
+  `merge` children — another branch requests the same lane, cancels one of
+  its IDs, or requests the cancellation of an ID carried by a request that
+  holds its lane, without which the lane admits or rejects it differently —
+  is decided by its admission, and the
+  turn accepts nothing behind it in its branch; a
   `latest` request merged only with unrelated work, such as
   `.merge(.send(.loading), latestRun)`, is still accepted in the turn.
   `TestStore` applies the same rules, so these cancellations remove the same
@@ -328,9 +332,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   it now succeeds and reports the absence through the selection.
 - Creating a key-path selection no longer records a read of the whole parent
   state, so a view that creates one in its body depends only on that
-  selection. A closure-based selection still records that read, as in 6.0.x:
-  nothing keeps it alive after the body returns, and the read is what
-  notifies such a view. Getting another holder's live closure-based
+  selection. A closure-based selection still records that read, as in 6.0.x
+  (one declared with `dependingOnAll:` and no dependency reads no state and
+  records none): nothing keeps it alive after the body returns, and the read
+  is what notifies such a view. Getting another holder's live closure-based
   selection from `select(…, id:)` records that read too; before, such a
   reader stopped updating once the holder released the selection.
 - Never access projection registry storage while an observer callback runs.

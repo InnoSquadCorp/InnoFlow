@@ -327,8 +327,10 @@ extension TestStore {
   private func cancelRemainingEffectsForFinish() {
     let sequence = markCancelledAll()
     cancelAllEffectsSynchronously(upTo: sequence)
-    queue.removeBuffered { _ in true }
-    outputQueue.removeBuffered { _ in true }
+    // Every pending value goes: the buffered ones, and one a waiting
+    // `receive` was handed but has not resumed to reduce.
+    queue.withdraw { _, _ in true }
+    outputQueue.withdraw { _, _ in true }
   }
 
   package func noteTestInteraction(

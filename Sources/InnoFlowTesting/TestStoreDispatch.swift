@@ -44,6 +44,8 @@ public struct TestStoreDispatch: Sendable {
   public var isFinished: Bool { flowTask.isFinished }
 
   /// Cancels only this dispatch. Already-reduced state is not rolled back.
+  /// A dispatch that has finished ignores the call, as a `FlowTask` does: a
+  /// value it delivered stays buffered until the test receives it.
   public func cancel() { flowTask.cancel() }
 
   /// Verifies dispatch completion under one finite wall-clock deadline.

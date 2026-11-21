@@ -36,8 +36,8 @@
     "Tests/InnoFlowCoreTests/ProjectionObserverRegistryPerfTests.swift": "5d5b8d4d67266c0e06bd76eb86522ededa022e361a2887441bc36242a9b69faa",
     "Tests/InnoFlowCoreTests/ProjectionRegistrationBoundaryTests.swift": "af0de33dc011a489094e0ea59bfbb642fda8d0501a66840deb74d03e75841b73",
     "Tests/InnoFlowCoreTests/ProjectionReleaseScalingTests.swift": "f2824201b30660b6c985e6feee59b3a34a3084a689c524fd8f367fd53ffa6bd8",
-    "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift": "1464919dce2fce7bf702956b66adc28cf4f89c41fec25545463c8f4a350b16c7",
-    "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "bd16d033a5e2f61b3a6bc861d0b2efdb26087963067b7a0afaafe63ee8b4c20d",
+    "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift": "8be09c09c0a3d232607c1503a481759fad52533f8830ee09803bd9d25638d47b",
+    "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "5242a0b1f807d1b1f55db03298d7ea155979979e8977b6a15fbe87e041d22b21",
     "Tests/InnoFlowCoreTests/ReducerCompositionPerfTests.swift": "24efa0ec44f6b760bd382fe71d4df54107d2294271431107f85e2ea25d2e1abb",
     "Tests/InnoFlowCoreTests/RunLaneSnapshotConsistencyTests.swift": "e66c242be821db94376435d588b1ed891be1d3b0693d70b8e4fa3bf165cc708b",
     "Tests/InnoFlowCoreTests/SnapshotBoundaryConsistencyTests.swift": "aee8ab7d6bf54ec3e837c43c21f32efe53e6e447de395c067540388ea5145b12",
@@ -75,7 +75,7 @@
     "Tests/InnoFlowTestingTests/DispatchDiagnosticsTests.swift": "b30a71d786ac7f378ad7ce44ced799a73c272146b14e43b6b84383a6a93653e4",
     "Tests/InnoFlowTestingTests/DispatchIdentityConsistencyTests.swift": "ff533b58a3ad604db8fbe339737e82127f57d44c495626140d5634d62c3cd145",
     "Tests/InnoFlowTestingTests/EffectIsolationConsistencyTests.swift": "cc18e57a223d1de5081d7ae172d744229755874fe086674b19e59839f679cbc7",
-    "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift": "b5b15d528ab8d44e794bd3db48c2bccb853ce6cbc87a7bf47b950a25327714cf",
+    "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift": "9e42da76eb7e630b5449d1de5cdd4e61979d1ffdb9c1c34f5f80d06788f372fe",
     "Tests/InnoFlowTestingTests/EffectTaskPerformTests.swift": "35349c14488a07636161b787a9ca88ba5311e7f845e625c2fc8dda8158d268ec",
     "Tests/InnoFlowTestingTests/EffectTaskRunSequenceErrorTests.swift": "7fad0bc3713454e530f1748336dcac1cc09ad49dbeb55bd5dd0aab8455027384",
     "Tests/InnoFlowTestingTests/ExplorerFirstDiagnosticConsistencyTests.swift": "8fe30098a8408275c5a8d9f5d1dd0e3736d97494cf4be4f88996600b62c71acb",
@@ -91,20 +91,20 @@
     "Tests/InnoFlowTestingTests/PhaseTransitionGraphTests.swift": "771d1b95488c161cc15482bd829f23d774f7749b97690a55f71dec218974a1a1",
     "Tests/InnoFlowTestingTests/ReducerCompositionTests.swift": "aaae9837506b648886b77f2e784c7baed62133fff744429e9a13e0e988c9ed46",
     "Tests/InnoFlowTestingTests/ReducerOnChangeTests.swift": "c1efde2f065a25b168b0e3b397d64fd61d689edb50fa4026f70b158e5b8d766b",
-    "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift": "281949d88e08e47549472fd8d361300ec3dc77162d068c149180120df4f7b4c5",
+    "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift": "a777f38bc57eec73e0b89a2816745e7d7f2cbc8e5cd4581b39f8c39417e3d1ef",
     "Tests/InnoFlowTestingTests/SchedulerAdmissionConsistencyTests.swift": "c177c165c31258dadc47666a53cc7c57615830df87c413a1fb5dae47e64a36c3",
     "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift": "df0a0ddca65ba7a62246f819161463b17c90e5d9263bc75d47f7cd730ada3634",
     "Tests/InnoFlowTestingTests/TestEffectLedgerConsistencyTests.swift": "c27296d445409c72e821e96a10a949a8680f814d216d68eeb3423242f0198e39",
     "Tests/InnoFlowTestingTests/TestStoreDefaultsTests.swift": "7656e44ec0d6f3505ef0132ee50c121b032fc15b3251a1f3d5f70096d1bf1c23",
-    "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift": "b8fad21884646d5f8128d7bf36f8b802c586b8da9d813f858ef7ace0370f6e80",
+    "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift": "7c14f65988ea8738a5351e6d87d2c6b1f1f4f57d161dc05e5fc359bceee84986",
     "Tests/InnoFlowTestingTests/TestStoreDispatchConsistencyTests.swift": "8c37763f1487dc2c86a0454ee0676aada314541a79b9b5eef5a04b8ae15e6a64",
     "Tests/InnoFlowTestingTests/TestStoreEffectAlgebraTests.swift": "e3261cad028774016850e2a9d9e7f3695bee28751ed8bc160db17e9a262223bd",
     "Tests/InnoFlowTestingTests/TestStoreExhaustivityTests.swift": "1dec66ef4dcb36c5abe724dcf5db7821bac07154d3f1ad829a2fd4dddd1b2d3e",
     "Tests/InnoFlowTestingTests/TestStoreInvariantTests.swift": "4bddc01f51664ae447d232ccc3553988f184a9b5deef8f904668e1b33d772702",
     "Tests/InnoFlowTestingTests/TestStoreOutputMatchingTests.swift": "a3ed81f58ae9fcf9cbd839b9cbe218f28478d3f8331689f0c36025a6070dc560",
     "Tests/InnoFlowTestingTests/TestStoreOwnerFrameworkReportingTests.swift": "5bb16c055a57e8765b88098ddc8552aadccb855d695ae8249e463ca4c44ad47e",
-    "Tests/InnoFlowTestingTests/TestStoreReceiveTests.swift": "d4378a01c542df9e5e013a7f42d9d2371874ade4eb3075f05ca2bc106a50249d",
-    "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift": "a2535dda4fa66ac7429cb0442dff9af372222753e2ab2bc85cf6f6982fc07b0e",
+    "Tests/InnoFlowTestingTests/TestStoreReceiveTests.swift": "f86b4b0a0769d9ec468813f91a06cc5432a6a5379fac5ad9035fb0699cc84eec",
+    "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift": "7d17a8a8e27c4daa09dffc6a54bb68d74be978882bc6605323ff652c178d35c4",
     "Tests/InnoFlowTestingTests/TestStoreTerminalVerificationTests.swift": "4926a48338f468b90835c4dd47fa4afa0fea67cb70c349a8fd640ab215c0566e",
     "Tests/InnoFlowTestingTests/TestWaitScaleTests.swift": "3eef94677a232f49a8aac699703ffc3fb41b542a314a49810448b263111f0606",
     "Tests/InnoFlowTestingTests/TestingLocationConsistencyTests.swift": "c1e567af5968687209c6cab1157fe9d7ca114a87935945244cd134a1e2866fee",
@@ -1327,7 +1327,7 @@
       "displayName": "Dynamic key-path selections read for liveness and value stop being evaluated",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/dynamicKeyPathSelectionsReadForLivenessAreReleased()",
-      "line": 233,
+      "line": 232,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1336,7 +1336,7 @@
       "displayName": "A selection read for its liveness and its value is released after two unread changes",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/livenessAndValueReadFollowsTheValueRule()",
-      "line": 186,
+      "line": 185,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1345,7 +1345,7 @@
       "displayName": "A liveness read retains nothing and is notified when the store is released",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/livenessReadIsNotifiedByTheReleasedStore()",
-      "line": 255,
+      "line": 254,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1354,16 +1354,16 @@
       "displayName": "A liveness reader of a held selection is notified once when the store is released",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/livenessReaderOfAHeldSelectionIsNotifiedOnce()",
-      "line": 294,
+      "line": 293,
       "target": "InnoFlowCoreTests"
     },
     {
-      "attribute": "@Test(\"Control: a reader whose id: selection is still held is notified through it\")",
+      "attribute": "@Test(\"Control: a reader of an id: selection it holds is notified through the selection alone\")",
       "conditionalContexts": [],
-      "displayName": "Control: a reader whose id: selection is still held is notified through it",
+      "displayName": "Control: a reader of an id: selection it holds is notified through the selection alone",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/readerOfAHeldSharedSelectionIsNotified()",
-      "line": 405,
+      "line": 404,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1372,7 +1372,7 @@
       "displayName": "A reader of another holder's id: row selection is notified after the holder lets go",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/readerOfASharedRowSelectionIsNotifiedByTheRow(kind:)",
-      "line": 347,
+      "line": 346,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1381,7 +1381,7 @@
       "displayName": "A reader of another holder's id: selection is notified after the holder lets go",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/readerOfASharedSelectionIsNotifiedByTheStore(kind:)",
-      "line": 327,
+      "line": 326,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1390,7 +1390,7 @@
       "displayName": "A liveness reader of a removed row is not notified again when the store is released",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/removedRowLivenessReaderIsNotNotifiedByTheStoreRelease()",
-      "line": 310,
+      "line": 309,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1399,7 +1399,7 @@
       "displayName": "A liveness read of a row selection retains nothing and is notified when the row goes",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/rowLivenessReadIsNotifiedByTheRemovedRow()",
-      "line": 273,
+      "line": 272,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1408,7 +1408,7 @@
       "displayName": "A scoped selection read for its liveness and its value is released after two changes",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/scopedLivenessAndValueReadFollowsTheValueRule()",
-      "line": 210,
+      "line": 209,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1417,7 +1417,7 @@
       "displayName": "A reducer gets another holder's id: selection while its own store reduces",
       "file": "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift",
       "identifier": "ProjectionRetentionTests/sharedSelectionObtainedWhileTheStoreReduces(kind:onRow:)",
-      "line": 369,
+      "line": 368,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1426,7 +1426,7 @@
       "displayName": "A cancel that follows a sibling its own effect cancelled is still accepted in the turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelAfterSkippedSiblingDropsQueuedEmission()",
-      "line": 840,
+      "line": 959,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1435,7 +1435,7 @@
       "displayName": "A cancel behind a lane request the lane does not admit is accepted in the reduction turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelBehindRejectedLaneRequest(trigger:)",
-      "line": 1305,
+      "line": 1424,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1444,7 +1444,7 @@
       "displayName": "cancelInFlight replacement drops the predecessor's queued emission",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelInFlightReplacementDropsPredecessorEmission()",
-      "line": 1102,
+      "line": 1221,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1453,7 +1453,7 @@
       "displayName": "A cancel does not pre-empt an earlier concatenated sibling of the effect that returned it",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/cancelKeepsEarlierSiblingOfItsOwnEffect(action:)",
-      "line": 824,
+      "line": 943,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1462,7 +1462,7 @@
       "displayName": "A newer debounce request supersedes a predecessor whose timer already expired",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/debounceReplacementSupersedesExpiredPredecessorTimer()",
-      "line": 1120,
+      "line": 1239,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1471,7 +1471,25 @@
       "displayName": "A dispatch replaced before its effect was interpreted records the cancellation",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/dispatchReplacedInTheSameTurnRecordsCancellation()",
-      "line": 1029,
+      "line": 1148,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A lane held for a latest request whose dispatch is cancelled is closed\")",
+      "conditionalContexts": [],
+      "displayName": "A lane held for a latest request whose dispatch is cancelled is closed",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/laneHeldForCancelledLatestRequestIsClosed()",
+      "line": 1895,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"A lane held for a latest request keeps nothing of the request alive\")",
+      "conditionalContexts": [],
+      "displayName": "A lane held for a latest request keeps nothing of the request alive",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/laneHeldForCancelledLatestRequestRetainsNothing()",
+      "line": 1921,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1480,7 +1498,25 @@
       "displayName": "A lane whose replacement was cancelled before admission reopens as a new lane",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneReopenedAfterCancelledReplacementIsNew()",
-      "line": 975,
+      "line": 1094,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A lane request meets the same lane whichever merge branch cancels the request it is held for\",\n    arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "A lane request meets the same lane whichever merge branch cancels the request it is held for",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/laneRequestIgnoresBranchOrderOfHeldRequestCancel(ownerFirst:)",
+      "line": 1997,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A lane request meets the same lane whichever merge branch cancels a request holding it\",\n    arguments: [false, true], [false, true])",
+      "conditionalContexts": [],
+      "displayName": "A lane request meets the same lane whichever merge branch cancels a request holding it",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/laneRequestIgnoresBranchOrderOfHolderCancel(latestLane:ownerFirst:)",
+      "line": 2037,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1489,7 +1525,7 @@
       "displayName": "A lane request the reduction turn passes keeps the admission of that turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneRequestKeepsTheAdmissionOfItsTurn()",
-      "line": 1344,
+      "line": 1463,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1498,7 +1534,7 @@
       "displayName": "A latest lane request drops the emission of the run it replaces",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestLaneReplacementDropsPredecessorEmission()",
-      "line": 854,
+      "line": 973,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1507,7 +1543,7 @@
       "displayName": "A latest replacement cancelled before interpretation still releases its predecessor",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestReplacementCancelledBeforeInterpretationReleasesPredecessor()",
-      "line": 894,
+      "line": 1013,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1516,7 +1552,34 @@
       "displayName": "A latest replacement accepted in its reduction turn keeps the lane's identity",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestReplacementKeepsLaneIdentity()",
-      "line": 924,
+      "line": 1043,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A latest request accepted for a closed lane holds the lane until it is admitted\",\n    arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "A latest request accepted for a closed lane holds the lane until it is admitted",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/latestRequestAcceptedForClosedLaneHoldsItsLane(concatenated:)",
+      "line": 1858,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A latest request is accepted in its turn whichever merge branch cancels its lane's owner\",\n    arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "A latest request is accepted in its turn whichever merge branch cancels its lane's owner",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/latestRequestAcceptedWhicheverBranchCancelsItsLaneOwner(ownerFirst:)",
+      "line": 1936,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"A latest request holds its lane when another branch's request under its ID cannot cancel it\",\n    arguments: MergeOrderFeature.OwnIDSibling.allCases)",
+      "conditionalContexts": [],
+      "displayName": "A latest request holds its lane when another branch's request under its ID cannot cancel it",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/latestRequestHoldsItsLaneWhenAnotherBranchCannotCancelIt(sibling:)",
+      "line": 1968,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1525,7 +1588,7 @@
       "displayName": "A latest request merged with a send is still accepted in its reduction turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestRequestMergedWithSendIsAcceptedInTheTurn()",
-      "line": 1546,
+      "line": 1832,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1534,7 +1597,7 @@
       "displayName": "A cancel leading a concatenation is accepted before its later siblings are delivered",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/leadingCancelInConcatenationDropsQueuedEmission()",
-      "line": 1088,
+      "line": 1207,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1543,7 +1606,7 @@
       "displayName": "A lane request another merge branch can reorder is decided by its admission alone",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/orderDependentLaneRequestIsDecidedByAdmission(shape:)",
-      "line": 1481,
+      "line": 1767,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1552,7 +1615,7 @@
       "displayName": "Control: an own cancel after its own work completed records nothing",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/ownCancelAfterCompletedWorkRecordsNothing()",
-      "line": 1290,
+      "line": 1409,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1561,7 +1624,7 @@
       "displayName": "A dispatch whose own cancel releases its own work records the cancellation",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/ownCancelOfOwnWorkRecordsCancellation()",
-      "line": 1003,
+      "line": 1122,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1570,7 +1633,7 @@
       "displayName": "An own cancel records the cancellation whether or not its work registered first",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/ownCancelRecordsCancellationInEitherOrder(cancelFirst:)",
-      "line": 1234,
+      "line": 1353,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1579,7 +1642,7 @@
       "displayName": "A partly interpreted dispatch records the cancellation of work it had not reached",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/partlyInterpretedDispatchRecordsSkippedWork(cancelledBy:)",
-      "line": 1264,
+      "line": 1383,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1588,7 +1651,7 @@
       "displayName": "The reduction turn still decides a latest request merged with work on no lane",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsLatestRequestMergedWithSend()",
-      "line": 1425,
+      "line": 1711,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1597,7 +1660,7 @@
       "displayName": "The reduction turn accepts no latest request another merge branch can reject",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsNoOrderDependentLatestRequest(shape:)",
-      "line": 1409,
+      "line": 1695,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1606,7 +1669,7 @@
       "displayName": "The reduction turn accepts nothing that another merge branch's cancel may skip",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsNothingASiblingCancelMaySkip(cancelFirst:)",
-      "line": 1455,
+      "line": 1741,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1615,7 +1678,43 @@
       "displayName": "The reduction turn decides no lane request another merge branch can reorder",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesNoOrderDependentLaneRequest(laneIsBusy:)",
-      "line": 1383,
+      "line": 1502,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"The reduction turn decides no lane request whose lane another merge branch can change\",\n    arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "The reduction turn decides no lane request whose lane another merge branch can change",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/passDecidesNoRequestWhoseLaneASiblingCanChange(ownerFirst:)",
+      "line": 1532,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"The reduction turn decides a lane request its lane answers alike without the cancelled holder\",\n    arguments: [false, true])",
+      "conditionalContexts": [],
+      "displayName": "The reduction turn decides a lane request its lane answers alike without the cancelled holder",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestItsLaneAnswersAlike(ownerFirst:)",
+      "line": 1569,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\"The reduction turn decides a lane request its own branch cancelled, whatever its lane\")",
+      "conditionalContexts": [],
+      "displayName": "The reduction turn decides a lane request its own branch cancelled, whatever its lane",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestItsOwnBranchCancelled()",
+      "line": 1676,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"The reduction turn decides a lane request whose own ID another branch cannot cancel\",\n    arguments: MergeOrderFeature.OwnIDSibling.allCases, [false, true])",
+      "conditionalContexts": [],
+      "displayName": "The reduction turn decides a lane request whose own ID another branch cannot cancel",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestWhoseOwnIDAnotherBranchCannotCancel(sibling:ownerFirst:)",
+      "line": 1642,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1624,7 +1723,16 @@
       "displayName": "The reduction turn still decides a request whose merge siblings touch other IDs",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestWhoseSiblingsTouchOtherIDs()",
-      "line": 1436,
+      "line": 1722,
+      "target": "InnoFlowCoreTests"
+    },
+    {
+      "attribute": "@Test(\n    \"The reduction turn defers a lane request whose holder another branch can release\",\n    arguments: MergeOrderFeature.Release.allCases)",
+      "conditionalContexts": [],
+      "displayName": "The reduction turn defers a lane request whose holder another branch can release",
+      "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
+      "identifier": "ReducerCancellationAcceptanceTests/passDefersRequestWhoseHolderAnotherBranchReleases(release:)",
+      "line": 1620,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1633,7 +1741,7 @@
       "displayName": "A reducer-returned cancel drops an emission already queued for MainActor",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/reducerReturnedCancelDropsQueuedEmission()",
-      "line": 1074,
+      "line": 1193,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1642,7 +1750,7 @@
       "displayName": "A reducer-returned cancel returns pending lane capacity before send returns",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/reducerReturnedCancelReleasesPendingLaneRequestsSynchronously(diagnosticsEnabled:)",
-      "line": 1152,
+      "line": 1271,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1651,7 +1759,7 @@
       "displayName": "A request a lane with another policy rejects leaves that lane's work running",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/requestRejectedByLaneWithAnotherPolicyLeavesItRunning(policy:)",
-      "line": 872,
+      "line": 991,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1660,7 +1768,7 @@
       "displayName": "Control: the store-level cancel API drops an emission already queued for MainActor",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/storeLevelCancelDropsQueuedEmission()",
-      "line": 1060,
+      "line": 1179,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1669,7 +1777,7 @@
       "displayName": "The store-level cancel API releases pending lane capacity before its first suspension",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/storeLevelCancelReleasesPendingLaneRequestsBeforeSuspending(diagnosticsEnabled:)",
-      "line": 1184,
+      "line": 1303,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1678,7 +1786,7 @@
       "displayName": "A replacement superseded before admission hands the lane's identity to the newer one",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/supersededReplacementHandsLaneIdentityOn()",
-      "line": 947,
+      "line": 1066,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1687,7 +1795,7 @@
       "displayName": "A throttle request cancelled during its clock read records the cancellation",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/throttleCancelledDuringClockReadRecordsCancellation(throughOwnerID:)",
-      "line": 1574,
+      "line": 2093,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1696,7 +1804,7 @@
       "displayName": "Control: a throttle request nothing cancels during its clock read records nothing",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/throttleNotCancelledDuringClockReadRecordsNothing()",
-      "line": 1598,
+      "line": 2117,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -5554,7 +5662,7 @@
       "displayName": "A queued request cancelled through its dispatch frees its slot before the next admission",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/dispatchCancelledQueuedRequestFreesItsSlot()",
-      "line": 684,
+      "line": 832,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5567,12 +5675,39 @@
       "target": "InnoFlowTestingTests"
     },
     {
+      "attribute": "@Test(\n    \"A held lane closes once its request can no longer be admitted\",\n    arguments: HeldLaneRelease.allCases)",
+      "conditionalContexts": [],
+      "displayName": "A held lane closes once its request can no longer be admitted",
+      "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
+      "identifier": "EffectRunAdmissionCancellationTests/heldLaneClosesOnceItsRequestCanNoLongerBeAdmitted(release:)",
+      "line": 689,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"A lane held for a latest request that can no longer proceed is closed\")",
+      "conditionalContexts": [],
+      "displayName": "A lane held for a latest request that can no longer proceed is closed",
+      "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
+      "identifier": "EffectRunAdmissionCancellationTests/laneHeldForCancelledLatestRequestIsClosed()",
+      "line": 736,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"A latest request accepted for a closed lane holds the lane until it is admitted\")",
+      "conditionalContexts": [],
+      "displayName": "A latest request accepted for a closed lane holds the lane until it is admitted",
+      "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
+      "identifier": "EffectRunAdmissionCancellationTests/latestRequestAcceptedForClosedLaneHoldsTheLane()",
+      "line": 638,
+      "target": "InnoFlowTestingTests"
+    },
+    {
       "attribute": "@Test(\n    \"A merged serial request cannot reopen a latest lane its latest sibling replaced\",\n    arguments: [false, true])",
       "conditionalContexts": [],
       "displayName": "A merged serial request cannot reopen a latest lane its latest sibling replaced",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/mergedSerialAndLatestOnOpenLatestLane(latestFirst:)",
-      "line": 638,
+      "line": 763,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5581,7 +5716,16 @@
       "displayName": "A cancellation handler that re-enters the store finds its request already cancelled",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/reentrantCancellationHandlerSeesFinalSchedulerState()",
-      "line": 774,
+      "line": 922,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"TestStore closes a lane held for a latest request whose send's task was cancelled\")",
+      "conditionalContexts": [],
+      "displayName": "TestStore closes a lane held for a latest request whose send's task was cancelled",
+      "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
+      "identifier": "EffectRunAdmissionCancellationTests/testStoreClosesLaneHeldForRequestOfCancelledSend()",
+      "line": 785,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5590,7 +5734,7 @@
       "displayName": "TestStore frees a dispatch-cancelled queued request's slot before the next send",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/testStoreDispatchCancelledQueuedRequestFreesItsSlot()",
-      "line": 728,
+      "line": 876,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -5599,7 +5743,7 @@
       "displayName": "TestStore rejects a merged serial request on a latest lane its sibling replaced",
       "file": "Tests/InnoFlowTestingTests/EffectRunSchedulerTests.swift",
       "identifier": "EffectRunAdmissionCancellationTests/testStoreMergedSerialAndLatestOnOpenLatestLane(latestFirst:)",
-      "line": 660,
+      "line": 808,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6805,7 +6949,7 @@
       "displayName": "accepted cancellation suppresses a later thrown error without faking physical completion",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/cancellationBeforeFailure(throwsCancellation:)",
-      "line": 134,
+      "line": 144,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6814,7 +6958,7 @@
       "displayName": "discarded run and debounce handles complete as controls",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/discardedControls(mode:)",
-      "line": 39,
+      "line": 49,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6823,7 +6967,7 @@
       "displayName": "throttle replacement releases every discarded dispatch",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/discardedSharedThrottle(count:)",
-      "line": 86,
+      "line": 96,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6832,7 +6976,7 @@
       "displayName": "ordinary sequence run keeps its silent CancellationError contract",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/ordinaryRunCancellationErrorControl()",
-      "line": 124,
+      "line": 134,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6841,7 +6985,7 @@
       "displayName": "perform maps all errors while active in both hosts",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/performMapping(outcome:)",
-      "line": 108,
+      "line": 118,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6850,7 +6994,7 @@
       "displayName": "shared throttle dispatch cancellation leaves newer work alive",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/sharedThrottleCancellation()",
-      "line": 60,
+      "line": 70,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6859,7 +7003,7 @@
       "displayName": "releasing the Store cancels a trailing timer and closes its dispatch",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/storeReleaseClosesTrailingDispatch()",
-      "line": 166,
+      "line": 176,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6868,7 +7012,7 @@
       "displayName": "trailing dispatch completion is independent of handle retention",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/trailingCompletion(retainsHandle:count:)",
-      "line": 10,
+      "line": 20,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7786,7 +7930,7 @@
       "displayName": "A composite's tasks deliver where a Store runs them, before the jobs queued after them",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/compositeTasksDeliverWhereAStoreRunsThem(shape:late:)",
-      "line": 3630,
+      "line": 3665,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7795,7 +7939,7 @@
       "displayName": "An interpreted follow-up comes after its action's concatenate siblings; a plain one before",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/concatenateSiblingOrder(shape:wrap:)",
-      "line": 2522,
+      "line": 2550,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7804,7 +7948,7 @@
       "displayName": "Outputs around an action's concatenate siblings are kept as a Store publishes them",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/concatenateSiblingOutputs(shape:wrap:)",
-      "line": 2548,
+      "line": 2576,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7813,7 +7957,7 @@
       "displayName": "Positions more than four interpreter jobs behind a delivery keep their order",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/deepPositionsKeepTheirOrder(shape:late:)",
-      "line": 3687,
+      "line": 3722,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7822,7 +7966,7 @@
       "displayName": "A deferred walk starts only once the suspended walk before it finishes",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/deferredWalkWaitsForSuspendedWalkBeforeIt(exhaustive:)",
-      "line": 3235,
+      "line": 3270,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7831,7 +7975,7 @@
       "displayName": "A delegate chain of a child's emission precedes the child's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/delegateChainPrecedesNextEmission(stopsAfterFirst:exhaustive:)",
-      "line": 2398,
+      "line": 2426,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7840,7 +7984,7 @@
       "displayName": "Cancelling the dispatch removes a buffered action its effect's own cancel has passed",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/dispatchCancelRemovesDeliveredAction()",
-      "line": 2310,
+      "line": 2338,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7849,7 +7993,7 @@
       "displayName": "A drained walk behind a deferred one is deferred too",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkBehindDeferredWalkIsDeferred(exhaustive:)",
-      "line": 3344,
+      "line": 3379,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7858,7 +8002,7 @@
       "displayName": "A drained walk created behind a suspended one starts after that one returns",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkBehindSuspendedWalkStartsAfterIt(exhaustive:)",
-      "line": 3161,
+      "line": 3196,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7867,7 +8011,7 @@
       "displayName": "A drained walk's cancel after its clock read keeps what jobs queued before it delivered",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkCancelKeepsValuesOfJobsQueuedBeforeIt(exhaustive:)",
-      "line": 3484,
+      "line": 3519,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7876,7 +8020,7 @@
       "displayName": "A drained walk's value after its clock read comes before the send",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkValueAfterClockReadPrecedesSend(exhaustive:)",
-      "line": 3073,
+      "line": 3104,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7885,7 +8029,7 @@
       "displayName": "A drained walk's value after its clock read comes after jobs queued before its interpreter",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkValueFollowsJobsQueuedBeforeItsInterpreter(exhaustive:)",
-      "line": 3134,
+      "line": 3169,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7894,7 +8038,7 @@
       "displayName": "A drained walk's value after its clock read is behind a send right after its interpreter ran",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/drainedWalkValueFollowsSendRightAfterItsInterpreter(exhaustive:)",
-      "line": 3103,
+      "line": 3134,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7903,7 +8047,7 @@
       "displayName": "A follow-up's cancel removes an output delivered after its chain began",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpCancelRemovesLaterOutput(exhaustive:)",
-      "line": 2471,
+      "line": 2499,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7912,7 +8056,7 @@
       "displayName": "A received action's follow-up chain precedes its run's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpChainPrecedesNextEmission(shape:exhaustive:)",
-      "line": 2373,
+      "line": 2401,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7921,7 +8065,7 @@
       "displayName": "A follow-up of a run's emission precedes the next run of the same concatenate",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpPrecedesNextConcatenatedRun(shape:exhaustive:)",
-      "line": 2425,
+      "line": 2453,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7930,7 +8074,7 @@
       "displayName": "Follow-ups of a run's emission precede the run's next emission",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/followUpPrecedesNextEmission(secondCancelsFollowUp:exhaustive:)",
-      "line": 2220,
+      "line": 2248,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7939,7 +8083,7 @@
       "displayName": "A chain of two interpreted follow-ups is received in an order a Store has",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedChainFollowsTheRace(cancelsRun:exhaustive:)",
-      "line": 2648,
+      "line": 2676,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7948,7 +8092,7 @@
       "displayName": "An interpreted follow-up comes after a job queued behind its action's delivery job",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpAfterLaterQueuedJob(delivery:exhaustive:)",
-      "line": 2739,
+      "line": 2770,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7957,7 +8101,7 @@
       "displayName": "A received action's interpreted follow-up comes after a job queued before its delivery",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpAfterQueuedJob(shape:mode:)",
-      "line": 2688,
+      "line": 2716,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7966,7 +8110,7 @@
       "displayName": "An interpreted follow-up precedes what its action's effect delivers in a later job",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedFollowUpPrecedesLaterJob(shape:exhaustive:)",
-      "line": 2601,
+      "line": 2629,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7975,7 +8119,7 @@
       "displayName": "An interpreted follow-up's output survives a cancel delivered in a later job",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/interpretedOutputSurvivesLaterJobCancel(exhaustive:)",
-      "line": 2626,
+      "line": 2654,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7984,7 +8128,7 @@
       "displayName": "A nested interpreted follow-up comes after an emission queued while its chain ran",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/nestedFollowUpAfterQueuedEmission(exhaustive:)",
-      "line": 3577,
+      "line": 3612,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7993,7 +8137,7 @@
       "displayName": "An interpreted follow-up's own follow-up comes after its siblings' follow-ups",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/nestedFollowUpsKeepInterpreterOrder(exhaustive:)",
-      "line": 3555,
+      "line": 3590,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8002,7 +8146,7 @@
       "displayName": "A non-exhaustive output receive never skips an output after the expected one",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/offOutputReceiveReducesEarlierActionsFirst()",
-      "line": 2342,
+      "line": 2370,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8011,7 +8155,7 @@
       "displayName": "Another dispatch's cancel after the delivery keeps the delivered action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/otherDispatchCancelKeepsDeliveredAction(exhaustive:)",
-      "line": 2494,
+      "line": 2522,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8020,7 +8164,7 @@
       "displayName": "An output delivered before its effect's own cancel is received",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/outputBeforeOwnCancelIsReceived(exhaustive:)",
-      "line": 2325,
+      "line": 2353,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8029,7 +8173,7 @@
       "displayName": "An output delivered before a received action survives that action's cancel",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/outputBeforeReceivedActionSurvivesItsCancel(exhaustive:)",
-      "line": 2451,
+      "line": 2479,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8038,7 +8182,7 @@
       "displayName": "An effect's own later cancel keeps an action it already delivered",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/ownCancelKeepsEarlierDelivery(shape:exhaustive:)",
-      "line": 2169,
+      "line": 2197,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8047,7 +8191,7 @@
       "displayName": "A received action's plain output precedes the outputs its effect publishes later",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/receivedActionOutputOrder(shape:exhaustive:)",
-      "line": 2578,
+      "line": 2606,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8056,7 +8200,7 @@
       "displayName": "A received action's cancel removes actions buffered behind it",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/receivedCancelRemovesActionsBehindIt(markCancels:exhaustive:)",
-      "line": 2244,
+      "line": 2272,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8065,7 +8209,7 @@
       "displayName": "A walk that suspends more than once resumes behind the jobs queued before each suspension",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/repeatedSuspensionResumesAtEachLevel(shape:late:)",
-      "line": 3665,
+      "line": 3700,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8074,7 +8218,7 @@
       "displayName": "A run emission's composite follow-up comes before a later merge step of its concatenate",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/runEmissionCompositeFollowUpPrecedesLaterMergeStep(late:)",
-      "line": 3711,
+      "line": 3746,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8083,7 +8227,7 @@
       "displayName": "A scoped receive gets a child action its effect's own cancel has passed",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/scopedReceiveGetsDeliveredAction()",
-      "line": 2363,
+      "line": 2391,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8092,7 +8236,7 @@
       "displayName": "A scoped send's cancel removes what is delivered while its drain suspends",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/scopedSentCancelRemovesValuesDeliveredDuringItsDrain(exhaustive:)",
-      "line": 3046,
+      "line": 3077,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8101,7 +8245,7 @@
       "displayName": "A scoped send's interpreted follow-up comes after a job queued before the send",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/scopedSentFollowUpAfterQueuedJob(shape:exhaustive:)",
-      "line": 2810,
+      "line": 2841,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8110,7 +8254,7 @@
       "displayName": "A send that times out draining removes the buffered actions it did not reduce",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sendDrainTimeoutRemovesRemainingActions()",
-      "line": 2292,
+      "line": 2320,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8119,7 +8263,7 @@
       "displayName": "A send leaves buffered what is delivered while it drains earlier actions",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sendLeavesValuesDeliveredDuringItsDrain()",
-      "line": 2965,
+      "line": 2996,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8128,7 +8272,7 @@
       "displayName": "A send reduces the sent action before the interpreted effects of the actions it drains",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sendReducesSentActionBeforeDrainedInterpreters(shape:viaScope:)",
-      "line": 2838,
+      "line": 2869,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8137,7 +8281,7 @@
       "displayName": "A send's cancel removes an output published while its drain suspends",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentCancelRemovesOutputPublishedDuringItsDrain(exhaustive:)",
-      "line": 3521,
+      "line": 3556,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8146,7 +8290,7 @@
       "displayName": "A send's cancel removes what is delivered while its drain suspends",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentCancelRemovesValuesDeliveredDuringItsDrain(shape:exhaustive:)",
-      "line": 3001,
+      "line": 3032,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8155,7 +8299,7 @@
       "displayName": "A sent action's interpreted follow-up comes after a job queued before the send",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentFollowUpAfterQueuedJob(shape:exhaustive:)",
-      "line": 2783,
+      "line": 2814,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8164,7 +8308,7 @@
       "displayName": "A sent action's interpreter comes before the follow-ups of the actions its send drains",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentInterpreterPrecedesDrainedFollowUps(exhaustive:)",
-      "line": 2885,
+      "line": 2916,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8173,7 +8317,7 @@
       "displayName": "The sent walk starts only once the suspended walk before it finishes",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/sentWalkWaitsForSuspendedWalkBeforeIt(exhaustive:)",
-      "line": 3273,
+      "line": 3308,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8182,7 +8326,7 @@
       "displayName": "A send whose drain suspends keeps the place where the send began",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/suspendedDrainKeepsTheSendPlace(shape:exhaustive:)",
-      "line": 2913,
+      "line": 2944,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8191,7 +8335,7 @@
       "displayName": "A test-issued cancel removes a covered buffered action whatever its effect did since",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/testIssuedCancelRemovesCoveredAction(shape:cancelsAll:)",
-      "line": 2267,
+      "line": 2295,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8200,7 +8344,7 @@
       "displayName": "A throttle reading the default clock suspends as in a Store",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/throttleOnDefaultClockSuspends(exhaustive:)",
-      "line": 3390,
+      "line": 3425,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8209,7 +8353,7 @@
       "displayName": "A delivered action left unreceived queues a bounded number of anchor markers",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/unreceivedActionBoundsAnchorMarkers()",
-      "line": 3607,
+      "line": 3642,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8218,7 +8362,7 @@
       "displayName": "A receive that waits while the effect cancels itself still gets the action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/waitingReceiveGetsActionBeforeOwnCancel()",
-      "line": 2189,
+      "line": 2217,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8227,7 +8371,7 @@
       "displayName": "A walk waiting for a suspended one starts behind the jobs queued before that one resumed",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/waitingWalkStartsBehindJobsQueuedBeforeResumption(exhaustive:)",
-      "line": 3189,
+      "line": 3224,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8236,7 +8380,7 @@
       "displayName": "A walk behind one whose chain ended resumes behind the jobs queued before it started",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/walkBehindEndedChainResumesBehindEarlierJobs(shape:exhaustive:)",
-      "line": 3416,
+      "line": 3451,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8245,7 +8389,7 @@
       "displayName": "A walk created behind a received walk that suspended starts after it",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/walkBehindReceivedSuspendedWalkStartsAfterIt(exhaustive:)",
-      "line": 3313,
+      "line": 3348,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -8254,7 +8398,7 @@
       "displayName": "Work that cancels a timer under its own ID keeps its delivered action",
       "file": "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift",
       "identifier": "TestStoreDeliveryOrderTests/workCancellingTimerKeepsItsAction(exhaustive:)",
-      "line": 2199,
+      "line": 2227,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9047,6 +9191,15 @@
       "file": "Tests/InnoFlowTestingTests/TestStoreReceiveTests.swift",
       "identifier": "TestStoreReceiveTests/expiredDeadlinePreservesValidActionAfterStaleBuffer()",
       "line": 262,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"A failing finish withdraws the action a waiting receive was handed\")",
+      "conditionalContexts": [],
+      "displayName": "A failing finish withdraws the action a waiting receive was handed",
+      "file": "Tests/InnoFlowTestingTests/TestStoreReceiveTests.swift",
+      "identifier": "TestStoreReceiveTests/failingFinishWithdrawsHandedAction()",
+      "line": 359,
       "target": "InnoFlowTestingTests"
     },
     {

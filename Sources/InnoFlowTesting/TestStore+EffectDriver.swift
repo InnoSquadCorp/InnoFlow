@@ -325,9 +325,10 @@ extension TestStore: ReductionTurnCancellationAcceptor {
     context: EffectExecutionContext
   ) {
     guard context.cancellationScope != nil else { return }
-    // The same order `Store` uses: the lane's requests are displaced and
-    // reported as superseded, then everything else under `id` is released.
-    runScheduler.displaceLatestLane(id: id, successor: context)
+    // The same order `Store` uses: the lane is held for the request, its
+    // earlier requests displaced and reported as superseded, then everything
+    // else under `id` is released.
+    runScheduler.holdLatestLane(id: id, successor: context)
     acceptInReductionTurn(.inFlight(id), context: context)
   }
 

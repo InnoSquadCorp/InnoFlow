@@ -34,6 +34,11 @@ extension TestStore {
   /// at its delivery. A buffered action reduced first whose walk had not
   /// started when the send began, and every interpreted one reduced after it,
   /// is walked after the new action is reduced, as in a `Store`.
+  ///
+  /// These rules describe sends and receives a test awaits one after
+  /// another. A call that begins in another task while an earlier one is
+  /// still walking an effect does not wait for that walk, so what it
+  /// delivers can come before values a `Store` handles first.
   @discardableResult
   public func send(
     _ action: R.Action,
