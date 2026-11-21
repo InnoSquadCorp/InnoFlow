@@ -132,7 +132,7 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   whether the cancelled dispatch's effect had been interpreted yet. In a
   `TestStore`, as in a `Store`, only the IDs of the request the window fires
   can stop the work it fires; cancelling an ID that only a cancelled newer
-  request carried no longer stops it.
+  request carried does not stop it.
 - `TestStore` keeps buffered actions and outputs in the order a `Store`
   handles them. A plain `.send` or `.output` follow-up of a received action
   is queued right behind it, at every depth: a follow-up chain and a Scope
