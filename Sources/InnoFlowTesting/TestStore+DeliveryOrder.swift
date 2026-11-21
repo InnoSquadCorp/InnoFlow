@@ -11,9 +11,9 @@ package import InnoFlowCore
 // reduction. When the reduction returns an effect other than a plain `.send`
 // or `.output`, the `Store` creates a root interpreter task right then, and
 // the values the synchronous part of that walk delivers are handled where
-// that task runs. MainActor tasks run in the order they are created, so such
-// a value is handled where a MainActor task created while the action was
-// handled runs, unless the interpreter task created before it has not
+// that task runs. MainActor tasks start in the order they are created, so
+// such a value is handled where a MainActor task created while the action
+// was handled runs, unless the interpreter task created before it has not
 // finished — it suspended, as a throttle reading its clock or a scheduled
 // run waiting for admission does, or it still waits for the one before it —
 // which the task awaits before it walks.

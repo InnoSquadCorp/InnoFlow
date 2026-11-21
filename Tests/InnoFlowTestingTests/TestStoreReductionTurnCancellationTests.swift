@@ -490,6 +490,8 @@ struct TestStoreReductionTurnCancellationTests {
 
     await store.send(.startWork(underLane: trigger != .sameLaneThenCancel))
     await waitUntil { gate.hasStarted(2) }
+    // Only started work counts a cancellation.
+    #expect(gate.hasStarted(2))
 
     await store.send(trigger)
     // The merge's branches run in tasks after `send` returns: only the

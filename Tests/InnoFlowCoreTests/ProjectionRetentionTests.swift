@@ -14,16 +14,15 @@ import os
 // - a liveness read (`isAlive`) observes the owner's liveness and retains
 //   nothing, so a selection that is also read for its value follows the value
 //   rule, and a liveness reader is notified when the owner is deactivated even
-//   after the selection was released;
-// - a liveness read through a scope observes the parent store's release too,
-//   so its reader is notified when the store is released even after the scope
-//   itself was released;
-// - a selection that outlives its scope is deactivated when the scope is
-//   released, which notifies its readers;
+//   after the selection was released: when the store is released, or when a
+//   row's element is removed. A scope that is released without being
+//   deactivated notifies no one, which no test here covers;
 // - obtaining a closure-based selection from the `id:` cache records the same
 //   read of the owner that creating one records, without reading the owner's
 //   state, so a reducer can obtain one while its own store reduces, and its
-//   reader is notified after the holder that created it lets go.
+//   reader is notified after the holder that created it lets go;
+// - a reader that reads a handle it holds is notified through the selection
+//   alone.
 
 private let keyPathEvaluations = OSAllocatedUnfairLock(initialState: 0)
 
@@ -402,13 +401,17 @@ struct ProjectionRetentionTests {
     #expect(notifications.withLock { $0 } == 1)
   }
 
-  @Test("Control: a reader whose id: selection is still held is notified through it")
+  @Test("Control: a reader of an id: selection it holds is notified through the selection alone")
   func readerOfAHeldSharedSelectionIsNotified() {
     let store = Store(reducer: RetentionFeature(), initialState: .init())
     let holder = sharedSelection(.dependingOn, of: store)
-    let notifications = track {
-      _ = sharedSelection(.dependingOn, of: store).requireAlive()
-    }
+    // The held handle is read, not obtained again: no read of the store's
+    // state is recorded.
+    let notifications = track { _ = holder.requireAlive() }
+
+    // `.touchOther` leaves the selected value unchanged.
+    store.send(.touchOther)
+    #expect(notifications.withLock { $0 } == 0)
 
     store.send(.increment)
     #expect(notifications.withLock { $0 } == 1)

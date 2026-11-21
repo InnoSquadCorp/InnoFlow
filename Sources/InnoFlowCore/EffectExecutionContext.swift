@@ -60,6 +60,15 @@ package struct EffectOrigin: Sendable {
   }
 }
 
+/// A weak reference that can cross isolation boundaries.
+private struct UnretainedReference<Object: AnyObject & Sendable>: Sendable {
+  weak var object: Object?
+
+  init(_ object: Object) {
+    self.object = object
+  }
+}
+
 /// Shared context passed through effect interpretation in both `Store` and `TestStore`.
 ///
 /// Extracted to eliminate duplication between production and testing runtimes.
@@ -239,6 +248,40 @@ package struct EffectExecutionContext: Sendable {
     guard runCancellationState?.isCancelled != true else { return false }
     guard cancellationScope?.isGloballyCancelled != true else { return false }
     return cancellationTokens.allSatisfy { $0.isCancelled == false }
+  }
+
+  /// A check of whether work declared in this context can still start that
+  /// keeps none of the context alive: the dispatch, the cancellation scope
+  /// and the lifetime owners are referenced weakly.
+  ///
+  /// Only an interpreter that holds this context can start the work. It keeps
+  /// the scope's interpreter count above zero and its dispatch active until
+  /// it does, and while an interpreter of the scope is alive the scope records
+  /// every cancellation of an ID its tree declares, whether or not a token for
+  /// that ID is still alive. The work can therefore no longer start once
+  /// ``shouldProceed`` would be false, once the dispatch has finished, or once
+  /// the scope has no interpreter left.
+  package func makeUnretainedProceedCheck() -> @Sendable () -> Bool {
+    let scope = cancellationScope.map(UnretainedReference.init)
+    let tracker = flowTaskTracker.map(UnretainedReference.init)
+    let owners = lifetimeOwners.map(UnretainedReference.init)
+    let cancellationIDs = cancellationIDs
+    let runCancellationState = runCancellationState
+    return {
+      guard owners.allSatisfy({ $0.object?.isCancelled == false }) else { return false }
+      if let tracker {
+        guard let tracker = tracker.object, !tracker.isCancelled, !tracker.isFinished
+        else { return false }
+      }
+      guard runCancellationState?.isCancelled != true else { return false }
+      if let scope {
+        guard let scope = scope.object, scope.liveInterpreterCount > 0,
+          !scope.isGloballyCancelled,
+          !cancellationIDs.contains(where: { scope.isCancelled(id: $0) })
+        else { return false }
+      }
+      return true
+    }
   }
 
   /// Returns a terminal execution context that cannot discover new IDs.
