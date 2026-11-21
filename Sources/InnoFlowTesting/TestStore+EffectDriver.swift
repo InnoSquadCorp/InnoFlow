@@ -183,6 +183,13 @@ extension TestStore: EffectDriver {
           }
           guard let pending = self.throttleState.pendingToFire(for: id) else { return nil }
           guard self.shouldProceed(context: pending.context) else { return nil }
+          // The fired request can be an older one the window fell back to.
+          // Its work runs in this task from now on, so only its own IDs may
+          // cancel the task: a `Store`, whose shared timer carries no ID, lets
+          // only the fired request's IDs stop that work.
+          if let token = self.throttleActivityTokenByID[id] {
+            self.refreshTrackedTask(token: token, context: pending.context)
+          }
           return pending
         }
       } catch {
@@ -229,10 +236,8 @@ extension TestStore: EffectDriver {
       // A followed walk resumes from the read one level deeper.
       let walk = TestStoreFollowedWalk.awaitingDriver(in: self)
       defer { walk?.didResumeFromDriver() }
-      if let manualClock {
-        return await manualClock.now
-      }
-      return await continuousClockNow()
+      guard let manualClock else { return await continuousClockNow() }
+      return await manualClock.now
     }
   }
 
@@ -244,9 +249,7 @@ extension TestStore: EffectDriver {
         ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
-    let walks = TestStoreFollowedWalk.ofConcurrentChildren(
-      children.count, in: self, context: context)
-    for (child, walk) in zip(children, walks) {
+    for (child, walk) in followedWalks(ofConcurrent: children, context: context) {
       let token = UUID()
       beginFinishActivity(.composite, token: token, context: context)
       let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)

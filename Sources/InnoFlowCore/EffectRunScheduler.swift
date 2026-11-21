@@ -229,6 +229,10 @@ package final class EffectRunScheduler {
   /// finished without reaching it, or its admission turned it away — the
   /// lane is closed, and the next lane under that ID is new.
   private var heldLatestLanes: [AnyEffectID: HeldLatestLane] = [:]
+  /// The size past which held lanes whose request can no longer be admitted
+  /// are dropped. It then doubles over what is left, so holding a lane stays
+  /// amortized constant time however many lanes one turn holds.
+  private var heldLatestLanePruneMark = 16
 
   package init() {}
 
@@ -297,9 +301,12 @@ package final class EffectRunScheduler {
   /// newer request and is left alone, as is a lane with another policy.
   package func holdLatestLane(id: AnyEffectID, successor: EffectExecutionContext) {
     guard let sequence = successor.sequence else { return }
-    if !heldLatestLanes.isEmpty {
-      heldLatestLanes = heldLatestLanes.filter { $0.value.canStillBeAdmitted() }
+    // A held lane whose request can no longer be admitted is closed, so its
+    // identity is not carried on: the next lane under that ID is new.
+    if let held = heldLatestLanes[id], !held.canStillBeAdmitted() {
+      heldLatestLanes.removeValue(forKey: id)
     }
+    pruneHeldLatestLanesIfNeeded()
     guard let lane = lanes[id] else {
       // No lane is open. A newer request, accepted before the previous one
       // was admitted, carries the held lane's identity on; the first request
@@ -331,6 +338,15 @@ package final class EffectRunScheduler {
         await gate.reject()
       }
     }
+  }
+
+  /// Drops the held lanes whose request can no longer be admitted once there
+  /// are more than `heldLatestLanePruneMark`. Such a lane is closed already
+  /// (`laneView(for:)` ignores it), so dropping it changes no answer.
+  private func pruneHeldLatestLanesIfNeeded() {
+    guard heldLatestLanes.count > heldLatestLanePruneMark else { return }
+    heldLatestLanes = heldLatestLanes.filter { $0.value.canStillBeAdmitted() }
+    heldLatestLanePruneMark = max(16, heldLatestLanes.count * 2)
   }
 
   /// Removes and reports every request of a lane that a `latest` request

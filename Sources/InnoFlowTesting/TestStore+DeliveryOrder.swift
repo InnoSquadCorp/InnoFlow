@@ -1045,6 +1045,16 @@ extension TestStore {
     interpreterTail = walk.tail
   }
 
+  /// The children of an unawaited `merge`, each with the walk the test store
+  /// follows it as (``TestStoreFollowedWalk/ofConcurrentChildren(_:in:context:)``).
+  func followedWalks(
+    ofConcurrent children: [ReducerEffect<R.Action, R.Output>], context: EffectExecutionContext?
+  ) -> Zip2Sequence<[ReducerEffect<R.Action, R.Output>], [TestStoreFollowedWalk?]> {
+    let walks = TestStoreFollowedWalk.ofConcurrentChildren(
+      children.count, in: self, context: context)
+    return zip(children, walks)
+  }
+
   /// Buffers an effect action where a `Store` handles it: right behind the
   /// received action, after the ones its reduction drained before, when the
   /// synchronous part of a drained walk delivers it; at its walk's anchor
