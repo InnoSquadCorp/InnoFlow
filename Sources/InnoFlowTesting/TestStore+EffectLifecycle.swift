@@ -242,11 +242,15 @@ extension TestStore {
         && (scope.sequence <= sequence
           || scope.shouldProceed == false)
     }
-    throttleState.clearStates { scope in
+    let throttleOwners = throttleState.clearStates { scope in
       scope.contains(id)
         && (scope.sequence <= sequence
           || scope.shouldProceed == false)
     }
+    // A window whose newest request the cancellation removed passes to the
+    // request it replaced, which still needs the shared timer: move the
+    // timer to that request before releasing the tasks under `id`.
+    handThrottleTimersOver(to: throttleOwners)
     guard let tokens = taskIDsByEffectID[id] else { return }
 
     for token in Array(tokens) {
@@ -285,6 +289,17 @@ extension TestStore {
     }
   }
 
+  /// Re-indexes each shared trailing timer under the request that now owns
+  /// its window, exactly as a newer request in the window does.
+  private func handThrottleTimersOver(to owners: [AnyEffectID: EffectExecutionContext]) {
+    for (windowID, owner) in owners {
+      guard let token = throttleActivityTokenByID[windowID], runningTasks[token] != nil else {
+        continue
+      }
+      refreshTrackedTask(token: token, context: owner)
+    }
+  }
+
   private func markTrackedTaskCancelled(token: UUID) {
     // Cancellation closes delivery immediately, while the task remains in the
     // physical registry until its completion callback actually arrives.
@@ -318,31 +333,6 @@ extension TestStore {
         taskIDsByEffectID[id] = tokens
       }
     }
-  }
-
-  // MARK: - Receiving
-
-  package func popBufferedQueuedAction() -> ActionQueue<R.Action>.QueuedAction? {
-    while let entry = queue.popBuffered() {
-      guard shouldProceed(context: entry.context) else {
-        entry.finish()
-        continue
-      }
-      return entry
-    }
-    return nil
-  }
-
-  package func popBufferedAction() async -> R.Action? {
-    guard let entry = popBufferedQueuedAction() else { return nil }
-    defer { entry.finish() }
-    return entry.action
-  }
-
-  package func discardInvalidatedActions() {
-    queue.removeBuffered { !shouldProceed(context: $0.context) }
-    outputQueue.removeBuffered { !shouldProceed(context: $0.context) }
-    finishActivity.noteProgress()
   }
 
   private func isRunTaskActive(token: UUID) -> Bool {

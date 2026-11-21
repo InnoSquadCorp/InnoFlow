@@ -10,7 +10,11 @@ extension TestStore {
   ///
   /// In non-exhaustive mode, skips mismatches under one total timeout, just
   /// like `receive`, and advances intermediate FIFO actions and their effects.
-  /// An already-buffered match can be received with `.zero`.
+  /// Before it skips a buffered output, it reduces the buffered actions a
+  /// `Store` reduced before it published that output, so an output that
+  /// comes after the expected one is never skipped. A `.zero` timeout
+  /// examines only the output at the head of the buffer: a match there is
+  /// received.
   public func receiveOutput(
     _ expectedOutput: R.Output,
     timeout: Duration? = nil,
@@ -147,7 +151,7 @@ extension TestStore {
         // action before checking outputs again. An action flood cannot starve
         // the output side, and the original deadline covers all progress.
         if let action = queue.popBuffered() {
-          guard shouldProceed(context: action.context) else {
+          guard action.isDeliverable else {
             action.finish()
             didProgress = true
             continue
@@ -179,7 +183,7 @@ extension TestStore {
         queuedOutput = received
       }
 
-      guard shouldProceed(context: queuedOutput.context) else {
+      guard queuedOutput.isDeliverable else {
         didProgress = true
         continue
       }
@@ -188,6 +192,19 @@ extension TestStore {
         return .some(value)
       case .mismatched:
         break
+      }
+
+      // A `Store` reduced a buffered action keyed before this output before
+      // it published the output, and what that reduction publishes comes
+      // first: keep the output and reduce the action instead of skipping it.
+      if !exhaustivity.isOn,
+        let action = popBufferedQueuedAction(before: queuedOutput.delivery.storeOrder)
+      {
+        outputQueue.restoreFirst(queuedOutput)
+        reportSkippedAction(action.action, context: "receiving an output", location: location)
+        await applyUnassertedAction(action, location: location)
+        didProgress = true
+        continue
       }
 
       if exhaustivity.isOn {
@@ -209,7 +226,7 @@ extension TestStore {
 
   package func popBufferedOutput() async -> R.Output? {
     while let queuedOutput = outputQueue.popBuffered() {
-      guard shouldProceed(context: queuedOutput.context) else { continue }
+      guard queuedOutput.isDeliverable else { continue }
       return queuedOutput.action
     }
     return nil

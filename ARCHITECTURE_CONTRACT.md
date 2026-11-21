@@ -180,10 +180,17 @@ expose the same tiered read contract:
   notification so a reader that reads again keeps the same handle. A key-path
   selection that is never read, or that passes two notifications unread, is
   released, and a released selection leaves its dependency bucket at once, so
-  the owner stops evaluating its key path. A read of liveness alone
-  (`isAlive`) registers a tracker that no value change fires, so it is
-  retained until the selection is deactivated. The selection cannot tell a
-  tracked read from an untracked one: any read starts the retention above.
+  the owner stops evaluating its key path. A liveness read (`isAlive`)
+  records its Observation access on the owner's liveness — the parent
+  `Store`'s release or the `ScopedStore`'s deactivation — instead of on the
+  selection, so it never retains the selection, and its reader is notified
+  when the owner is deactivated, even after the selection was released. A
+  `ScopedStore` that is released without being deactivated (a single scope
+  dropped before its store, or a row of a superseded family) notifies no
+  one: its selections turn dead without a notification, so a reader that
+  needs one holds the scope. The
+  selection cannot tell a tracked value read from an untracked one: any value
+  read starts the retention above.
   Key paths must therefore be valid for every state reachable while a reader
   holds the selection or the owner still retains it.
 - A dependency bucket's change predicate is determined by its key. Key-path
@@ -209,14 +216,26 @@ expose the same tiered read contract:
   superseded stay correct but resolve their element by scanning; the family
   that replaces them reports their vanished elements at the next structural
   change. A row whose id occurs more than once resolves its first occurrence.
+  A scope in the middle of the pass, before or after the pass classifies the
+  change, changes none of these rules: every row still compares its element
+  with that element's previous value, so in a collection with contiguous
+  storage a row that only moved is not refreshed and a removed row of the
+  active family does not scan, and a row whose id occurs more than once
+  follows its first occurrence.
 - Creating a key-path selection seeds its snapshot without recording an
   Observation access on the parent, so a view that selects one value does
   not depend on the whole parent state; the owner retains the selection for
   its reader instead. A closure-based selection (`dependingOn:`,
   `dependingOnAll:`, a selector, with or without `id:`) has no such
   retention, so creating one during a tracked read records a read of the
-  parent's state, as in 6.0.x. A view that creates one in its body is
-  therefore invalidated by any parent change until it holds the selection.
+  parent's state, as in 6.0.x, and so does getting another holder's live
+  selection from the `id:` cache (a cache hit records that Observation access
+  without reading the state, so a reducer can do it while its own store
+  reduces). A `dependingOnAll:` selection with no dependency reads no state,
+  so neither creating it nor a cache hit records a read. A view that obtains
+  a closure-based selection in its body is therefore invalidated by any
+  parent change until it holds the selection and reads that handle instead
+  of obtaining it again.
 - A reducer-returned `.cancel`, a `cancelInFlight: true` replacement, a
   newer debounce request and a `latest` lane request are accepted in the
   MainActor turn of the reduction that returned them, whenever the
@@ -235,10 +254,46 @@ expose the same tiered read contract:
   earlier effect under the identifier is released and recorded, even when
   the replacing dispatch is then cancelled before its effect runs. A
   `latest` request that a lane with another policy will reject changes
-  nothing. A throttled subtree is the exception: whether it runs depends on its window,
+  nothing. The turn decides every lane request it reaches against the lane
+  state of that turn, with the rule admission applies, and the interpreter
+  later reports exactly that decision: a request the lane rejects, or whose
+  own tree already cancelled its lane identifier, completes without awaiting,
+  so a cancellation after it in a `concatenate` is still accepted in the
+  turn; a request the lane admits awaits its run. A lane request whose
+  outcome depends on the order in which the interpreter runs `merge`
+  children is not decided in the turn: one that shares its lane with a lane
+  request in another branch of an enclosing `merge`, whose identifiers
+  another branch cancels, or that its lane admits or rejects differently
+  once another branch has requested the cancellation of an identifier
+  carried by a request holding the lane (a `latest` lane's running request
+  or the request it is held for, or a serial lane's pending request),
+  wherever that work lies in its branch. The turn then accepts no `latest`
+  replacement for such a request
+  and nothing behind it in its branch, and its admission decides it; work
+  whose context another branch's `.cancel` covers is treated the same way,
+  even when the work's own path cancelled that identifier first. The
+  identifier cancellation of a request that cancels in flight
+  (`cancelInFlight: true`, a debounce, a `latest` lane request) covers only
+  sequences issued before its own, so in another branch such a request counts
+  against the requests holding a lane, not against a lane request's own
+  identifiers. Within one sequence a debounce still replaces a pending
+  debounce under its identifier and a `latest` request displaces its own
+  lane's requests, but the turn decides no work inside a debounce and no
+  request whose lane another branch requests; a throttle requests no
+  cancellation.
+  A `latest` request merged only with work that touches neither its lane nor
+  its identifiers, such as `.merge(.send(.loading), latestRun)`, is still
+  accepted in the turn. A `latest` request accepted in a reduction turn
+  holds its lane, one it displaced or one that was closed, as the open
+  `latest` lane under its identifier until the request is admitted or can no
+  longer proceed, so a request with another policy meets a conflicting lane.
+  A throttled subtree is the exception: whether it runs depends on its window,
   so cancellation inside it is accepted when the interpreter admits it.
-  `Store` and `TestStore` share this acceptance, so a test receives exactly
-  the actions a production store reduces.
+  `Store` and `TestStore` share this acceptance, so a test receives the
+  actions a production store reduces (see TestStore delivery below for the
+  order, its known limits, and cancellations a test issues). A dispatch whose declared work
+  an identifier cancellation releases before that work is registered records
+  the cancellation in diagnostics when the interpreter skips the work.
 - A run's task-cancellation handlers (`withTaskCancellationHandler`,
   `AsyncStream` termination) execute where cancellation is delivered, which
   can be the main thread inside `send`, `cancelEffects` or `Store.deinit`.
@@ -327,7 +382,12 @@ children, and derived `SelectedStore` projections.
   observes completion without receiving authority to cancel another
   dispatch's pending work. Store and TestStore therefore apply stale ID/global
   cancellation to the same active throttle scope, while TestStore keeps one
-  finish activity through post-fire recursion.
+  finish activity through post-fire recursion. A cancellation that removes
+  the window's newest trailing request — through its dispatch or through an
+  identifier only that request carries — removes only the retained requests
+  it covers and hands the window, with its timer, to the newest remaining
+  request that can still proceed (a window retains the newest request and up
+  to seven it replaced); the window resets only when none remains.
 - A `FlowTask` retains cancellation scopes weakly. Live effect contexts keep
   their own scopes alive, while completed descendants do not accumulate behind
   one long-running sibling.
@@ -416,7 +476,9 @@ Phase declarations and references compare the same logical Swift identifier, reg
 
 ### TestStoreDispatch
 
-Root, scoped, and phase helper sends return one discardable TestStoreDispatch. Queued actions keep their dispatch activity until the receive reduction has registered follow-up work. Runtime completion is separate from unverified delivered outputs. Dispatch finish never consumes either queue, regardless of exhaustivity, and can be retried after explicit receive. Timeout/caller cancellation cancels only that dispatch and does not mark uncooperative physical work finished. Handles weakly reference their store. Non-exhaustive receiveOutput advances intermediate actions using a non-consuming shared queue revision, preserving per-queue FIFO and one total deadline.
+TestStore delivery: a `Store` reduces an effect action, and publishes an output, when an effect delivers it; a `TestStore` buffers the value and reduces an action when the test receives it. Both buffers keep the order in which a `Store` handles the values in the schedule where every buffered value was handled at its delivery. When a received action's reduction returns a plain `.send` or `.output` (also mapped, lifted by `Scope`, or under optional-child ownership), a `Store` drains it with the reduction: the value is queued right behind the action, and an output ahead of every output published after the action, at every depth of a plain chain; this is the only order a `Store` has. A `Store` hands any other effect to a root interpreter task it creates while it handles the action, and MainActor tasks start in the order they are created. A test store queues a MainActor marker task, the action's anchor, at every effect-action delivery outside the synchronous part of a walk it follows, and at every send (also scoped or phase) when it begins; a value a followed walk delivers takes the walk's next level instead, and a marker takes its position when it runs. The test store starts a received or sent action's interpreted effect only once its anchor has run, and queues the values the synchronous part of that walk delivers at the anchor's position: behind everything delivered before the anchor ran, such as the later sends of the `concatenate` job that delivered the action or a run emission whose MainActor job was already queued when the action was delivered or sent, and ahead of everything delivered after it, such as the emitting run's next emission or a `concatenate` step after a run. A buffered value keeps that position however late the test receives. `send` and `receive` of such an action let the MainActor jobs queued before the anchor run before they start the effect, and the jobs a test queues after they return run after the anchors of the interpreter tasks that walk creates. The anchor of an interpreted value's own interpreter is queued when the anchor of the interpreter that delivered it runs, where a `Store` creates that task, for four levels; deeper positions — a deeper value's, or a walk's start or resumption there — share the fourth, and an anchor chain whose actions have all finished their walks or left the buffer queues no further marker, unless the last interpreted walk the test store followed finished on it: the next walk, when it waited for that one, starts at that chain's next level and resumes at the level after it, however late the test receives its action. A send takes its place, and queues its anchor, when it begins: a `Store` reduces the sent action, and creates its interpreter task, in the MainActor job in which the send begins, before any job queued by then runs. The test store first reduces the buffered values a `Store` handled before the send (those delivered before it, their plain follow-ups, and the values of interpreter tasks that ran before the send began), then the sent action, whose plain follow-ups share the send's place, and only then starts, in order, the drained effects whose walks had not started when the send began and every interpreted one behind them; every value delivered from the send on stays buffered behind the sent action. This holds also when the drain suspends: the values other jobs deliver meanwhile come after the send's place, and the markers queued meanwhile run after the send's anchor. A `Store` starts a root interpreter walk only once the interpreter task it created before has finished, and a walk can suspend before it finishes: a throttle suspends to read its clock — the test store's default clock read suspends as a `Store`'s does — and a scheduled run (`.run(id:policy:)`) while it waits for admission. The test store follows every interpreted walk — received, drained, deferred or sent — until it returns, in the order a `Store` created their tasks, and records where each finished; a walk that suspends more than once, such as a throttle around a scheduled run or nested throttles, is placed as if it resumed once, a known limitation: what it delivers after a later resumption, and the walks behind it, can come before jobs a `Store` runs first. A walk whose predecessor finished only after the walk's anchor ran starts at the next anchor level after that point, behind every job queued before the predecessor finished: the earliest point at which a `Store` starts it. A `Store`'s walk awaits the earlier task, whose completion resumes it through the global executor, so it can start later, behind jobs queued after that point, depending on how soon the global executor hands it back relative to the MainActor's other jobs; the test store takes the earliest point, as for a resumption. What a walk delivers after it first suspends is keyed at the next level after its start, where a `Store` resumes it at the earliest, behind every MainActor job queued before it started; jobs queued later race with that resumption in a `Store`, and the test store places the resumed values before them. When such a level's marker runs only after a send began, the values it keys are behind the sent action, which can cancel them, the race a `Store` has when the send comes right after the walk started. Work a walk starts in another task — a run, a composite (`merge`, `concatenate`) and its children, a timer — delivers at its delivery, a known limitation since 6.0.x: a `Store` starts that work while the walk runs, so it can reduce the first values of that work, such as the leading sends of a `concatenate`, before MainActor jobs that the test store places ahead of them — a job queued after the walk's anchor ran, or the walk behind the one that started the work — even when the test receives as early as it can; and what that work delivers from a send on is behind the sent action, which can cancel it, although a `Store` typically reduced those values before the send. A test that needs such values first receives them before sending. Where the `Store` order is a race, such as a run's next emission against the interpreter task created while the follow-up of its previous emission is reduced, the test store's own scheduling decides it, and a test can receive either order; for a suspended walk's resumption, and for the start of a walk that waits for the one before it, the test store takes the earliest point, as above, apart from a walk that suspends more than once and the walks behind it, and positions past the fourth level. Positions past the fourth level collapse to the fourth, for interpreted follow-ups and for the start and resumption of walks alike, so what is placed there can come before jobs a `Store` runs first, a known limitation. The values of independent effects and of other dispatches, and every child of a `merge` or `concatenate`, stay in delivery order. That includes a composite follow-up of a run's emission, whose first values a `Store` reduces before a following `merge` step of the emitting `concatenate`: a test that receives late can receive the `merge` children first, a known limitation. These rules describe calls a test awaits one after another: a `send` or `receive` that begins in another task while an earlier call is still walking an effect does not wait for that walk, so what it delivers can come before values a `Store` handles first. A cancellation applied while the test reduces a received or sent action removes the covered actions and outputs a `Store` would have delivered after it — after the action for its reduction and reduction-turn acceptance (for a sent action, after the send's place, which includes what a suspended drain let through), after its anchor for the synchronous part of its effect walk — except the values its own walk delivered. A cancellation the test issues — `cancelEffects(identifiedBy:)`, `cancelAllEffects()`, a `TestStoreDispatch.cancel()` or another dispatch cancellation, and the cancellation of remaining work when a drain times out or `finish()` fails — removes every covered buffered value: the test chooses the schedule in which it lands first. No other cancellation removes a delivered value: not the delivering effect's own continuation, another dispatch's effect, an asynchronous continuation, or a debounce, `latest` or throttle replacement outside such a reduction; a sent action's cancellation keeps every value delivered before the send began.
+
+Root, scoped, and phase helper sends return one discardable TestStoreDispatch. Queued actions keep their dispatch activity until the receive reduction has registered follow-up work. Runtime completion is separate from unverified delivered outputs. Dispatch finish never consumes either queue, regardless of exhaustivity, and can be retried after explicit receive. Timeout/caller cancellation cancels only that dispatch and does not mark uncooperative physical work finished. Handles weakly reference their store. Non-exhaustive receiveOutput takes a ready matching output; before it skips a ready output that does not match, it reduces the buffered actions a `Store` reduced before that output, so it never skips an output a `Store` publishes after the expected one. A ready output that matches is taken even when a buffered action a `Store` reduced before it publishes an earlier one once the test reduces it, so a matcher that accepts both can receive the two in the other order. Otherwise it advances intermediate actions using a non-consuming shared queue revision, preserving per-queue FIFO and one total deadline.
 
 ### Optional-child lifetime boundary
 

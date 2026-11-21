@@ -51,8 +51,10 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let diffLineLimit: Int
   package let wallClock = ContinuousClock()
   package let manualClock: ManualTestClock?
-  package let queue = ActionQueue<R.Action>()
-  package let outputQueue = ActionQueue<R.Output>()
+  /// Buffered effect actions. Each delivery opens an anchor chain.
+  package let queue: ActionQueue<R.Action>
+  /// Buffered outputs.
+  package let outputQueue: ActionQueue<R.Output>
   package let finishActivity = TestStoreFinishActivity()
   package let effectLedgers = TestEffectLedgerRegistry()
   /// Whether a Swift Testing test created this store. Captured at
@@ -101,6 +103,24 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
   package let runScheduler = EffectRunScheduler()
   package var invariants: [TestStoreInvariant<R.State>] = []
   package var phaseCoverageObserver: (any PhaseMapRuntimeObserver)?
+  /// The delivery of the buffered action the test is reducing, or the place
+  /// of the action it sends, until the reduction-turn acceptance of its
+  /// effect has run.
+  package var reducingAction: TestStoreDelivery?
+  /// The reductions whose effect walk the store follows, by effect sequence.
+  package var followedWalks: [UInt64: TestStoreFollowedWalk] = [:]
+  /// Where the last interpreted walk the store followed finished: a `Store`
+  /// starts a root interpreter walk only once the one before it has finished.
+  /// The tail's chain keeps queueing levels while it holds the tail, so a
+  /// walk that waited for the tail's walk finds the levels where the test
+  /// store starts and resumes it.
+  package var interpreterTail: TestStoreAnchor? {
+    didSet {
+      guard interpreterTail?.chain !== oldValue?.chain else { return }
+      interpreterTail?.chain.addMember()
+      oldValue?.chain.settleMember()
+    }
+  }
 
   package var walker: EffectWalker<TestStore<R>> {
     EffectWalker(driver: self)
@@ -118,6 +138,8 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
     self.reducer = reducer
     self.state = initialState
     self.manualClock = clock
+    self.queue = ActionQueue(opensAnchorChains: true)
+    self.outputQueue = ActionQueue(opensAnchorChains: false)
     // A deadline is a failure backstop; one far beyond a day cannot be
     // represented by every wait that sleeps on it, so it is clamped like
     // `INNOFLOW_TESTSTORE_EFFECT_TIMEOUT`.
@@ -233,17 +255,23 @@ public final class TestStore<R: Reducer> where R.State: Equatable {
 
   @discardableResult
   package func markCancelled(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
-    effectBoundaries.markCancelled(id: id, upTo: sequence)
+    let boundary = effectBoundaries.markCancelled(id: id, upTo: sequence)
+    withdrawDeliveries(cancelledBy: id, upTo: boundary, issuedBy: sequence)
+    return boundary
   }
 
   @discardableResult
   package func markCancelledInFlight(id: AnyEffectID, upTo sequence: UInt64? = nil) -> UInt64 {
-    effectBoundaries.markCancelledInFlight(id: id, upTo: sequence)
+    let boundary = effectBoundaries.markCancelledInFlight(id: id, upTo: sequence)
+    withdrawDeliveries(cancelledBy: id, upTo: boundary, issuedBy: sequence)
+    return boundary
   }
 
   @discardableResult
   package func markCancelledAll(upTo sequence: UInt64? = nil) -> UInt64 {
-    effectBoundaries.markCancelledAll(upTo: sequence)
+    let boundary = effectBoundaries.markCancelledAll(upTo: sequence)
+    withdrawDeliveries(cancelledBy: nil, upTo: boundary, issuedBy: sequence)
+    return boundary
   }
 
 }

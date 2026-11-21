@@ -6,7 +6,9 @@ reservations; the call creates no subscription or diagnostic history.
 
 Each `EffectRunLaneSnapshot` contains an opaque `EffectRunLaneID`, the execution
 policy, whether the head has start admission, the pending-request count, and
-whether head cancellation was requested. No raw EffectID, child instance ID,
+whether head cancellation was requested. The pending-request count includes
+only requests that can still proceed: a request whose dispatch or ID was
+cancelled is not counted, even before that cancellation reaches the scheduler. No raw EffectID, child instance ID,
 action, state, or output is included. The opaque ID remains stable through serial
 promotion and latest replacement while the lane is live. Closing and recreating
 a lane creates a new identity. Equal user IDs in different Stores stay unrelated.

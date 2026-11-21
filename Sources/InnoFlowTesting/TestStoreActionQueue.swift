@@ -64,16 +64,52 @@ package final class ActionQueue<Action: Sendable> {
   package struct QueuedAction: Sendable {
     let action: Action
     let context: EffectExecutionContext?
+    let delivery: TestStoreDelivery
     private let activity: TestStoreDispatchActivity?
 
-    init(action: Action, context: EffectExecutionContext?, tracksActivity: Bool) {
+    init(
+      action: Action,
+      context: EffectExecutionContext?,
+      delivery: TestStoreDelivery,
+      tracksActivity: Bool
+    ) {
       self.action = action
       self.context = context?.frozenForExecution()
+      self.delivery = delivery
       activity =
         tracksActivity ? (context?.flowTaskTracker).map(TestStoreDispatchActivity.init) : nil
     }
 
-    func finish() { activity?.finish() }
+    /// Whether the test may still receive the value: no cancellation removed
+    /// it and its dispatch was not cancelled. Other cancellation of its effect
+    /// does not matter, because a `Store` has already handled the value.
+    @MainActor package var isDeliverable: Bool {
+      !delivery.isWithdrawn && context?.flowTaskTracker?.isCancelled != true
+    }
+
+    /// Whether a cancellation of `id`, or of every effect when `id` is `nil`,
+    /// up to the sequence `boundary` covers the effect that delivered the value.
+    @MainActor func isCovered(byCancellationOf id: AnyEffectID?, upTo boundary: UInt64) -> Bool {
+      guard let scope = context?.cancellationScope, scope.sequence <= boundary else { return false }
+      return id.map { context?.cancellationIDs.contains($0) == true } ?? true
+    }
+
+    /// The value is done: it was reduced, or it left the buffer unreduced.
+    @MainActor func finish() {
+      activity?.finish()
+      delivery.settle()
+    }
+  }
+
+  /// Where a value no waiter takes is buffered.
+  enum Placement {
+    /// Behind every buffered value.
+    case back
+    /// Ahead of every buffered value, except `predecessor` and the values
+    /// ahead of it while `predecessor` is still buffered.
+    case front(behind: TestStoreDelivery?)
+    /// Ahead of the first buffered value a `Store` handles after this one.
+    case ordered
   }
 
   private struct Waiter {
@@ -83,6 +119,9 @@ package final class ActionQueue<Action: Sendable> {
     let resolution: ActionQueueWaiterResolution
   }
 
+  /// Counts the markers of the anchor chains its deliveries open; `nil` for
+  /// outputs, which are never reduced.
+  let anchorMarkerCount: TestStoreAnchorMarkerCount?
   private var buffer: [QueuedAction] = []
   private var headIndex = 0
   // Waiters intentionally use an ordered array instead of a dictionary so
@@ -90,6 +129,14 @@ package final class ActionQueue<Action: Sendable> {
   // an arbitrary waiter via `waiters.keys.first`, which made multi-waiter
   // test scenarios non-deterministic across runs.
   private var waiters: [Waiter] = []
+  /// Values resumed to a waiter that has not run yet; they are still pending.
+  private var handedOff: [QueuedAction] = []
+
+  /// - Parameter opensAnchorChains: Whether a value delivered at its own
+  ///   delivery opens an anchor chain: an action does, an output does not.
+  package init(opensAnchorChains: Bool = true) {
+    anchorMarkerCount = opensAnchorChains ? TestStoreAnchorMarkerCount() : nil
+  }
 
   package var pendingWaiterCount: Int {
     waiters.count
@@ -110,10 +157,24 @@ package final class ActionQueue<Action: Sendable> {
   // coupling tests to scheduler-dependent wall-clock completion thresholds.
   var waitTimeoutObserver: ((Duration) -> Void)?
 
-  func enqueue(_ action: Action, context: EffectExecutionContext?, tracksActivity: Bool = true) {
+  /// Delivers a value to the first waiter, or buffers it at `placement`.
+  ///
+  /// - Parameter delivery: Where a `Store` handles the value; by default at
+  ///   its own delivery. It is recorded, and the anchor marker of an action
+  ///   it opens is queued, before a waiter is resumed.
+  /// - Returns: The record of the delivery.
+  @discardableResult
+  func enqueue(
+    _ action: Action,
+    context: EffectExecutionContext?,
+    tracksActivity: Bool = true,
+    delivery: TestStoreDelivery? = nil,
+    placement: Placement = .back
+  ) -> TestStoreDelivery {
     let queuedAction = QueuedAction(
       action: action,
       context: context,
+      delivery: delivery ?? .delivered(opening: anchorMarkerCount),
       tracksActivity: tracksActivity
     )
     while !waiters.isEmpty {
@@ -123,11 +184,41 @@ package final class ActionQueue<Action: Sendable> {
         head.continuation.resume(returning: nil)
         continue
       }
+      handedOff.append(queuedAction)
       head.continuation.resume(returning: queuedAction)
-      return
+      return queuedAction.delivery
     }
 
-    buffer.append(queuedAction)
+    switch placement {
+    case .back:
+      buffer.append(queuedAction)
+    case .front(let predecessor):
+      let index =
+        predecessor.flatMap { predecessor in
+          buffer[headIndex...].firstIndex { $0.delivery === predecessor }.map { $0 + 1 }
+        } ?? headIndex
+      buffer.insert(queuedAction, at: index)
+    case .ordered:
+      let storeOrder = queuedAction.delivery.storeOrder
+      let index =
+        buffer[headIndex...].firstIndex { $0.delivery.storeOrder > storeOrder } ?? buffer.endIndex
+      buffer.insert(queuedAction, at: index)
+    }
+    return queuedAction.delivery
+  }
+
+  /// Withdraws the pending values `predicate` selects: removes the buffered
+  /// ones and marks each one withdrawn, so a waiter already handed one
+  /// discards it. The predicate learns whether a value is still buffered.
+  func withdraw(where predicate: (QueuedAction, _ isBuffered: Bool) -> Bool) {
+    for entry in handedOff where predicate(entry, false) {
+      entry.delivery.isWithdrawn = true
+    }
+    removeBuffered { entry in
+      guard predicate(entry, true) else { return false }
+      entry.delivery.isWithdrawn = true
+      return true
+    }
   }
 
   func removeBuffered(where predicate: (QueuedAction) -> Bool) {
@@ -152,7 +243,7 @@ package final class ActionQueue<Action: Sendable> {
 
     let waiterID = UUID()
     let resolution = ActionQueueWaiterResolution()
-    return await withTaskCancellationHandler {
+    let received: QueuedAction? = await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
         guard !resolution.isCancellationClaimed else {
           continuation.resume(returning: nil)
@@ -180,10 +271,20 @@ package final class ActionQueue<Action: Sendable> {
         self?.resolveWaiter(id: waiterID, returning: nil)
       }
     }
+    if let received {
+      handedOff.removeAll { $0.delivery === received.delivery }
+    }
+    return received
   }
 
-  func popBuffered() -> QueuedAction? {
-    guard headIndex < buffer.count else { return nil }
+  /// Puts a value just taken from the head of the buffer back at its head.
+  func restoreFirst(_ queuedAction: QueuedAction) {
+    buffer.insert(queuedAction, at: headIndex)
+  }
+
+  /// Removes and returns the first buffered value when `isEligible` accepts it.
+  func popBuffered(if isEligible: (QueuedAction) -> Bool = { _ in true }) -> QueuedAction? {
+    guard headIndex < buffer.count, isEligible(buffer[headIndex]) else { return nil }
     let queuedAction = buffer[headIndex]
     headIndex += 1
     compactBufferIfNeeded()

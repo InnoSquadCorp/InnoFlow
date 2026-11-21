@@ -10,11 +10,36 @@ extension TestStore {
 
   /// Sends a user action and verifies its state transition.
   ///
-  /// Buffered effect actions are reduced first. Exhaustive stores report
+  /// Buffered effect actions delivered before the send are reduced first, as
+  /// a `Store` reduced them at their delivery. Exhaustive stores report
   /// those actions as unreceived; non-exhaustive stores continue silently or
   /// emit warnings according to ``exhaustivity``. Recovery is bounded by the
   /// store's effect timeout so a recursively emitted action cannot block the
   /// send forever.
+  ///
+  /// When a reduction returns an effect a `Store` interprets in a MainActor
+  /// task it creates — anything but `.none` or a plain `.send` or `.output`,
+  /// also under ownership metadata — the send starts that effect where a
+  /// `Store` walks it at the earliest: once the MainActor jobs queued before
+  /// that task have run and the walk of the task created before it has
+  /// finished. It buffers what the effect delivers there, and, once the walk
+  /// has first suspended, where a `Store` resumes it at the earliest. Two
+  /// limitations are the exception, and can place a value before jobs a
+  /// `Store` runs first: a walk that suspends more than once is placed as if
+  /// it resumed once, and the walks behind it start right behind that place;
+  /// and positions more than four interpreter jobs behind a delivery or send
+  /// share the fourth job's position. A third limitation concerns work the
+  /// walk starts in another task (a run, a `merge` or `concatenate` and its
+  /// children, a timer): what that work delivers is buffered at its
+  /// delivery, which can be behind jobs a `Store` runs after it. A buffered
+  /// action reduced first whose walk had not started when the send began,
+  /// and every interpreted one reduced after it, is walked after the new
+  /// action is reduced, as in a `Store`.
+  ///
+  /// These rules describe sends and receives a test awaits one after
+  /// another. A call that begins in another task while an earlier one is
+  /// still walking an effect does not wait for that walk, so what it
+  /// delivers can come before values a `Store` handles first.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -48,16 +73,16 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
-    await prepareForSend(location: location)
+    let prepared = await prepareForSend(location: location)
     let dispatch = makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousState = state
 
-    let effect = reduceAction(
-      action,
-      source: .send,
-      location: location
-    )
+    let (effect, context) = reduceSentAction(
+      at: prepared, location: location, flowTaskTracker: dispatch.tracker
+    ) {
+      reduceAction(action, source: .send, location: location)
+    }
     assertStateTransition(
       from: previousState,
       expectedStateMutation: updateExpectedState.map { update in
@@ -70,15 +95,25 @@ extension TestStore {
       location: location
     )
 
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location, flowTaskTracker: dispatch.tracker),
-      awaited: false
-    )
+    await walkSentEffect(effect, context: context, prepared: prepared)
     return dispatch.task
   }
 
+  /// Receives the next buffered effect action, requires it to equal
+  /// `expectedAction`, and verifies its state transition.
+  ///
+  /// A received action's effect starts where a `Store` would start it at the
+  /// earliest, as for ``send(_:assert:fileID:filePath:line:column:)``: an
+  /// effect the `Store` interprets in a MainActor task of its own starts once
+  /// the MainActor jobs queued before that task have run and the walk of the
+  /// task created before it has finished. The same two limitations are the
+  /// exception, and can place a value before jobs a `Store` runs first: a
+  /// walk that suspends more than once is placed as if it resumed once, and
+  /// the walks behind it start right behind that place; and positions more
+  /// than four interpreter jobs behind a delivery or send share the fourth
+  /// job's position. The third applies as well: what work the walk starts in
+  /// another task delivers is buffered at its delivery, which can be behind
+  /// jobs a `Store` runs after it.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
@@ -404,34 +439,22 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)?,
     location: TestStoreSourceLocation
   ) async {
-    defer { queuedAction.finish() }
-    guard shouldProceed(context: queuedAction.context) else { return }
-    let action = queuedAction.action
-    let previousState = state
-
-    let effect = reduceAction(
-      action,
-      source: .receive,
-      location: location
-    )
-    assertStateTransition(
-      from: previousState,
-      expectedStateMutation: updateExpectedState.map { update in
-        { state in
-          update(&state)
-          return true
-        }
-      },
-      eventDescription: "mismatch after receiving action.",
-      location: location
-    )
-
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location, flowTaskTracker: queuedAction.context?.flowTaskTracker),
-      awaited: false
-    )
+    await reduceReceivedAction(
+      queuedAction, source: .receive, location: location,
+      willReduce: { _ in },
+      didReduce: { previousState in
+        assertStateTransition(
+          from: previousState,
+          expectedStateMutation: updateExpectedState.map { update in
+            { state in
+              update(&state)
+              return true
+            }
+          },
+          eventDescription: "mismatch after receiving action.",
+          location: location
+        )
+      })
   }
 
   public func assertNoBufferedActions(
@@ -469,14 +492,20 @@ extension TestStore {
     }
   }
 
+  /// Cancels the effects identified by `id` and removes every buffered action
+  /// and output they delivered, as if the cancellation landed before them.
   public func cancelEffects<ID: Hashable & Sendable>(identifiedBy id: EffectID<ID>) async {
     let erasedID = AnyEffectID(id)
     let sequence = markCancelled(id: erasedID)
+    purgeDeliveries(cancelledBy: erasedID, upTo: sequence)
     cancelEffectsSynchronously(identifiedBy: erasedID, upTo: sequence)
   }
 
+  /// Cancels every effect and removes every buffered action and output they
+  /// delivered, as if the cancellation landed before them.
   public func cancelAllEffects() async {
     let sequence = markCancelledAll()
+    purgeDeliveries(cancelledBy: nil, upTo: sequence)
     cancelAllEffectsSynchronously(upTo: sequence)
   }
 
@@ -616,13 +645,12 @@ extension TestStore {
     flowTaskTracker: FlowTaskTracker? = nil,
     location: TestStoreSourceLocation
   ) async {
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location,
-        flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker),
-      awaited: false
-    )
+    let context = reductionTurnContext(
+      for: effect, location: location,
+      flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker)
+    await walkSentEffect(
+      effect, context: context,
+      prepared: TestStorePreparedSend(markerCount: queue.anchorMarkerCount))
   }
 
   package func walkScopedEffect(_ effect: ReducerEffect<R.Action, R.Output>) async {

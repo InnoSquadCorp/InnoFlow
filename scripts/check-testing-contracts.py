@@ -77,8 +77,8 @@ driver = (root / 'Sources/InnoFlowTesting/TestStore+EffectDriver.swift').read_te
 if 'extension TestStore: ReductionTurnCancellationAcceptor' not in driver:
     failures.append('TestStore must share reduction-turn cancellation acceptance with Store')
 starts = sum(
-    (root / 'Sources/InnoFlowTesting' / name).read_text().count('context: nextEffectContext(')
-    for name in ['TestStore+Public.swift', 'TestStore+Exhaustivity.swift'])
+    (root / 'Sources/InnoFlowTesting' / name).read_text().count('nextEffectContext(')
+    for name in ['TestStore+Public.swift', 'TestStore+Exhaustivity.swift', 'TestStore+DeliveryOrder.swift'])
 if starts:
     failures.append('TestStore must start reducer effects through reductionTurnContext(for:)')
 

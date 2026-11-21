@@ -432,6 +432,12 @@ extension Store: EffectDriver {
     effectBridge.shouldProceed(context: context)
   }
 
+  package func reportCancelledBeforeRegistration(context: EffectExecutionContext) {
+    guard let diagnostics, let dispatchID = context.dispatchID else { return }
+    diagnostics.recordCancellationRequested(
+      dispatchID, sequence: context.sequence, hasEffectID: true)
+  }
+
   @discardableResult
   package func scheduleDebounce(
     _ nested: ReducerEffect<R.Action, R.Output>,
@@ -513,7 +519,7 @@ extension Store: EffectDriver {
     let generation = throttleState.nextGeneration(for: id)
 
     let clock = self.clock
-    let completion = FlowTaskCompletion()
+    let completion = ThrottleWindowCompletion()
     let task = Task { [weak self] in
       defer { completion.complete() }
       do {
@@ -555,11 +561,11 @@ extension Store: EffectDriver {
       )
     }
 
-    throttleState.setTrailingTask(task, completion: completion, for: id)
     // A trailing timer can outlive and serve more than one dispatch. The
-    // runtime owns the shared timer; each dispatch tracks only its completion
-    // so cancelling an older FlowTask cannot cancel a newer pending effect.
-    schedulingContext.flowTaskTracker?.trackCompletion(of: completion)
+    // runtime owns the shared timer; each dispatch waits only for the window
+    // on behalf of its own request (`ThrottleStateMap.holdWindow`), so
+    // cancelling an older FlowTask cannot cancel a newer pending effect.
+    throttleState.setTrailingTask(task, completion: completion, for: id)
     return task
   }
 
@@ -567,14 +573,9 @@ extension Store: EffectDriver {
     for id: AnyEffectID,
     context: EffectExecutionContext
   ) {
-    guard
-      let flowTaskTracker = context.flowTaskTracker,
-      let completion = throttleState.trailingCompletion(for: id)
-    else { return }
-
-    // The timer is runtime-owned. Mirror its completion into the latest
-    // dispatch without granting that dispatch authority over the shared task.
-    flowTaskTracker.trackCompletion(of: completion)
+    // The timer is runtime-owned and indexed by nothing a dispatch owns. The
+    // newer request's dispatch waits for the window through `throttleState`,
+    // without authority over the shared task.
   }
 
   package var now: ContinuousClock.Instant {

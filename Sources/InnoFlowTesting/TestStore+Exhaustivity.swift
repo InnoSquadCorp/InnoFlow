@@ -5,20 +5,33 @@
 import Foundation
 
 extension TestStore {
+  /// Takes the place of an action the test sends now, and reduces the
+  /// buffered actions a `Store` reduced before it: those delivered before
+  /// the send, with the values their reductions drain and the values of
+  /// interpreter tasks that ran before the send began.
+  ///
+  /// - Returns: The place of the send, and the walks of the drained actions
+  ///   whose interpreter tasks a `Store` runs after it reduces the sent
+  ///   action; the send runs them after its reduction.
   package func prepareForSend(
     location: TestStoreSourceLocation
-  ) async {
+  ) async -> TestStorePreparedSend {
     noteTestInteraction(location: location)
+    // A `Store` reduces the sent action in the MainActor job in which the
+    // send begins, before any job queued by then runs, even when this drain
+    // suspends: values delivered or anchored from now on stay buffered.
+    var prepared = TestStorePreparedSend(markerCount: queue.anchorMarkerCount)
     let deadline = wallClock.now.advanced(by: effectTimeout)
     var skippedActionCount = 0
     var skippedActionDescriptions: [String] = []
     var didDrainAction = false
 
-    while let action = popBufferedQueuedAction() {
+    while let action = popBufferedQueuedAction(before: prepared.order) {
       // Give one already-buffered action a chance to recover even when the
       // configured timeout is zero, then bound recursive synchronous sends.
       if didDrainAction, wallClock.now >= deadline {
         let sequence = markCancelledAll()
+        purgeDeliveries(cancelledBy: nil, upTo: sequence)
         cancelAllEffectsSynchronously(upTo: sequence)
         let actionList = formattedSkippedActions(
           skippedActionDescriptions,
@@ -38,17 +51,18 @@ extension TestStore {
           """,
           location
         )
-        return
+        action.finish()
+        return prepared
       }
       if skippedActionDescriptions.count < 20 {
         skippedActionDescriptions.append(String(describing: action.action))
       }
       skippedActionCount += 1
-      await applyUnassertedAction(action, location: location)
+      await reduceBufferedActionBeforeSend(action, location: location, preparing: &prepared)
       didDrainAction = true
     }
 
-    guard skippedActionCount > 0 else { return }
+    guard skippedActionCount > 0 else { return prepared }
 
     let actionList = formattedSkippedActions(
       skippedActionDescriptions,
@@ -67,7 +81,7 @@ extension TestStore {
       )
 
     case .off(let showSkippedAssertions):
-      guard showSkippedAssertions else { return }
+      guard showSkippedAssertions else { return prepared }
       warningReporter(
         """
         TestStore skipped \(skippedActionCount) effect action(s) before sending a new action:
@@ -78,6 +92,7 @@ extension TestStore {
         location
       )
     }
+    return prepared
   }
 
   private func formattedSkippedActions(
@@ -96,20 +111,9 @@ extension TestStore {
     _ queuedAction: ActionQueue<R.Action>.QueuedAction,
     location: TestStoreSourceLocation
   ) async {
-    defer { queuedAction.finish() }
-    guard shouldProceed(context: queuedAction.context) else { return }
-    let action = queuedAction.action
-    let effect = reduceAction(
-      action,
-      source: .automatic,
-      location: location
-    )
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location, flowTaskTracker: queuedAction.context?.flowTaskTracker),
-      awaited: false
-    )
+    await reduceReceivedAction(
+      queuedAction, source: .automatic, location: location,
+      willReduce: { _ in }, didReduce: { _ in })
   }
 
   package func reportSkippedAction(

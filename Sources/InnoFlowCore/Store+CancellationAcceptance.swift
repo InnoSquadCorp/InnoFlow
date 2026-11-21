@@ -111,8 +111,8 @@ extension Store: ReductionTurnCancellationAcceptor {
     scope.recordAcceptedCancellation(request)
   }
 
-  package func runLaneKind(for id: AnyEffectID) -> EffectExecutionPolicy.Kind? {
-    effectBridge.runScheduler.laneKind(for: id)
+  package func runLane(for id: AnyEffectID) -> EffectRunLaneView? {
+    effectBridge.runScheduler.laneView(for: id)
   }
 
   package func acceptLatestReplacementInReductionTurn(
@@ -122,9 +122,10 @@ extension Store: ReductionTurnCancellationAcceptor {
     guard context.cancellationScope != nil else { return }
     // Admission order: the lane's own requests are displaced and reported as
     // superseded first, then everything else under `id` is released. The
+    // lane is held for the request until it is admitted, and the
     // interpreter's admission later consumes the recorded acceptance instead
     // of repeating it.
-    effectBridge.runScheduler.displaceLatestLane(id: id, successor: context)
+    effectBridge.runScheduler.holdLatestLane(id: id, successor: context)
     acceptInReductionTurn(.inFlight(id), context: context)
   }
 }

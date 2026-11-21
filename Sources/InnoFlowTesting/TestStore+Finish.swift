@@ -272,6 +272,7 @@ extension TestStore {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
           markTerminalVerificationHandled(terminalVerificationRevision)
+          action.finish()
           return .timedOut(snapshot)
         }
         reportSkippedAction(
@@ -323,8 +324,10 @@ extension TestStore {
   private func cancelRemainingEffectsForFinish() {
     let sequence = markCancelledAll()
     cancelAllEffectsSynchronously(upTo: sequence)
-    queue.removeBuffered { _ in true }
-    outputQueue.removeBuffered { _ in true }
+    // Every pending value goes: the buffered ones, and one a waiting
+    // `receive` was handed but has not resumed to reduce.
+    queue.withdraw { _, _ in true }
+    outputQueue.withdraw { _, _ in true }
   }
 
   package func noteTestInteraction(
@@ -377,7 +380,7 @@ extension TestStore {
     var actionCount = 0
     var actionDescriptions: [String] = []
     queue.forEachBuffered { queuedAction in
-      guard shouldProceed(context: queuedAction.context) else { return }
+      guard queuedAction.isDeliverable else { return }
       actionCount += 1
       if actionDescriptions.count < 20 {
         actionDescriptions.append(String(describing: queuedAction.action))
@@ -387,7 +390,7 @@ extension TestStore {
     var outputCount = 0
     var outputDescriptions: [String] = []
     outputQueue.forEachBuffered { queuedOutput in
-      guard shouldProceed(context: queuedOutput.context) else { return }
+      guard queuedOutput.isDeliverable else { return }
       outputCount += 1
       if outputDescriptions.count < 20 {
         outputDescriptions.append(String(describing: queuedOutput.action))

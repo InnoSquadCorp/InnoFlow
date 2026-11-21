@@ -263,14 +263,17 @@ struct TestStoreReceiveTests {
   func expiredDeadlinePreservesValidActionAfterStaleBuffer() async {
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let cancellationID = AnyEffectID(StaticEffectID("receive-buffered-deadline"))
-    let sequence = store.nextSequence()
-    let staleContext = store.makeEffectContext(
-      sequence: sequence,
+    // Cancelling its dispatch invalidates the action but leaves it buffered.
+    let dispatch = FlowTaskTracker()
+    _ = dispatch.beginActivity()
+    let staleContext = store.effectBoundaries.makeContext(
+      sequence: store.nextSequence(),
       cancellationIDs: [cancellationID],
-      potentialCancellationIDs: [cancellationID]
+      potentialCancellationIDs: [cancellationID],
+      flowTaskTracker: dispatch
     )
     store.deliverAction(.ignored, context: staleContext)
-    _ = store.markCancelled(id: cancellationID, upTo: sequence)
+    dispatch.cancel()
     store.deliverAction(.value(21), context: nil)
 
     let timedOut = await store.receiveResult(timeout: .zero) { action in
@@ -294,11 +297,14 @@ struct TestStoreReceiveTests {
   func invalidatedActionsDoNotResetReceiveDeadline() async {
     let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
     let cancellationID = AnyEffectID(StaticEffectID("receive-total-deadline"))
-    let sequence = store.nextSequence()
-    let staleContext = store.makeEffectContext(
-      sequence: sequence,
+    // Cancelling its dispatch invalidates the action handed to the waiter.
+    let dispatch = FlowTaskTracker()
+    _ = dispatch.beginActivity()
+    let staleContext = store.effectBoundaries.makeContext(
+      sequence: store.nextSequence(),
       cancellationIDs: [cancellationID],
-      potentialCancellationIDs: [cancellationID]
+      potentialCancellationIDs: [cancellationID],
+      flowTaskTracker: dispatch
     )
     let totalTimeout = Duration.seconds(5)
     let minimumConsumedBudget = Duration.milliseconds(50)
@@ -325,7 +331,7 @@ struct TestStoreReceiveTests {
 
     try? await Task.sleep(for: .milliseconds(100))
     store.deliverAction(.ignored, context: staleContext)
-    _ = store.markCancelled(id: cancellationID, upTo: sequence)
+    dispatch.cancel()
 
     let didInstallSecondWaiter = await waitUntil {
       observedTimeouts.count == 2 && store.queue.pendingWaiterCount == 1
@@ -347,6 +353,51 @@ struct TestStoreReceiveTests {
     let consumedBudget = observedTimeouts[0] - observedTimeouts[1]
     #expect(observedTimeouts[1] > .zero)
     #expect(consumedBudget >= minimumConsumedBudget)
+    #expect(store.queue.pendingWaiterCount == 0)
+  }
+
+  @Test("A failing finish withdraws the action a waiting receive was handed")
+  func failingFinishWithdrawsHandedAction() async {
+    let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
+    let cancellationID = AnyEffectID(StaticEffectID("receive-handed-then-finish"))
+    var receiveResult: TestStoreReceiveResult<ReceiveFeature.Action, Void>?
+    let receiving = Task { @MainActor in
+      receiveResult = await store.receiveResult(timeout: .milliseconds(200)) { _ in
+        TestStoreActionMatch.matched(())
+      }
+    }
+    guard await waitUntil(condition: { store.queue.pendingWaiterCount == 1 }) else {
+      receiving.cancel()
+      _ = await receiving.value
+      Issue.record("Expected the receive waiter to be installed")
+      return
+    }
+
+    // One MainActor job: the waiter is handed the first action, the second
+    // stays buffered, and the finish fails on it before the waiter resumes.
+    let context = store.effectBoundaries.makeContext(
+      sequence: store.nextSequence(),
+      cancellationIDs: [cancellationID],
+      potentialCancellationIDs: [cancellationID]
+    )
+    store.deliverAction(.value(1), context: context)
+    store.deliverAction(.value(2), context: context)
+    let finished = await store.finishResult(timeout: .zero)
+    guard case .unhandledWork = finished else {
+      receiving.cancel()
+      _ = await receiving.value
+      Issue.record("Expected the finish to fail on the buffered action, got \(finished)")
+      return
+    }
+
+    // The finish cancelled the remaining work, the handed action included:
+    // the receive neither returns nor reduces it.
+    _ = await receiving.value
+    guard case .timedOut = receiveResult else {
+      Issue.record("Expected the receive to discard the withdrawn action")
+      return
+    }
+    #expect(store.state.values.isEmpty)
     #expect(store.queue.pendingWaiterCount == 0)
   }
 }
