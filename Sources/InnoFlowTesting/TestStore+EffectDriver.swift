@@ -181,6 +181,13 @@ extension TestStore: EffectDriver {
           }
           guard let pending = self.throttleState.pendingToFire(for: id) else { return nil }
           guard self.shouldProceed(context: pending.context) else { return nil }
+          // The fired request can be an older one the window fell back to.
+          // Its work runs in this task from now on, so only its own IDs may
+          // cancel the task: a `Store`, whose shared timer carries no ID, lets
+          // only the fired request's IDs stop that work.
+          if let token = self.throttleActivityTokenByID[id] {
+            self.refreshTrackedTask(token: token, context: pending.context)
+          }
           return pending
         }
       } catch {

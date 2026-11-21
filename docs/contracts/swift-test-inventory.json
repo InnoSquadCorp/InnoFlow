@@ -105,7 +105,7 @@
     "Tests/InnoFlowTestingTests/TestStoreOwnerFrameworkReportingTests.swift": "5bb16c055a57e8765b88098ddc8552aadccb855d695ae8249e463ca4c44ad47e",
     "Tests/InnoFlowTestingTests/TestStorePhaseTransitionTests.swift": "d2cf97d67c2ffb93a6e8d7fdadfbe5c76631c9f58070159ffa9ea3ed026ad3b5",
     "Tests/InnoFlowTestingTests/TestStoreReceiveTests.swift": "f86b4b0a0769d9ec468813f91a06cc5432a6a5379fac5ad9035fb0699cc84eec",
-    "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift": "7d17a8a8e27c4daa09dffc6a54bb68d74be978882bc6605323ff652c178d35c4",
+    "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift": "d8fc7f9a8961beae99e64603b5e02cd73cddeeddf4ddea23edc2b9789c24d0e4",
     "Tests/InnoFlowTestingTests/TestStoreTerminalVerificationTests.swift": "4926a48338f468b90835c4dd47fa4afa0fea67cb70c349a8fd640ab215c0566e",
     "Tests/InnoFlowTestingTests/TestWaitScaleTests.swift": "3eef94677a232f49a8aac699703ffc3fb41b542a314a49810448b263111f0606",
     "Tests/InnoFlowTestingTests/TestingLocationConsistencyTests.swift": "c1e567af5968687209c6cab1157fe9d7ca114a87935945244cd134a1e2866fee",
@@ -9353,7 +9353,7 @@
       "displayName": "A cancel behind a lane request its busy lane rejects is accepted in the reduction turn",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/cancelBehindRejectedLaneRequestIsAcceptedInTheTurn()",
-      "line": 392,
+      "line": 433,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9362,7 +9362,7 @@
       "displayName": "A latest lane request drops the emission of the run it replaces",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/latestLaneReplacementDropsParkedEmission()",
-      "line": 328,
+      "line": 369,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9371,7 +9371,7 @@
       "displayName": "A latest request behind a synchronous sibling drops the emission of the run it replaces",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/latestLaneRequestAfterSiblingDropsParkedEmission()",
-      "line": 345,
+      "line": 386,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9380,7 +9380,7 @@
       "displayName": "A latest request a serial lane rejects leaves that lane's work to be received",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/latestRequestRejectedBySerialLaneLeavesItRunning()",
-      "line": 369,
+      "line": 410,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9389,7 +9389,7 @@
       "displayName": "A cancel leading a concatenation drops the emission a Store would drop",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/leadingCancelInConcatenationDropsParkedEmission()",
-      "line": 310,
+      "line": 351,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9398,7 +9398,7 @@
       "displayName": "TestStore accepts nothing behind a lane request another merge branch can reorder",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/nothingAcceptedBehindOrderDependentLaneRequest(trigger:)",
-      "line": 475,
+      "line": 568,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9407,7 +9407,7 @@
       "displayName": "A throttle request its own ID cancellation removes releases its test dispatch at once",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/removedThrottleRequestReleasesItsDispatch()",
-      "line": 443,
+      "line": 484,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -9416,7 +9416,16 @@
       "displayName": "Cancelling an ID only the newest throttle request carries fires the request it replaced",
       "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
       "identifier": "TestStoreReductionTurnCancellationTests/throttleFallbackAfterNewestOwnerCancellation(throughReducer:)",
-      "line": 416,
+      "line": 457,
+      "target": "InnoFlowTestingTests"
+    },
+    {
+      "attribute": "@Test(\"Only the IDs of the request a throttle window fires can stop the work it fires\")",
+      "conditionalContexts": [],
+      "displayName": "Only the IDs of the request a throttle window fires can stop the work it fires",
+      "file": "Tests/InnoFlowTestingTests/TestStoreReductionTurnCancellationTests.swift",
+      "identifier": "TestStoreReductionTurnCancellationTests/throttleTimerFollowsTheFiredRequest()",
+      "line": 516,
       "target": "InnoFlowTestingTests"
     },
     {
