@@ -20,18 +20,21 @@ extension TestStore {
   /// When a reduction returns an effect a `Store` interprets in a MainActor
   /// task it creates — anything but `.none` or a plain `.send` or `.output`,
   /// also under ownership metadata — the send starts that effect where a
-  /// `Store` walks it at the earliest: once the MainActor jobs queued before
-  /// that task have run and the walk of the task created before it has
-  /// finished. It buffers what the effect delivers there, and, once the walk
-  /// has first suspended, where a `Store` resumes it at the earliest. Two
-  /// limitations are the exception, and can place a value before jobs a
-  /// `Store` runs first: a walk that suspends more than once is placed as if
-  /// it resumed once, and the walks behind it start right behind that place;
-  /// and positions more than four interpreter jobs behind a delivery or send
-  /// share the fourth job's position. A buffered action reduced first whose
-  /// walk had not started when the send began, and every interpreted one
-  /// reduced after it, is walked after the new action is reduced, as in a
-  /// `Store`.
+  /// `Store` starts its walk: where that task runs, once the MainActor jobs
+  /// queued before it have run, or, when the walk of the task created before
+  /// it has not finished by then, in the job queued when that walk finishes.
+  /// It buffers what the effect delivers there, and, once the walk has first
+  /// suspended, where a `Store` resumes it at the earliest: a `Store`
+  /// resumes a suspended walk through the global executor, so where it
+  /// continues, and where a walk waiting for it then starts, is a race, and
+  /// the test store takes the earliest point. Two limitations are the
+  /// exception, and can place a value before jobs a `Store` runs first: a
+  /// walk that suspends more than once is placed as if it resumed once, and
+  /// the walks behind it start right behind that place; and positions more
+  /// than four interpreter jobs behind a delivery or send share the fourth
+  /// job's position. A buffered action reduced first whose walk had not
+  /// started when the send began, and every interpreted one reduced after
+  /// it, is walked after the new action is reduced, as in a `Store`.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -94,16 +97,18 @@ extension TestStore {
   /// Receives the next buffered effect action, requires it to equal
   /// `expectedAction`, and verifies its state transition.
   ///
-  /// A received action's effect starts where a `Store` would start it at the
-  /// earliest, as for ``send(_:assert:fileID:filePath:line:column:)``: an
-  /// effect the `Store` interprets in a MainActor task of its own starts once
-  /// the MainActor jobs queued before that task have run and the walk of the
-  /// task created before it has finished. The same two limitations are the
-  /// exception, and can place a value before jobs a `Store` runs first: a
-  /// walk that suspends more than once is placed as if it resumed once, and
-  /// the walks behind it start right behind that place; and positions more
-  /// than four interpreter jobs behind a delivery or send share the fourth
-  /// job's position.
+  /// A received action's effect starts where a `Store` starts it, as for
+  /// ``send(_:assert:fileID:filePath:line:column:)``: an effect the `Store`
+  /// interprets in a MainActor task of its own starts where that task runs,
+  /// once the MainActor jobs queued before it have run, or, when the walk of
+  /// the task created before it has not finished by then, in the job queued
+  /// when that walk finishes — for a walk that suspended, the earliest point
+  /// at which a `Store` resumes and finishes it. The same two limitations
+  /// are the exception, and can place a value before jobs a `Store` runs
+  /// first: a walk that suspends more than once is placed as if it resumed
+  /// once, and the walks behind it start right behind that place; and
+  /// positions more than four interpreter jobs behind a delivery or send
+  /// share the fourth job's position.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,

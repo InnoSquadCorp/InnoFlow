@@ -24,9 +24,10 @@ import Testing
 // queued after it, such as the run's next emission or the next step of a
 // `concatenate` after a run. The last rule holds unless the interpreter task
 // created before it has not finished, because it suspended or still waits
-// for its own predecessor: the task awaits it, and where it then starts, like
-// where a suspended walk resumes, is a race in a `Store`; those tests compare
-// with the earliest point a `Store` reaches. The test store's two known
+// for its own predecessor: a `Store` then starts the walk in the job queued
+// when that task finishes, and where a suspended walk resumes, and so
+// finishes, is a race in a `Store`; those tests compare with the earliest
+// point a `Store` reaches. The test store's two known
 // limitations — a walk that suspends more than once, with the walks behind
 // it, and positions past the fourth interpreter level behind a delivery or
 // send — change no order these tests assert, although a walk here can reach
@@ -2728,9 +2729,9 @@ struct TestStoreDeliveryOrderTests {
     // The job that delivers `r` and `xz` queues a job that queues the job
     // delivering `z`. A `Store` runs `r`'s interpreter task, which suspends
     // to read the clock, then that job, which queues `z`'s job before the
-    // task finishes, and starts `xz`'s walk only once it finishes, at the
-    // earliest in the job queued then, behind `z`'s job: `xzv`'s cancel of
-    // `z`'s effect comes late.
+    // task finishes, and starts `xz`'s walk only once it finishes, in the
+    // job queued then, behind `z`'s job: `xzv`'s cancel of `z`'s effect comes
+    // late.
     let ids = [AnyEffectID(markID)]
     let reference = Store(
       reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
@@ -2957,11 +2958,10 @@ struct TestStoreDeliveryOrderTests {
     // One job delivers `r` and `shape`'s action, then queues the receive of
     // `r` and a job that waits until `r`'s clock read is served, then queues
     // a job that queues the one delivering `z`. A `Store` starts the waiting
-    // walk only once `r`'s interpreter task has finished, at the earliest in
-    // the job queued then, and resumes it after its own clock read, behind
-    // `z`'s job: `z` comes before `xv`, and `xc`'s cancel of `z`'s effect
-    // comes late. `r` then has nothing left in its anchor chain, which goes
-    // on all the same.
+    // walk only once `r`'s interpreter task has finished, in the job queued
+    // then, and resumes it after its own clock read, behind `z`'s job: `z`
+    // comes before `xv`, and `xc`'s cancel of `z`'s effect comes late. `r`
+    // then has nothing left in its anchor chain, which goes on all the same.
     let ids = [AnyEffectID(markID)]
     let referenceClock = ManualTestClock()
     let reference = Store(
