@@ -37,7 +37,7 @@
     "Tests/InnoFlowCoreTests/ProjectionRegistrationBoundaryTests.swift": "af0de33dc011a489094e0ea59bfbb642fda8d0501a66840deb74d03e75841b73",
     "Tests/InnoFlowCoreTests/ProjectionReleaseScalingTests.swift": "f2824201b30660b6c985e6feee59b3a34a3084a689c524fd8f367fd53ffa6bd8",
     "Tests/InnoFlowCoreTests/ProjectionRetentionTests.swift": "8be09c09c0a3d232607c1503a481759fad52533f8830ee09803bd9d25638d47b",
-    "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "f4151d3ec7c958236e0285b8da15a5be33a6ad63246c1038a01fcf37f757eab6",
+    "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift": "24b664def6914a48f069ecf43978bf19e272b993c517cf603eae6d19b57187d3",
     "Tests/InnoFlowCoreTests/ReducerCompositionPerfTests.swift": "24efa0ec44f6b760bd382fe71d4df54107d2294271431107f85e2ea25d2e1abb",
     "Tests/InnoFlowCoreTests/RunLaneSnapshotConsistencyTests.swift": "e66c242be821db94376435d588b1ed891be1d3b0693d70b8e4fa3bf165cc708b",
     "Tests/InnoFlowCoreTests/SnapshotBoundaryConsistencyTests.swift": "aee8ab7d6bf54ec3e837c43c21f32efe53e6e447de395c067540388ea5145b12",
@@ -91,7 +91,7 @@
     "Tests/InnoFlowTestingTests/PhaseTransitionGraphTests.swift": "771d1b95488c161cc15482bd829f23d774f7749b97690a55f71dec218974a1a1",
     "Tests/InnoFlowTestingTests/ReducerCompositionTests.swift": "aaae9837506b648886b77f2e784c7baed62133fff744429e9a13e0e988c9ed46",
     "Tests/InnoFlowTestingTests/ReducerOnChangeTests.swift": "c1efde2f065a25b168b0e3b397d64fd61d689edb50fa4026f70b158e5b8d766b",
-    "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift": "281949d88e08e47549472fd8d361300ec3dc77162d068c149180120df4f7b4c5",
+    "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift": "af1c46167aa4c8b2698b52906397047640408e68010fcedecfb3650dfce88910",
     "Tests/InnoFlowTestingTests/SchedulerAdmissionConsistencyTests.swift": "c177c165c31258dadc47666a53cc7c57615830df87c413a1fb5dae47e64a36c3",
     "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift": "df0a0ddca65ba7a62246f819161463b17c90e5d9263bc75d47f7cd730ada3634",
     "Tests/InnoFlowTestingTests/TestEffectLedgerConsistencyTests.swift": "c27296d445409c72e821e96a10a949a8680f814d216d68eeb3423242f0198e39",
@@ -1480,7 +1480,7 @@
       "displayName": "A lane held for a latest request whose dispatch is cancelled is closed",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneHeldForCancelledLatestRequestIsClosed()",
-      "line": 1885,
+      "line": 1893,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1489,7 +1489,7 @@
       "displayName": "A lane held for a latest request keeps nothing of the request alive",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneHeldForCancelledLatestRequestRetainsNothing()",
-      "line": 1911,
+      "line": 1919,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1507,7 +1507,7 @@
       "displayName": "A lane request meets the same lane whichever merge branch cancels the request it is held for",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneRequestIgnoresBranchOrderOfHeldRequestCancel(ownerFirst:)",
-      "line": 1987,
+      "line": 1995,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1516,7 +1516,7 @@
       "displayName": "A lane request meets the same lane whichever merge branch cancels a request holding it",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/laneRequestIgnoresBranchOrderOfHolderCancel(latestLane:ownerFirst:)",
-      "line": 2027,
+      "line": 2035,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1561,7 +1561,7 @@
       "displayName": "A latest request accepted for a closed lane holds the lane until it is admitted",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestRequestAcceptedForClosedLaneHoldsItsLane(concatenated:)",
-      "line": 1848,
+      "line": 1856,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1570,16 +1570,16 @@
       "displayName": "A latest request is accepted in its turn whichever merge branch cancels its lane's owner",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestRequestAcceptedWhicheverBranchCancelsItsLaneOwner(ownerFirst:)",
-      "line": 1926,
+      "line": 1934,
       "target": "InnoFlowCoreTests"
     },
     {
-      "attribute": "@Test(\n    \"A latest request holds its lane whatever request another branch makes under its own ID\",\n    arguments: MergeOrderFeature.OwnIDSibling.allCases)",
+      "attribute": "@Test(\n    \"A latest request holds its lane when another branch's request under its ID cannot cancel it\",\n    arguments: MergeOrderFeature.OwnIDSibling.allCases)",
       "conditionalContexts": [],
-      "displayName": "A latest request holds its lane whatever request another branch makes under its own ID",
+      "displayName": "A latest request holds its lane when another branch's request under its ID cannot cancel it",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
-      "identifier": "ReducerCancellationAcceptanceTests/latestRequestHoldsItsLaneWhateverAnotherBranchRequestsUnderItsID(sibling:)",
-      "line": 1958,
+      "identifier": "ReducerCancellationAcceptanceTests/latestRequestHoldsItsLaneWhenAnotherBranchCannotCancelIt(sibling:)",
+      "line": 1966,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1588,7 +1588,7 @@
       "displayName": "A latest request merged with a send is still accepted in its reduction turn",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/latestRequestMergedWithSendIsAcceptedInTheTurn()",
-      "line": 1822,
+      "line": 1830,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1606,7 +1606,7 @@
       "displayName": "A lane request another merge branch can reorder is decided by its admission alone",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/orderDependentLaneRequestIsDecidedByAdmission(shape:)",
-      "line": 1757,
+      "line": 1765,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1651,7 +1651,7 @@
       "displayName": "The reduction turn still decides a latest request merged with work on no lane",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsLatestRequestMergedWithSend()",
-      "line": 1701,
+      "line": 1709,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1660,7 +1660,7 @@
       "displayName": "The reduction turn accepts no latest request another merge branch can reject",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsNoOrderDependentLatestRequest(shape:)",
-      "line": 1685,
+      "line": 1693,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1669,7 +1669,7 @@
       "displayName": "The reduction turn accepts nothing that another merge branch's cancel may skip",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passAcceptsNothingASiblingCancelMaySkip(cancelFirst:)",
-      "line": 1731,
+      "line": 1739,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1705,7 +1705,7 @@
       "displayName": "The reduction turn decides a lane request its own branch cancelled, whatever its lane",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestItsOwnBranchCancelled()",
-      "line": 1666,
+      "line": 1674,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1723,7 +1723,7 @@
       "displayName": "The reduction turn still decides a request whose merge siblings touch other IDs",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/passDecidesRequestWhoseSiblingsTouchOtherIDs()",
-      "line": 1712,
+      "line": 1720,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1795,7 +1795,7 @@
       "displayName": "A throttle request cancelled during its clock read records the cancellation",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/throttleCancelledDuringClockReadRecordsCancellation(throughOwnerID:)",
-      "line": 2083,
+      "line": 2091,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -1804,7 +1804,7 @@
       "displayName": "Control: a throttle request nothing cancels during its clock read records nothing",
       "file": "Tests/InnoFlowCoreTests/ReducerCancellationAcceptanceTests.swift",
       "identifier": "ReducerCancellationAcceptanceTests/throttleNotCancelledDuringClockReadRecordsNothing()",
-      "line": 2107,
+      "line": 2115,
       "target": "InnoFlowCoreTests"
     },
     {
@@ -6949,7 +6949,7 @@
       "displayName": "accepted cancellation suppresses a later thrown error without faking physical completion",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/cancellationBeforeFailure(throwsCancellation:)",
-      "line": 134,
+      "line": 136,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6958,7 +6958,7 @@
       "displayName": "discarded run and debounce handles complete as controls",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/discardedControls(mode:)",
-      "line": 39,
+      "line": 41,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6967,7 +6967,7 @@
       "displayName": "throttle replacement releases every discarded dispatch",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/discardedSharedThrottle(count:)",
-      "line": 86,
+      "line": 88,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6976,7 +6976,7 @@
       "displayName": "ordinary sequence run keeps its silent CancellationError contract",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/ordinaryRunCancellationErrorControl()",
-      "line": 124,
+      "line": 126,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6985,7 +6985,7 @@
       "displayName": "perform maps all errors while active in both hosts",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/performMapping(outcome:)",
-      "line": 108,
+      "line": 110,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -6994,7 +6994,7 @@
       "displayName": "shared throttle dispatch cancellation leaves newer work alive",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/sharedThrottleCancellation()",
-      "line": 60,
+      "line": 62,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7003,7 +7003,7 @@
       "displayName": "releasing the Store cancels a trailing timer and closes its dispatch",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/storeReleaseClosesTrailingDispatch()",
-      "line": 166,
+      "line": 168,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7012,7 +7012,7 @@
       "displayName": "trailing dispatch completion is independent of handle retention",
       "file": "Tests/InnoFlowTestingTests/RuntimeConsistencyTests.swift",
       "identifier": "RuntimeConsistencyTests/trailingCompletion(retainsHandle:count:)",
-      "line": 10,
+      "line": 12,
       "target": "InnoFlowTestingTests"
     },
     {

@@ -1660,7 +1660,15 @@ struct ReducerCancellationAcceptanceTests {
     #expect(
       recorder.pass(effect, recordedFor: [owner, lane], policy: .dropWhileRunning)
         == [.completed(.rejected(.conflictingPolicy))])
-    #expect(recorder.accepted.contains(.all(AnyEffectID(workID))))
+    // The sibling's own acceptance: an in-flight cancellation of the owner ID
+    // for a `cancelInFlight` boundary or a debounce; a `latest` request
+    // replaces its lane instead, and a throttle accepts nothing.
+    var accepted: Set<EffectCancellationRequest> = [.all(AnyEffectID(workID))]
+    if sibling == .cancelInFlight || sibling == .debounce {
+      accepted.insert(.inFlight(owner))
+    }
+    #expect(Set(recorder.accepted) == accepted)
+    #expect(recorder.replacedLanes == (sibling == .latestLane ? [owner] : []))
   }
 
   @Test("The reduction turn decides a lane request its own branch cancelled, whatever its lane")
@@ -1956,9 +1964,9 @@ struct ReducerCancellationAcceptanceTests {
   }
 
   @Test(
-    "A latest request holds its lane whatever request another branch makes under its own ID",
+    "A latest request holds its lane when another branch's request under its ID cannot cancel it",
     arguments: MergeOrderFeature.OwnIDSibling.allCases)
-  fileprivate func latestRequestHoldsItsLaneWhateverAnotherBranchRequestsUnderItsID(
+  fileprivate func latestRequestHoldsItsLaneWhenAnotherBranchCannotCancelIt(
     sibling: MergeOrderFeature.OwnIDSibling
   ) async {
     let gate = EmissionGate()

@@ -52,11 +52,15 @@ request, the request a held lane waits for, or a serial lane's pending
 request. Requesting the cancellation of an ID means a `.cancel`, a
 `cancelInFlight: true` boundary, a `latest` lane request or a debounce under
 that ID; a throttle decides only its own window and requests no cancellation.
-All but `.cancel` cancel in flight: they cover only sequences issued before
-their own, so they can release a request holding the lane but never change
-the request itself. A running serial or drop request keeps its slot when it
-is cancelled, so it changes no answer, and a request the lane admits or
-rejects for the same reason either way is decided in the turn.
+All but `.cancel` cancel in flight: their ID cancellation covers only
+sequences issued before their own, so they can release a request holding the
+lane but cannot cancel the request. Within one sequence a debounce still
+replaces a pending debounce under its ID, and a `latest` request displaces its
+own lane's requests; the turn decides no work inside a debounce and defers a
+request whose lane another branch requests. A running serial or drop request
+keeps its slot when it is cancelled, so it changes no answer, and a request
+the lane admits or rejects for the same reason either way is decided in the
+turn.
 
 ## Lifecycle observations
 

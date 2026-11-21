@@ -84,12 +84,15 @@ extension ReductionTurnCancellationAcceptor {
   /// the lane admits or rejects either way is decided. A cancellation request
   /// is a `.cancel`, `cancelInFlight: true`, a debounce or a `latest` lane
   /// request; a throttle decides only its own window and requests none. All
-  /// but `.cancel` cancel in flight: they cover only sequences issued before
-  /// their own, so under a lane request's own IDs they change nothing, while
-  /// they can release a request that holds its lane. Another branch's work
-  /// counts wherever it is in that branch, also behind asynchronous work.
-  /// Everything the pass does decide therefore holds in every order the
-  /// interpreter may pick.
+  /// but `.cancel` cancel in flight: their ID cancellation covers only
+  /// sequences issued before their own, so under a lane request's own IDs
+  /// they cannot cancel the request, while they can release a request that
+  /// holds its lane. A debounce still replaces a pending debounce of its own
+  /// sequence, but the pass never decides work inside a debounce, and a
+  /// `latest` request displaces its own lane's requests, which the
+  /// shared-lane rule covers. Another branch's work counts wherever it is in
+  /// that branch, also behind asynchronous work. Everything the pass does
+  /// decide therefore holds in every order the interpreter may pick.
   package func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
@@ -425,10 +428,12 @@ private struct MergeSiblings {
   }
 
   /// Whether another branch can decide a lane request first or last: it
-  /// requests the same lane, or cancels one of the request's IDs. A request
-  /// that cancels in flight (`cancelInFlight: true`, a debounce, a `latest`
-  /// lane request) covers only sequences issued before its own, and a
-  /// throttle decides only its own window, so neither changes the request.
+  /// requests the same lane, or cancels one of the request's IDs. The ID
+  /// cancellation of a request that cancels in flight (`cancelInFlight:
+  /// true`, a debounce, a `latest` lane request) covers only sequences issued
+  /// before its own, and a throttle decides only its own window, so neither
+  /// cancels the request. The `.cancel` check restates the one in
+  /// `proceeds`, which the pass runs first.
   func mayReorder(laneRequest lane: AnyEffectID, cancellationIDs: [AnyEffectID]) -> Bool {
     levels.contains { level in
       level.branches.otherBranch(than: level.branch, requestsLane: lane)

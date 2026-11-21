@@ -3,6 +3,8 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
+@testable import InnoFlowCoreTestSupport
+
 /// Public-host regressions intentionally also compile against the pre-fix revision.
 @Suite("Runtime completion and result consistency", .timeLimit(.minutes(5)))
 @MainActor
@@ -298,7 +300,7 @@ private final class ConsistencySignal: Sendable {
         return false
       }
       group.addTask {
-        do { try await Task.sleep(for: .seconds(5)) } catch {}
+        do { try await Task.sleep(for: scaledTestDeadline(.seconds(5))) } catch {}
         return false
       }
       let result = await group.next() ?? false
