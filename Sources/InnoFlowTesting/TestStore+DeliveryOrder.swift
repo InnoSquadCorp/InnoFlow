@@ -23,23 +23,29 @@ package import InnoFlowCore
 // which a `Store` handles the values, where every value was handled at its
 // delivery:
 //
-// - Every effect-action delivery outside the synchronous part of a walk the
-//   test store follows, and every `send`, opens an anchor chain and queues
-//   its first marker task right away. When a marker runs, it takes the next
-//   MainActor event as its position: the place where the `Store` runs the
-//   interpreter task of that action.
+// - Every effect-action delivery outside a walk the test store follows, and
+//   every `send`, opens an anchor chain and queues its first marker task
+//   right away. When a marker runs, it takes the next MainActor event as its
+//   position: the place where the `Store` runs the interpreter task of that
+//   action. Each marker queues the next level's while the chain has a member
+//   that can still need it, so level `n` stands for the MainActor jobs a
+//   `Store` runs `n - 1` jobs behind that interpreter task, each queued while
+//   the one before it runs. Among the values handled at one level, the order
+//   of the jobs that deliver them decides: a job queued by an earlier job, or
+//   earlier by the same job, runs first (`TestStoreRank`).
 // - A received or sent action whose effect a `Store` interprets is walked
 //   only once its anchor has run. The MainActor jobs queued before the anchor
 //   deliver their values first, as they do in a `Store`.
 // - A `Store` starts a root interpreter walk only once the one it created
 //   before has finished. The test store walks interpreted effects in that
 //   order, and records where each walk finished: a walk whose predecessor
-//   finished only after its anchor ran starts at the next level after that
-//   point, the earliest point at which a `Store` starts it, short of the
-//   two limitations below. The predecessor's completion resumes a `Store`'s
-//   walk through the global executor, which can land behind later jobs,
-//   depending on how soon it hands the walk back relative to the MainActor's
-//   other jobs.
+//   had not finished when its anchor ran starts at the next level after the
+//   point where the predecessor finished, behind everything the
+//   predecessor's last job created: the earliest point at which a `Store`
+//   starts it, short of the depth limit below. The predecessor's completion
+//   resumes a `Store`'s walk through the global executor, which can land
+//   behind later jobs, depending on how soon it hands the walk back relative
+//   to the MainActor's other jobs.
 // - A `send` takes its place, and queues its anchor, when it begins: a
 //   `Store` reduces the sent action, and creates its interpreter task, in
 //   the MainActor job in which the send begins. The send first reduces the
@@ -49,39 +55,42 @@ package import InnoFlowCore
 //   send began and every interpreted one behind them, also when the drain
 //   suspends. Every value delivered from the send on stays buffered, behind
 //   the sent action.
-// - A value delivered outside such a walk is handled at its delivery, a new
-//   event. A plain `.send` or `.output` that a received action's reduction
-//   returns, also under ownership metadata, is drained with the reduction:
-//   it shares the action's key and is queued right behind it. A value the
-//   synchronous part of a walk delivers is handled where the walk starts, in
+// - A value delivered outside a followed walk is handled at its delivery, a
+//   new event. A plain `.send` or `.output` that a received action's
+//   reduction returns, also under ownership metadata, is drained with the
+//   reduction: it shares the action's key and is queued right behind it. A
+//   value a followed walk delivers is handled where that walk runs, in
 //   delivery order.
 // - A `Store` creates the interpreter task of an interpreted value while the
-//   interpreter that delivered it runs. A marker therefore queues the marker
-//   of the next level when it runs, while an action of its chain has not
-//   finished its walk or the last walk the test store followed finished on
-//   the chain, up to `TestStoreAnchorChain.depth` levels; deeper positions,
-//   a walk's start or resumption among them, share the deepest one, a known
-//   limitation: what is placed there can come before jobs a `Store` runs
-//   first.
+//   interpreter that delivered it runs: at the next level. Levels past
+//   `TestStoreAnchorChain.depth` share the deepest one, a known limitation:
+//   what is placed there can come before jobs a `Store` runs first.
 // - The test store follows a walk until it returns. A `Store` resumes a walk
 //   that suspends — after a clock read or an admission — behind every
-//   MainActor job queued before it started, at the earliest where the next
-//   level after its start runs, which the test store takes for what the
-//   walk delivers from then on, short of the depth limit above. A walk that
-//   suspends more than once is placed as if it resumed once, and the walks
-//   behind it start right behind that place, a known limitation: both can
-//   come before jobs a `Store` runs first. What
-//   work a walk started in another task delivers — a run, a composite and
-//   its children, a timer — is handled at its delivery, a known limitation:
-//   a `Store` starts that work while the walk runs, and can handle its first
+//   MainActor job queued before it suspended, at the earliest where the next
+//   level runs, behind everything the job it suspended in created; the test
+//   store places what the walk delivers from then on there, one level deeper
+//   for each suspension.
+// - A `Store` walks the children of an unawaited `concatenate` in a MainActor
+//   task it creates while the walk that starts it runs, and each child of an
+//   unawaited `merge` once a task group has handed it to the MainActor, two
+//   levels deeper at the earliest — an optimized build walks it there, a
+//   debug build a job later; the children of a `merge` race each other, and
+//   the test store starts them in declaration order. The test store
+//   follows such a task's walk until it returns or awaits other work, as
+//   above, and takes nothing from a buffer until every one it follows has.
+//   What work delivers that a walk started and awaits or leaves to run in
+//   another task — a run, a timer, the children of an awaited `merge` — and
+//   what a composite task delivers once it awaited such work, is handled at
+//   its delivery, a known limitation since 6.0.x: a `Store` can handle those
 //   values before MainActor jobs placed ahead of them here.
 // - A cancellation applied while the test reduces a received or sent action
-//   — its reduction, the reduction-turn acceptance and the synchronous part
-//   of its effect walk — removes the covered values a `Store` would have
-//   delivered after that action (after where its walk delivers, once it
-//   runs), except the ones its own walk delivered. For a sent action, those are the
-//   values delivered from the send on, such as those of a job queued before
-//   the send, or of work a drained action started in another task.
+//   — its reduction, the reduction-turn acceptance and a followed walk of its
+//   effect — removes the covered values a `Store` would have delivered after
+//   that action (after where the walk delivers, once it runs), except the
+//   ones its own effect delivered. For a sent action, those are the values
+//   delivered from the send on, such as those of a job queued before the
+//   send, or of work a drained action started in another task.
 // - A cancellation the test issues itself removes every value it covers, as
 //   if it landed first: `cancelEffects(identifiedBy:)`, `cancelAllEffects()`,
 //   the cancellation of a dispatch, and the cancellation of all remaining
@@ -91,17 +100,23 @@ package import InnoFlowCore
 // reduced or published it.
 
 /// Where a `Store` handles a delivered value in the schedule a test store
-/// models: at a MainActor event, in delivery order among the values handled
-/// at the same event.
+/// models: at a MainActor event, and, among the values handled where one
+/// anchor marker ran, in the order in which a `Store` runs the jobs that
+/// deliver them.
 package struct TestStoreOrder: Comparable, Sendable {
   /// The MainActor event: the value's own delivery, or the run of the anchor
-  /// of the walk that delivered it.
+  /// marker of the walk that delivered it.
   fileprivate let event: UInt64
-  /// The delivery order among the values handled at `event`.
+  /// The place of the value among the ones handled at `event`; the origin
+  /// for a value handled at its own delivery.
+  fileprivate let rank: TestStoreRank
+  /// The delivery order, for values no rank tells apart.
   fileprivate let order: UInt64
 
   package static func < (lhs: Self, rhs: Self) -> Bool {
-    (lhs.event, lhs.order) < (rhs.event, rhs.order)
+    if lhs.event != rhs.event { return lhs.event < rhs.event }
+    if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+    return lhs.order < rhs.order
   }
 
   /// The place of an action the test sends now, which a `Store` reduces in
@@ -109,7 +124,37 @@ package struct TestStoreOrder: Comparable, Sendable {
   /// before, ahead of every value delivered or anchored from now on.
   @MainActor
   fileprivate static func now() -> Self {
-    Self(event: TestStoreEvents.next(), order: 0)
+    Self(event: TestStoreEvents.next(), rank: .origin, order: 0)
+  }
+}
+
+/// The order in which a `Store` runs the MainActor jobs that share one anchor
+/// level, and handles the values they deliver: a path of indices.
+///
+/// MainActor jobs run in the order they are queued, so the jobs of one level
+/// run in the order of the jobs that queued them, and the jobs one job queued
+/// in the order in which it queued them. What a walk creates — a value it
+/// delivers, with the interpreter task of an action, or the task of a
+/// composite — takes the walk's rank followed by its index among what the
+/// walk creates before it next suspends. A walk that resumes, and a walk that
+/// starts once the one before it has finished, are queued when the job
+/// before them ends, at the earliest: they take that job's rank followed by
+/// ``TestStoreRank/last``, behind everything that job created.
+package struct TestStoreRank: Comparable, Sendable {
+  /// The index of a job queued when the job before it ends.
+  static let last = UInt64.max
+  /// The rank of the first job of an anchor chain, and of a value a `Store`
+  /// handles at its own delivery.
+  static let origin = TestStoreRank(path: [])
+
+  private let path: [UInt64]
+
+  func appending(_ index: UInt64) -> TestStoreRank {
+    TestStoreRank(path: path + [index])
+  }
+
+  package static func < (lhs: Self, rhs: Self) -> Bool {
+    lhs.path.lexicographicallyPrecedes(rhs.path)
   }
 }
 
@@ -172,21 +217,25 @@ package final class TestStoreAnchorMarkerCount {
 /// of its interpreted follow-ups, and so on, one level each.
 ///
 /// A level's marker is a MainActor task queued where a `Store` creates the
-/// interpreter task of that level: the first at the delivery, every other
+/// MainActor jobs of that level: the first at the delivery, every other
 /// while the marker before it runs. The chain's members are the actions
-/// whose interpreter it anchors; a member settles once the synchronous part
-/// of its reduction's walk has finished, or when it leaves the buffer without
-/// being reduced. The test store is a member too while the chain holds its
-/// interpreter tail: the test store starts a root walk that waited for the
-/// tail's walk at the chain's level after the tail, and resumes it at the
-/// level after that, however late the test receives the walk's action. The
+/// whose interpreter it anchors, and the walks of composite tasks the test
+/// store follows on it; an action settles once the synchronous part of its
+/// reduction's walk has finished, or when it leaves the buffer without being
+/// reduced, and a composite task's walk once the test store stops following
+/// it. The test store is a member too while the chain holds its interpreter
+/// tail: the test store starts a root walk that waited for the tail's walk
+/// at the chain's level after the tail, and resumes it one level deeper each
+/// time it suspends, however late the test receives the walk's action. The
 /// chain queues no marker once no member is unsettled, and at most ``depth``
 /// markers in all.
 @MainActor
 package final class TestStoreAnchorChain {
   /// The deepest level that gets a marker of its own; deeper positions — a
-  /// follow-up's, or a walk's start or resumption — share its position.
-  package static let depth = 4
+  /// follow-up's, a composite task's, or a walk's start or resumption —
+  /// share its position. An action the test never receives queues this many
+  /// markers.
+  package static let depth = 16
 
   /// The levels whose marker is queued.
   private var queuedLevels = 0
@@ -267,7 +316,14 @@ package struct TestStoreAnchor {
   /// Where a `Store` runs the interpreter task it creates while this one
   /// runs. The deepest level stands for every deeper one.
   var next: TestStoreAnchor {
-    TestStoreAnchor(chain: chain, level: min(level + 1, TestStoreAnchorChain.depth))
+    advanced(by: 1)
+  }
+
+  /// Where a `Store` runs a MainActor job queued `levels` jobs behind this
+  /// one, each queued while the one before it runs. The deepest level stands
+  /// for every deeper one.
+  func advanced(by levels: Int) -> TestStoreAnchor {
+    TestStoreAnchor(chain: chain, level: min(level + levels, TestStoreAnchorChain.depth))
   }
 
   /// The position the marker took, once it has run.
@@ -280,24 +336,45 @@ package struct TestStoreAnchor {
     position.map { $0 < order.event } ?? false
   }
 
+  /// Whether the interpreter task anchored here, once this marker has run,
+  /// still waits for the walk that ended at `predecessor`: that walk's task
+  /// had not finished when this one ran. It had when it finished at an
+  /// earlier point, or when it is the task created just before this one at
+  /// this very anchor and ran through without waiting or suspending.
+  func isBehind(_ predecessor: TestStoreInterpreterTail?) -> Bool {
+    guard let predecessor, let finished = predecessor.anchor.position, let own = position
+    else { return false }
+    return finished > own || (finished == own && !predecessor.ranThroughAtItsAnchor)
+  }
+
   /// Where the test store starts the walk of the interpreter task anchored
-  /// here, once this marker has run, when the walk before it finished at
-  /// `predecessor`: here, unless that walk finished at or after the point
-  /// where this anchor ran; then at its next level, a job queued right after
-  /// it finished.
-  /// Short of the two limitations in this file's header — a walk that
-  /// suspends more than once, and ``TestStoreAnchorChain/depth`` — that is
-  /// the earliest job in which a `Store` starts the walk.
-  func start(after predecessor: TestStoreAnchor?) -> TestStoreAnchor {
-    guard let predecessor, let finished = predecessor.position, let own = position,
-      finished >= own
-    else { return self }
-    return predecessor.next
+  /// here, once this marker has run, when the walk before it ended at
+  /// `predecessor`: here, unless the task still waits for that walk
+  /// (``isBehind(_:)``); then at the next level after the point where that
+  /// walk finished, a job queued right after it finished. Short of
+  /// ``TestStoreAnchorChain/depth``, that is the earliest job in which a
+  /// `Store` starts the walk.
+  func start(after predecessor: TestStoreInterpreterTail?) -> TestStoreAnchor {
+    guard let predecessor, isBehind(predecessor) else { return self }
+    return predecessor.anchor.next
   }
 
   func wait() async {
     await chain.waitForMarker(atLevel: level)
   }
+}
+
+/// Where the last root interpreter walk a test store followed finished.
+@MainActor
+package struct TestStoreInterpreterTail {
+  /// The level at which the walk delivered when it returned.
+  package let anchor: TestStoreAnchor
+  /// The rank at that level of the job in which the walk returned.
+  let rank: TestStoreRank
+  /// Whether the walk started where a `Store` first runs its interpreter
+  /// task and returned without suspending: that task had then finished
+  /// before any task created after it ran, also one at the same anchor.
+  package let ranThroughAtItsAnchor: Bool
 }
 
 /// What a test store knows about one delivered effect action or output.
@@ -350,7 +427,7 @@ package final class TestStoreDelivery {
   static func delivered(opening markerCount: TestStoreAnchorMarkerCount?) -> TestStoreDelivery {
     let event = TestStoreEvents.next()
     return .init(
-      storeOrder: { TestStoreOrder(event: event, order: $0) },
+      storeOrder: { TestStoreOrder(event: event, rank: .origin, order: $0) },
       followUpAnchor: markerCount.map { TestStoreAnchorChain(markerCount: $0).first })
   }
 
@@ -363,22 +440,27 @@ package final class TestStoreDelivery {
     return .init(storeOrder: { _ in received.storeOrder }, followUpAnchor: anchor)
   }
 
-  /// A value the synchronous part of a walk anchored at `anchor` delivers: a
-  /// `Store` handles it where that interpreter runs, and creates the
-  /// interpreter task of its own reduction there, one level deeper.
-  static func interpreted(
-    at anchor: TestStoreAnchor, position: UInt64, isAction: Bool
-  ) -> TestStoreDelivery {
-    let followUp = isAction ? anchor.next : nil
+  /// A value a followed walk delivers at `place`: a `Store` handles it where
+  /// that walk runs, and creates the interpreter task of its own reduction
+  /// there, one level deeper.
+  static func interpreted(at place: TestStoreWalkPlace, isAction: Bool) -> TestStoreDelivery {
+    let followUp = isAction ? place.anchor.next : nil
     followUp?.chain.addMember()
     return .init(
-      storeOrder: { TestStoreOrder(event: position, order: $0) }, followUpAnchor: followUp)
+      storeOrder: { TestStoreOrder(event: place.position, rank: place.rank, order: $0) },
+      followUpAnchor: followUp)
   }
 
-  /// The order behind every value a `Store` handles at `position` up to now:
-  /// a walk anchored there runs after them.
-  static func walkThreshold(at position: UInt64) -> TestStoreOrder {
-    TestStoreOrder(event: position, order: lastOrder)
+  /// The order of what a job handles at `place`, ahead of everything a
+  /// `Store` handles there afterwards.
+  static func order(at place: TestStoreWalkPlace) -> TestStoreOrder {
+    TestStoreOrder(event: place.position, rank: place.rank, order: 0)
+  }
+
+  /// The rank of the interpreter task of this action's reduction at its
+  /// anchor: the value's own rank where a `Store` handles it.
+  var rank: TestStoreRank {
+    storeOrder.rank
   }
 
   /// Ends the action's membership of its anchor chain: its reduction's walk
@@ -390,90 +472,394 @@ package final class TestStoreDelivery {
   }
 }
 
-/// The reduction of a received or sent action whose effect walk a test store
-/// follows, until that walk returns.
+/// Where a followed walk places what it delivers or creates next.
 @MainActor
-package final class TestStoreFollowedWalk {
-  /// Where a `Store` handles the action: the delivery of the received
-  /// action, or the place of the send.
-  let handled: TestStoreDelivery
-  /// Whether a `Store` drains the effect the reduction returned with the
-  /// reduction, instead of creating an interpreter task for it.
-  let isDrained: Bool
-  /// Where a `Store` first runs the interpreter task of an effect it does not
-  /// drain.
-  let anchor: TestStoreAnchor?
-  /// Where the test store starts the walk: the anchor, or the next level
-  /// after the walk created before it finished
-  /// (``TestStoreAnchor/start(after:)``).
-  private(set) var startAnchor: TestStoreAnchor?
-  /// Where the walk delivers once it has suspended: the next level after its
-  /// start (``TestStoreAnchor/next``). Short of the two limitations in this
-  /// file's header, that is behind every MainActor job queued before the
-  /// walk started, where a `Store` resumes the walk at the earliest.
-  private(set) var resumedAnchor: TestStoreAnchor?
-  /// The order behind which a cancellation applied during the reduction
-  /// removes covered values: where `handled` is, then the position where the
-  /// walk delivers.
-  var threshold: TestStoreOrder
-  /// The last value the drained effect placed behind the action; the next
-  /// one goes behind it.
-  var lastFollowUp: TestStoreDelivery?
-  /// The walk has started.
-  var isWalking = false
-  /// The test store still follows the walk: it has not returned.
-  private(set) var isSynchronous = true
+package struct TestStoreWalkPlace {
+  /// The level at which the walk delivers.
+  let anchor: TestStoreAnchor
+  /// The position that level's marker took.
+  let position: UInt64
+  /// The rank at that level of what the walk delivers or creates next.
+  let rank: TestStoreRank
+}
 
-  /// Follows the reduction of an action a `Store` handles at `handled`.
-  init(handled: TestStoreDelivery, isDrained: Bool) {
-    self.handled = handled
-    self.isDrained = isDrained
-    anchor = isDrained ? nil : handled.followUpAnchor
-    startAnchor = anchor
-    threshold = handled.storeOrder
+/// The walks of composite tasks a test store follows that have not finished
+/// yet. They deliver at positions that can precede values already buffered,
+/// so the test store takes nothing from a buffer while one is pending.
+@MainActor
+package final class TestStoreFollowedTasks {
+  private var pendingCount = 0
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  fileprivate func begin() {
+    pendingCount += 1
   }
 
-  /// Where the test store places what the walk delivers now:
-  /// ``resumedAnchor`` once it has suspended, ``startAnchor`` before.
-  var deliveryAnchor: TestStoreAnchor? {
-    resumedAnchor ?? startAnchor
-  }
-
-  /// The walk will start at `start`: its anchor, or, when it waits for its
-  /// predecessor, a level of the chain that holds the interpreter tail, which
-  /// keeps queueing levels while it does.
-  func prepare(toStartAt start: TestStoreAnchor) {
-    startAnchor = start
-  }
-
-  /// The start's marker has run: the walk delivers there.
-  func begin() {
-    if let position = startAnchor?.position {
-      threshold = TestStoreDelivery.walkThreshold(at: position)
+  fileprivate func end() {
+    pendingCount -= 1
+    guard pendingCount == 0 else { return }
+    let resumed = waiters
+    waiters.removeAll()
+    for waiter in resumed {
+      waiter.resume()
     }
   }
 
-  /// The walk has reached its first suspension: from now on it delivers at
-  /// ``resumedAnchor``, the next level after its start. That marker was
-  /// queued when the start's ran, before the walk began, so it has run: the
-  /// start's chain had an unsettled member then — the walk's own action, the
-  /// action of the walk before it, or the test store while the chain held
-  /// the interpreter tail. Only walks running concurrently on one store can
-  /// find it missing; the walk then keeps delivering at its start.
-  func didReachFirstSuspension() {
-    guard isSynchronous, resumedAnchor == nil, let next = startAnchor?.next,
-      let position = next.position
-    else { return }
-    resumedAnchor = next
-    threshold = TestStoreDelivery.walkThreshold(at: position)
+  /// Returns once no followed composite task is pending, without suspending
+  /// when none is. Task cancellation does not end the wait: each pending task
+  /// finishes once the marker of its level has run.
+  package func settle() async {
+    while pendingCount > 0 {
+      await withCheckedContinuation { waiters.append($0) }
+    }
+  }
+}
+
+/// Starts the walks of the children of one `merge` in declaration order. Each
+/// waits for the marker of its level, and a task resumed from such a wait
+/// reaches the MainActor through another executor, in any order.
+@MainActor
+private final class TestStoreStartOrder {
+  private var startedCount = 0
+  private var waiting: [Int: CheckedContinuation<Void, Never>] = [:]
+
+  /// Returns once every child before `index` has started.
+  func waitForTurn(of index: Int) async {
+    guard index > startedCount else { return }
+    await withCheckedContinuation { waiting[index] = $0 }
   }
 
-  /// The walk has returned: values delivered from now on are handled at their
-  /// delivery, and the action's membership settles.
-  func endSynchronousPart() {
-    guard isSynchronous else { return }
-    isSynchronous = false
-    handled.settle()
+  /// The child `index` starts in this MainActor job; the next one starts in
+  /// a later job.
+  func didStart(_ index: Int) {
+    startedCount = index + 1
+    waiting.removeValue(forKey: startedCount)?.resume()
+  }
+}
+
+/// The walk of an effect whose deliveries a test store places where a `Store`
+/// handles them, while the walk runs in one MainActor task without awaiting
+/// other work:
+///
+/// - the root interpreter walk of a received or sent action's reduction,
+///   until it returns;
+/// - the walk a `Store` runs in a task that a followed walk creates — the
+///   children of an unawaited `concatenate`, or one child of an unawaited
+///   `merge` — until it returns or first awaits other work: a run, a timer,
+///   or the children of an awaited `merge`.
+///
+/// A followed walk delivers at one anchor level at a time. Each time it
+/// resumes from a suspension inside the effect driver — a clock read, an
+/// admission — it delivers one level deeper: a `Store` resumes it behind
+/// every MainActor job queued before it suspended, at the earliest where the
+/// next level runs.
+@MainActor
+package final class TestStoreFollowedWalk {
+  /// The followed walk the current task runs. A task a walk creates inherits
+  /// it; the task of a composite, the work of a timer and the task of a
+  /// scheduled run set their own.
+  @TaskLocal static var current: TestStoreFollowedWalk?
+
+  /// Where a `Store` handles the action whose reduction returned the effect:
+  /// the delivery of the received action, or the place of the send; `nil`
+  /// for the walk of a task another walk created.
+  let handled: TestStoreDelivery?
+  /// Whether a `Store` drains the effect the reduction returned with the
+  /// reduction, instead of creating an interpreter task for it.
+  let isDrained: Bool
+  /// Where a `Store` first runs the task of the walk; `nil` for a drained
+  /// effect.
+  let anchor: TestStoreAnchor?
+  /// Where the test store starts the walk: the anchor, or, for a root walk,
+  /// the next level after the walk created before it finished
+  /// (``TestStoreAnchor/start(after:)``).
+  private(set) var startAnchor: TestStoreAnchor?
+  /// Where the test store places what the walk delivers now: its start, and
+  /// one level deeper each time it resumed (``TestStoreAnchor/next``). Short
+  /// of ``TestStoreAnchorChain/depth``, that is behind every MainActor job
+  /// queued before the walk last suspended, where a `Store` resumes it at
+  /// the earliest.
+  private(set) var deliveryAnchor: TestStoreAnchor?
+  /// The last value a drained effect placed behind its action; the next one
+  /// goes behind it.
+  var lastFollowUp: TestStoreDelivery?
+
+  private let store: ObjectIdentifier
+  private let sequence: UInt64?
+  /// The store's pending followed composite tasks, this walk's among them
+  /// when it is one.
+  private let tasks: TestStoreFollowedTasks
+  /// The turn of a `merge`'s child among its siblings.
+  private let turn: (order: TestStoreStartOrder, index: Int)?
+  /// The rank, at the level where the walk delivers, of the job it runs in.
+  private var rank: TestStoreRank
+  /// The index of what the walk delivers or creates next in that job.
+  private var nextIndex: UInt64 = 0
+  /// The walk has started.
+  private var hasStarted = false
+  /// The test store still follows the walk: it has neither returned nor
+  /// awaited other work.
+  private var isFollowed = true
+  /// The walk is inside an effect-driver call that can suspend it.
+  private var isAwaitingDriver = false
+  /// The walk suspended inside that call and has not resumed.
+  private var isSuspended = false
+  /// The walk did not start where a `Store` first runs its task, or suspended.
+  private var didWaitOrSuspend = false
+  /// Counts the stretches the walk ran between suspensions.
+  private var stretch: UInt64 = 0
+
+  /// Follows the root walk of the effect that the reduction of an action a
+  /// `Store` handles at `handled` returned.
+  init(
+    handled: TestStoreDelivery, isDrained: Bool, store: AnyObject, sequence: UInt64?,
+    tasks: TestStoreFollowedTasks
+  ) {
+    self.handled = handled
+    self.isDrained = isDrained
+    self.store = ObjectIdentifier(store)
+    self.sequence = sequence
+    self.tasks = tasks
+    turn = nil
+    rank = handled.rank
+    anchor = isDrained ? nil : handled.followUpAnchor
+    startAnchor = anchor
+    deliveryAnchor = anchor
+  }
+
+  /// Follows the walk of a task that `creator` creates, which a `Store` runs
+  /// at `anchor` with `rank`. The walk is a member of the anchor's chain, and
+  /// pending, until the test store stops following it.
+  private init(
+    at anchor: TestStoreAnchor, rank: TestStoreRank, creator: TestStoreFollowedWalk,
+    turn: (order: TestStoreStartOrder, index: Int)? = nil
+  ) {
+    handled = nil
+    isDrained = false
+    store = creator.store
+    sequence = creator.sequence
+    tasks = creator.tasks
+    self.turn = turn
+    self.rank = rank
+    self.anchor = anchor
+    startAnchor = anchor
+    deliveryAnchor = anchor
+    anchor.chain.addMember()
+    tasks.begin()
+  }
+
+  /// The followed walk that is delivering a value of the effect `sequence`
+  /// into `store` right now, in the current task.
+  static func delivering(in store: AnyObject, sequence: UInt64?) -> TestStoreFollowedWalk? {
+    guard let walk = current, walk.store == ObjectIdentifier(store), walk.isDelivering,
+      let sequence, walk.sequence == sequence
+    else { return nil }
+    return walk
+  }
+
+  /// Follows the walk of the task that the walk delivering a value of
+  /// `context` into `store` creates now for an unawaited `concatenate`: a
+  /// `Store` walks the children in a MainActor task it creates there, the
+  /// job queued behind the creating one. `nil` when no followed walk is
+  /// creating the task.
+  static func ofSequentialTask(
+    in store: AnyObject, context: EffectExecutionContext?
+  ) -> TestStoreFollowedWalk? {
+    guard let creator = delivering(in: store, sequence: context?.sequence),
+      let place = creator.placeNext()
+    else { return nil }
+    return TestStoreFollowedWalk(at: place.anchor.next, rank: place.rank, creator: creator)
+  }
+
+  /// Follows the walks of the `count` children of an unawaited `merge` that
+  /// the walk delivering a value of `context` into `store` starts now. A
+  /// `Store` creates one MainActor task there, in which a task group hands
+  /// every child to the MainActor from another executor to check that the
+  /// effect can proceed, then walks the child: an optimized build walks it
+  /// in that job, two MainActor jobs behind the creating one, each queued
+  /// while the one before it runs; a debug build hands the child back to
+  /// another executor in between and walks it a job later. The children race
+  /// each other; the test store starts them two jobs behind, the earliest
+  /// point, in declaration order. `nil` for every child when no followed walk
+  /// is starting them.
+  static func ofConcurrentChildren(
+    _ count: Int, in store: AnyObject, context: EffectExecutionContext?
+  ) -> [TestStoreFollowedWalk?] {
+    guard let creator = delivering(in: store, sequence: context?.sequence),
+      let place = creator.placeNext()
+    else { return Array(repeating: nil, count: count) }
+    let order = TestStoreStartOrder()
+    return (0..<count).map { index in
+      TestStoreFollowedWalk(
+        at: place.anchor.advanced(by: 2),
+        rank: place.rank.appending(UInt64(index)).appending(TestStoreRank.last),
+        creator: creator, turn: (order, index))
+    }
+  }
+
+  /// Where the walk finished, for the root walk created after it.
+  var tail: TestStoreInterpreterTail? {
+    deliveryAnchor.map {
+      TestStoreInterpreterTail(anchor: $0, rank: rank, ranThroughAtItsAnchor: !didWaitOrSuspend)
+    }
+  }
+
+  /// The walk will start once the walk that ended at `predecessor` has
+  /// finished: at its anchor, or, when it still waits for that walk then, at
+  /// the next level after the point where that walk finished, on the chain
+  /// that holds the interpreter tail, which keeps queueing levels while it
+  /// does. A `Store` queues the waiting walk when its predecessor's last job
+  /// ends.
+  ///
+  /// - Returns: Where the walk starts.
+  func prepareToStart(after predecessor: TestStoreInterpreterTail?) -> TestStoreAnchor? {
+    guard let anchor, let predecessor, anchor.isBehind(predecessor) else { return anchor }
+    didWaitOrSuspend = true
+    rank = predecessor.rank.appending(TestStoreRank.last)
+    startAnchor = predecessor.anchor.next
+    deliveryAnchor = startAnchor
+    return startAnchor
+  }
+
+  /// Runs `body`, the walk, in the current task, once the marker of its
+  /// start has run: the walk delivers there until it first suspends.
+  func run(_ body: () async -> Void) async {
+    hasStarted = true
+    if !isDrained {
+      beginStretch()
+    }
+    await Self.$current.withValue(self) { await body() }
+  }
+
+  /// Runs `body`, the walk of a task another walk created: followed as
+  /// `walk`, once the marker of its level has run and the children of the
+  /// same `merge` before it have started; without a walk to follow it as,
+  /// handled at its deliveries.
+  static func runTask(following walk: TestStoreFollowedWalk?, _ body: () async -> Void) async {
+    guard let walk else {
+      return await $current.withValue(nil) { await body() }
+    }
+    await walk.anchor?.wait()
+    if let turn = walk.turn {
+      await turn.order.waitForTurn(of: turn.index)
+      turn.order.didStart(turn.index)
+    }
+    await walk.run(body)
+    walk.finish()
+  }
+
+  /// `recurse` for a timer's work: what it walks is handled at its
+  /// delivery, whichever walk armed the timer.
+  static func unfollowed<Action: Sendable, Output: Sendable>(
+    _ recurse:
+      @escaping @MainActor @Sendable (
+        ReducerEffect<Action, Output>, EffectExecutionContext?, Bool
+      ) async -> Void
+  )
+    -> @MainActor @Sendable (ReducerEffect<Action, Output>, EffectExecutionContext?, Bool) async
+    -> Void
+  {
+    { effect, context, awaited in
+      await runTask(following: nil) { await recurse(effect, context, awaited) }
+    }
+  }
+
+  /// The walk has returned, or awaits other work: values delivered from now
+  /// on are handled at their delivery, and the walk's membership settles.
+  func finish() {
+    guard isFollowed else { return }
+    isFollowed = false
+    if let handled {
+      handled.settle()
+    } else {
+      anchor?.chain.settleMember()
+      tasks.end()
+    }
+  }
+
+  /// Where the walk places the value it delivers or the task it creates now,
+  /// and takes that place; `nil` when the marker of its level has not run.
+  func placeNext() -> TestStoreWalkPlace? {
+    guard let place else { return nil }
+    nextIndex += 1
+    return place
+  }
+
+  /// The order behind which a cancellation the walk applies now removes
+  /// covered values: where a `Store` handles the action, then where the walk
+  /// delivers next.
+  var threshold: TestStoreOrder? {
+    guard hasStarted, !isDrained, let place else { return handled?.storeOrder }
+    return TestStoreDelivery.order(at: place)
+  }
+
+  /// The walk the current task runs, when the test store follows it and it
+  /// is about to make an effect-driver call on `store` that can suspend it.
+  /// The caller reports the return of that call with
+  /// ``didResumeFromDriver()``.
+  static func awaitingDriver(in store: AnyObject) -> TestStoreFollowedWalk? {
+    guard let walk = current, walk.store == ObjectIdentifier(store), walk.isDelivering,
+      !walk.isDrained
+    else { return nil }
+    walk.isAwaitingDriver = true
+    return walk
+  }
+
+  /// The effect-driver call has returned. When it suspended the walk, the
+  /// walk delivers one level deeper from now on, behind everything the job
+  /// it suspended in created. That level's marker was queued when the marker
+  /// before it ran, before the stretch that just ended began, so it has run:
+  /// the chain had an unsettled member then — the walk's own action, the
+  /// walk itself, or the test store while the chain held the interpreter
+  /// tail. Only walks running concurrently on one store can find it missing;
+  /// the walk then keeps delivering where it did.
+  func didResumeFromDriver() {
+    isAwaitingDriver = false
+    guard isFollowed, isSuspended else { return }
+    isSuspended = false
+    didWaitOrSuspend = true
+    if let next = deliveryAnchor?.next, next.position != nil {
+      deliveryAnchor = next
+      rank = rank.appending(TestStoreRank.last)
+      nextIndex = 0
+    }
+    beginStretch()
+  }
+
+  /// Where the walk delivers or creates next, once the marker of its level
+  /// has run.
+  private var place: TestStoreWalkPlace? {
+    guard let anchor = deliveryAnchor, let position = anchor.position else { return nil }
+    return TestStoreWalkPlace(anchor: anchor, position: position, rank: rank.appending(nextIndex))
+  }
+
+  /// Whether the walk's own task is running a stretch the test store follows.
+  private var isDelivering: Bool {
+    hasStarted && isFollowed && !isSuspended
+  }
+
+  /// The walk runs from now until it next suspends. MainActor jobs run in the
+  /// order they are queued: the job queued here runs once the walk has
+  /// suspended or returned, before the walk resumes and before any work the
+  /// walk started in this stretch.
+  private func beginStretch() {
+    stretch &+= 1
+    let begun = stretch
+    Task { @MainActor [weak self] in
+      self?.stretchDidEnd(begun)
+    }
+  }
+
+  /// The stretch has ended: inside an effect-driver call, the walk resumes
+  /// one level deeper; anywhere else, it awaits other work or has returned,
+  /// and the test store stops following it.
+  private func stretchDidEnd(_ ended: UInt64) {
+    guard isFollowed, ended == stretch else { return }
+    if isAwaitingDriver {
+      isSuspended = true
+    } else {
+      finish()
+    }
   }
 }
 
@@ -571,13 +957,9 @@ extension TestStore {
     case .nothing:
       entry.delivery.settle()
     case .drained:
-      await walkFollowing(
-        effect, context: context,
-        walk: TestStoreFollowedWalk(handled: entry.delivery, isDrained: true))
+      await walkFollowing(effect, context: context, handled: entry.delivery, isDrained: true)
     case .interpreted:
-      await walkFollowing(
-        effect, context: context,
-        walk: TestStoreFollowedWalk(handled: entry.delivery, isDrained: false))
+      await walkFollowing(effect, context: context, handled: entry.delivery, isDrained: false)
     }
   }
 
@@ -624,15 +1006,11 @@ extension TestStore {
     case .drained:
       // Before any interpreter task runs, and before any job a suspended
       // drain let run.
-      await walkFollowing(
-        effect, context: context,
-        walk: TestStoreFollowedWalk(handled: prepared.delivery, isDrained: true))
+      await walkFollowing(effect, context: context, handled: prepared.delivery, isDrained: true)
       await prepared.runDeferredWalks()
     case .interpreted:
       await prepared.runDeferredWalks()
-      await walkFollowing(
-        effect, context: context,
-        walk: TestStoreFollowedWalk(handled: prepared.delivery, isDrained: false))
+      await walkFollowing(effect, context: context, handled: prepared.delivery, isDrained: false)
     }
   }
 
@@ -643,49 +1021,28 @@ extension TestStore {
 
   /// Walks a reduction's effect where a `Store` interprets it: inline when
   /// the `Store` drains it, otherwise once the walk's anchor has run.
+  ///
+  /// - Parameter handled: Where a `Store` handles the action whose reduction
+  ///   returned the effect.
   private func walkFollowing(
     _ effect: ReducerEffect<R.Action, R.Output>,
     context: EffectExecutionContext,
-    walk: TestStoreFollowedWalk
+    handled: TestStoreDelivery,
+    isDrained: Bool
   ) async {
-    let sequence = context.sequence
-    if let sequence { followedWalks[sequence] = walk }
-    defer {
-      walk.endSynchronousPart()
-      if let sequence { followedWalks[sequence] = nil }
-    }
+    let walk = TestStoreFollowedWalk(
+      handled: handled, isDrained: isDrained, store: self, sequence: context.sequence,
+      tasks: followedTasks)
+    defer { walk.finish() }
     // A drained walk delivers its value without suspending.
     guard let anchor = walk.anchor else {
-      walk.isWalking = true
-      return await walker.walk(effect, context: context, awaited: false)
+      return await walk.run { await walker.walk(effect, context: context, awaited: false) }
     }
     await anchor.wait()
     // A `Store` starts the walk once the walk it created before has finished.
-    let start = anchor.start(after: interpreterTail)
-    walk.prepare(toStartAt: start)
-    await start.wait()
-    walk.begin()
-    // MainActor jobs run in the order they are queued: this one runs at the
-    // walk's first suspension, before the walk resumes and before any work
-    // the walk started.
-    Task { @MainActor [weak walk] in
-      walk?.didReachFirstSuspension()
-    }
-    walk.isWalking = true
-    await walker.walk(effect, context: context, awaited: false)
-    interpreterTail = walk.deliveryAnchor
-  }
-
-  /// The walk whose synchronous part is delivering a value of `context`.
-  /// Work queued on the MainActor before the walk began can run at its first
-  /// suspension; its values belong to other effects.
-  private func followedWalk(
-    deliveringIn context: EffectExecutionContext?
-  ) -> TestStoreFollowedWalk? {
-    guard let sequence = context?.sequence, let walk = followedWalks[sequence],
-      walk.isWalking, walk.isSynchronous
-    else { return nil }
-    return walk
+    await walk.prepareToStart(after: interpreterTail)?.wait()
+    await walk.run { await walker.walk(effect, context: context, awaited: false) }
+    interpreterTail = walk.tail
   }
 
   /// Buffers an effect action where a `Store` handles it: right behind the
@@ -693,18 +1050,18 @@ extension TestStore {
   /// synchronous part of a drained walk delivers it; at its walk's anchor
   /// when an interpreted walk does; otherwise at its delivery.
   func enqueueDeliveredAction(_ action: R.Action, context: EffectExecutionContext?) {
-    guard let walk = followedWalk(deliveringIn: context) else {
+    guard let walk = TestStoreFollowedWalk.delivering(in: self, sequence: context?.sequence)
+    else {
       queue.enqueue(action, context: context)
       return
     }
-    if walk.isDrained {
+    if walk.isDrained, let handled = walk.handled {
       walk.lastFollowUp = queue.enqueue(
-        action, context: context, delivery: .drained(after: walk.handled, isAction: true),
+        action, context: context, delivery: .drained(after: handled, isAction: true),
         placement: .front(behind: walk.lastFollowUp))
-    } else if let anchor = walk.deliveryAnchor, let position = anchor.position {
+    } else if let place = walk.placeNext() {
       queue.enqueue(
-        action, context: context,
-        delivery: .interpreted(at: anchor, position: position, isAction: true),
+        action, context: context, delivery: .interpreted(at: place, isAction: true),
         placement: .ordered)
     } else {
       queue.enqueue(action, context: context)
@@ -713,15 +1070,16 @@ extension TestStore {
 
   /// Buffers an output where a `Store` publishes it, as for an action.
   func enqueueDeliveredOutput(_ output: R.Output, context: EffectExecutionContext?) {
-    guard let walk = followedWalk(deliveringIn: context) else {
+    guard let walk = TestStoreFollowedWalk.delivering(in: self, sequence: context?.sequence)
+    else {
       outputQueue.enqueue(output, context: context, tracksActivity: false)
       return
     }
     let delivery: TestStoreDelivery
-    if walk.isDrained {
-      delivery = .drained(after: walk.handled, isAction: false)
-    } else if let anchor = walk.deliveryAnchor, let position = anchor.position {
-      delivery = .interpreted(at: anchor, position: position, isAction: false)
+    if walk.isDrained, let handled = walk.handled {
+      delivery = .drained(after: handled, isAction: false)
+    } else if let place = walk.placeNext() {
+      delivery = .interpreted(at: place, isAction: false)
     } else {
       delivery = .delivered(opening: nil)
     }
@@ -749,9 +1107,11 @@ extension TestStore {
     if let reducing = reducingAction {
       threshold = reducing.storeOrder
       ownSequence = nil
-    } else if let issuer, let walk = followedWalks[issuer], walk.isWalking, walk.isSynchronous {
+    } else if let walk = TestStoreFollowedWalk.delivering(in: self, sequence: issuer),
+      let walkThreshold = walk.threshold
+    {
       // Once the walk runs, only its own cancellations belong to the reduction.
-      threshold = walk.threshold
+      threshold = walkThreshold
       ownSequence = issuer
     } else {
       return
@@ -826,6 +1186,7 @@ extension TestStore {
   }
 
   package func popBufferedAction() async -> R.Action? {
+    await followedTasks.settle()
     guard let entry = popBufferedQueuedAction() else { return nil }
     defer { entry.finish() }
     return entry.action

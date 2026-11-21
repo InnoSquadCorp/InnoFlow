@@ -140,6 +140,9 @@ extension TestStore {
         reportTimeout()
         return nil
       }
+      // A composite task the test store follows can still buffer a value
+      // ahead of the ones buffered now.
+      await followedTasks.settle()
 
       // Capture before inspecting either queue; waiting never consumes a value.
       let revision = finishActivity.snapshot.revision
@@ -225,6 +228,7 @@ extension TestStore {
   }
 
   package func popBufferedOutput() async -> R.Output? {
+    await followedTasks.settle()
     while let queuedOutput = outputQueue.popBuffered() {
       guard queuedOutput.isDeliverable else { continue }
       return queuedOutput.action
