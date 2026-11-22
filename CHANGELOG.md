@@ -348,6 +348,20 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   test was cancelled or hit its time limit. The failure is reported at the
   scenario's latest assertion on the store, or at the running Swift Testing
   test when the scenario starts with that step.
+- `TestStore` phase helpers — `send` and `receive` with `tracking:through:`,
+  or with `through:` a `PhaseMap` — check the transition their action makes:
+  from the phase right before that action is reduced to the phase right
+  after. In 6.0.x they compared the phase before the call with the phase
+  after it, which also spans the buffered actions a `send` reduces first and
+  the actions a non-exhaustive `receive` skips. Two allowed transitions were
+  then reported as one illegal transition (`idle` to `loaded` for an action
+  entering `loading` followed by one entering `loaded`), also for a phase a
+  `PhaseMap` owns; a transition the graph does not allow went unreported
+  when the combined one was allowed or ended in the phase the call began
+  in; and an exhaustive `receive` that got another action checked that
+  action's transition as the expected action's. The helpers do not check the
+  transitions of the actions a call reduces on the way, and check none when
+  the expected action is not received.
 
 ### Notes
 
