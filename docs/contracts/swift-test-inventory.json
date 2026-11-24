@@ -95,7 +95,7 @@
     "Tests/InnoFlowTestingTests/SchedulerAdmissionConsistencyTests.swift": "c177c165c31258dadc47666a53cc7c57615830df87c413a1fb5dae47e64a36c3",
     "Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift": "df0a0ddca65ba7a62246f819161463b17c90e5d9263bc75d47f7cd730ada3634",
     "Tests/InnoFlowTestingTests/TestEffectLedgerConsistencyTests.swift": "c27296d445409c72e821e96a10a949a8680f814d216d68eeb3423242f0198e39",
-    "Tests/InnoFlowTestingTests/TestStoreCompositeWaitTests.swift": "26ce50bd2ceca4b98536518a6a943369eff3d46f227631b4bb1ba31a22b0c892",
+    "Tests/InnoFlowTestingTests/TestStoreCompositeWaitTests.swift": "f0fef28d60698334d401f42f7a11afb4c330a652323ef9c3ee2346b16549f633",
     "Tests/InnoFlowTestingTests/TestStoreDefaultsTests.swift": "7656e44ec0d6f3505ef0132ee50c121b032fc15b3251a1f3d5f70096d1bf1c23",
     "Tests/InnoFlowTestingTests/TestStoreDeliveryOrderTests.swift": "c7af2de0e5c6b81106698e3647f8790270d880496a526dae881f9fe1f4e44d14",
     "Tests/InnoFlowTestingTests/TestStoreDispatchConsistencyTests.swift": "8c37763f1487dc2c86a0454ee0676aada314541a79b9b5eef5a04b8ae15e6a64",
@@ -7896,7 +7896,7 @@
       "displayName": "Waiting for a composite task counts against a receive's timeout",
       "file": "Tests/InnoFlowTestingTests/TestStoreCompositeWaitTests.swift",
       "identifier": "TestStoreCompositeWaitTests/compositeWaitCountsAgainstTheTimeout()",
-      "line": 73,
+      "line": 82,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7905,7 +7905,7 @@
       "displayName": "A non-exhaustive finish drains behind an undeliverable head in Store order",
       "file": "Tests/InnoFlowTestingTests/TestStoreCompositeWaitTests.swift",
       "identifier": "TestStoreCompositeWaitTests/finishDrainsBehindAnUndeliverableHeadInOrder()",
-      "line": 127,
+      "line": 136,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7914,7 +7914,7 @@
       "displayName": "A non-exhaustive finish skips outputs behind an undeliverable head in Store order",
       "file": "Tests/InnoFlowTestingTests/TestStoreCompositeWaitTests.swift",
       "identifier": "TestStoreCompositeWaitTests/finishSkipsOutputsBehindAnUndeliverableHeadInOrder()",
-      "line": 154,
+      "line": 163,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7932,7 +7932,7 @@
       "displayName": "A zero timeout receives nothing a pending composite task has not delivered",
       "file": "Tests/InnoFlowTestingTests/TestStoreCompositeWaitTests.swift",
       "identifier": "TestStoreCompositeWaitTests/zeroTimeoutDoesNotWaitForCompositeTasks()",
-      "line": 92,
+      "line": 101,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7941,7 +7941,7 @@
       "displayName": "A zero-timeout receiveOutput reduces no action ahead of a mismatched output",
       "file": "Tests/InnoFlowTestingTests/TestStoreCompositeWaitTests.swift",
       "identifier": "TestStoreCompositeWaitTests/zeroTimeoutReceiveOutputReducesNothing()",
-      "line": 185,
+      "line": 194,
       "target": "InnoFlowTestingTests"
     },
     {
@@ -7950,7 +7950,7 @@
       "displayName": "A zero timeout receives a value buffered ahead of a pending composite task",
       "file": "Tests/InnoFlowTestingTests/TestStoreCompositeWaitTests.swift",
       "identifier": "TestStoreCompositeWaitTests/zeroTimeoutReceivesAValueAheadOfACompositeTask()",
-      "line": 105,
+      "line": 114,
       "target": "InnoFlowTestingTests"
     },
     {

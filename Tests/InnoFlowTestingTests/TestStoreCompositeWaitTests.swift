@@ -58,15 +58,24 @@ struct TestStoreCompositeWaitTests {
 
   @Test("A receive takes a value once no pending composite task can precede it")
   func receiveStopsWaitingOnceNothingCanPrecedeTheValue() async {
-    let store = TestStore(reducer: StaggeredMergeFeature(), initialState: .init())
-    await store.send(.start)
-    // The task of `a` delivers it two levels deeper and returns; the tasks
-    // of the nested `merge`s are still pending and deliver `z` four levels
-    // deeper still, behind `a`.
-    await store.receive(.a) { $0.received = ["a"] }
+    let store = TestStore(reducer: StaggeredFeature(), initialState: .init())
+    let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: [])
+    // Delivered in this job: the marker of each level of `q`'s chain runs
+    // after the marker of the same level of `p`'s, and queues the next one.
+    store.deliverAction(.q, context: context)
+    store.deliverAction(.p, context: context)
+    // `q` leaves `merge` tasks on their way to `z`, eight levels deeper.
+    await store.receive(.q) { $0.log = ["q"] }
+    // `p` leaves the `concatenate` task that delivers `a` one level deeper,
+    // ahead of every task of `q`.
+    await store.receive(.p) { $0.log = ["q", "p"] }
+    // The receive waits for that task only: when it returns, the markers of
+    // `q`'s deeper levels have not run, so a task of `q` is still pending.
+    await store.receive(.a) { $0.log = ["q", "p", "a"] }
     #expect(store.followedTasks.canDeliver(before: nil))
 
-    await store.receive(.z) { $0.received = ["a", "z"] }
+    await store.receive(.b) { $0.log = ["q", "p", "a", "b"] }
+    await store.receive(.z) { $0.log = ["q", "p", "a", "b", "z"] }
     await store.finish()
   }
 
@@ -260,22 +269,29 @@ private struct AheadFeature: Reducer {
   }
 }
 
-/// `a` comes two interpreter levels deeper, `z` six.
-private struct StaggeredMergeFeature: Reducer {
+/// `p` delivers `a` and `b` from an unawaited `concatenate`; `q` delivers `z`
+/// from four nested `merge`s, eight interpreter levels deeper.
+private struct StaggeredFeature: Reducer {
   struct State: Equatable, Sendable {
-    var received: [String] = []
+    var log: [String] = []
   }
 
   enum Action: String, Equatable, Sendable {
-    case start, a, z
+    case p, q, a, b, z
   }
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
-    guard action == .start else {
-      state.received.append(action.rawValue)
+    state.log.append(action.rawValue)
+    switch action {
+    case .p:
+      return .concatenate(.send(.a), .send(.b))
+    case .q:
+      return .merge(
+        .merge(.merge(.merge(.send(.z), .run { _ in }), .run { _ in }), .run { _ in }),
+        .run { _ in })
+    default:
       return .none
     }
-    return .merge(.send(.a), .merge(.merge(.send(.z), .run { _ in }), .run { _ in }))
   }
 }
 
