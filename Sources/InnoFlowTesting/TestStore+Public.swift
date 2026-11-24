@@ -171,8 +171,9 @@ extension TestStore {
   /// Receives an exact action using a timeout for this assertion only.
   ///
   /// The timeout is one total wall-clock budget, including time spent
-  /// discarding actions invalidated by effect cancellation or reducing
-  /// mismatches in non-exhaustive mode.
+  /// waiting for a composite task the store follows, discarding actions
+  /// invalidated by effect cancellation, or reducing mismatches in
+  /// non-exhaustive mode.
   public func receive(
     _ expectedAction: R.Action,
     timeout: Duration,

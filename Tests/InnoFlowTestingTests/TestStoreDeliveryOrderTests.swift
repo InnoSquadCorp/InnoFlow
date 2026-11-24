@@ -1794,9 +1794,10 @@ private func reducedByStore<R: Reducer>(
     store.deliverAction(action, context: isChained ? chainContext : nil)
   }
   // A `Store` hands walks back to the MainActor from other executors.
-  _ = await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(1)) {
+  let reducedExpected = await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(1)) {
     progress.ranCount == chain.count && Set(expected).isSubset(of: store.state[keyPath: log])
   }
+  #expect(reducedExpected, "A Store reduced \(store.state[keyPath: log]), expecting \(expected)")
   await drainMainActorJobs()
   let reduced = store.state[keyPath: log]
   store.send(end)
@@ -1936,6 +1937,15 @@ private enum CompositeShape: String, CaseIterable, Sendable, CustomTestStringCon
     case .mergeWithComposite: [("z2", "c"), ("z3", "a"), ("a", "b")]
     case .throttledConcatenate: [("z2", "a"), ("a", "b")]
     case .concatenateWithThrottle: [("a2", "b"), ("b", "c")]
+    default: []
+    }
+  }
+
+  /// Actions a `Store` reduces one right after the other in every run: the
+  /// sends one task delivers without suspending in between.
+  var storeAdjacentPairs: [(first: String, second: String)] {
+    switch self {
+    case .mergeWithComposite, .throttledConcatenate: [("a", "b")]
     default: []
     }
   }
@@ -3688,6 +3698,11 @@ struct TestStoreDeliveryOrderTests {
         Array(reduced.prefix(shape.storePrefix)) == Array(shape.log.prefix(shape.storePrefix)))
       for (earlier, later) in shape.storeOrders {
         #expect(orders(reduced, earlier, before: later), "\(earlier) before \(later) in \(reduced)")
+      }
+      for (first, second) in shape.storeAdjacentPairs {
+        #expect(
+          zip(reduced, reduced.dropFirst()).contains { $0 == first && $1 == second },
+          "\(first) right before \(second) in \(reduced)")
       }
     }
 

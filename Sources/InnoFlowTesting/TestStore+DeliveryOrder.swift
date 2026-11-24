@@ -485,34 +485,99 @@ package struct TestStoreWalkPlace {
 
 /// The walks of composite tasks a test store follows that have not finished
 /// yet. They deliver at positions that can precede values already buffered,
-/// so the test store takes nothing from a buffer while one is pending.
+/// so the test store takes no buffered value one of them can still precede.
 @MainActor
 package final class TestStoreFollowedTasks {
-  private var pendingCount = 0
-  private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var pending: [ObjectIdentifier: TestStoreFollowedWalk] = [:]
+  private var waiters: [UInt64: TestStoreSettleWaiter] = [:]
+  private var nextWaiterID: UInt64 = 0
 
-  fileprivate func begin() {
-    pendingCount += 1
+  fileprivate func begin(_ walk: TestStoreFollowedWalk) {
+    pending[ObjectIdentifier(walk)] = walk
   }
 
-  fileprivate func end() {
-    pendingCount -= 1
-    guard pendingCount == 0 else { return }
-    let resumed = waiters
-    waiters.removeAll()
-    for waiter in resumed {
-      waiter.resume()
+  fileprivate func end(_ walk: TestStoreFollowedWalk) {
+    pending.removeValue(forKey: ObjectIdentifier(walk))
+    guard pending.isEmpty else { return }
+    for id in Array(waiters.keys) {
+      resolveWaiter(id, with: .settled)
     }
+  }
+
+  /// Whether a pending task can still deliver a value a `Store` handles
+  /// before `order`; with no `order`, whether any task is pending. A task
+  /// whose level's marker has not run delivers behind every value placed so
+  /// far.
+  package func canDeliver(before order: TestStoreOrder?) -> Bool {
+    guard let order else { return !pending.isEmpty }
+    return pending.values.contains { $0.canDeliver(before: order) }
   }
 
   /// Returns once no followed composite task is pending, without suspending
   /// when none is. Task cancellation does not end the wait: each pending task
   /// finishes once the marker of its level has run.
   package func settle() async {
-    while pendingCount > 0 {
-      await withCheckedContinuation { waiters.append($0) }
+    while !pending.isEmpty {
+      _ = await waitForEnd(until: nil)
     }
   }
+
+  /// Returns `.settled` once no followed composite task is pending, without
+  /// suspending when none is; `.timedOut` once `deadline` passes, and
+  /// `.cancelled` once the calling task is cancelled, while one still is.
+  /// The pending tasks keep running either way.
+  package func settle(until deadline: ContinuousClock.Instant) async -> TestStoreSettlement {
+    while !pending.isEmpty {
+      if Task.isCancelled { return .cancelled }
+      guard ContinuousClock.now < deadline else { return .timedOut }
+      let settlement = await waitForEnd(until: deadline)
+      guard settlement == .settled else { return settlement }
+    }
+    return .settled
+  }
+
+  private func waitForEnd(until deadline: ContinuousClock.Instant?) async -> TestStoreSettlement {
+    let id = nextWaiterID
+    nextWaiterID &+= 1
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        let timeoutTask = deadline.map { deadline in
+          Task { @MainActor [weak self] in
+            try? await ContinuousClock().sleep(until: deadline)
+            guard !Task.isCancelled else { return }
+            self?.resolveWaiter(id, with: .timedOut)
+          }
+        }
+        waiters[id] = TestStoreSettleWaiter(continuation: continuation, timeoutTask: timeoutTask)
+      }
+    } onCancel: {
+      guard deadline != nil else { return }
+      Task { @MainActor [weak self] in
+        self?.resolveWaiter(id, with: .cancelled)
+      }
+    }
+  }
+
+  private func resolveWaiter(_ id: UInt64, with settlement: TestStoreSettlement) {
+    guard let waiter = waiters.removeValue(forKey: id) else { return }
+    waiter.timeoutTask?.cancel()
+    waiter.continuation.resume(returning: settlement)
+  }
+}
+
+/// How a bounded wait for the composite tasks a test store follows ended.
+package enum TestStoreSettlement: Equatable, Sendable {
+  /// No followed composite task is pending.
+  case settled
+  /// The caller's deadline passed while one still was.
+  case timedOut
+  /// The calling task was cancelled while one still was.
+  case cancelled
+}
+
+private struct TestStoreSettleWaiter {
+  let continuation: CheckedContinuation<TestStoreSettlement, Never>
+  let timeoutTask: Task<Void, Never>?
 }
 
 /// Starts the walks of the children of one `merge` in declaration order. Each
@@ -645,7 +710,7 @@ package final class TestStoreFollowedWalk {
     startAnchor = anchor
     deliveryAnchor = anchor
     anchor.chain.addMember()
-    tasks.begin()
+    tasks.begin(self)
   }
 
   /// The followed walk that is delivering a value of the effect `sequence`
@@ -773,8 +838,16 @@ package final class TestStoreFollowedWalk {
       handled.settle()
     } else {
       anchor?.chain.settleMember()
-      tasks.end()
+      tasks.end(self)
     }
+  }
+
+  /// Whether the walk can still deliver a value a `Store` handles before
+  /// `order`. It delivers nothing ahead of its next place, and nothing ahead
+  /// of the values buffered before the marker of its level runs.
+  func canDeliver(before order: TestStoreOrder) -> Bool {
+    guard isFollowed, let place else { return false }
+    return TestStoreDelivery.order(at: place) < order
   }
 
   /// Where the walk places the value it delivers or the task it creates now,

@@ -160,7 +160,8 @@ reduced, and a buffered output as one it has already published:
   would have skipped when a buffered action that a `Store` reduced before
   that output publishes the expected one: it reduces that action first, as a
   skipped action. Receiving outputs in the order a `Store` publishes them no
-  longer loses the later one.
+  longer loses the later one. With no time left, as with a zero timeout, it
+  reduces nothing and keeps the output.
 - A cancellation applied while the test reduces a received or sent action
   still removes the covered actions buffered behind it, and the covered
   outputs a `Store` would publish after it. For a sent action those are the
@@ -201,8 +202,11 @@ reduced, and a buffered output as one it has already published:
   before a later `merge` step of the emitting `concatenate`. A test that
   received those values after later ones receives them in that order
   instead. `send` and `receive` return without waiting for those tasks; the
-  next call that takes a buffered value — `receive`, `receiveOutput`, a
-  `send`'s drain, `finish()` — waits for them first. Work a walk awaits or
+  next call that takes a buffered value such a task can still precede —
+  `receive`, `receiveOutput`, a `send`'s drain, `finish()` — waits for it
+  first; `receive`, `receiveOutput` and `finish()` wait within their timeout
+  and stop when the calling task is cancelled: as in 6.0.x, a zero timeout
+  receives no value such a task has not delivered yet. Work a walk awaits or
   leaves to another task — a run, a timer, the children of an awaited
   `merge` — and what a composite task delivers once it awaited such work
   still deliver at their delivery, as in 6.0.x: their values can come behind

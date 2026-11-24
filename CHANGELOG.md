@@ -176,16 +176,17 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   Until such a task awaits other work, what it delivers comes before the
   jobs a `Store` runs after it — the leading sends of a `concatenate`, and
   a run emission's composite follow-up ahead of a later `merge` step of the
-  emitting `concatenate` — and a test store takes no buffered value while
-  such a task is pending. Before, the order, and with a cancellation
-  the set of received actions and outputs, depended on when the test
-  received the first action. Where the `Store` order is itself a race, such
-  as a wrapped follow-up of a wrapped follow-up of a run's emission against
-  the run's next emission, a test can receive either order. A `Store` hands
-  a resumed walk, and a walk that waited for the one before it, back to the
-  MainActor from another executor, so where it continues depends on how soon
-  that happens relative to the MainActor's other jobs; the test store takes
-  the earliest point. Two exceptions can place a value before jobs a
+  emitting `concatenate` — and a test store takes no buffered value such a
+  task can still precede while it is pending, waiting for it within the
+  call's timeout until the calling task is cancelled. Before, the order, and
+  with a cancellation the set of received actions and outputs, depended on
+  when the test received the first action. Where the `Store` order is itself a
+  race, such as a wrapped follow-up of a wrapped follow-up of a run's emission
+  against the run's next emission, a test can receive either order. A `Store`
+  hands a resumed walk, and a walk that waited for the one before it, back to
+  the MainActor from another executor, so where it continues depends on how
+  soon that happens relative to the MainActor's other jobs; the test store
+  takes the earliest point. Two exceptions can place a value before jobs a
   `Store` runs first: positions more than sixteen interpreter jobs behind a
   delivery or send — a follow-up that deep, a composite task, or a walk
   that starts or resumes there — share the sixteenth job's position; and
@@ -198,8 +199,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered
-  actions a `Store` reduced before that output. Before, a test that received
-  outputs in the order a `Store` publishes them could lose the later one.
+  actions a `Store` reduced before that output; with no time left, as with a
+  zero timeout, it reduces none of them and keeps that output. Before, a
+  test that received outputs in the order a `Store` publishes them could
+  lose the later one.
 - A collection scope now refreshes only the rows a change can affect instead
   of every row on any change, and rows resolve their positions once per
   structural change instead of each scanning the collection, also when an

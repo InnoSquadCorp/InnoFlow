@@ -256,8 +256,32 @@ extension TestStore {
         return .cancelled
       }
       // A composite task the test store follows can still buffer a value
-      // ahead of the ones buffered now.
-      await followedTasks.settle()
+      // ahead of the ones buffered now: an exhaustive store reports what it
+      // buffers, a non-exhaustive one drains in order. Waiting for it counts
+      // against the timeout and ends when this task is cancelled.
+      let next =
+        exhaustivity.isOn
+        ? nil
+        : (queue.firstBuffered?.delivery.storeOrder
+          ?? outputQueue.firstBuffered?.delivery.storeOrder)
+      var settlement = TestStoreSettlement.settled
+      if followedTasks.canDeliver(before: next) {
+        settlement = await followedTasks.settle(until: deadline)
+        if settlement == .settled { continue }
+      }
+      if settlement == .cancelled {
+        cancelRemainingEffectsForFinish()
+        markTerminalVerificationHandled(terminalVerificationRevision)
+        return .cancelled
+      }
+      if settlement == .timedOut {
+        // Snapshot both queues before cancellation invalidates either side.
+        let pending = exhaustivity.isOn ? unverifiedSnapshot() : .init()
+        let snapshot = finishActivity.snapshot
+        cancelRemainingEffectsForFinish()
+        markTerminalVerificationHandled(terminalVerificationRevision)
+        return pending.isEmpty ? .timedOut(snapshot) : .unhandledWork(pending)
+      }
 
       if exhaustivity.isOn {
         // Snapshot both queues before cancellation invalidates either side.
@@ -286,7 +310,7 @@ extension TestStore {
         await applyUnassertedAction(action, location: location)
         didDrainWork = true
         continue
-      } else if let output = await popBufferedOutput() {
+      } else if let output = takeBufferedOutput() {
         // Match action draining: allow one already-buffered value even for a
         // zero timeout, then enforce the same total deadline for the rest.
         if didDrainWork, wallClock.now >= deadline {
