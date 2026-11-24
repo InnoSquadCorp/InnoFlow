@@ -22,19 +22,18 @@ extension TestStore {
   /// also under ownership metadata — the send starts that effect where a
   /// `Store` walks it at the earliest: once the MainActor jobs queued before
   /// that task have run and the walk of the task created before it has
-  /// finished. It buffers what the effect delivers there, and, once the walk
-  /// has first suspended, where a `Store` resumes it at the earliest. Two
-  /// limitations are the exception, and can place a value before jobs a
-  /// `Store` runs first: a walk that suspends more than once is placed as if
-  /// it resumed once, and the walks behind it start right behind that place;
-  /// and positions more than four interpreter jobs behind a delivery or send
-  /// share the fourth job's position. A third limitation concerns work the
-  /// walk starts in another task (a run, a `merge` or `concatenate` and its
-  /// children, a timer): what that work delivers is buffered at its
-  /// delivery, which can be behind jobs a `Store` runs after it. A buffered
-  /// action reduced first whose walk had not started when the send began,
-  /// and every interpreted one reduced after it, is walked after the new
-  /// action is reduced, as in a `Store`.
+  /// finished. It buffers what the effect delivers there, and, after each
+  /// suspension, where a `Store` resumes the walk at the earliest. The tasks
+  /// in which a `concatenate` or a `merge` walks its children buffer what
+  /// they deliver, until they await other work, where a `Store` runs them at
+  /// the earliest; the send does not wait for them, and the next call that
+  /// takes a buffered value does. Two exceptions can place a value before
+  /// jobs a `Store` runs first: positions more than sixteen interpreter jobs
+  /// behind a delivery or send share the sixteenth job's position, and what a
+  /// run, a timer or the children of an awaited `merge` deliver is buffered
+  /// at its delivery. A buffered action reduced first whose walk had not
+  /// started when the send began, and every interpreted one reduced after it,
+  /// is walked after the new action is reduced, as in a `Store`.
   ///
   /// These rules describe sends and receives a test awaits one after
   /// another. A call that begins in another task while an earlier one is
@@ -123,14 +122,14 @@ extension TestStore {
   /// earliest, as for ``send(_:assert:fileID:filePath:line:column:)``: an
   /// effect the `Store` interprets in a MainActor task of its own starts once
   /// the MainActor jobs queued before that task have run and the walk of the
-  /// task created before it has finished. The same two limitations are the
-  /// exception, and can place a value before jobs a `Store` runs first: a
-  /// walk that suspends more than once is placed as if it resumed once, and
-  /// the walks behind it start right behind that place; and positions more
-  /// than four interpreter jobs behind a delivery or send share the fourth
-  /// job's position. The third applies as well: what work the walk starts in
-  /// another task delivers is buffered at its delivery, which can be behind
-  /// jobs a `Store` runs after it.
+  /// task created before it has finished, and what it delivers is buffered
+  /// as for a send, with the same two exceptions, which can place a value
+  /// before jobs a `Store` runs first: positions more than sixteen
+  /// interpreter jobs behind a delivery or send share the sixteenth job's
+  /// position, and what a run, a timer or the children of an awaited `merge`
+  /// deliver is buffered at its delivery. Before it takes a buffered value,
+  /// the receive waits for the tasks of a `concatenate` or `merge` the store
+  /// follows, which can buffer a value ahead of the ones already buffered.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
