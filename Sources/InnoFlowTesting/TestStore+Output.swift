@@ -151,8 +151,8 @@ extension TestStore {
         outputQueue.firstBuffered?.delivery.storeOrder
         ?? (exhaustivity.isOn ? nil : queue.firstBuffered?.delivery.storeOrder)
       if followedTasks.canDeliver(before: next) {
-        switch await followedTasks.settle(until: deadline) {
-        case .settled:
+        switch await followedTasks.waitForProgress(until: deadline) {
+        case .progressed:
           guard wallClock.now < deadline else {
             reportTimeout()
             return nil

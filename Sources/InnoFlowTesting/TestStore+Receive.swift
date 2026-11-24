@@ -83,8 +83,8 @@ extension TestStore {
       // for it counts against the timeout, and what it delivers once the
       // deadline has passed is late.
       if followedTasks.canDeliver(before: queue.firstBuffered?.delivery.storeOrder) {
-        switch await followedTasks.settle(until: deadline) {
-        case .settled:
+        switch await followedTasks.waitForProgress(until: deadline) {
+        case .progressed:
           guard wallClock.now < deadline else { return .timedOut(timeout: resolvedTimeout) }
           continue
         case .timedOut:

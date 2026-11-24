@@ -56,6 +56,20 @@ struct TestStoreCompositeWaitTests {
     #expect(await finishing.value)
   }
 
+  @Test("A receive takes a value once no pending composite task can precede it")
+  func receiveStopsWaitingOnceNothingCanPrecedeTheValue() async {
+    let store = TestStore(reducer: StaggeredMergeFeature(), initialState: .init())
+    await store.send(.start)
+    // The task of `a` delivers it two levels deeper and returns; the tasks
+    // of the nested `merge`s are still pending and deliver `z` four levels
+    // deeper still, behind `a`.
+    await store.receive(.a) { $0.received = ["a"] }
+    #expect(store.followedTasks.canDeliver(before: nil))
+
+    await store.receive(.z) { $0.received = ["a", "z"] }
+    await store.finish()
+  }
+
   @Test("Waiting for a composite task counts against a receive's timeout")
   func compositeWaitCountsAgainstTheTimeout() async {
     let store = TestStore(reducer: NestedMergeFeature(), initialState: .init())
@@ -243,6 +257,25 @@ private struct AheadFeature: Reducer {
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     state.log.append(action.rawValue)
     return action == .first ? .concatenate(.send(.c1), .send(.c2)) : .none
+  }
+}
+
+/// `a` comes two interpreter levels deeper, `z` six.
+private struct StaggeredMergeFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var received: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case start, a, z
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    guard action == .start else {
+      state.received.append(action.rawValue)
+      return .none
+    }
+    return .merge(.send(.a), .merge(.merge(.send(.z), .run { _ in }), .run { _ in }))
   }
 }
 

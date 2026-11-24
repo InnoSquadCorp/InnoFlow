@@ -267,10 +267,10 @@ extension TestStore {
         ? nil
         : (queue.firstBuffered?.delivery.storeOrder
           ?? outputQueue.firstBuffered?.delivery.storeOrder)
-      var settlement = TestStoreSettlement.settled
+      var settlement = TestStoreSettlement.progressed
       if followedTasks.canDeliver(before: next) {
-        settlement = await followedTasks.settle(until: deadline)
-        if settlement == .settled { continue }
+        settlement = await followedTasks.waitForProgress(until: deadline)
+        if settlement == .progressed { continue }
       }
       if settlement == .cancelled {
         cancelRemainingEffectsForFinish()

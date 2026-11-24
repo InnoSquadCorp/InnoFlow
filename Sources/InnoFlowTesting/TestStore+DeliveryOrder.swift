@@ -498,9 +498,14 @@ package final class TestStoreFollowedTasks {
 
   fileprivate func end(_ walk: TestStoreFollowedWalk) {
     pending.removeValue(forKey: ObjectIdentifier(walk))
-    guard pending.isEmpty else { return }
+    noteProgress()
+  }
+
+  /// A pending task has returned, or has delivered what it delivers before
+  /// it suspends: a waiting caller checks its buffer again.
+  fileprivate func noteProgress() {
     for id in Array(waiters.keys) {
-      resolveWaiter(id, with: .settled)
+      resolveWaiter(id, with: .progressed)
     }
   }
 
@@ -518,25 +523,27 @@ package final class TestStoreFollowedTasks {
   /// finishes once the marker of its level has run.
   package func settle() async {
     while !pending.isEmpty {
-      _ = await waitForEnd(until: nil)
+      _ = await waitForProgressEvent(until: nil)
     }
   }
 
-  /// Returns `.settled` once no followed composite task is pending, without
-  /// suspending when none is; `.timedOut` once `deadline` passes, and
-  /// `.cancelled` once the calling task is cancelled, while one still is.
-  /// The pending tasks keep running either way.
-  package func settle(until deadline: ContinuousClock.Instant) async -> TestStoreSettlement {
-    while !pending.isEmpty {
-      if Task.isCancelled { return .cancelled }
-      guard ContinuousClock.now < deadline else { return .timedOut }
-      let settlement = await waitForEnd(until: deadline)
-      guard settlement == .settled else { return settlement }
-    }
-    return .settled
+  /// Returns `.progressed` once a pending task returns or suspends, and
+  /// right away when none is pending; the caller then checks its buffer
+  /// again. Returns `.timedOut` once `deadline` passes, and `.cancelled` once
+  /// the calling task is cancelled, first. The pending tasks keep running
+  /// either way.
+  package func waitForProgress(until deadline: ContinuousClock.Instant) async
+    -> TestStoreSettlement
+  {
+    guard !pending.isEmpty else { return .progressed }
+    if Task.isCancelled { return .cancelled }
+    guard ContinuousClock.now < deadline else { return .timedOut }
+    return await waitForProgressEvent(until: deadline)
   }
 
-  private func waitForEnd(until deadline: ContinuousClock.Instant?) async -> TestStoreSettlement {
+  private func waitForProgressEvent(until deadline: ContinuousClock.Instant?) async
+    -> TestStoreSettlement
+  {
     let id = nextWaiterID
     nextWaiterID &+= 1
     return await withTaskCancellationHandler {
@@ -567,8 +574,8 @@ package final class TestStoreFollowedTasks {
 
 /// How a bounded wait for the composite tasks a test store follows ended.
 package enum TestStoreSettlement: Equatable, Sendable {
-  /// No followed composite task is pending.
-  case settled
+  /// A pending task returned or suspended, or none was pending.
+  case progressed
   /// The caller's deadline passed while one still was.
   case timedOut
   /// The calling task was cancelled while one still was.
@@ -930,6 +937,8 @@ package final class TestStoreFollowedWalk {
     guard isFollowed, ended == stretch else { return }
     if isAwaitingDriver {
       isSuspended = true
+      // It delivers nothing more until it resumes, one level deeper.
+      if handled == nil { tasks.noteProgress() }
     } else {
       finish()
     }
