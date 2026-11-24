@@ -14,7 +14,9 @@ extension TestStore {
   /// `Store` reduced before it published that output, so an output that
   /// comes after the expected one is never skipped. A `.zero` timeout
   /// examines only the output at the head of the buffer: a match there is
-  /// received, and a mismatch reduces no action ahead of it.
+  /// received, and a mismatch reduces no action ahead of it. While a
+  /// composite task the store follows can still deliver ahead of that output,
+  /// whatever it delivers, a `.zero` timeout times out instead.
   public func receiveOutput(
     _ expectedOutput: R.Output,
     timeout: Duration? = nil,
@@ -261,8 +263,8 @@ extension TestStore {
     return takeBufferedOutput()
   }
 
-  /// Takes the first deliverable buffered output. The caller settles the
-  /// composite tasks the test store follows first.
+  /// Takes the first deliverable buffered output. The caller first waits for
+  /// any composite task the test store follows that can deliver ahead of it.
   func takeBufferedOutput() -> R.Output? {
     while let queuedOutput = outputQueue.popBuffered() {
       guard queuedOutput.isDeliverable else { continue }

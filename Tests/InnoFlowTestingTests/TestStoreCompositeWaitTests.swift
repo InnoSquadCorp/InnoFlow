@@ -103,9 +103,69 @@ struct TestStoreCompositeWaitTests {
     #expect(store.followedTasks.canDeliver(before: nil))
 
     await store.receive(.second, timeout: .zero) { $0.log = ["first", "second"] }
+    // It did not wait for that task.
+    #expect(store.followedTasks.canDeliver(before: nil))
     await store.receive(.c1) { $0.log = ["first", "second", "c1"] }
     await store.receive(.c2) { $0.log = ["first", "second", "c1", "c2"] }
     await store.finish()
+  }
+
+  @Test("A non-exhaustive finish drains behind an undeliverable head in Store order")
+  func finishDrainsBehindAnUndeliverableHeadInOrder() async {
+    let store = TestStore(reducer: AheadFeature(), initialState: .init())
+    store.exhaustivity = .off
+    let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: [])
+    let (tracker, activity, dispatch) = store.makeDispatch()
+    let dispatchContext = store.nextEffectContext(
+      for: .none, location: .init(), flowTaskTracker: tracker)
+    // Delivered in this job: receiving `first` waits for the marker of its
+    // level, which queues the next level's marker before the test resumes.
+    store.deliverAction(.first, context: context)
+    store.deliverAction(.second, context: dispatchContext)
+    tracker.endActivity(activity)
+    await store.receive(.first) { $0.log = ["first"] }
+    // `first`'s `concatenate` task is pending at a place ahead of `late`: a
+    // `Store` reduces `c1` and `c2` first.
+    store.deliverAction(.late, context: context)
+    var lateOrder: TestStoreOrder?
+    store.queue.forEachBuffered { if $0.action == .late { lateOrder = $0.delivery.storeOrder } }
+    #expect(lateOrder.map { store.followedTasks.canDeliver(before: $0) } == true)
+    // `second` stays buffered, undeliverable, until a later job discards it.
+    dispatch.cancel()
+
+    await store.finish()
+    #expect(store.state.log == ["first", "c1", "c2", "late"])
+  }
+
+  @Test("A non-exhaustive finish skips outputs behind an undeliverable head in Store order")
+  func finishSkipsOutputsBehindAnUndeliverableHeadInOrder() async {
+    let store = TestStore(reducer: OutputBehindFeature(), initialState: .init())
+    store.exhaustivity = .off(showSkippedAssertions: true)
+    var skipped: [String] = []
+    store.warningReporter = { message, _ in
+      let prefix = "TestStore skipped reducer output while finishing:\n"
+      if message.hasPrefix(prefix) { skipped.append(String(message.dropFirst(prefix.count))) }
+    }
+    let context = store.makeEffectContext(sequence: store.nextSequence(), cancellationIDs: [])
+    let (tracker, activity, dispatch) = store.makeDispatch()
+    let dispatchContext = store.nextEffectContext(
+      for: .none, location: .init(), flowTaskTracker: tracker)
+    store.deliverAction(.first, context: context)
+    store.deliverOutput("head", context: dispatchContext)
+    await store.receive(.first) { $0.log = ["first"] }
+    store.deliverOutput("late", context: context)
+    var lateOrder: TestStoreOrder?
+    store.outputQueue.forEachBuffered {
+      if $0.action == "late" { lateOrder = $0.delivery.storeOrder }
+    }
+    #expect(lateOrder.map { store.followedTasks.canDeliver(before: $0) } == true)
+    // An output holds no activity of its dispatch: cancel it while it runs,
+    // which leaves `head` buffered, undeliverable.
+    dispatch.cancel()
+    tracker.endActivity(activity)
+
+    await store.finish()
+    #expect(skipped == ["o1", "o2", "late"])
   }
 
   @Test("A zero-timeout receiveOutput reduces no action ahead of a mismatched output")
@@ -177,12 +237,30 @@ private struct AheadFeature: Reducer {
   }
 
   enum Action: String, Equatable, Sendable {
-    case first, second, c1, c2
+    case first, second, late, c1, c2
   }
 
   func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
     state.log.append(action.rawValue)
     return action == .first ? .concatenate(.send(.c1), .send(.c2)) : .none
+  }
+}
+
+/// `first` publishes `o1` and `o2` from an unawaited `concatenate`.
+private struct OutputBehindFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case first
+  }
+
+  typealias Output = String
+
+  func reduce(into state: inout State, action: Action) -> ReducerEffect<Action, String> {
+    state.log.append(action.rawValue)
+    return .concatenate(.output("o1"), .output("o2"))
   }
 }
 

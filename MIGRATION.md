@@ -206,7 +206,10 @@ reduced, and a buffered output as one it has already published:
   `receive`, `receiveOutput`, a `send`'s drain, `finish()` — waits for it
   first; `receive`, `receiveOutput` and `finish()` wait within their timeout
   and stop when the calling task is cancelled: as in 6.0.x, a zero timeout
-  receives no value such a task has not delivered yet. Work a walk awaits or
+  receives no value such a task has not delivered yet. Unlike 6.0.x, it also
+  takes no buffered value such a task can still precede, whatever the task
+  delivers — an action ahead of an output, or an output ahead of an action:
+  give that call a timeout instead. Work a walk awaits or
   leaves to another task — a run, a timer, the children of an awaited
   `merge` — and what a composite task delivers once it awaited such work
   still deliver at their delivery, as in 6.0.x: their values can come behind

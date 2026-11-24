@@ -258,7 +258,10 @@ extension TestStore {
       // A composite task the test store follows can still buffer a value
       // ahead of the ones buffered now: an exhaustive store reports what it
       // buffers, a non-exhaustive one drains in order. Waiting for it counts
-      // against the timeout and ends when this task is cancelled.
+      // against the timeout and ends when this task is cancelled. An
+      // undeliverable value at a head would hide the value taken behind it,
+      // so a non-exhaustive store drops it first, as taking it would.
+      if !exhaustivity.isOn { dropUndeliverableHeads() }
       let next =
         exhaustivity.isOn
         ? nil
@@ -345,6 +348,16 @@ extension TestStore {
         after: snapshot.revision,
         until: deadline
       )
+    }
+  }
+
+  /// Drops the undeliverable values at the head of both buffers.
+  private func dropUndeliverableHeads() {
+    while let head = queue.firstBuffered, !head.isDeliverable {
+      queue.popBuffered()?.finish()
+    }
+    while let head = outputQueue.firstBuffered, !head.isDeliverable {
+      _ = outputQueue.popBuffered()
     }
   }
 

@@ -177,25 +177,25 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   jobs a `Store` runs after it — the leading sends of a `concatenate`, and
   a run emission's composite follow-up ahead of a later `merge` step of the
   emitting `concatenate` — and a test store takes no buffered value such a
-  task can still precede while it is pending, waiting for it within the
-  call's timeout until the calling task is cancelled. Before, the order, and
-  with a cancellation the set of received actions and outputs, depended on
-  when the test received the first action. Where the `Store` order is itself a
-  race, such as a wrapped follow-up of a wrapped follow-up of a run's emission
-  against the run's next emission, a test can receive either order. A `Store`
-  hands a resumed walk, and a walk that waited for the one before it, back to
-  the MainActor from another executor, so where it continues depends on how
-  soon that happens relative to the MainActor's other jobs; the test store
-  takes the earliest point. Two exceptions can place a value before jobs a
-  `Store` runs first: positions more than sixteen interpreter jobs behind a
-  delivery or send — a follow-up that deep, a composite task, or a walk
-  that starts or resumes there — share the sixteenth job's position; and
-  work a walk awaits or leaves to another task (a run, a timer, the
-  children of an awaited `merge`), and what a composite task delivers once
-  it awaited such work, delivers at its delivery, as in 6.0.x. An action the
-  test never receives queues sixteen anchor markers, each a MainActor task
-  of about 5 µs on the local benchmark; an action the test receives as it
-  arrives queues one.
+  task can still precede while it is pending: a send's drain waits for it, and
+  `receive`, `receiveOutput` and `finish()` wait within their timeout or until
+  the calling task is cancelled. Before, the order, and with a cancellation
+  the set of received actions and outputs, depended on when the test received
+  the first action. Where the `Store` order is itself a race, such as a
+  wrapped follow-up of a wrapped follow-up of a run's emission against the
+  run's next emission, a test can receive either order. A `Store` hands a
+  resumed walk, and a walk that waited for the one before it, back to the
+  MainActor from another executor, so where it continues depends on how soon
+  that happens relative to the MainActor's other jobs; the test store takes
+  the earliest point. Two exceptions can place a value before jobs a `Store`
+  runs first: positions more than sixteen interpreter jobs behind a delivery
+  or send — a follow-up that deep, a composite task, or a walk that starts or
+  resumes there — share the sixteenth job's position; and work a walk awaits
+  or leaves to another task (a run, a timer, the children of an awaited
+  `merge`), and what a composite task delivers once it awaited such work,
+  delivers at its delivery, as in 6.0.x. An action the test never receives
+  queues sixteen anchor markers, each a MainActor task of about 5 µs on the
+  local benchmark; an action the test receives as it arrives queues one.
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered
