@@ -1,10 +1,16 @@
 # InnoFlow
 
-[![Release](https://img.shields.io/github/v/release/InnoSquadCorp/InnoFlow)](https://github.com/InnoSquadCorp/InnoFlow/releases) [![License](https://img.shields.io/github/license/InnoSquadCorp/InnoFlow)](LICENSE) [Swift Package Index](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) · [CI and public operations](docs/automation-policy.md)
+[![Release](https://img.shields.io/github/v/release/InnoSquadCorp/InnoFlow)](https://github.com/InnoSquadCorp/InnoFlow/releases) [![License](https://img.shields.io/github/license/InnoSquadCorp/InnoFlow)](LICENSE) [![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FInnoSquadCorp%2FInnoFlow%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) [![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FInnoSquadCorp%2FInnoFlow%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) [Swift Package Index](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) · [CI and public operations](docs/automation-policy.md)
 
 [English](README.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [简体中文](README.zh-Hans.md) | [日本語](README.ja.md) | [Русский](README.ru.md)
 
 SwiftUI を中心に、ビジネス・ドメインの状態遷移を扱う単方向状態管理フレームワークです。Reducer、Store、決定的なテストから始め、機能に必要なときにオーケストレーションを加えてください。
+
+- **フレームワークの学習ではなく Reducer から始める。** `@InnoFlow` が `reduce` を生成し、`Scope`、`IfLet`、`ForEachReducer` で機能を組み合わせます。
+- **決定的なテストが標準。** `TestStore` は既定で網羅的に検証し、`ManualTestClock` が時間を制御するため、すべての状態変化・エフェクト・出力をアサートします。
+- **オーケストレーションは段階的に。** `FlowTask`、`PhaseMap`、Inspector は機能が必要としたときに導入します。
+- **必要なものだけを出荷。** 5 つのプロダクトに分かれ、`InnoFlowCore` は SwiftUI に依存せず、`InnoFlowTesting` はアプリのターゲットに含めません。
+- **コーディングエージェント対応。** 同梱の [Claude Code・Codex スキル](skills/README.md) がエージェントに現在の API を伝えます。
 
 ## InnoFlow 6.0.2
 

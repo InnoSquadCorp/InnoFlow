@@ -1,10 +1,16 @@
 # InnoFlow
 
-[![Release](https://img.shields.io/github/v/release/InnoSquadCorp/InnoFlow)](https://github.com/InnoSquadCorp/InnoFlow/releases) [![License](https://img.shields.io/github/license/InnoSquadCorp/InnoFlow)](LICENSE) [Swift Package Index](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) · [CI and public operations](docs/automation-policy.md)
+[![Release](https://img.shields.io/github/v/release/InnoSquadCorp/InnoFlow)](https://github.com/InnoSquadCorp/InnoFlow/releases) [![License](https://img.shields.io/github/license/InnoSquadCorp/InnoFlow)](LICENSE) [![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FInnoSquadCorp%2FInnoFlow%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) [![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FInnoSquadCorp%2FInnoFlow%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) [Swift Package Index](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) · [CI and public operations](docs/automation-policy.md)
 
 [English](README.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [简体中文](README.zh-Hans.md) | [日本語](README.ja.md) | [Русский](README.ru.md)
 
 Однонаправленное управление состоянием с ориентацией на SwiftUI для бизнес-переходов и состояния предметной области. Начните с редьюсера, Store и детерминированных тестов; добавляйте оркестрацию по мере необходимости.
+
+- **Начните с редьюсера, а не с изучения фреймворка.** `@InnoFlow` генерирует `reduce`; фичи компонуются через `Scope`, `IfLet` и `ForEachReducer`.
+- **Детерминированные тесты по умолчанию.** `TestStore` по умолчанию проверяет всё, а `ManualTestClock` управляет временем, поэтому проверяется каждое изменение состояния, эффект и выход.
+- **Оркестрация — постепенно.** `FlowTask`, `PhaseMap` и Inspector подключаются, только когда они нужны фиче.
+- **Поставляйте только нужное.** Пять продуктов; `InnoFlowCore` не зависит от SwiftUI, а `InnoFlowTesting` не попадает в таргеты приложения.
+- **Готов к работе с агентами.** В комплекте [навык для Claude Code и Codex](skills/README.md), который знакомит агентов с актуальным API.
 
 ## InnoFlow 6.0.2
 

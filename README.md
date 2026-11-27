@@ -1,10 +1,16 @@
 # InnoFlow
 
-[![Release](https://img.shields.io/github/v/release/InnoSquadCorp/InnoFlow)](https://github.com/InnoSquadCorp/InnoFlow/releases) [![License](https://img.shields.io/github/license/InnoSquadCorp/InnoFlow)](LICENSE) [Swift Package Index](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) · [CI and public operations](docs/automation-policy.md)
+[![Release](https://img.shields.io/github/v/release/InnoSquadCorp/InnoFlow)](https://github.com/InnoSquadCorp/InnoFlow/releases) [![License](https://img.shields.io/github/license/InnoSquadCorp/InnoFlow)](LICENSE) [![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FInnoSquadCorp%2FInnoFlow%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) [![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FInnoSquadCorp%2FInnoFlow%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) [Swift Package Index](https://swiftpackageindex.com/InnoSquadCorp/InnoFlow) · [CI and public operations](docs/automation-policy.md)
 
 [English](README.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [简体中文](README.zh-Hans.md) | [日本語](README.ja.md) | [Русский](README.ru.md)
 
 SwiftUI-first unidirectional state management for business and domain transitions. Start with a reducer, a Store and deterministic tests; adopt orchestration only when your feature needs it.
+
+- **Start with a reducer, not a framework tour.** `@InnoFlow` generates `reduce`; compose features with `Scope`, `IfLet` and `ForEachReducer`.
+- **Deterministic tests by default.** `TestStore` is exhaustive by default and `ManualTestClock` controls time, so every state change, effect and output is asserted.
+- **Adopt orchestration progressively.** `FlowTask`, `PhaseMap` and the Inspector arrive when a feature needs them, not before.
+- **Ship only what you need.** Five products; `InnoFlowCore` has no SwiftUI dependency, and `InnoFlowTesting` stays out of app targets.
+- **Ready for coding agents.** A bundled [Claude Code and Codex skill](skills/README.md) teaches agents the current API.
 
 ## InnoFlow 6.0.2
 
