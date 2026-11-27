@@ -175,20 +175,22 @@ reduced, and a buffered output as one it has already published:
   `Store` resumes it at the earliest, behind the jobs queued before it
   suspended, one level deeper per suspension (nested throttles, a throttle
   around a scheduled run), instead of at its delivery. Short of the depth
-  limit below, a walk starts at the earliest point at which a `Store` starts
-  it: where a `Store` runs its interpreter task, or, when the walk created
-  just before it finishes only later, right after that walk finished. A
-  `Store` starts each root interpreter walk only after the one before it,
-  and hands a resumed walk, and a walk that waited, back to the MainActor
-  from another executor, so where they continue depends on how soon that
-  happens relative to the MainActor's other jobs. A throttle on a test store
-  without a `ManualTestClock` now suspends to read the clock too, as on a
-  `Store`, so its value comes behind the jobs queued before its walk. A test
-  that received those values, or the values of the walk behind it, in
-  delivery order receives them in that order instead. A value a drained walk
-  delivers after a suspension is reduced before the sent action when its
-  resumption point came before the send began, and can otherwise come behind
-  it, as in a `Store` that sends right after the walk started.
+  limit below, a walk starts where a `Store` starts it: where a `Store` runs
+  its interpreter task, or, when the walk created just before it finishes
+  only later, in the job queued when that walk finishes. A `Store` starts
+  each root interpreter walk only after the one before it, a walk that
+  waited in the job in which that one finishes, and hands a resumed walk
+  back to the MainActor from another executor, so where a suspended walk
+  continues, and where a walk waiting for it then starts, depends on how
+  soon that happens relative to the MainActor's other jobs. A throttle on a
+  test store without a `ManualTestClock` now suspends to read the clock
+  too, as on a `Store`, so its value comes behind the jobs queued before its
+  walk. A test that received those values, or the values of the walk behind
+  it, in delivery order receives them in that order instead. A value a
+  drained walk delivers after a suspension is reduced before the sent
+  action when its resumption point came before the send began, and can
+  otherwise come behind it, as in a `Store` that sends right after the walk
+  started.
 - The tasks in which a `concatenate` or a `merge` walks its children now
   deliver where a `Store` runs them at the earliest, instead of at their
   delivery: a `concatenate`'s children in the job a `Store` queues while the
@@ -236,6 +238,27 @@ termination) can therefore run on the main thread during `send`,
 `cancelEffects(identifiedBy:)` or `Store.deinit`. Do not block there on work
 the main thread is waiting to do, such as a lock the caller holds or
 `DispatchQueue.main.sync`.
+
+### Interpreter order in a `Store`
+
+A `Store` walks the effects it interprets — every effect but `.none` and a
+plain `.send` or `.output` — one at a time, in the order it reduced their
+actions. When an effect's interpreter task runs while an earlier walk is
+suspended (a throttle reading its clock, a `.run(id:policy:)` waiting for
+admission), the effect now starts in the MainActor job queued when that walk
+finishes: behind every job queued before that point and ahead of every job
+queued after it. In 6.0.x it came back to the MainActor through the global
+executor, so its place among the jobs queued after the earlier walk finished
+depended on load. Where the suspended walk itself resumes still does.
+
+The store creates the task that walks such an effect at the end of the job in
+which the earlier walk finishes. It runs at the priority of the interpreter
+task created with the effect, but its task-local values, and those of the
+runs it starts, are the ones of the interpreter before it: values that the
+code which sent an earlier action set, possibly several dispatches back, not
+the ones of the code that sent this action. An effect whose interpreter did
+not have to wait still inherits the sender's, as in 6.0.x. Rely on neither:
+pass what an effect needs through its action, state or dependency bundle.
 
 ### Throttle trailing requests
 

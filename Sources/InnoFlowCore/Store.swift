@@ -58,7 +58,7 @@ public final class Store<R: Reducer> {
   package let collectionScopeCache = CollectionScopeCache()
   package let selectionCache = SelectionCache()
   private let observerRegistry = ProjectionObserverRegistry<R.State>()
-  @ObservationIgnored private var rootEffectInterpreterTail: Task<Void, Never>?
+  private let rootInterpreterLine = StoreRootInterpreterLine()
 
   private var walker: EffectWalker<Store<R>> {
     EffectWalker(driver: self)
@@ -256,28 +256,33 @@ public final class Store<R: Reducer> {
     default:
       let flowTaskTracker = context.flowTaskTracker
       let activity = flowTaskTracker?.beginActivity()
-      let predecessor = rootEffectInterpreterTail
-      let task = Task { @MainActor [weak self, weak flowTaskTracker] in
-        defer {
-          if let activity {
-            flowTaskTracker?.endActivity(activity)
+      // The line creates the interpreter task here, and starts the walk in
+      // that task or, when an earlier walk has not finished by the time it
+      // runs, in a MainActor task it creates at the end of the job in which
+      // that walk finishes.
+      rootInterpreterLine.enqueue(
+        .init(
+          run: { [weak self, weak flowTaskTracker] in
+            defer {
+              if let activity {
+                flowTaskTracker?.endActivity(activity)
+              }
+            }
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            // Keep the root interpreter unawaited so its frame never owns
+            // Store across user or delayed work. Every concrete descendant
+            // registers its own FlowTask activity before this walk returns.
+            context.cancellationScope?.beginInterpretation()
+            await self.walkEffect(effect, context: context, awaited: false)
+          },
+          adopt: { [weak flowTaskTracker] task in
+            if let activity {
+              flowTaskTracker?.attach(task, to: activity)
+            }
           }
-        }
-        if let predecessor {
-          await predecessor.value
-        }
-        guard let self else { return }
-        guard !Task.isCancelled else { return }
-        // Keep the root interpreter unawaited so its frame never owns Store
-        // across user or delayed work. Every concrete descendant registers
-        // its own FlowTask activity before this walk returns.
-        context.cancellationScope?.beginInterpretation()
-        await self.walkEffect(effect, context: context, awaited: false)
-      }
-      rootEffectInterpreterTail = task
-      if let activity {
-        flowTaskTracker?.attach(task, to: activity)
-      }
+        )
+      )
     }
   }
 

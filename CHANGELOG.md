@@ -133,6 +133,22 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   `TestStore`, as in a `Store`, only the IDs of the request the window fires
   can stop the work it fires; cancelling an ID that only a cancelled newer
   request carried does not stop it.
+- A `Store` starts an interpreter that waited for the one before it in the
+  MainActor job queued when that one finishes. A `Store` walks the effects
+  it interprets one at a time, in the order it created their interpreter
+  tasks. An interpreter whose task ran while an earlier walk was suspended —
+  a throttle reading its clock, a scheduled run waiting for admission —
+  awaited the earlier task and came back to the MainActor through the
+  global executor, so jobs queued after the earlier walk finished could run
+  before it, depending on load. The `Store` now creates the task that walks
+  the waiting effect at the end of the job in which the earlier walk
+  finishes: the walk starts behind every job queued before that point and
+  ahead of every job queued after it. That task carries the priority of the
+  interpreter task created with the effect, and the task-local values of
+  the interpreter that started it, which the code that sent an earlier
+  action set, instead of those of the code that sent this action. An
+  interpreter that does not have to wait is unchanged, and where a
+  suspended walk resumes still depends on the executor.
 - `TestStore` keeps buffered actions and outputs in the order a `Store`
   handles them. A plain `.send` or `.output` follow-up of a received action
   is queued right behind it, at every depth: a follow-up chain and a Scope
@@ -158,11 +174,11 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   as a `Store` drops it. `TestStore` also follows what a `Store` does when
   an interpreter walk suspends: it walks interpreted effects in the order a
   `Store` creates their tasks, starts a walk that waits for the walk before
-  it right after that walk finished, the earliest point at which a `Store`
-  starts it, and keys what a walk delivers after each suspension where a
-  `Store` resumes it at the earliest, behind the MainActor jobs queued
-  before it suspended, one level deeper per suspension — nested throttles,
-  a throttle around a scheduled run. A send's drain defers every
+  it in the job queued when that walk finished, where a `Store` starts it,
+  and keys what a walk delivers after each suspension where a `Store`
+  resumes it at the earliest, behind the MainActor jobs queued before it
+  suspended, one level deeper per suspension — nested throttles, a throttle
+  around a scheduled run. A send's drain defers every
   interpreted walk behind one it defers, and a throttle on the default clock
   suspends to read it, as in a `Store`. What a walk delivers after a
   suspension is reduced before a later send when its resumption point came
@@ -184,18 +200,19 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   the first action. Where the `Store` order is itself a race, such as a
   wrapped follow-up of a wrapped follow-up of a run's emission against the
   run's next emission, a test can receive either order. A `Store` hands a
-  resumed walk, and a walk that waited for the one before it, back to the
-  MainActor from another executor, so where it continues depends on how soon
-  that happens relative to the MainActor's other jobs; the test store takes
-  the earliest point. Two exceptions can place a value before jobs a `Store`
-  runs first: positions more than sixteen interpreter jobs behind a delivery
-  or send — a follow-up that deep, a composite task, or a walk that starts or
-  resumes there — share the sixteenth job's position; and work a walk awaits
-  or leaves to another task (a run, a timer, the children of an awaited
-  `merge`), and what a composite task delivers once it awaited such work,
-  delivers at its delivery, as in 6.0.x. An action the test never receives
-  queues sixteen anchor markers, each a MainActor task of about 5 µs on the
-  local benchmark; an action the test receives as it arrives queues one.
+  resumed walk back to the MainActor from another executor, so where it
+  continues, and where a walk that waited for it then starts, depends on how
+  soon that happens relative to the MainActor's other jobs; the test store
+  takes the earliest point. Two exceptions can place a value before jobs a
+  `Store` runs first: positions more than sixteen interpreter jobs behind a
+  delivery or send — a follow-up that deep, a composite task, or a walk that
+  starts or resumes there — share the sixteenth job's position; and work a
+  walk awaits or leaves to another task (a run, a timer, the children of an
+  awaited `merge`), and what a composite task delivers once it awaited such
+  work, delivers at its delivery, as in 6.0.x. An action the test never
+  receives queues sixteen anchor markers, each a MainActor task of about 5 µs
+  on the local benchmark; an action the test receives as it arrives queues
+  one.
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered

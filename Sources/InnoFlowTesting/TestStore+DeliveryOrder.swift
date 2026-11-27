@@ -13,10 +13,11 @@ package import InnoFlowCore
 // the values the synchronous part of that walk delivers are handled where
 // that task runs. MainActor tasks start in the order they are created, so
 // such a value is handled where a MainActor task created while the action
-// was handled runs, unless the interpreter task created before it has not
+// was handled runs, unless the interpreter created before it has not
 // finished — it suspended, as a throttle reading its clock or a scheduled
-// run waiting for admission does, or it still waits for the one before it —
-// which the task awaits before it walks.
+// run waiting for admission does, or it still waits for the one before it:
+// the `Store` then starts the walk in a MainActor task it creates at the end
+// of the job in which that interpreter finishes.
 //
 // A test store buffers the values at the same points instead, reduces an
 // action when the test receives it, and keeps each buffer in the order in
@@ -37,15 +38,19 @@ package import InnoFlowCore
 //   only once its anchor has run. The MainActor jobs queued before the anchor
 //   deliver their values first, as they do in a `Store`.
 // - A `Store` starts a root interpreter walk only once the one it created
-//   before has finished. The test store walks interpreted effects in that
-//   order, and records where each walk finished: a walk whose predecessor
-//   had not finished when its anchor ran starts at the next level after the
-//   point where the predecessor finished, behind everything the
-//   predecessor's last job created: the earliest point at which a `Store`
-//   starts it, short of the depth limit below. The predecessor's completion
-//   resumes a `Store`'s walk through the global executor, which can land
-//   behind later jobs, depending on how soon it hands the walk back relative
-//   to the MainActor's other jobs.
+//   before has finished: in the walk's own interpreter task when that has
+//   happened by the time the task runs, otherwise in a MainActor task it
+//   creates at the end of the job in which the earlier walk finishes, behind
+//   every job queued before that point, everything that job created among
+//   them, and ahead of every job queued after it. The test store walks
+//   interpreted effects in that order, and records where each walk
+//   finished: a walk whose predecessor had not finished when its anchor ran
+//   starts at the next level after the point where the predecessor
+//   finished, behind everything the predecessor's last job created: the job
+//   in which a `Store` starts it when the predecessor finished there, short
+//   of the depth limit below. The start adds no race of its own; a walk that
+//   suspended finishes where it resumed, which the test store places as
+//   described below.
 // - A `send` takes its place, and queues its anchor, when it begins: a
 //   `Store` reduces the sent action, and creates its interpreter task, in
 //   the MainActor job in which the send begins. The send first reduces the
@@ -66,11 +71,14 @@ package import InnoFlowCore
 //   `TestStoreAnchorChain.depth` share the deepest one, a known limitation:
 //   what is placed there can come before jobs a `Store` runs first.
 // - The test store follows a walk until it returns. A `Store` resumes a walk
-//   that suspends — after a clock read or an admission — behind every
-//   MainActor job queued before it suspended, at the earliest where the next
-//   level runs, behind everything the job it suspended in created; the test
-//   store places what the walk delivers from then on there, one level deeper
-//   for each suspension.
+//   that suspends — after a clock read or an admission — through the global
+//   executor: behind every MainActor job queued before it suspended, at the
+//   earliest where the next level runs, behind everything the job it
+//   suspended in created, and later depending on how soon that executor
+//   hands the walk back relative to the MainActor's other jobs. The test
+//   store places what the walk delivers from then on at that earliest point,
+//   one level deeper for each suspension, and so also where the walk behind
+//   it starts.
 // - A `Store` walks the children of an unawaited `concatenate` in a MainActor
 //   task it creates while the walk that starts it runs, and each child of an
 //   unawaited `merge` once a task group has handed it to the MainActor, two
@@ -136,10 +144,10 @@ package struct TestStoreOrder: Comparable, Sendable {
 /// in the order in which it queued them. What a walk creates — a value it
 /// delivers, with the interpreter task of an action, or the task of a
 /// composite — takes the walk's rank followed by its index among what the
-/// walk creates before it next suspends. A walk that resumes, and a walk that
-/// starts once the one before it has finished, are queued when the job
-/// before them ends, at the earliest: they take that job's rank followed by
-/// ``TestStoreRank/last``, behind everything that job created.
+/// walk creates before it next suspends. A walk that starts once the one
+/// before it has finished is queued when the job before it ends, and a walk
+/// that resumes is queued there at the earliest: they take that job's rank
+/// followed by ``TestStoreRank/last``, behind everything that job created.
 package struct TestStoreRank: Comparable, Sendable {
   /// The index of a job queued when the job before it ends.
   static let last = UInt64.max
@@ -352,8 +360,10 @@ package struct TestStoreAnchor {
   /// `predecessor`: here, unless the task still waits for that walk
   /// (``isBehind(_:)``); then at the next level after the point where that
   /// walk finished, a job queued right after it finished. Short of
-  /// ``TestStoreAnchorChain/depth``, that is the earliest job in which a
-  /// `Store` starts the walk.
+  /// ``TestStoreAnchorChain/depth``, that is the job in which a `Store`
+  /// starts the walk when the walk before it finished at `predecessor`: a
+  /// `Store` creates the task that walks a waiting effect at the end of the
+  /// job in which the earlier walk finishes.
   func start(after predecessor: TestStoreInterpreterTail?) -> TestStoreAnchor {
     guard let predecessor, isBehind(predecessor) else { return self }
     return predecessor.anchor.next

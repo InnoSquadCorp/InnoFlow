@@ -20,20 +20,24 @@ extension TestStore {
   /// When a reduction returns an effect a `Store` interprets in a MainActor
   /// task it creates — anything but `.none` or a plain `.send` or `.output`,
   /// also under ownership metadata — the send starts that effect where a
-  /// `Store` walks it at the earliest: once the MainActor jobs queued before
-  /// that task have run and the walk of the task created before it has
-  /// finished. It buffers what the effect delivers there, and, after each
-  /// suspension, where a `Store` resumes the walk at the earliest. The tasks
-  /// in which a `concatenate` or a `merge` walks its children buffer what
-  /// they deliver, until they await other work, where a `Store` runs them at
-  /// the earliest; the send does not wait for them, and the next call that
-  /// takes a buffered value does. Two exceptions can place a value before
-  /// jobs a `Store` runs first: positions more than sixteen interpreter jobs
-  /// behind a delivery or send share the sixteenth job's position, and what a
-  /// run, a timer or the children of an awaited `merge` deliver is buffered
-  /// at its delivery. A buffered action reduced first whose walk had not
-  /// started when the send began, and every interpreted one reduced after it,
-  /// is walked after the new action is reduced, as in a `Store`.
+  /// `Store` starts its walk: where that task runs, once the MainActor jobs
+  /// queued before it have run, or, when the walk of the task created before
+  /// it has not finished by then, in the job queued when that walk finishes.
+  /// It buffers what the effect delivers there, and, after each suspension,
+  /// where a `Store` resumes the walk at the earliest: a `Store` resumes a
+  /// suspended walk through the global executor, so where it continues, and
+  /// where a walk waiting for it then starts, is a race, and the test store
+  /// takes the earliest point. The tasks in which a `concatenate` or a
+  /// `merge` walks its children buffer what they deliver, until they await
+  /// other work, where a `Store` runs them at the earliest; the send does not
+  /// wait for them, and the next call that takes a buffered value does. Two
+  /// exceptions can place a value before jobs a `Store` runs first: positions
+  /// more than sixteen interpreter jobs behind a delivery or send share the
+  /// sixteenth job's position, and what a run, a timer or the children of an
+  /// awaited `merge` deliver is buffered at its delivery. A buffered action
+  /// reduced first whose walk had not started when the send began, and every
+  /// interpreted one reduced after it, is walked after the new action is
+  /// reduced, as in a `Store`.
   ///
   /// These rules describe sends and receives a test awaits one after
   /// another. A call that begins in another task while an earlier one is
@@ -118,11 +122,13 @@ extension TestStore {
   /// Receives the next buffered effect action, requires it to equal
   /// `expectedAction`, and verifies its state transition.
   ///
-  /// A received action's effect starts where a `Store` would start it at the
-  /// earliest, as for ``send(_:assert:fileID:filePath:line:column:)``: an
-  /// effect the `Store` interprets in a MainActor task of its own starts once
-  /// the MainActor jobs queued before that task have run and the walk of the
-  /// task created before it has finished, and what it delivers is buffered
+  /// A received action's effect starts where a `Store` starts it, as for
+  /// ``send(_:assert:fileID:filePath:line:column:)``: an effect the `Store`
+  /// interprets in a MainActor task of its own starts where that task runs,
+  /// once the MainActor jobs queued before it have run, or, when the walk of
+  /// the task created before it has not finished by then, in the job queued
+  /// when that walk finishes — for a walk that suspended, the earliest point
+  /// at which a `Store` resumes and finishes it. What it delivers is buffered
   /// as for a send, with the same two exceptions, which can place a value
   /// before jobs a `Store` runs first: positions more than sixteen
   /// interpreter jobs behind a delivery or send share the sixteenth job's

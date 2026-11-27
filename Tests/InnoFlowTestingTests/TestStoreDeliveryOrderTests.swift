@@ -26,13 +26,15 @@ import Testing
 // walks its children in. The last rule holds unless the task waits for
 // something first — the interpreter task created before it, which suspended
 // or still waits for its own predecessor, or the hops a `merge`'s child
-// takes to the MainActor — and where it then starts, like where a suspended
-// walk resumes, is a race in a `Store`; those tests compare with the
-// earliest point a `Store` reaches, and with the orders a `Store` keeps in
-// every run. Positions past the sixteenth interpreter level behind a
-// delivery or send, which the test store collapses, are outside these
-// tests. A cancellation the test issues itself is the one exception to the
-// first rule: it lands before the values it covers.
+// takes to the MainActor. A `Store` starts a walk that waits for the one
+// before it in the job queued when that one finishes; where a suspended walk
+// resumes, and so finishes, and where a `merge`'s child starts, is a race in
+// a `Store`; those tests compare with the earliest point a `Store` reaches,
+// and with the orders a `Store` keeps in every run. Positions past the
+// sixteenth interpreter level behind a delivery or send, which the test
+// store collapses, are outside these tests. A cancellation the test issues
+// itself is the one exception to the first rule: it lands before the values
+// it covers.
 //
 // A test queues a MainActor job ahead of its next statement by creating a
 // MainActor task that delivers through the store's effect driver, as the
@@ -2105,9 +2107,10 @@ private enum DeepShape: String, CaseIterable, Sendable, CustomTestStringConverti
     }
   }
 
-  /// The orders a `Store` keeps in every run besides `first`: it starts each
-  /// waiting walk only once the one before it has finished, a MainActor job
-  /// later at the earliest.
+  /// The orders a `Store` keeps in every run besides `first`: `r` resumes,
+  /// at the earliest, behind `z1`'s job, and each waiting walk starts in the
+  /// MainActor job queued when the one before it finishes, behind the next
+  /// `z` job.
   var storeOrders: [(earlier: String, later: String)] {
     self == .followUpChain
       ? [] : [("z1", "rl"), ("z2", "cv1"), ("z3", "cv2"), ("z4", "cv3"), ("z5", "cv4")]
@@ -3238,9 +3241,9 @@ struct TestStoreDeliveryOrderTests {
     // The job that delivers `r` and `xz` queues a job that queues the job
     // delivering `z`. A `Store` runs `r`'s interpreter task, which suspends
     // to read the clock, then that job, which queues `z`'s job before the
-    // task finishes, and starts `xz`'s walk only once it finishes, at the
-    // earliest in the job queued then, behind `z`'s job: `xzv`'s cancel of
-    // `z`'s effect comes late.
+    // task finishes, and starts `xz`'s walk only once it finishes, in the
+    // job queued then, behind `z`'s job: `xzv`'s cancel of `z`'s effect comes
+    // late.
     let ids = [AnyEffectID(markID)]
     let reference = Store(
       reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
@@ -3467,11 +3470,10 @@ struct TestStoreDeliveryOrderTests {
     // One job delivers `r` and `shape`'s action, then queues the receive of
     // `r` and a job that waits until `r`'s clock read is served, then queues
     // a job that queues the one delivering `z`. A `Store` starts the waiting
-    // walk only once `r`'s interpreter task has finished, at the earliest in
-    // the job queued then, and resumes it after its own clock read, behind
-    // `z`'s job: `z` comes before `xv`, and `xc`'s cancel of `z`'s effect
-    // comes late. `r` then has nothing left in its anchor chain, which goes
-    // on all the same.
+    // walk only once `r`'s interpreter task has finished, in the job queued
+    // then, and resumes it after its own clock read, behind `z`'s job: `z`
+    // comes before `xv`, and `xc`'s cancel of `z`'s effect comes late. `r`
+    // then has nothing left in its anchor chain, which goes on all the same.
     let ids = [AnyEffectID(markID)]
     let referenceClock = ManualTestClock()
     let reference = Store(
