@@ -10,7 +10,13 @@ extension TestStore {
   ///
   /// In non-exhaustive mode, skips mismatches under one total timeout, just
   /// like `receive`, and advances intermediate FIFO actions and their effects.
-  /// An already-buffered match can be received with `.zero`.
+  /// Before it skips a buffered output, it reduces the buffered actions a
+  /// `Store` reduced before it published that output, so an output that
+  /// comes after the expected one is never skipped. A `.zero` timeout
+  /// examines only the output at the head of the buffer: a match there is
+  /// received, and a mismatch reduces no action ahead of it. While a
+  /// composite task the store follows can still deliver ahead of that output,
+  /// whatever it delivers, a `.zero` timeout times out instead.
   public func receiveOutput(
     _ expectedOutput: R.Output,
     timeout: Duration? = nil,
@@ -136,6 +142,29 @@ extension TestStore {
         reportTimeout()
         return nil
       }
+      // A composite task the test store follows can still buffer a value
+      // ahead of the one this call examines next: the first output, or, in
+      // non-exhaustive mode with none buffered, the first action. Waiting for
+      // it counts against the timeout, and what it delivers once the
+      // deadline has passed is late.
+      let next =
+        outputQueue.firstBuffered?.delivery.storeOrder
+        ?? (exhaustivity.isOn ? nil : queue.firstBuffered?.delivery.storeOrder)
+      if followedTasks.canDeliver(before: next) {
+        switch await followedTasks.waitForProgress(until: deadline) {
+        case .progressed:
+          guard wallClock.now < deadline else {
+            reportTimeout()
+            return nil
+          }
+          continue
+        case .timedOut:
+          reportTimeout()
+          return nil
+        case .cancelled:
+          return nil
+        }
+      }
 
       // Capture before inspecting either queue; waiting never consumes a value.
       let revision = finishActivity.snapshot.revision
@@ -147,7 +176,7 @@ extension TestStore {
         // action before checking outputs again. An action flood cannot starve
         // the output side, and the original deadline covers all progress.
         if let action = queue.popBuffered() {
-          guard shouldProceed(context: action.context) else {
+          guard action.isDeliverable else {
             action.finish()
             didProgress = true
             continue
@@ -179,7 +208,7 @@ extension TestStore {
         queuedOutput = received
       }
 
-      guard shouldProceed(context: queuedOutput.context) else {
+      guard queuedOutput.isDeliverable else {
         didProgress = true
         continue
       }
@@ -188,6 +217,28 @@ extension TestStore {
         return .some(value)
       case .mismatched:
         break
+      }
+
+      // A `Store` reduced a buffered action keyed before this output before
+      // it published the output, and what that reduction publishes comes
+      // first: keep the output and reduce the action instead of skipping it.
+      // With no time left, the call examines only this output and reduces
+      // nothing ahead of it.
+      if !exhaustivity.isOn, wallClock.now >= deadline,
+        hasDeliverableBufferedAction(before: queuedOutput.delivery.storeOrder)
+      {
+        outputQueue.restoreFirst(queuedOutput)
+        reportTimeout()
+        return nil
+      }
+      if !exhaustivity.isOn,
+        let action = popBufferedQueuedAction(before: queuedOutput.delivery.storeOrder)
+      {
+        outputQueue.restoreFirst(queuedOutput)
+        reportSkippedAction(action.action, context: "receiving an output", location: location)
+        await applyUnassertedAction(action, location: location)
+        didProgress = true
+        continue
       }
 
       if exhaustivity.isOn {
@@ -208,10 +259,27 @@ extension TestStore {
   }
 
   package func popBufferedOutput() async -> R.Output? {
+    await followedTasks.settle()
+    return takeBufferedOutput()
+  }
+
+  /// Takes the first deliverable buffered output. The caller first waits for
+  /// any composite task the test store follows that can deliver ahead of it.
+  func takeBufferedOutput() -> R.Output? {
     while let queuedOutput = outputQueue.popBuffered() {
-      guard shouldProceed(context: queuedOutput.context) else { continue }
+      guard queuedOutput.isDeliverable else { continue }
       return queuedOutput.action
     }
     return nil
+  }
+
+  /// Whether a deliverable action a `Store` handled before `order` is
+  /// buffered.
+  private func hasDeliverableBufferedAction(before order: TestStoreOrder) -> Bool {
+    var found = false
+    queue.forEachBuffered { entry in
+      if !found, entry.delivery.storeOrder < order, entry.isDeliverable { found = true }
+    }
+    return found
   }
 }

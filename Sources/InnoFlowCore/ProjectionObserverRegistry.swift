@@ -133,6 +133,10 @@ package final class ProjectionObserverRegistry<Snapshot> {
   private var compactionPassCount: UInt64 = 0
   private var staleObserverHints: Int = 0
   private var registrationCount: UInt64 = 0
+  /// Whether ``refresh(from:to:)`` is running, and the collections it has
+  /// classified so far.
+  private var isClassifyingPass = false
+  private var classifiedCollections: [AnyKeyPath] = []
 
   package init(
     compactionDeadObserverThreshold: Int = projectionObserverCompactionDeadObserverThresholdDefault,
@@ -239,10 +243,32 @@ package final class ProjectionObserverRegistry<Snapshot> {
     staleObserverHints = 0
   }
 
+  /// Whether a refresh pass is running that has not classified the change of
+  /// `collection` yet.
+  ///
+  /// Observer callbacks run during the pass, after the owner's state already
+  /// holds `newSnapshot`. A collection scoped from such a callback before its
+  /// classification indexes a collection that the pass has yet to compare
+  /// with the one in `oldSnapshot`.
+  package func isAwaitingClassification(of collection: AnyKeyPath) -> Bool {
+    isClassifyingPass && !classifiedCollections.contains(collection)
+  }
+
   package func refresh(from oldSnapshot: Snapshot, to newSnapshot: Snapshot) {
     refreshPassCount &+= 1
     guard !alwaysObservers.isEmpty || !dependencyBuckets.isEmpty || !collectionBuckets.isEmpty
     else { return }
+    let enclosingPassClassifications = isClassifyingPass ? classifiedCollections : nil
+    isClassifyingPass = true
+    classifiedCollections.removeAll(keepingCapacity: true)
+    defer {
+      if let enclosingPassClassifications {
+        classifiedCollections = enclosingPassClassifications
+      } else {
+        isClassifyingPass = false
+        classifiedCollections.removeAll(keepingCapacity: true)
+      }
+    }
     staleObserverHints &+= refreshAlwaysObservers()
 
     var firstChangedDependencyKey: ProjectionDependencyKey?
@@ -288,26 +314,27 @@ package final class ProjectionObserverRegistry<Snapshot> {
   /// then refreshes the rows whose element changed or was removed.
   private func refreshCollectionBuckets(from oldSnapshot: Snapshot, to newSnapshot: Snapshot) {
     for (collection, bucket) in collectionBuckets {
+      let pendingObservers: ContiguousArray<any ProjectionObserver>
       switch bucket.change(oldSnapshot, newSnapshot) {
       case .none:
-        continue
+        pendingObservers = []
 
       case .elements(let elementIDs):
-        refresh(
-          pendingObserverArray: collectCollectionObservers(in: collection, elementIDs: elementIDs)
-        )
+        pendingObservers = collectCollectionObservers(in: collection, elementIDs: elementIDs)
 
       case .structure:
         // Moving a row does not change what it shows. Once positions are
         // resolved, only rows whose element changed or disappeared refresh.
         let affectedElementIDs = bucket.prepareStructuralRefresh(oldSnapshot, newSnapshot)
-        refresh(
-          pendingObserverArray: collectCollectionObservers(
-            in: collection,
-            elementIDs: affectedElementIDs
-          )
+        pendingObservers = collectCollectionObservers(
+          in: collection,
+          elementIDs: affectedElementIDs
         )
       }
+      // The rows' positions now describe `newSnapshot`, the collection that a
+      // scope from a row callback below indexes as well.
+      classifiedCollections.append(collection)
+      refresh(pendingObserverArray: pendingObservers)
     }
   }
 

@@ -3,6 +3,16 @@ import InnoFlowCore
 import InnoFlowTesting
 import Testing
 
+/// The repository's `INNOFLOW_TEST_WAIT_SCALE` (a number from 1 to 1000), read
+/// here rather than through the test-support module, which the pre-fix
+/// revision does not have.
+private let consistencyWaitScale: Double = {
+  guard let raw = ProcessInfo.processInfo.environment["INNOFLOW_TEST_WAIT_SCALE"],
+    let scale = Double(raw.trimmingCharacters(in: .whitespacesAndNewlines)), scale >= 1
+  else { return 1 }
+  return min(scale, 1000)
+}()
+
 /// Public-host regressions intentionally also compile against the pre-fix revision.
 @Suite("Runtime completion and result consistency", .timeLimit(.minutes(5)))
 @MainActor
@@ -298,7 +308,7 @@ private final class ConsistencySignal: Sendable {
         return false
       }
       group.addTask {
-        do { try await Task.sleep(for: .seconds(5)) } catch {}
+        do { try await Task.sleep(for: .seconds(5) * consistencyWaitScale) } catch {}
         return false
       }
       let result = await group.next() ?? false

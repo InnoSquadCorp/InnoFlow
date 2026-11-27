@@ -127,6 +127,12 @@ package final class EffectCancellationScope: Sendable {
     /// Requests accepted in the reduction turn, before the interpreter task
     /// reaches the node that issued them, counted per request.
     var acceptedCancellations: [EffectCancellationRequest: Int] = [:]
+    /// Lane admissions the reduction turn decided for scheduled requests,
+    /// keyed by the request's cancellation IDs (ending with its lane ID) and
+    /// kept in declaration order per policy.
+    var turnLaneAdmissions:
+      [[AnyEffectID]: [(policy: EffectExecutionPolicy.Kind, admission: ReductionTurnLaneAdmission)]] =
+        [:]
     /// The dispatch whose effect this scope belongs to, and whether its root
     /// interpreter has still to start. Work such a scope declares is not
     /// registered anywhere yet, so a cancellation accepted in that gap finds
@@ -267,6 +273,57 @@ package final class EffectCancellationScope: Sendable {
     }
   }
 
+  /// Records the admission the reduction turn decided for a scheduled request
+  /// the interpreter reaches without awaiting asynchronous work.
+  ///
+  /// Requests are correlated by their cancellation IDs, which end with the
+  /// lane ID, and their policy, oldest first. Two requests with one key are
+  /// not interchangeable — their admission callbacks, operations and
+  /// `concatenate` continuations differ — so the correlation is sound only
+  /// because the interpreter reaches the requests of one key in the order
+  /// the pass recorded them:
+  /// - The pass decides no lane request that shares its lane with a lane
+  ///   request in another branch of an enclosing `merge`, whose children the
+  ///   interpreter runs in any order. Two recorded requests with one key
+  ///   share their lane, so neither lies in such a branch of the other: a
+  ///   `concatenate` orders them, and the interpreter finishes the earlier
+  ///   one's admission, which consumes the oldest entry, before it reaches the
+  ///   later one.
+  /// - A request the pass leaves undecided has no entry and consumes none of
+  ///   another request's: a recorded request with its key is ordered before
+  ///   it by a `concatenate`, so it is admitted first, and none can follow it,
+  ///   because the scan stops at an undecided request.
+  /// - A recorded request the interpreter skips stops at its enclosing
+  ///   context, whose cancellation tokens every later request with its key
+  ///   shares, so those are skipped as well and nothing consumes the entry it
+  ///   leaves behind.
+  package func recordTurnLaneAdmission(
+    _ admission: ReductionTurnLaneAdmission,
+    cancellationIDs: [AnyEffectID],
+    policy: EffectExecutionPolicy.Kind
+  ) {
+    state.withLock { state in
+      state.turnLaneAdmissions[cancellationIDs, default: []].append((policy, admission))
+    }
+  }
+
+  /// Consumes the oldest admission the reduction turn recorded for a request
+  /// with these cancellation IDs and policy, or returns `nil` when the turn
+  /// did not reach such a request.
+  package func consumeTurnLaneAdmission(
+    cancellationIDs: [AnyEffectID],
+    policy: EffectExecutionPolicy.Kind
+  ) -> ReductionTurnLaneAdmission? {
+    state.withLock { state in
+      guard var entries = state.turnLaneAdmissions[cancellationIDs],
+        let index = entries.firstIndex(where: { $0.policy == policy })
+      else { return nil }
+      let admission = entries.remove(at: index).admission
+      state.turnLaneAdmissions[cancellationIDs] = entries.isEmpty ? nil : entries
+      return admission
+    }
+  }
+
   fileprivate func cancel(id: AnyEffectID) {
     let token = state.withLock { state -> EffectCancellationToken? in
       if state.interpreterCount > 0, state.potentialCancellationIDs.contains(id) {
@@ -299,6 +356,7 @@ package final class EffectCancellationScope: Sendable {
         state.potentialCancellationIDs.removeAll(keepingCapacity: false)
         state.pendingCancellationIDs.removeAll(keepingCapacity: false)
         state.acceptedCancellations.removeAll(keepingCapacity: false)
+        state.turnLaneAdmissions.removeAll(keepingCapacity: false)
       }
     }
   }

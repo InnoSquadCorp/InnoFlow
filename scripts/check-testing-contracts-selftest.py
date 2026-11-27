@@ -19,7 +19,7 @@ mutations = [
     ('scenario-reports-miss', 'Sources/InnoFlowTesting/TestStoreScenario.swift', 'store.issueReporter(', 'ignore('),
     ('explorer-store-deadline', 'Sources/InnoFlowTesting/TestStoreExplorer.swift', 'clock.waitForSleepers(atLeast: sleepers, timeout: store.effectTimeout)', 'clock.waitForSleepers(atLeast: sleepers)'),
     ('teststore-reduction-turn-acceptance', 'Sources/InnoFlowTesting/TestStore+EffectDriver.swift', 'extension TestStore: ReductionTurnCancellationAcceptor', 'extension TestStore'),
-    ('teststore-effect-start-site', 'Sources/InnoFlowTesting/TestStore+Exhaustivity.swift', 'context: reductionTurnContext(', 'context: nextEffectContext('),
+    ('teststore-effect-start-site', 'Sources/InnoFlowTesting/TestStore+DeliveryOrder.swift', 'let context = reductionTurnContext(', 'let context = nextEffectContext('),
     ('suite-time-limit', 'Tests/InnoFlowTestingTests/StoreEffectRuntimeTests.swift', '.serialized, .timeLimit(.minutes(5)))', '.serialized)'),
     # A time limit on a test inside the suite does not bound the suite attribute.
     ('suite-time-limit-outside-attribute', 'Tests/InnoFlowSwiftUIIntegrationTests/StoreScopeSelectionTests.swift', None,

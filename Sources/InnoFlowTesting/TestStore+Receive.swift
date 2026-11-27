@@ -78,6 +78,21 @@ extension TestStore {
 
     while true {
       guard !Task.isCancelled else { return .cancelled }
+      // A composite task the test store follows can still buffer a value
+      // ahead of the first one buffered now, or the first one at all. Waiting
+      // for it counts against the timeout, and what it delivers once the
+      // deadline has passed is late.
+      if followedTasks.canDeliver(before: queue.firstBuffered?.delivery.storeOrder) {
+        switch await followedTasks.waitForProgress(until: deadline) {
+        case .progressed:
+          guard wallClock.now < deadline else { return .timedOut(timeout: resolvedTimeout) }
+          continue
+        case .timedOut:
+          return .timedOut(timeout: resolvedTimeout)
+        case .cancelled:
+          return .cancelled
+        }
+      }
 
       let queuedAction: ActionQueue<R.Action>.QueuedAction
       if didDiscardInvalidatedAction, wallClock.now >= deadline {
@@ -99,7 +114,7 @@ extension TestStore {
         queuedAction = awaitedAction
       }
 
-      guard shouldProceed(context: queuedAction.context) else {
+      guard queuedAction.isDeliverable else {
         queuedAction.finish()
         didDiscardInvalidatedAction = true
         continue

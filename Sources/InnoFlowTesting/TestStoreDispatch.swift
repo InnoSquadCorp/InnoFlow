@@ -44,6 +44,8 @@ public struct TestStoreDispatch: Sendable {
   public var isFinished: Bool { flowTask.isFinished }
 
   /// Cancels only this dispatch. Already-reduced state is not rolled back.
+  /// A dispatch that has finished ignores the call, as a `FlowTask` does: a
+  /// value it delivered stays buffered until the test receives it.
   public func cancel() { flowTask.cancel() }
 
   /// Verifies dispatch completion under one finite wall-clock deadline.
@@ -161,13 +163,13 @@ extension TestStore {
   package func unverifiedSnapshot(dispatchID: DispatchID? = nil) -> TestStoreUnverifiedSnapshot {
     var snapshot = TestStoreUnverifiedSnapshot()
     queue.forEachBuffered { entry in
-      guard shouldProceed(context: entry.context) else { return }
+      guard entry.isDeliverable else { return }
       guard dispatchID == nil || entry.context?.dispatchID == dispatchID else { return }
       snapshot.actionCount += 1
       if snapshot.actions.count < 20 { snapshot.actions.append(String(describing: entry.action)) }
     }
     outputQueue.forEachBuffered { entry in
-      guard shouldProceed(context: entry.context) else { return }
+      guard entry.isDeliverable else { return }
       guard dispatchID == nil || entry.context?.dispatchID == dispatchID else { return }
       snapshot.outputCount += 1
       if snapshot.outputs.count < 20 { snapshot.outputs.append(String(describing: entry.action)) }

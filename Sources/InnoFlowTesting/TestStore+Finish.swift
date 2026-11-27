@@ -255,6 +255,36 @@ extension TestStore {
         markTerminalVerificationHandled(terminalVerificationRevision)
         return .cancelled
       }
+      // A composite task the test store follows can still buffer a value
+      // ahead of the ones buffered now: an exhaustive store reports what it
+      // buffers, a non-exhaustive one drains in order. Waiting for it counts
+      // against the timeout and ends when this task is cancelled. An
+      // undeliverable value at a head would hide the value taken behind it,
+      // so a non-exhaustive store drops it first, as taking it would.
+      if !exhaustivity.isOn { dropUndeliverableHeads() }
+      let next =
+        exhaustivity.isOn
+        ? nil
+        : (queue.firstBuffered?.delivery.storeOrder
+          ?? outputQueue.firstBuffered?.delivery.storeOrder)
+      var settlement = TestStoreSettlement.progressed
+      if followedTasks.canDeliver(before: next) {
+        settlement = await followedTasks.waitForProgress(until: deadline)
+        if settlement == .progressed { continue }
+      }
+      if settlement == .cancelled {
+        cancelRemainingEffectsForFinish()
+        markTerminalVerificationHandled(terminalVerificationRevision)
+        return .cancelled
+      }
+      if settlement == .timedOut {
+        // Snapshot both queues before cancellation invalidates either side.
+        let pending = exhaustivity.isOn ? unverifiedSnapshot() : .init()
+        let snapshot = finishActivity.snapshot
+        cancelRemainingEffectsForFinish()
+        markTerminalVerificationHandled(terminalVerificationRevision)
+        return pending.isEmpty ? .timedOut(snapshot) : .unhandledWork(pending)
+      }
 
       if exhaustivity.isOn {
         // Snapshot both queues before cancellation invalidates either side.
@@ -272,6 +302,7 @@ extension TestStore {
           let snapshot = finishActivity.snapshot
           cancelRemainingEffectsForFinish()
           markTerminalVerificationHandled(terminalVerificationRevision)
+          action.finish()
           return .timedOut(snapshot)
         }
         reportSkippedAction(
@@ -282,7 +313,7 @@ extension TestStore {
         await applyUnassertedAction(action, location: location)
         didDrainWork = true
         continue
-      } else if let output = await popBufferedOutput() {
+      } else if let output = takeBufferedOutput() {
         // Match action draining: allow one already-buffered value even for a
         // zero timeout, then enforce the same total deadline for the rest.
         if didDrainWork, wallClock.now >= deadline {
@@ -320,11 +351,23 @@ extension TestStore {
     }
   }
 
+  /// Drops the undeliverable values at the head of both buffers.
+  private func dropUndeliverableHeads() {
+    while let head = queue.firstBuffered, !head.isDeliverable {
+      queue.popBuffered()?.finish()
+    }
+    while let head = outputQueue.firstBuffered, !head.isDeliverable {
+      _ = outputQueue.popBuffered()
+    }
+  }
+
   private func cancelRemainingEffectsForFinish() {
     let sequence = markCancelledAll()
     cancelAllEffectsSynchronously(upTo: sequence)
-    queue.removeBuffered { _ in true }
-    outputQueue.removeBuffered { _ in true }
+    // Every pending value goes: the buffered ones, and one a waiting
+    // `receive` was handed but has not resumed to reduce.
+    queue.withdraw { _, _ in true }
+    outputQueue.withdraw { _, _ in true }
   }
 
   package func noteTestInteraction(
@@ -377,7 +420,7 @@ extension TestStore {
     var actionCount = 0
     var actionDescriptions: [String] = []
     queue.forEachBuffered { queuedAction in
-      guard shouldProceed(context: queuedAction.context) else { return }
+      guard queuedAction.isDeliverable else { return }
       actionCount += 1
       if actionDescriptions.count < 20 {
         actionDescriptions.append(String(describing: queuedAction.action))
@@ -387,7 +430,7 @@ extension TestStore {
     var outputCount = 0
     var outputDescriptions: [String] = []
     outputQueue.forEachBuffered { queuedOutput in
-      guard shouldProceed(context: queuedOutput.context) else { return }
+      guard queuedOutput.isDeliverable else { return }
       outputCount += 1
       if outputDescriptions.count < 20 {
         outputDescriptions.append(String(describing: queuedOutput.action))

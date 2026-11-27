@@ -32,9 +32,13 @@ A key-path selection is now alive while one of these holds:
   delivered yet (this is what keeps a transient view-body read such as
   `store.select(\.count).requireAlive()` working);
 - one notification has been delivered since the last read. A reader that
-  reads again during this window gets the same handle back;
-- its liveness alone was read (`isAlive`). No value change notifies such a
-  reader, so the owner keeps the selection until it is deactivated.
+  reads again during this window gets the same handle back.
+
+Reading `isAlive` keeps nothing alive. It observes the owner instead, so its
+reader is notified when the store is released or the row is removed, even
+after the selection itself was released. A selection on a `ScopedStore` that
+is itself released first turns dead without a notification, as in 6.0.x:
+hold the scope while its readers need one.
 
 What to check:
 
@@ -47,16 +51,22 @@ What to check:
   changed twice, whether or not the read was tracked, so a key path that can
   trap for some states (for example an `Array` index) is still evaluated for
   that long, and while a reader holds or observes the selection.
-- Selecting on a `ScopedStore` whose collection element was removed returns a
-  selection that is not alive: `optionalValue` is `nil` and `requireAlive()`
-  traps. In 6.0.x the same call site returned the cached, deactivated handle.
+- Selecting on a `ScopedStore` whose collection element was removed, or whose
+  parent store was released, returns a selection that is not alive:
+  `optionalValue` is `nil` and `requireAlive()` traps. In 6.0.x the same call
+  site returned the cached, deactivated handle, and creating a closure-based
+  selection or the first key-path selection there trapped in debug builds.
 
 Closure-based selections — `select(dependingOn:)`, `select(dependingOnAll:)`
 and `select { … }`, with or without `id:` — keep the 6.0.x behavior: the owner
 does not retain one for its reader, so creating one during a tracked read
-records a read of the owner's state. A view that creates one in its body is
-invalidated by any state change until it holds the selection. Key-path
-selections no longer record that read.
+records a read of the owner's state (a `dependingOnAll:` selection with no
+dependency reads no state and records none). A view that creates one in its
+body is invalidated by any state change until it holds the selection and
+reads that handle instead of obtaining it again. Getting
+another holder's live selection through the same `id:` records that read
+too; in 6.0.x such a reader stopped updating once the holder released the
+selection. Key-path selections no longer record that read.
 
 No source changes are required for selections that are held or read in a view
 body.
@@ -76,12 +86,149 @@ turn: the run it replaces is reported as superseded and released, also when
 the dispatch that returned the request is cancelled before its effect runs.
 A `latest` request that a lane with another policy rejects replaces nothing,
 as in 6.0.x. `runLaneSnapshots()` does not list the lane between that turn and
-the replacement's admission; the replacement keeps the lane's identity.
+the replacement's admission; the replacement keeps the lane's identity, and
+until then a request with another policy meets the lane as conflicting. The
+same holds when no lane was open: the accepted request holds the lane it
+will open.
+
+The reduction turn decides every lane request it reaches against the lane
+state of that turn, and the request later reports exactly that decision. A
+request the lane rejects (`busy`, `queueFull`, `conflictingPolicy`) completes
+without awaiting, so a `.cancel` after it in a `concatenate` is accepted in
+the turn too; the request stays rejected even if the lane finished before
+the interpreter reached it. In 6.0.x such a request was admitted against the
+lane it met at that later point.
+
+Two lane requests for one ID in different branches of one `merge`, a lane
+request whose IDs another branch cancels, and a lane request that its lane
+admits or rejects differently once another branch has requested the
+cancellation of an ID carried by a request holding the lane (a `latest`
+lane's running or accepted request, a serial lane's pending request) are
+decided by admission, in
+whatever order the interpreter reaches them; a `latest` request among them
+releases its predecessors when it is admitted, not in the reduction turn.
+Use `concatenate` when the order matters.
 
 `TestStore` applies the same rule. A test that received an action from work
 its next `send` cancels through a composite effect (for example
 `.concatenate(.cancel(id), .send(next))`) no longer receives it, matching
 `Store`.
+
+`TestStore` now treats a buffered effect action as one a `Store` has already
+reduced, and a buffered output as one it has already published:
+
+- A cancellation that comes after the delivery no longer removes it: the
+  delivering effect's own `.cancel` (`.concatenate(.send(a).cancellable(id),
+  .cancel(id))`, a run under `id` followed by `.cancel(id)`, the same inside a
+  `merge`), another dispatch's effect, or a `send` whose reduction cancels the
+  effect of an output buffered before the send (including closing an
+  optional child). In 6.0.x
+  the value was dropped. Add the missing `receive` or `receiveOutput` to an
+  exhaustive test.
+- A plain `.send` or `.output` follow-up of a received action is queued
+  right behind it, at any depth: receive a follow-up chain before the actions
+  delivered after its first action, and a plain output before the outputs
+  published after the action. A wrapped follow-up (`.cancellable`,
+  `.animation`, …) is queued where the `Store`'s interpreter task for it
+  runs: behind what was delivered before that task — the later sends of the
+  same `concatenate` (as in 6.0.x), and a run emission whose MainActor job
+  was already queued when the action was delivered or sent — and ahead of
+  what is delivered later, such as the emitting run's next emission or a
+  `concatenate` step after a run. `send` and `receive` now start an effect
+  that is not `.none` or a plain `.send` or `.output` only once that task
+  would run, so a MainActor job queued before it, such as a run's emission,
+  is delivered before they return: an exhaustive test receives that
+  emission before the wrapped follow-up. The bullets on suspended walks and
+  composite tasks below add three things: a follow-up whose interpreter task
+  waits for the one created before it starts later, the children of a
+  composite come where a `Store` walks them, and two exceptions can place a
+  value before jobs a `Store` runs first. A `send` that first reduces
+  buffered actions (in a non-exhaustive store, or after reporting them in an
+  exhaustive one) reduces the sent action before it starts the effects of
+  those whose interpreter task had not run when the send began, so their
+  wrapped follow-ups come after the sent action; in 6.0.x such a follow-up
+  was reduced first. Where the
+  `Store` order is a race — a run's next emission against a wrapped
+  follow-up of a wrapped follow-up of its previous emission — a test can
+  receive either order; accept both with `receive(where:)` or use a
+  non-exhaustive store. In 6.0.x the order depended on timing; a test that
+  received a later action first — for example the target before the `.send`
+  follow-up of an action it received as a mismatch, or a run's next
+  emission before a wrapped follow-up of its previous one — must swap the
+  two receives.
+- In a non-exhaustive store, `receiveOutput` keeps a buffered output it
+  would have skipped when a buffered action that a `Store` reduced before
+  that output publishes the expected one: it reduces that action first, as a
+  skipped action. Receiving outputs in the order a `Store` publishes them no
+  longer loses the later one. With no time left, as with a zero timeout, it
+  reduces nothing and keeps the output.
+- A cancellation applied while the test reduces a received or sent action
+  still removes the covered actions buffered behind it, and the covered
+  outputs a `Store` would publish after it. For a sent action those are the
+  values delivered from the send on: a value delivered while the send first
+  reduces buffered actions whose effects suspend (a scheduled run waiting for
+  admission, a throttle reading its clock) is now removed when the sent
+  action cancels its effect, as a `Store` drops it; in 6.0.x it was reduced
+  before the sent action.
+- A walk that suspends — a throttle reading its clock, a scheduled run waiting
+  for admission — now keys what it delivers after each suspension where a
+  `Store` resumes it at the earliest, behind the jobs queued before it
+  suspended, one level deeper per suspension (nested throttles, a throttle
+  around a scheduled run), instead of at its delivery. Short of the depth
+  limit below, a walk starts at the earliest point at which a `Store` starts
+  it: where a `Store` runs its interpreter task, or, when the walk created
+  just before it finishes only later, right after that walk finished. A
+  `Store` starts each root interpreter walk only after the one before it,
+  and hands a resumed walk, and a walk that waited, back to the MainActor
+  from another executor, so where they continue depends on how soon that
+  happens relative to the MainActor's other jobs. A throttle on a test store
+  without a `ManualTestClock` now suspends to read the clock too, as on a
+  `Store`, so its value comes behind the jobs queued before its walk. A test
+  that received those values, or the values of the walk behind it, in
+  delivery order receives them in that order instead. A value a drained walk
+  delivers after a suspension is reduced before the sent action when its
+  resumption point came before the send began, and can otherwise come behind
+  it, as in a `Store` that sends right after the walk started.
+- The tasks in which a `concatenate` or a `merge` walks its children now
+  deliver where a `Store` runs them at the earliest, instead of at their
+  delivery: a `concatenate`'s children in the job a `Store` queues while the
+  walk that starts it runs, and each child of a `merge` two jobs later, in
+  declaration order: the earliest point, where an optimized `Store` walks it
+  (a debug build a job later) and the children race each other.
+  What such a task delivers before it awaits other work therefore comes
+  before the jobs a `Store` runs after it, also when the test receives late:
+  the leading sends of a `concatenate` come before a run emission whose job
+  is queued behind that task, and a run emission's composite follow-up
+  before a later `merge` step of the emitting `concatenate`. A test that
+  received those values after later ones receives them in that order
+  instead. `send` and `receive` return without waiting for those tasks; the
+  next call that takes a buffered value such a task can still precede —
+  `receive`, `receiveOutput`, a `send`'s drain, `finish()` — waits for it
+  first; `receive`, `receiveOutput` and `finish()` wait within their timeout
+  and stop when the calling task is cancelled: as in 6.0.x, a zero timeout
+  receives no value such a task has not delivered yet. Unlike 6.0.x, it also
+  takes no buffered value such a task can still precede, whatever the task
+  delivers — an action ahead of an output, or an output ahead of an action:
+  give that call a timeout instead. Work a walk awaits or
+  leaves to another task — a run, a timer, the children of an awaited
+  `merge` — and what a composite task delivers once it awaited such work
+  still deliver at their delivery, as in 6.0.x: their values can come behind
+  MainActor jobs and walks that a `Store` runs after them; and when that
+  work delivers after a send began, its values are behind the sent action,
+  which can cancel them, although a `Store` typically reduced them before
+  the send. Receive those values before sending an action that cancels
+  them. Positions more than sixteen interpreter jobs behind a delivery or
+  send — a follow-up that deep, a composite task, or a walk that starts or
+  resumes there — share the sixteenth job's position, and can come before
+  jobs a `Store` runs first; an action the test never receives queues
+  sixteen anchor markers.
+- A cancellation the test issues — `cancelEffects(identifiedBy:)`,
+  `cancelAllEffects()`, a dispatch's `cancel()` — removes every covered
+  buffered action and output, as before.
+
+Cancelling a queued serial request through its dispatch now returns its
+capacity at once; the next request is no longer rejected with `queueFull`
+while that cancellation is on its way to the scheduler.
 
 Cancellation is delivered synchronously. A task-cancellation handler inside
 an effect operation (`withTaskCancellationHandler`, `AsyncStream`
@@ -92,11 +239,15 @@ the main thread is waiting to do, such as a lock the caller holds or
 
 ### Throttle trailing requests
 
-When the newest trailing request of a throttle window belongs to a dispatch
-that is cancelled before the window closes, the window now fires the request
-it replaced. In 6.0.x it fired nothing if the cancelled dispatch's effect had
-already been interpreted, and the replaced request otherwise. A window
-keeps the newest request and up to seven it replaced.
+When the newest trailing request of a throttle window is cancelled before the
+window closes — its dispatch is cancelled, or an ID only it carries is
+cancelled — the window now fires the newest request it retains that can
+still proceed: the one the cancelled request replaced, unless that one was
+cancelled as well. In 6.0.x an ID
+cancellation fired nothing, and a dispatch cancellation fired nothing if the
+cancelled dispatch's effect had already been interpreted, and the replaced
+request otherwise. A window keeps the newest request and up to seven it
+replaced.
 
 ### Case-path synthesis
 
@@ -145,6 +296,35 @@ precedes the step.
 A clock wait deadline (`waitTimeout:` or `timeout:`) and a `TestStore`
 `effectTimeout:` above one day are clamped to one day. In 6.0.x an extreme
 `TestStore` deadline such as `.seconds(Int64.max)` trapped at its first wait.
+
+### TestStore phase helpers
+
+`send` and `receive` with `tracking:through:`, or with `through:` a
+`PhaseMap`, keep their signatures. They now check the transition their action
+makes: from the phase right before that action is reduced to the phase right
+after. In 6.0.x they compared the phase before the call with the phase after
+it, which also spans the buffered actions a `send` reduces first and the
+actions a non-exhaustive `receive` skips.
+
+What to check:
+
+- A test that failed with `Illegal phase transition detected` for a
+  transition no single action makes — `From: idle`, `To: loaded` where one
+  action enters `loading` and the next enters `loaded` — now passes. A
+  workaround that received every action, or dropped `through:`, is no longer
+  needed.
+- A test on a non-exhaustive store can newly fail. Behind a drained or
+  skipped action, the helper's action is checked from the phase that action
+  entered, so a transition the graph does not allow is reported even when
+  the combined transition is allowed or ends in the phase the call began in.
+  Correct the reducer or the graph.
+- The helpers do not check the transitions of the actions a call reduces on
+  the way. In 6.0.x such a transition was part of the one the helper
+  checked, and a failure named the helper's own action. Receive such an
+  action through a helper to check its transition.
+- An exhaustive `receive` that gets another action reports the unexpected
+  action only. In 6.0.x it also reported that action's transition, under the
+  expected action's name, when the graph did not allow it.
 
 ## 6.0.2
 

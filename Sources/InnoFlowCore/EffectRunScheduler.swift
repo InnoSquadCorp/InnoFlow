@@ -54,6 +54,92 @@ package enum EffectRunCancellationCause: Sendable, Equatable {
   case superseded
 }
 
+/// The lane a scheduled request meets at admission.
+package struct EffectRunLaneView: Sendable, Equatable {
+  package var policy: EffectExecutionPolicy.Kind
+  /// The sequence of the request that holds the lane: its running request, or
+  /// the `latest` request a reduction turn accepted and the lane has not
+  /// admitted yet.
+  package var holderSequence: UInt64
+  /// Pending requests that can still proceed.
+  package var pendingCount: Int
+  /// The IDs of the request whose cancellation closes the lane at once: a
+  /// `latest` lane's running request, or the `latest` request a held lane
+  /// waits for. Empty for a serial or drop lane, whose running request keeps
+  /// its slot when it is cancelled.
+  package var ownerCancellationIDs: Set<AnyEffectID>
+  /// The IDs of each pending request that can still proceed. Cancelling one
+  /// of them frees its slot at once.
+  package var pendingCancellationIDs: [Set<AnyEffectID>]
+
+  package init(
+    policy: EffectExecutionPolicy.Kind,
+    holderSequence: UInt64,
+    pendingCount: Int,
+    ownerCancellationIDs: Set<AnyEffectID> = [],
+    pendingCancellationIDs: [Set<AnyEffectID>] = []
+  ) {
+    self.policy = policy
+    self.holderSequence = holderSequence
+    self.pendingCount = pendingCount
+    self.ownerCancellationIDs = ownerCancellationIDs
+    self.pendingCancellationIDs = pendingCancellationIDs
+  }
+
+  /// The lane a request meets once every ID `isCancelled` selects has been
+  /// cancelled: no lane when the request that owns the lane carries one, and
+  /// otherwise the lane without the pending requests that carry one.
+  package func afterCancellation(of isCancelled: (AnyEffectID) -> Bool) -> EffectRunLaneView? {
+    guard !ownerCancellationIDs.contains(where: isCancelled) else { return nil }
+    let remaining = pendingCancellationIDs.filter { !$0.contains(where: isCancelled) }
+    guard remaining.count != pendingCancellationIDs.count else { return self }
+    var lane = self
+    lane.pendingCount -= pendingCancellationIDs.count - remaining.count
+    lane.pendingCancellationIDs = remaining
+    return lane
+  }
+}
+
+/// What a lane does with a request whose own context can still proceed.
+package enum EffectRunLaneDecision: Sendable, Equatable {
+  /// No lane is open: the request opens one and starts.
+  case open
+  /// A `latest` request replaces the lane's requests and keeps its identity.
+  case replace
+  /// A serial request waits behind `position` earlier requests.
+  case queue(position: Int)
+  case reject(EffectAdmissionRejection)
+  /// An older `latest` request meets a lane a newer request holds.
+  case superseded
+
+  /// Whether the lane admits the request, which then awaits its run.
+  package var admitsRequest: Bool {
+    switch self {
+    case .open, .replace, .queue: true
+    case .reject, .superseded: false
+    }
+  }
+
+  /// Whether both decisions give the request the same outcome: the lane
+  /// admits it, rejects it for the same reason, or a newer request holds it.
+  package func hasSameOutcome(as other: EffectRunLaneDecision) -> Bool {
+    (admitsRequest && other.admitsRequest) || self == other
+  }
+}
+
+/// The admission a reduction turn decided for one lane request that the
+/// interpreter reaches without awaiting asynchronous work.
+package enum ReductionTurnLaneAdmission: Sendable, Equatable {
+  /// The lane admits the request. Its run is awaited, so the interpreter
+  /// admits it against the lane it meets then.
+  case admitted
+  /// The request completes without awaiting. The interpreter reports exactly
+  /// this admission without consulting the lane again, so the cancellations
+  /// the turn accepted behind it stay consistent with what the interpreter
+  /// does.
+  case completed(EffectAdmission)
+}
+
 /// Store-local admission state shared by production and testing drivers.
 @MainActor
 package final class EffectRunScheduler {
@@ -91,6 +177,15 @@ package final class EffectRunScheduler {
     var cancellationReported = false
     var task: Task<Void, Never>?
     var operationTask: Task<Void, Never>?
+
+    /// Whether the request can still start. A request whose dispatch or
+    /// owning ID was cancelled can no longer proceed even before that
+    /// cancellation reaches the scheduler.
+    var canProceed: Bool {
+      !cancellationState.isCancelled
+        && context?.shouldProceed != false
+        && task?.isCancelled != true
+    }
   }
 
   private struct Lane {
@@ -100,60 +195,144 @@ package final class EffectRunScheduler {
     var pending: [UUID]
   }
 
-  /// A `latest` lane that a reduction turn displaced for a replacement the
-  /// lane has not admitted yet.
-  private struct DisplacedLatestLane {
-    let diagnosticID: EffectRunLaneID
-    /// The newest replacement accepted for the lane. Frozen, so it holds no
-    /// interpreter lease.
-    var successor: EffectExecutionContext
+  /// A `latest` lane that a reduction turn holds for a request it accepted
+  /// and the lane has not admitted yet.
+  private struct HeldLatestLane {
+    /// The identity of the lane the turn displaced; `nil` when no lane was
+    /// open, so the request opens a new one.
+    let diagnosticID: EffectRunLaneID?
+    /// The sequence and IDs of the newest request accepted for the lane.
+    let sequence: UInt64
+    let cancellationIDs: Set<AnyEffectID>
+    /// Whether that request can still be admitted. The check keeps nothing
+    /// of the request alive, so a lane held for a request that was cancelled
+    /// or abandoned retains neither its dispatch nor its cancellation scope.
+    let canStillBeAdmitted: @Sendable () -> Bool
+
+    init(diagnosticID: EffectRunLaneID?, successor: EffectExecutionContext, sequence: UInt64) {
+      self.diagnosticID = diagnosticID
+      self.sequence = sequence
+      self.cancellationIDs = Set(successor.cancellationIDs)
+      self.canStillBeAdmitted = successor.makeUnretainedProceedCheck()
+    }
   }
 
   private var requests: [UUID: Request] = [:]
   private var lanes: [AnyEffectID: Lane] = [:]
   private var requestTokensByCancellationID: [AnyEffectID: Set<UUID>] = [:]
-  /// `latest` lanes displaced in a reduction turn. The replacement reopens
-  /// the lane under the same identity. Once the replacement can no longer
-  /// proceed the lane is closed, and the next lane under that ID is new.
-  private var displacedLatestLanes: [AnyEffectID: DisplacedLatestLane] = [:]
+  /// `latest` lanes held in a reduction turn: one the turn displaced, or one
+  /// that was closed when the turn accepted its request. Until that request
+  /// is admitted, such a lane is the open `latest` lane under its ID: the
+  /// request opens it, under the displaced lane's identity if there was one,
+  /// and a request with another policy meets a conflicting lane. Once the
+  /// request can no longer be admitted — it was cancelled, its dispatch
+  /// finished without reaching it, or its admission turned it away — the
+  /// lane is closed, and the next lane under that ID is new.
+  private var heldLatestLanes: [AnyEffectID: HeldLatestLane] = [:]
+  /// The size past which held lanes whose request can no longer be admitted
+  /// are dropped. It then doubles over what is left, so holding a lane stays
+  /// amortized constant time however many lanes one turn holds.
+  private var heldLatestLanePruneMark = 16
 
   package init() {}
 
-  /// The policy of the lane open under `id`, if any.
-  package func laneKind(for id: AnyEffectID) -> EffectExecutionPolicy.Kind? {
-    lanes[id]?.policy
+  /// Decides a request's admission from the lane it meets.
+  ///
+  /// Side-effect free: the reduction turn predicts admission with it and
+  /// ``admit(id:policy:cancellationIDs:sequence:dispatchID:onCancellation:onStart:onPendingExit:context:onAdmissionLifecycle:onCancellationEvent:)``
+  /// acts on it, so both apply one rule.
+  package nonisolated static func decide(
+    policy: EffectExecutionPolicy.Kind,
+    sequence: UInt64,
+    lane: EffectRunLaneView?
+  ) -> EffectRunLaneDecision {
+    guard let lane else { return .open }
+    guard lane.policy == policy else { return .reject(.conflictingPolicy) }
+    switch policy {
+    case .latest:
+      return sequence < lane.holderSequence ? .superseded : .replace
+    case .dropWhileRunning:
+      return .reject(.busy)
+    case .serial(let maxPending):
+      guard UInt(lane.pendingCount) < maxPending else {
+        return .reject(.queueFull(maxPending: maxPending))
+      }
+      return .queue(position: lane.pendingCount + 1)
+    }
   }
 
-  /// Displaces a `latest` lane on behalf of a newer `latest` request that the
+  /// The lane a request under `id` meets now: an open lane, or a `latest`
+  /// lane held for a request that can still proceed. Pending requests that
+  /// can no longer proceed are not counted. Side-effect free.
+  package func laneView(for id: AnyEffectID) -> EffectRunLaneView? {
+    if let lane = lanes[id] {
+      let running = requests[lane.running]
+      let pendingCancellationIDs = lane.pending.compactMap { token -> Set<AnyEffectID>? in
+        guard let request = requests[token], request.canProceed else { return nil }
+        return request.cancellationIDs
+      }
+      return EffectRunLaneView(
+        policy: lane.policy,
+        holderSequence: running?.sequence ?? 0,
+        pendingCount: pendingCancellationIDs.count,
+        ownerCancellationIDs: lane.policy == .latest ? running?.cancellationIDs ?? [] : [],
+        pendingCancellationIDs: pendingCancellationIDs
+      )
+    }
+    if let held = heldLatestLanes[id], held.canStillBeAdmitted() {
+      return EffectRunLaneView(
+        policy: .latest,
+        holderSequence: held.sequence,
+        pendingCount: 0,
+        ownerCancellationIDs: held.cancellationIDs
+      )
+    }
+    return nil
+  }
+
+  /// Holds the `latest` lane under `id` for a `latest` request that the
   /// reduction which returned it has accepted, exactly as admitting that
-  /// request does: the running request is cancelled and reported superseded.
+  /// request does: an open lane's running request is cancelled and reported
+  /// superseded, and until the request is admitted the lane is its own, so
+  /// no request with another policy can open it first.
   ///
   /// `successor` is the accepted request's context. A lane whose running
   /// request was issued in or after the successor's sequence belongs to a
   /// newer request and is left alone, as is a lane with another policy.
-  package func displaceLatestLane(id: AnyEffectID, successor: EffectExecutionContext) {
+  package func holdLatestLane(id: AnyEffectID, successor: EffectExecutionContext) {
     guard let sequence = successor.sequence else { return }
-    if !displacedLatestLanes.isEmpty {
-      displacedLatestLanes = displacedLatestLanes.filter { $0.value.successor.shouldProceed }
+    // A held lane whose request can no longer be admitted is closed, so its
+    // identity is not carried on: the next lane under that ID is new.
+    if let held = heldLatestLanes[id], !held.canStillBeAdmitted() {
+      heldLatestLanes.removeValue(forKey: id)
     }
+    pruneHeldLatestLanesIfNeeded()
     guard let lane = lanes[id] else {
-      // A newer replacement, accepted before the previous one was admitted,
-      // carries the displaced lane's identity on.
-      displacedLatestLanes[id]?.successor = successor.frozenForExecution()
+      // No lane is open. A newer request, accepted before the previous one
+      // was admitted, carries the held lane's identity on; the first request
+      // for a closed lane holds a lane with no identity yet.
+      heldLatestLanes[id] = HeldLatestLane(
+        diagnosticID: heldLatestLanes[id]?.diagnosticID,
+        successor: successor,
+        sequence: sequence
+      )
       return
     }
     guard lane.policy == .latest,
       let running = requests[lane.running], running.sequence < sequence
     else { return }
     lanes.removeValue(forKey: id)
-    displacedLatestLanes[id] = DisplacedLatestLane(
+    heldLatestLanes[id] = HeldLatestLane(
       diagnosticID: lane.diagnosticID,
-      successor: successor.frozenForExecution()
+      successor: successor,
+      sequence: sequence
     )
-    let gates = displace(lane).map(\.gate)
-    guard !gates.isEmpty else { return }
+    let displacedRequests = displace(lane)
+    deliverCancellation(to: displacedRequests)
+    guard !displacedRequests.isEmpty else { return }
     // The displaced requests are already cancelled; rejecting their gates
     // only wakes tasks still waiting to start, which then finish.
+    let gates = displacedRequests.map(\.gate)
     Task { @MainActor in
       for gate in gates {
         await gate.reject()
@@ -161,15 +340,22 @@ package final class EffectRunScheduler {
     }
   }
 
-  /// Cancels and reports every request of a lane that a `latest` request
-  /// replaces. The caller has already removed the lane and rejects the
+  /// Drops the held lanes whose request can no longer be admitted once there
+  /// are more than `heldLatestLanePruneMark`. Such a lane is closed already
+  /// (`laneView(for:)` ignores it), so dropping it changes no answer.
+  private func pruneHeldLatestLanesIfNeeded() {
+    guard heldLatestLanes.count > heldLatestLanePruneMark else { return }
+    heldLatestLanes = heldLatestLanes.filter { $0.value.canStillBeAdmitted() }
+    heldLatestLanePruneMark = max(16, heldLatestLanes.count * 2)
+  }
+
+  /// Removes and reports every request of a lane that a `latest` request
+  /// replaces. The caller has already removed the lane. It delivers task
+  /// cancellation once the scheduler state is final, and rejects the
   /// returned requests' gates.
   private func displace(_ lane: Lane) -> [Request] {
-    var displacedRequests: [Request] = []
-    for displacedToken in [lane.running] + lane.pending {
-      guard let displacedRequest = removeRequest(displacedToken) else {
-        continue
-      }
+    let displacedRequests = ([lane.running] + lane.pending).compactMap { removeRequest($0) }
+    for displacedRequest in displacedRequests {
       displacedRequest.cancellationState.cancel()
       displacedRequest.onAdmissionLifecycle(displacedRequest.token, .superseded)
       if !displacedRequest.cancellationReported {
@@ -178,14 +364,21 @@ package final class EffectRunScheduler {
       if let dispatchID = displacedRequest.dispatchID {
         displacedRequest.onCancellation(dispatchID, displacedRequest.sequence)
       }
-      displacedRequest.task?.cancel()
-      displacedRequest.operationTask?.cancel()
-      if lane.pending.contains(displacedToken) {
+      if lane.pending.contains(displacedRequest.token) {
         displacedRequest.onPendingExit(displacedRequest.token)
       }
-      displacedRequests.append(displacedRequest)
     }
     return displacedRequests
+  }
+
+  /// Cancels the tasks of requests the scheduler no longer tracks. Task
+  /// cancellation runs cancellation handlers synchronously, and a handler may
+  /// re-enter the scheduler, so this always comes after every state update.
+  private func deliverCancellation(to requests: [Request]) {
+    for request in requests {
+      request.operationTask?.cancel()
+      request.task?.cancel()
+    }
   }
 
   package var activeRequestCount: Int {
@@ -208,7 +401,7 @@ package final class EffectRunScheduler {
           id: lane.diagnosticID,
           policy: policy,
           isStartAdmitted: head.hasStarted,
-          pendingRequestCount: lane.pending.count,
+          pendingRequestCount: livePendingCount(of: lane),
           isCancellationRequested: head.cancellationState.isCancelled
             || head.context?.shouldProceed == false
             || head.task?.isCancelled == true
@@ -233,24 +426,48 @@ package final class EffectRunScheduler {
       _ in
     }
   ) async -> Plan {
+    let kind = policy.kind
+    // A request the reduction turn passed without awaiting keeps the
+    // admission that turn gave it; the turn may have accepted cancellations
+    // behind it on that basis.
+    if let context,
+      case .completed(let admission) = context.cancellationScope?.consumeTurnLaneAdmission(
+        cancellationIDs: context.cancellationIDs, policy: kind)
+    {
+      onAdmissionLifecycle(nil, admission)
+      if case .rejected(let reason) = admission {
+        return .rejected(reason)
+      }
+      return .terminal(admission)
+    }
+
     // Check the exact tokens introduced by the scheduled node, not just its
     // enclosing structural context. A cancelled deferred request must never
     // reserve capacity or supersede a newer live request.
     guard !Task.isCancelled, context?.shouldProceed != false else {
+      // The request a lane is held for is turned away: the lane is closed.
+      if kind == .latest, let held = heldLatestLanes[id], held.sequence == sequence,
+        held.cancellationIDs == Set(cancellationIDs + [id])
+      {
+        heldLatestLanes.removeValue(forKey: id)
+      }
       onAdmissionLifecycle(nil, .cancelledBeforeStart)
       return .terminal(.cancelledBeforeStart)
     }
 
-    let kind = policy.kind
-    if let lane = lanes[id], lane.policy != kind {
-      onAdmissionLifecycle(nil, .rejected(.conflictingPolicy))
-      return .rejected(.conflictingPolicy)
-    }
-    if case .latest = kind,
-      let lane = lanes[id], let current = requests[lane.running], sequence < current.sequence
-    {
+    // A pending request that can no longer proceed never counts toward
+    // capacity, even before its cancellation reaches the scheduler.
+    releasePendingRequestsThatCannotProceed(in: id)
+    let decision = Self.decide(policy: kind, sequence: sequence, lane: laneView(for: id))
+    switch decision {
+    case .reject(let reason):
+      onAdmissionLifecycle(nil, .rejected(reason))
+      return .rejected(reason)
+    case .superseded:
       onAdmissionLifecycle(nil, .superseded)
       return .terminal(.superseded)
+    case .open, .replace, .queue:
+      break
     }
 
     let token = UUID()
@@ -274,92 +491,54 @@ package final class EffectRunScheduler {
       task: nil,
       operationTask: nil
     )
-    switch kind {
-    case .latest:
-      let displacedLane = displacedLatestLanes.removeValue(forKey: id)
+    let ticket = { (admission: EffectAdmission) in
+      Ticket(
+        token: token,
+        id: id,
+        sequence: sequence,
+        gate: gate,
+        admission: admission,
+        cancellationState: cancellationState
+      )
+    }
+
+    switch decision {
+    case .queue(let position):
+      lanes[id]?.pending.append(token)
+      register(request)
+      onAdmissionLifecycle(token, .queued(position: position))
+      return .accepted(ticket(.queued(position: position)))
+
+    case .replace:
+      // The request keeps the identity of the lane it replaces, whether that
+      // lane is still open or was displaced in a reduction turn. A lane the
+      // turn held for the first request of a closed lane has none yet.
+      let heldLane = heldLatestLanes.removeValue(forKey: id)
+      let replacedLane = lanes.removeValue(forKey: id)
       let diagnosticID =
-        lanes[id]?.diagnosticID
-        ?? displacedLane.flatMap { $0.successor.shouldProceed ? $0.diagnosticID : nil }
-        ?? EffectRunLaneID(token)
-      var displacedRequests: [Request] = []
-      if let lane = lanes.removeValue(forKey: id) {
-        displacedRequests = displace(lane)
-      }
+        replacedLane?.diagnosticID ?? heldLane?.diagnosticID ?? EffectRunLaneID(token)
+      let displacedRequests = replacedLane.map { displace($0) } ?? []
       register(request)
       lanes[id] = Lane(diagnosticID: diagnosticID, policy: kind, running: token, pending: [])
-      // Publish the replacement before crossing an actor boundary. Otherwise a
-      // reentrant admission can install a newer lane while this call is
-      // suspended, only to have that lane overwritten when this call resumes.
+      // Publish the replacement before cancellation handlers run and before
+      // crossing an actor boundary. Otherwise a reentrant admission can
+      // install a newer lane only to have it overwritten here.
+      deliverCancellation(to: displacedRequests)
       for displacedRequest in displacedRequests {
         await displacedRequest.gate.reject()
       }
-      return .accepted(
-        Ticket(
-          token: token,
-          id: id,
-          sequence: sequence,
-          gate: gate,
-          admission: .started,
-          cancellationState: cancellationState
-        )
-      )
+      return .accepted(ticket(.started))
 
-    case .dropWhileRunning:
-      guard lanes[id] == nil else {
-        onAdmissionLifecycle(nil, .rejected(.busy))
-        return .rejected(.busy)
-      }
+    case .open:
+      // A held lane whose request can no longer proceed is closed.
+      heldLatestLanes.removeValue(forKey: id)
       register(request)
-      // A lane with another policy closes a displaced `latest` lane for good.
-      displacedLatestLanes.removeValue(forKey: id)
       lanes[id] = Lane(
         diagnosticID: EffectRunLaneID(token), policy: kind, running: token, pending: [])
-      return .accepted(
-        Ticket(
-          token: token,
-          id: id,
-          sequence: sequence,
-          gate: gate,
-          admission: .started,
-          cancellationState: cancellationState
-        )
-      )
+      return .accepted(ticket(.started))
 
-    case .serial(let maxPending):
-      guard var lane = lanes[id] else {
-        register(request)
-        displacedLatestLanes.removeValue(forKey: id)
-        lanes[id] = Lane(
-          diagnosticID: EffectRunLaneID(token), policy: kind, running: token, pending: [])
-        return .accepted(
-          Ticket(
-            token: token,
-            id: id,
-            sequence: sequence,
-            gate: gate,
-            admission: .started,
-            cancellationState: cancellationState
-          )
-        )
-      }
-      guard UInt(lane.pending.count) < maxPending else {
-        onAdmissionLifecycle(nil, .rejected(.queueFull(maxPending: maxPending)))
-        return .rejected(.queueFull(maxPending: maxPending))
-      }
-      lane.pending.append(token)
-      lanes[id] = lane
-      register(request)
-      onAdmissionLifecycle(token, .queued(position: lane.pending.count))
-      return .accepted(
-        Ticket(
-          token: token,
-          id: id,
-          sequence: sequence,
-          gate: gate,
-          admission: .queued(position: lane.pending.count),
-          cancellationState: cancellationState
-        )
-      )
+    case .reject, .superseded:
+      preconditionFailure("A request the lane does not admit returns above")
     }
   }
 
@@ -421,44 +600,53 @@ package final class EffectRunScheduler {
     guard let request = removeRequest(token) else { return }
     guard var lane = lanes[request.id] else { return }
 
-    if lane.running == token {
-      guard case .serial = lane.policy else {
-        lanes.removeValue(forKey: request.id)
-        return
+    guard lane.running == token else {
+      lane.pending.removeAll { $0 == token }
+      lanes[request.id] = lane
+      if !request.hasStarted, !request.cancellationReported {
+        request.onAdmissionLifecycle(token, .cancelledBeforeStart)
       }
-      // Skip missing/cancelled reservations directly. Recursing through
-      // finish(missingToken) cannot remove a lane whose request is absent.
-      while !lane.pending.isEmpty {
-        let next = lane.pending.removeFirst()
-        guard let nextRequest = requests[next] else { continue }
-        if nextRequest.cancellationState.isCancelled {
-          _ = removeRequest(next)
-          nextRequest.task?.cancel()
-          if !nextRequest.cancellationReported {
-            nextRequest.onAdmissionLifecycle(next, .cancelledBeforeStart)
-            nextRequest.onCancellationEvent(.explicit)
-          }
-          nextRequest.onPendingExit(next)
-          Task { await nextRequest.gate.reject() }
-          continue
-        }
-        lane.running = next
-        lanes[request.id] = lane
-        // A promoted reservation can still be awaiting attachment. The
-        // attachment and promotion paths share exactly-once start admission.
-        await startIfAttached(next)
-        return
-      }
+      request.onPendingExit(token)
+      return
+    }
+    guard case .serial = lane.policy else {
       lanes.removeValue(forKey: request.id)
       return
     }
-
-    lane.pending.removeAll { $0 == token }
-    lanes[request.id] = lane
-    if !request.hasStarted, !request.cancellationReported {
-      request.onAdmissionLifecycle(token, .cancelledBeforeStart)
+    // A reservation that can no longer proceed is released, never promoted.
+    releasePendingRequestsThatCannotProceed(in: request.id)
+    guard var promoted = lanes[request.id], !promoted.pending.isEmpty else {
+      lanes.removeValue(forKey: request.id)
+      return
     }
-    request.onPendingExit(token)
+    let next = promoted.pending.removeFirst()
+    promoted.running = next
+    lanes[request.id] = promoted
+    // A promoted reservation can still be awaiting attachment. The
+    // attachment and promotion paths share exactly-once start admission.
+    await startIfAttached(next)
+  }
+
+  /// Releases the pending requests of the lane under `id` that can no longer
+  /// proceed — their dispatch or an ID they carry was cancelled, but that
+  /// cancellation has not reached the scheduler yet — through the same
+  /// terminal path as an explicit cancellation. The cancellation that later
+  /// reaches the scheduler finds nothing left to do.
+  private func releasePendingRequestsThatCannotProceed(in id: AnyEffectID) {
+    guard let pending = lanes[id]?.pending, !pending.isEmpty else { return }
+    for token in pending {
+      if let request = requests[token] {
+        if !request.canProceed { cancel(token: token) }
+      } else {
+        // Skip missing reservations directly; finishing a missing token
+        // cannot remove it from its lane.
+        lanes[id]?.pending.removeAll { $0 == token }
+      }
+    }
+  }
+
+  private func livePendingCount(of lane: Lane) -> Int {
+    lane.pending.count { requests[$0]?.canProceed == true }
   }
 
   /// Cancels matching requests. A running serial/drop lane is retained until
@@ -477,13 +665,13 @@ package final class EffectRunScheduler {
   package func cancel(token: UUID) {
     guard var request = requests[token] else { return }
     request.cancellationState.cancel()
-    request.operationTask?.cancel()
-    request.task?.cancel()
     let reportCancellation = !request.cancellationReported
     request.cancellationReported = true
     let lane = lanes[request.id]
-    if lane?.running == token, lane?.policy != .latest {
-      // Keep the physical slot, including a not-yet-attached reservation.
+    // A running serial or drop request keeps its physical slot, including a
+    // not-yet-attached reservation, until its operation returns.
+    let keepsSlot = lane?.running == token && lane?.policy != .latest
+    if keepsSlot {
       requests[token] = request
     } else {
       _ = removeRequest(token)
@@ -495,7 +683,6 @@ package final class EffectRunScheduler {
           lanes[request.id] = lane
         }
       }
-      Task { await request.gate.reject() }
     }
     if reportCancellation {
       if !request.hasStarted {
@@ -504,6 +691,12 @@ package final class EffectRunScheduler {
       request.onCancellationEvent(.explicit)
     }
     if let lane, lane.running != token { request.onPendingExit(token) }
+    // The scheduler state is final before any cancellation handler runs: a
+    // handler that re-enters finds this request already cancelled.
+    deliverCancellation(to: [request])
+    if !keepsSlot {
+      Task { await request.gate.reject() }
+    }
   }
 
   @discardableResult
@@ -521,7 +714,7 @@ package final class EffectRunScheduler {
     let pendingTokens = Set(lanes.values.flatMap(\.pending))
     requests.removeAll(keepingCapacity: false)
     lanes.removeAll(keepingCapacity: false)
-    displacedLatestLanes.removeAll(keepingCapacity: false)
+    heldLatestLanes.removeAll(keepingCapacity: false)
     requestTokensByCancellationID.removeAll(keepingCapacity: false)
     for request in liveRequests {
       request.cancellationState.cancel()

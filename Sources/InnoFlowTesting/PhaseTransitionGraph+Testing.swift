@@ -70,8 +70,13 @@ package func assertValidGraph<Phase: Hashable & Sendable>(
 }
 
 extension TestStore {
-  /// Sends an action and verifies that the observed phase transition is allowed
-  /// by the provided graph.
+  /// Sends an action and verifies that the phase transition its reduction
+  /// makes is allowed by the provided graph.
+  ///
+  /// The transition is the one that reduction makes: from the phase right
+  /// before the reducer runs for `action` to the phase right after. The
+  /// buffered effect actions a send reduces first have been reduced by then,
+  /// and their own transitions are not checked.
   @discardableResult
   public func send<Phase: Hashable & Sendable>(
     _ action: R.Action,
@@ -111,37 +116,22 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
-    let previousPhase = state[keyPath: phase]
-    let task = await send(action, assert: updateExpectedState, location: location)
-    let nextPhase = state[keyPath: phase]
-
-    guard previousPhase != nextPhase else { return task }
-
-    guard graph.allows(from: previousPhase, to: nextPhase) else {
-      testStoreAssertionFailure(
-        """
-        Illegal phase transition detected.
-
-        Action:
-        \(action)
-
-        From:
-        \(previousPhase)
-
-        To:
-        \(nextPhase)
-
-        Allowed next phases:
-        \(graph.successors(from: previousPhase))
-        """,
-        location: location
-      )
-      return task
+    await send(action, assert: updateExpectedState, location: location) { previousState in
+      assertPhaseTransition(
+        from: previousState, tracking: phase, through: graph, madeBy: action,
+        failure: "Illegal phase transition detected.", location: location)
     }
-    return task
   }
 
-  /// Receives an action from an effect and verifies the phase transition.
+  /// Receives an action from an effect and verifies that the phase transition
+  /// its reduction makes is allowed by the provided graph.
+  ///
+  /// The transition is the one that reduction makes: from the phase right
+  /// before the reducer runs for `expectedAction` to the phase right after. A
+  /// non-exhaustive store has reduced the actions it skips by then, and their
+  /// own transitions are not checked. No transition is checked when
+  /// `expectedAction` is not received: another action arrives in an
+  /// exhaustive store, or the wait times out.
   public func receive<Phase: Hashable & Sendable>(
     _ expectedAction: R.Action,
     tracking phase: KeyPath<R.State, Phase>,
@@ -178,37 +168,19 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async where R.Action: Equatable {
-    let previousPhase = state[keyPath: phase]
-    await receive(expectedAction, assert: updateExpectedState, location: location)
-    let nextPhase = state[keyPath: phase]
-
-    guard previousPhase != nextPhase else { return }
-
-    guard graph.allows(from: previousPhase, to: nextPhase) else {
-      testStoreAssertionFailure(
-        """
-        Illegal phase transition detected while receiving effect action.
-
-        Action:
-        \(expectedAction)
-
-        From:
-        \(previousPhase)
-
-        To:
-        \(nextPhase)
-
-        Allowed next phases:
-        \(graph.successors(from: previousPhase))
-        """,
-        location: location
-      )
-      return
+    await receiveExact(
+      expectedAction, timeout: nil, assert: updateExpectedState, location: location
+    ) { previousState in
+      assertPhaseTransition(
+        from: previousState, tracking: phase, through: graph, madeBy: expectedAction,
+        failure: "Illegal phase transition detected while receiving effect action.",
+        location: location)
     }
   }
 
   /// Receives an action under a per-assertion timeout and verifies the phase
-  /// transition against the supplied graph.
+  /// transition its reduction makes against the supplied graph, as the
+  /// overload without a timeout does.
   public func receive<Phase: Hashable & Sendable>(
     _ expectedAction: R.Action,
     tracking phase: KeyPath<R.State, Phase>,
@@ -250,37 +222,55 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async where R.Action: Equatable {
-    let previousPhase = state[keyPath: phase]
-    await receive(
-      expectedAction,
-      timeout: timeout,
-      assert: updateExpectedState,
-      location: location
-    )
+    await receiveExact(
+      expectedAction, timeout: timeout, assert: updateExpectedState, location: location
+    ) { previousState in
+      assertPhaseTransition(
+        from: previousState, tracking: phase, through: graph, madeBy: expectedAction,
+        failure: "Illegal phase transition detected while receiving effect action.",
+        location: location)
+    }
+  }
+
+  /// Reports the phase transition one reduction made, from `previousState`
+  /// to the current state, unless `graph` allows it. A reduction that leaves
+  /// the phase unchanged makes no transition.
+  ///
+  /// The caller passes the state right before the reducer ran for `action`
+  /// and calls this right after that reduction. A phase read earlier would
+  /// also span the buffered actions a send reduces first and the actions a
+  /// non-exhaustive receive skips.
+  private func assertPhaseTransition<Phase: Hashable & Sendable>(
+    from previousState: R.State,
+    tracking phase: KeyPath<R.State, Phase>,
+    through graph: PhaseTransitionGraph<Phase>,
+    madeBy action: R.Action,
+    failure: String,
+    location: TestStoreSourceLocation
+  ) {
+    let previousPhase = previousState[keyPath: phase]
     let nextPhase = state[keyPath: phase]
 
-    guard previousPhase != nextPhase else { return }
-
-    guard graph.allows(from: previousPhase, to: nextPhase) else {
-      testStoreAssertionFailure(
-        """
-        Illegal phase transition detected while receiving effect action.
-
-        Action:
-        \(expectedAction)
-
-        From:
-        \(previousPhase)
-
-        To:
-        \(nextPhase)
-
-        Allowed next phases:
-        \(graph.successors(from: previousPhase))
-        """,
-        location: location
-      )
+    guard previousPhase != nextPhase, !graph.allows(from: previousPhase, to: nextPhase) else {
       return
     }
+    issueReporter(
+      """
+      \(failure)
+
+      Action:
+      \(action)
+
+      From:
+      \(previousPhase)
+
+      To:
+      \(nextPhase)
+
+      Allowed next phases:
+      \(graph.successors(from: previousPhase))
+      """,
+      location
+    )
   }
 }

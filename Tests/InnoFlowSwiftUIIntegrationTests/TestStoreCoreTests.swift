@@ -402,16 +402,21 @@ struct TestStoreCoreTests {
       initialState: .init(),
       effectTimeout: .milliseconds(20)
     )
-    let sequence = store.nextSequence()
-    let context = store.makeEffectContext(
-      sequence: sequence,
+    let dispatch = FlowTaskTracker()
+    _ = dispatch.beginActivity()
+    let context = store.effectBoundaries.makeContext(
+      sequence: store.nextSequence(),
       cancellationIDs: [id],
-      potentialCancellationIDs: [id]
+      potentialCancellationIDs: [id],
+      flowTaskTracker: dispatch
     )
 
     store.deliverAction(.increment, context: context)
     await drainAsyncWork()
-    await store.cancelEffects(id: id, context: context)
+    // Its dispatch is cancelled while the action stays buffered. A later
+    // cancellation of the ID by an effect would leave the action receivable,
+    // because a Store already reduced it.
+    dispatch.cancel()
 
     await store.assertNoBufferedActions()
     await store.finish()

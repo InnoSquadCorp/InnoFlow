@@ -96,7 +96,7 @@ where Root.State: Equatable {
     assert updateExpectedState: ((inout ChildState) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
-    await parent.prepareForSend(location: location)
+    let prepared = await parent.prepareForSend(location: location)
     let dispatch = parent.makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousRootState = parent.state
@@ -105,11 +105,11 @@ where Root.State: Equatable {
     // post-reduction case is handled by the failable expected-state updater.
     _ = stateReader(previousRootState)
 
-    let effect = parent.applyScopedAction(
-      actionEmbedder(action),
-      source: .scopedSend,
-      location: location
-    )
+    let (effect, context) = parent.reduceSentAction(
+      at: prepared, location: location, flowTaskTracker: dispatch.tracker
+    ) {
+      parent.applyScopedAction(actionEmbedder(action), source: .scopedSend, location: location)
+    }
     parent.assertStateTransition(
       from: previousRootState,
       expectedStateMutation: rootStateUpdater(from: updateExpectedState),
@@ -120,7 +120,7 @@ where Root.State: Equatable {
       location: location
     )
 
-    await parent.walkScopedEffect(effect, flowTaskTracker: dispatch.tracker, location: location)
+    await parent.walkSentEffect(effect, context: context, prepared: prepared)
     return dispatch.task
   }
 
@@ -587,28 +587,22 @@ where Root.State: Equatable {
     assert updateExpectedState: ((inout ChildState) -> Void)?,
     location: TestStoreSourceLocation
   ) async {
-    defer { queuedAction.finish() }
-    guard parent.shouldProceed(context: queuedAction.context) else { return }
-    let rootAction = queuedAction.action
-    let previousRootState = parent.state
-    _ = stateReader(previousRootState)
-
-    let effect = parent.applyScopedAction(
-      rootAction,
+    await parent.reduceReceivedAction(
+      queuedAction,
       source: .scopedReceive,
-      location: location
-    )
-    parent.assertStateTransition(
-      from: previousRootState,
-      expectedStateMutation: rootStateUpdater(from: updateExpectedState),
-      mismatchLabel: "Scoped root state",
-      eventDescription: "mismatch after receiving action.",
-      failureContext: failureContext,
-      exhaustiveGuidance: scopedExhaustivityGuidance,
-      location: location
-    )
-
-    await parent.walkScopedEffect(effect, context: queuedAction.context, location: location)
+      location: location,
+      willReduce: { _ = stateReader($0) },
+      didReduce: { previousRootState in
+        parent.assertStateTransition(
+          from: previousRootState,
+          expectedStateMutation: rootStateUpdater(from: updateExpectedState),
+          mismatchLabel: "Scoped root state",
+          eventDescription: "mismatch after receiving action.",
+          failureContext: failureContext,
+          exhaustiveGuidance: scopedExhaustivityGuidance,
+          location: location
+        )
+      })
   }
 
   private func reportScopedParentMismatch(

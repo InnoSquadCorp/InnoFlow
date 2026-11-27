@@ -10,11 +10,35 @@ extension TestStore {
 
   /// Sends a user action and verifies its state transition.
   ///
-  /// Buffered effect actions are reduced first. Exhaustive stores report
+  /// Buffered effect actions delivered before the send are reduced first, as
+  /// a `Store` reduced them at their delivery. Exhaustive stores report
   /// those actions as unreceived; non-exhaustive stores continue silently or
   /// emit warnings according to ``exhaustivity``. Recovery is bounded by the
   /// store's effect timeout so a recursively emitted action cannot block the
   /// send forever.
+  ///
+  /// When a reduction returns an effect a `Store` interprets in a MainActor
+  /// task it creates — anything but `.none` or a plain `.send` or `.output`,
+  /// also under ownership metadata — the send starts that effect where a
+  /// `Store` walks it at the earliest: once the MainActor jobs queued before
+  /// that task have run and the walk of the task created before it has
+  /// finished. It buffers what the effect delivers there, and, after each
+  /// suspension, where a `Store` resumes the walk at the earliest. The tasks
+  /// in which a `concatenate` or a `merge` walks its children buffer what
+  /// they deliver, until they await other work, where a `Store` runs them at
+  /// the earliest; the send does not wait for them, and the next call that
+  /// takes a buffered value does. Two exceptions can place a value before
+  /// jobs a `Store` runs first: positions more than sixteen interpreter jobs
+  /// behind a delivery or send share the sixteenth job's position, and what a
+  /// run, a timer or the children of an awaited `merge` deliver is buffered
+  /// at its delivery. A buffered action reduced first whose walk had not
+  /// started when the send began, and every interpreted one reduced after it,
+  /// is walked after the new action is reduced, as in a `Store`.
+  ///
+  /// These rules describe sends and receives a test awaits one after
+  /// another. A call that begins in another task while an earlier one is
+  /// still walking an effect does not wait for that walk, so what it
+  /// delivers can come before values a `Store` handles first.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -48,16 +72,32 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
-    await prepareForSend(location: location)
+    await send(action, assert: updateExpectedState, location: location, didReduce: { _ in })
+  }
+
+  /// Sends `action` and verifies its state transition.
+  ///
+  /// - Parameter didReduce: Runs with the state right before the sent
+  ///   action's reduction, right after that reduction and its state
+  ///   assertion. The buffered actions the send reduces first have been
+  ///   reduced by then, so the two states differ by that one reduction.
+  @discardableResult
+  func send(
+    _ action: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)?,
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void
+  ) async -> TestStoreDispatch {
+    let prepared = await prepareForSend(location: location)
     let dispatch = makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
     let previousState = state
 
-    let effect = reduceAction(
-      action,
-      source: .send,
-      location: location
-    )
+    let (effect, context) = reduceSentAction(
+      at: prepared, location: location, flowTaskTracker: dispatch.tracker
+    ) {
+      reduceAction(action, source: .send, location: location)
+    }
     assertStateTransition(
       from: previousState,
       expectedStateMutation: updateExpectedState.map { update in
@@ -69,16 +109,27 @@ extension TestStore {
       eventDescription: "mismatch after action.",
       location: location
     )
+    didReduce(previousState)
 
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location, flowTaskTracker: dispatch.tracker),
-      awaited: false
-    )
+    await walkSentEffect(effect, context: context, prepared: prepared)
     return dispatch.task
   }
 
+  /// Receives the next buffered effect action, requires it to equal
+  /// `expectedAction`, and verifies its state transition.
+  ///
+  /// A received action's effect starts where a `Store` would start it at the
+  /// earliest, as for ``send(_:assert:fileID:filePath:line:column:)``: an
+  /// effect the `Store` interprets in a MainActor task of its own starts once
+  /// the MainActor jobs queued before that task have run and the walk of the
+  /// task created before it has finished, and what it delivers is buffered
+  /// as for a send, with the same two exceptions, which can place a value
+  /// before jobs a `Store` runs first: positions more than sixteen
+  /// interpreter jobs behind a delivery or send share the sixteenth job's
+  /// position, and what a run, a timer or the children of an awaited `merge`
+  /// deliver is buffered at its delivery. Before it takes a buffered value,
+  /// the receive waits for the tasks of a `concatenate` or `merge` the store
+  /// follows, which can buffer a value ahead of the ones already buffered.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
@@ -120,8 +171,9 @@ extension TestStore {
   /// Receives an exact action using a timeout for this assertion only.
   ///
   /// The timeout is one total wall-clock budget, including time spent
-  /// discarding actions invalidated by effect cancellation or reducing
-  /// mismatches in non-exhaustive mode.
+  /// waiting for a composite task the store follows, discarding actions
+  /// invalidated by effect cancellation, or reducing mismatches in
+  /// non-exhaustive mode.
   public func receive(
     _ expectedAction: R.Action,
     timeout: Duration,
@@ -351,11 +403,20 @@ extension TestStore {
     }
   }
 
-  private func receiveExact(
+  /// Receives the next buffered effect action, requires it to equal
+  /// `expectedAction`, and verifies its state transition.
+  ///
+  /// - Parameter didReduce: Runs with the state right before the received
+  ///   action's reduction, right after that reduction and its state
+  ///   assertion. A non-exhaustive store has reduced the actions it skips by
+  ///   then, so the two states differ by that one reduction. It does not run
+  ///   when `expectedAction` is not received.
+  func receiveExact(
     _ expectedAction: R.Action,
     timeout: Duration?,
     assert updateExpectedState: ((inout R.State) -> Void)?,
-    location: TestStoreSourceLocation
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void = { _ in }
   ) async where R.Action: Equatable {
     let result = await receiveMatchingResult(timeout: timeout, location: location) { action in
       action == expectedAction ? .matched(()) : .mismatched
@@ -366,7 +427,8 @@ extension TestStore {
       await applyReceivedAction(
         action,
         assert: updateExpectedState,
-        location: location
+        location: location,
+        didReduce: didReduce
       )
 
     case .mismatched(let action):
@@ -402,36 +464,26 @@ extension TestStore {
   private func applyReceivedAction(
     _ queuedAction: ActionQueue<R.Action>.QueuedAction,
     assert updateExpectedState: ((inout R.State) -> Void)?,
-    location: TestStoreSourceLocation
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void = { _ in }
   ) async {
-    defer { queuedAction.finish() }
-    guard shouldProceed(context: queuedAction.context) else { return }
-    let action = queuedAction.action
-    let previousState = state
-
-    let effect = reduceAction(
-      action,
-      source: .receive,
-      location: location
-    )
-    assertStateTransition(
-      from: previousState,
-      expectedStateMutation: updateExpectedState.map { update in
-        { state in
-          update(&state)
-          return true
-        }
-      },
-      eventDescription: "mismatch after receiving action.",
-      location: location
-    )
-
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location, flowTaskTracker: queuedAction.context?.flowTaskTracker),
-      awaited: false
-    )
+    await reduceReceivedAction(
+      queuedAction, source: .receive, location: location,
+      willReduce: { _ in },
+      didReduce: { previousState in
+        assertStateTransition(
+          from: previousState,
+          expectedStateMutation: updateExpectedState.map { update in
+            { state in
+              update(&state)
+              return true
+            }
+          },
+          eventDescription: "mismatch after receiving action.",
+          location: location
+        )
+        didReduce(previousState)
+      })
   }
 
   public func assertNoBufferedActions(
@@ -469,14 +521,20 @@ extension TestStore {
     }
   }
 
+  /// Cancels the effects identified by `id` and removes every buffered action
+  /// and output they delivered, as if the cancellation landed before them.
   public func cancelEffects<ID: Hashable & Sendable>(identifiedBy id: EffectID<ID>) async {
     let erasedID = AnyEffectID(id)
     let sequence = markCancelled(id: erasedID)
+    purgeDeliveries(cancelledBy: erasedID, upTo: sequence)
     cancelEffectsSynchronously(identifiedBy: erasedID, upTo: sequence)
   }
 
+  /// Cancels every effect and removes every buffered action and output they
+  /// delivered, as if the cancellation landed before them.
   public func cancelAllEffects() async {
     let sequence = markCancelledAll()
+    purgeDeliveries(cancelledBy: nil, upTo: sequence)
     cancelAllEffectsSynchronously(upTo: sequence)
   }
 
@@ -616,13 +674,12 @@ extension TestStore {
     flowTaskTracker: FlowTaskTracker? = nil,
     location: TestStoreSourceLocation
   ) async {
-    await walker.walk(
-      effect,
-      context: reductionTurnContext(
-        for: effect, location: location,
-        flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker),
-      awaited: false
-    )
+    let context = reductionTurnContext(
+      for: effect, location: location,
+      flowTaskTracker: flowTaskTracker ?? context?.flowTaskTracker)
+    await walkSentEffect(
+      effect, context: context,
+      prepared: TestStorePreparedSend(markerCount: queue.anchorMarkerCount))
   }
 
   package func walkScopedEffect(_ effect: ReducerEffect<R.Action, R.Output>) async {

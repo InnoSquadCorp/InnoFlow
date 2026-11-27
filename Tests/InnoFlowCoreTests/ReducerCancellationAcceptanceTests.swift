@@ -424,6 +424,515 @@ private func admissionLabel(_ admission: EffectAdmission) -> String {
   }
 }
 
+/// Work a dispatch declares under `workID` but has not registered yet when a
+/// cancellation of that ID is accepted.
+private struct DeclaredWorkFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var marks = 0
+    var log: [String] = []
+  }
+
+  enum Action: Sendable {
+    /// The issuing effect's own `.cancel` is interpreted while its work under
+    /// the ID still waits behind a held sibling.
+    case ownCancelBeforeRegistration
+    /// Control: the work is registered and parked before the own `.cancel`.
+    case ownCancelAfterRegistration
+    /// Control: the own `.cancel` follows work that has already finished.
+    case ownCancelAfterOwnWork
+    /// The work under the ID waits behind a held run.
+    case declareBehindHold
+    case cancelWork
+    case mark
+    case ran
+  }
+
+  let gate: EmissionGate
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    let gate = gate
+    let hold = EffectTask<Action>.run { _ in
+      gate.markStarted(1)
+      await gate.waitUntilReleased(1)
+    }
+    switch action {
+    case .ownCancelBeforeRegistration:
+      return .merge(
+        .concatenate(
+          hold,
+          EffectTask<Action>.run { send in
+            gate.markStarted(2)
+            await send(.ran)
+          }
+          .cancellable(workID)
+        ),
+        .concatenate(.cancel(workID), .send(.mark))
+      )
+
+    case .ownCancelAfterRegistration:
+      return .merge(
+        EffectTask<Action>.run { send in
+          gate.markStarted(2)
+          await gate.waitUntilReleased(2)
+          await send(.ran)
+        }
+        .cancellable(workID),
+        .concatenate(hold, .cancel(workID), .send(.mark))
+      )
+
+    case .ownCancelAfterOwnWork:
+      return .concatenate(EffectTask<Action>.send(.mark).cancellable(workID), .cancel(workID))
+
+    case .declareBehindHold:
+      return .concatenate(
+        hold,
+        EffectTask<Action>.run { send in
+          gate.markStarted(2)
+          await send(.ran)
+        }
+        .cancellable(workID)
+      )
+
+    case .cancelWork:
+      return .cancel(workID)
+
+    case .mark:
+      state.marks += 1
+      return .none
+
+    case .ran:
+      state.log.append("ran")
+      return .none
+    }
+  }
+}
+
+private final class CancellationCounter: Sendable {
+  private let count = OSAllocatedUnfairLock(initialState: 0)
+
+  func increment() {
+    count.withLock { $0 += 1 }
+  }
+
+  var value: Int {
+    count.withLock { $0 }
+  }
+}
+
+private let laneID = EffectID<String>("reducer-cancellation-acceptance-lane")
+private let otherLaneID = EffectID<String>("reducer-cancellation-acceptance-other-lane")
+
+/// A lane request followed, in the same concatenation, by a `.cancel` of
+/// unrelated work. A request the lane does not admit awaits nothing.
+private struct LaneThenCancelFeature: Reducer {
+  enum Trigger: Sendable, CaseIterable {
+    /// `dropWhileRunning` meets its own busy lane.
+    case busyDropLane
+    /// `latest` meets a `dropWhileRunning` lane.
+    case conflictingPolicy
+    /// `serial(maxPending: 0)` meets its running lane.
+    case fullSerialQueue
+    /// The same tree cancels the lane ID before it requests the lane.
+    case laneCancelledByOwnTree
+    /// Control: the lane admits the request, whose run is awaited.
+    case admittedRequest
+  }
+
+  struct State: Equatable, Sendable {
+    var admissions: [EffectAdmission] = []
+  }
+
+  enum Action: Sendable {
+    case occupyDropLane
+    case occupySerialLane
+    case startWork
+    case trigger(Trigger)
+    case openLatestUnderOwner
+    case dropRequestThenCancel
+    case admission(EffectAdmission)
+  }
+
+  let gate: EmissionGate
+  let workCancellations: CancellationCounter
+
+  private func occupant(_ policy: EffectExecutionPolicy) -> EffectTask<Action> {
+    let gate = gate
+    return .run(id: laneID, policy: policy) { _, _ in
+      gate.markStarted(10)
+      await gate.waitUntilReleased(10)
+    }
+  }
+
+  /// A lane request that never awaits anything once it is admitted.
+  private func request(
+    on id: EffectID<String> = laneID,
+    _ policy: EffectExecutionPolicy,
+    onAdmission: (@Sendable (EffectAdmission) -> Action)? = nil
+  ) -> EffectTask<Action> {
+    let gate = gate
+    guard let onAdmission else {
+      return .run(id: id, policy: policy) { _, _ in gate.markStarted(30) }
+    }
+    return .run(id: id, policy: policy, onAdmission: onAdmission) { _, _ in gate.markStarted(30) }
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    let gate = gate
+    let workCancellations = workCancellations
+    switch action {
+    case .occupyDropLane:
+      return occupant(.dropWhileRunning)
+
+    case .occupySerialLane:
+      return occupant(.serial(maxPending: 0))
+
+    case .startWork:
+      return EffectTask<Action>.run { _ in
+        await withTaskCancellationHandler {
+          gate.markStarted(20)
+          await gate.waitUntilReleased(20)
+        } onCancel: {
+          workCancellations.increment()
+        }
+      }
+      .cancellable(workID)
+
+    case .trigger(let trigger):
+      let laneRequest: EffectTask<Action>
+      switch trigger {
+      case .busyDropLane:
+        laneRequest = request(.dropWhileRunning)
+      case .conflictingPolicy:
+        laneRequest = request(.latest)
+      case .fullSerialQueue:
+        laneRequest = request(.serial(maxPending: 0))
+      case .laneCancelledByOwnTree:
+        laneRequest = .concatenate(.cancel(laneID), request(.serial(maxPending: 4)))
+      case .admittedRequest:
+        laneRequest = .run(id: otherLaneID, policy: .dropWhileRunning) { _, _ in
+          gate.markStarted(31)
+          await gate.waitUntilReleased(31)
+        }
+      }
+      return .concatenate(laneRequest, .cancel(workID))
+
+    case .openLatestUnderOwner:
+      return occupant(.latest).cancellable(otherID)
+
+    case .dropRequestThenCancel:
+      return .concatenate(
+        request(.dropWhileRunning, onAdmission: { .admission($0) }),
+        .cancel(workID)
+      )
+
+    case .admission(let admission):
+      state.admissions.append(admission)
+      return .none
+    }
+  }
+}
+
+private let mergeLaneID = EffectID<String>("reducer-cancellation-acceptance-merge-lane")
+private let mergeOwnerID = EffectID<String>("reducer-cancellation-acceptance-merge-owner")
+
+/// The admissions lane requests receive, recorded when admission reports
+/// them rather than when their admission action is reduced.
+private final class AdmissionRecorder: Sendable {
+  private let admissions = OSAllocatedUnfairLock(initialState: [Int: EffectAdmission]())
+
+  func record(_ admission: EffectAdmission, for request: Int) {
+    admissions.withLock { $0[request] = admission }
+  }
+
+  subscript(request: Int) -> EffectAdmission? {
+    admissions.withLock { $0[request] }
+  }
+}
+
+/// Lane requests in the branches of one `merge`, which the interpreter runs
+/// in any order. Earlier work counts its cancellations, so a test reads what
+/// the reduction turn accepted the moment `send` returns.
+private struct MergeOrderFeature: Reducer {
+  /// The requests that release work under an ID another effect carries.
+  enum Release: String, Sendable, CaseIterable {
+    case cancel, cancelInFlight, debounce, latestLane
+  }
+
+  /// Requests under an ID that cancel nothing of the tree that issued them:
+  /// a throttle decides only its own window, and the others cancel in
+  /// flight, covering only earlier sequences.
+  enum OwnIDSibling: String, Sendable, CaseIterable {
+    case throttle, cancelInFlight, debounce, latestLane
+  }
+
+  /// `sibling` under the owner ID.
+  func ownIDSibling(_ sibling: OwnIDSibling) -> EffectTask<Action> {
+    switch sibling {
+    case .throttle:
+      EffectTask<Action>.send(.pad).throttle(mergeOwnerID, for: .milliseconds(20))
+    case .cancelInFlight:
+      EffectTask<Action>.send(.pad).cancellable(mergeOwnerID, cancelInFlight: true)
+    case .debounce:
+      EffectTask<Action>.send(.pad).debounce(mergeOwnerID, for: .milliseconds(20))
+    case .latestLane:
+      .run(id: mergeOwnerID, policy: .latest) { _, _ in }
+    }
+  }
+
+  enum Shape: String, Sendable, CaseIterable {
+    /// `merge(a, concatenate(b, .cancel(workID)))`: `a` and `b` are drop
+    /// requests for one closed lane, and the interpreter reaches `a` late.
+    case sameLaneThenCancel
+    /// `merge(a in .cancellable(owner), concatenate(.cancel(owner), b))`:
+    /// drop requests for one closed lane, `a` reached late.
+    case siblingCancelsRequest
+    /// `merge(latest, serial)` for one closed lane.
+    case latestThenSerial
+    /// `merge(serial, latest)` for one closed lane.
+    case serialThenLatest
+    /// `merge(latest, concatenate(hold, serial))`: the serial request lies
+    /// behind asynchronous work in its branch.
+    case latestThenHeldSerial
+  }
+
+  struct State: Equatable, Sendable {
+    var loading = 0
+  }
+
+  enum Action: Sendable {
+    /// Work the turn may release: under `workID`, or under the lane's ID.
+    case startWork(underLane: Bool)
+    case trigger(Shape)
+    /// The common pattern: `merge(.send(.loading), latest request)`.
+    case load
+    /// `concatenate(.send(.loading), latest request)`.
+    case loadConcatenated
+    /// A request with another policy for the lane.
+    case otherPolicy
+    /// Request `4` opens the lane with `policy`, under the owner ID when
+    /// asked.
+    case occupy(EffectExecutionPolicy, underOwner: Bool)
+    /// Request `5` queues behind request `4`, under the owner ID.
+    case queueUnderOwner
+    /// `merge(concatenate(request 6 with the policy, .cancel(workID)),
+    /// .cancel(owner))`, or the same branches the other way round.
+    case cancelHolder(EffectExecutionPolicy, ownerFirst: Bool)
+    /// `merge(.send(.loading), latest request)`, the request under the owner
+    /// ID.
+    case loadUnderOwner
+    /// `merge(concatenate(drop request 6, .cancel(workID)), a throttle under
+    /// the owner ID)`, or the same branches the other way round.
+    case throttleHolder(ownerFirst: Bool)
+    /// `merge(concatenate(.cancel(lane), drop request 6, .cancel(workID)),
+    /// .cancel(owner))`: the request's own branch cancels its lane ID first.
+    case ownCancelThenRequest
+    /// `merge(concatenate(drop request 6 under the owner ID,
+    /// .cancel(workID)), a sibling under the owner ID)`, or the same branches
+    /// the other way round.
+    case ownIDSibling(OwnIDSibling, ownerFirst: Bool)
+    /// `merge(latest request under the owner ID, a sibling under the owner
+    /// ID)`.
+    case loadWithOwnIDSibling(OwnIDSibling)
+    /// `merge(concatenate(drop request 6, .cancel(workID)), a request to
+    /// release work under the owner ID)`.
+    case releaseHolder(Release)
+    case loading
+    case pad
+    case admission
+  }
+
+  /// Request `1` is the merge's first lane request (`a`, or the `latest`
+  /// one), request `2` its second; `3` holds the serial request back.
+  /// Requests `4` and `5` hold the lane that request `6` meets.
+  let gate: EmissionGate
+  let workCancellations: CancellationCounter
+  let admissions: AdmissionRecorder
+
+  func request(_ index: Int, _ policy: EffectExecutionPolicy) -> EffectTask<Action> {
+    let gate = gate
+    let admissions = admissions
+    return .run(
+      id: mergeLaneID, policy: policy,
+      onAdmission: { admission in
+        admissions.record(admission, for: index)
+        return .admission
+      },
+      { _, _ in
+        gate.markStarted(index)
+        await gate.waitUntilReleased(index)
+      }
+    )
+  }
+
+  /// `effect` behind three nested merges, so the interpreter reaches it after
+  /// the other branch of an enclosing merge.
+  func late(_ effect: EffectTask<Action>) -> EffectTask<Action> {
+    var padded = effect
+    for _ in 0..<3 {
+      padded = .merge(padded, .send(.pad))
+    }
+    return padded
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    let gate = gate
+    let workCancellations = workCancellations
+    switch action {
+    case .startWork(let underLane):
+      return EffectTask<Action>.run { _ in
+        await withTaskCancellationHandler {
+          gate.markStarted(20)
+          await gate.waitUntilReleased(20)
+        } onCancel: {
+          workCancellations.increment()
+        }
+      }
+      .cancellable(underLane ? mergeLaneID : workID)
+
+    case .trigger(.sameLaneThenCancel):
+      return .merge(
+        late(request(1, .dropWhileRunning)),
+        .concatenate(request(2, .dropWhileRunning), .cancel(workID)))
+
+    case .trigger(.siblingCancelsRequest):
+      return .merge(
+        late(request(1, .dropWhileRunning).cancellable(mergeOwnerID)),
+        .concatenate(.cancel(mergeOwnerID), request(2, .dropWhileRunning)))
+
+    case .trigger(.latestThenSerial):
+      return .merge(request(1, .latest), request(2, .serial(maxPending: 4)))
+
+    case .trigger(.serialThenLatest):
+      return .merge(request(2, .serial(maxPending: 4)), request(1, .latest))
+
+    case .trigger(.latestThenHeldSerial):
+      let hold = EffectTask<Action>.run { _ in
+        gate.markStarted(3)
+        await gate.waitUntilReleased(3)
+      }
+      return .merge(request(1, .latest), .concatenate(hold, request(2, .serial(maxPending: 4))))
+
+    case .load:
+      return .merge(.send(.loading), request(1, .latest))
+
+    case .loadConcatenated:
+      return .concatenate(.send(.loading), request(1, .latest))
+
+    case .loadUnderOwner:
+      return .merge(.send(.loading), request(1, .latest).cancellable(mergeOwnerID))
+
+    case .throttleHolder(let ownerFirst):
+      let requestThenCancel = EffectTask<Action>.concatenate(
+        request(6, .dropWhileRunning), .cancel(workID))
+      let throttle = EffectTask<Action>.send(.pad).throttle(mergeOwnerID, for: .seconds(1))
+      return ownerFirst
+        ? .merge(throttle, requestThenCancel) : .merge(requestThenCancel, throttle)
+
+    case .ownCancelThenRequest:
+      return .merge(
+        .concatenate(.cancel(mergeLaneID), request(6, .dropWhileRunning), .cancel(workID)),
+        .cancel(mergeOwnerID))
+
+    case .ownIDSibling(let sibling, let ownerFirst):
+      let requestThenCancel = EffectTask<Action>.concatenate(
+        request(6, .dropWhileRunning).cancellable(mergeOwnerID), .cancel(workID))
+      let other = ownIDSibling(sibling)
+      return ownerFirst ? .merge(other, requestThenCancel) : .merge(requestThenCancel, other)
+
+    case .loadWithOwnIDSibling(let sibling):
+      return .merge(request(1, .latest).cancellable(mergeOwnerID), ownIDSibling(sibling))
+
+    case .releaseHolder(let release):
+      let sibling: EffectTask<Action>
+      switch release {
+      case .cancel:
+        sibling = .cancel(mergeOwnerID)
+      case .cancelInFlight:
+        sibling = EffectTask<Action>.send(.pad).cancellable(mergeOwnerID, cancelInFlight: true)
+      case .debounce:
+        sibling = EffectTask<Action>.send(.pad).debounce(mergeOwnerID, for: .seconds(1))
+      case .latestLane:
+        sibling = .run(id: mergeOwnerID, policy: .latest) { _, _ in }
+      }
+      return .merge(.concatenate(request(6, .dropWhileRunning), .cancel(workID)), sibling)
+
+    case .otherPolicy:
+      return request(2, .dropWhileRunning)
+
+    case .occupy(let policy, let underOwner):
+      let occupying = request(4, policy)
+      return underOwner ? occupying.cancellable(mergeOwnerID) : occupying
+
+    case .queueUnderOwner:
+      return request(5, .serial(maxPending: 1)).cancellable(mergeOwnerID)
+
+    case .cancelHolder(let policy, let ownerFirst):
+      let requestThenCancel = EffectTask<Action>.concatenate(request(6, policy), .cancel(workID))
+      return ownerFirst
+        ? .merge(.cancel(mergeOwnerID), requestThenCancel)
+        : .merge(requestThenCancel, .cancel(mergeOwnerID))
+
+    case .loading:
+      state.loading += 1
+      return .none
+
+    case .pad, .admission:
+      return .none
+    }
+  }
+}
+
+/// Records what the reduction-turn pass accepts and decides, against lanes
+/// a test sets up, without interpreting anything.
+@MainActor
+private final class TurnPassRecorder: ReductionTurnCancellationAcceptor {
+  typealias Action = MergeOrderFeature.Action
+  typealias Output = Never
+
+  var lanes: [AnyEffectID: EffectRunLaneView] = [:]
+  private(set) var accepted: [EffectCancellationRequest] = []
+  private(set) var replacedLanes: [AnyEffectID] = []
+
+  func acceptInReductionTurn(
+    _ request: EffectCancellationRequest, context: EffectExecutionContext
+  ) {
+    accepted.append(request)
+  }
+
+  func runLane(for id: AnyEffectID) -> EffectRunLaneView? {
+    lanes[id]
+  }
+
+  func acceptLatestReplacementInReductionTurn(id: AnyEffectID, context: EffectExecutionContext) {
+    replacedLanes.append(id)
+  }
+
+  /// Runs the pass over `effect`, then returns every admission it recorded
+  /// for a request with `cancellationIDs` and `policy`, oldest first, and
+  /// then those for a request with `otherCancellationIDs`.
+  func pass(
+    _ effect: EffectTask<Action>,
+    recordedFor cancellationIDs: [AnyEffectID],
+    and otherCancellationIDs: [AnyEffectID]? = nil,
+    policy: EffectExecutionPolicy.Kind
+  ) -> [ReductionTurnLaneAdmission] {
+    let boundaries = EffectCancellationBoundaries()
+    let context = boundaries.makeContext(
+      sequence: boundaries.nextSequence(),
+      potentialCancellationIDs: effect.potentialCancellationIDs)
+    acceptSynchronousCancellations(in: effect, context: context)
+    var recorded: [ReductionTurnLaneAdmission] = []
+    for cancellationIDs in [cancellationIDs, otherCancellationIDs].compactMap({ $0 }) {
+      while let admission = context.cancellationScope?.consumeTurnLaneAdmission(
+        cancellationIDs: cancellationIDs, policy: policy)
+      {
+        recorded.append(admission)
+      }
+    }
+    return recorded
+  }
+}
+
 @MainActor
 @Suite(
   "Reducer-returned cancellation is accepted in the reduction turn", .serialized,
@@ -826,5 +1335,863 @@ struct ReducerCancellationAcceptanceTests {
     await cancellation.value
     await waitUntil { scheduler.activeRequestCount == 0 }
     #expect(scheduler.activeRequestCount == 0)
+  }
+
+  // MARK: Work cancelled before it registered
+
+  private func cancellationRecorded(
+    for dispatchIndex: Int, in diagnostics: StoreDiagnostics
+  ) -> Bool {
+    let records = diagnostics.snapshot().records
+    let dispatches = records.filter { $0.kind == .submitted }.map(\.dispatchID)
+    guard dispatches.indices.contains(dispatchIndex) else { return false }
+    return records.contains {
+      $0.dispatchID == dispatches[dispatchIndex] && $0.kind == .cancellationRequested
+    }
+  }
+
+  @Test(
+    "An own cancel records the cancellation whether or not its work registered first",
+    arguments: [true, false])
+  func ownCancelRecordsCancellationInEitherOrder(cancelFirst: Bool) async {
+    let gate = EmissionGate()
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: DeclaredWorkFeature(gate: gate), initialState: .init(), diagnostics: diagnostics)
+
+    if cancelFirst {
+      // The work waits behind the held sibling, so the cancel is interpreted
+      // before anything is registered under the ID.
+      let dispatch = store.send(.ownCancelBeforeRegistration)
+      await waitUntil { store.state.marks == 1 && gate.hasStarted(1) }
+      gate.release(1)
+      await dispatch.finish()
+      #expect(gate.hasStarted(2) == false)
+    } else {
+      let dispatch = store.send(.ownCancelAfterRegistration)
+      await waitUntil { gate.hasStarted(1) && gate.hasStarted(2) }
+      gate.release(1)
+      await waitUntil { store.state.marks == 1 }
+      gate.release(2)
+      await dispatch.finish()
+    }
+
+    #expect(store.state.log.isEmpty)
+    #expect(cancellationRecorded(for: 0, in: diagnostics))
+  }
+
+  @Test(
+    "A partly interpreted dispatch records the cancellation of work it had not reached",
+    arguments: ["reducer", "store"])
+  func partlyInterpretedDispatchRecordsSkippedWork(cancelledBy source: String) async {
+    let gate = EmissionGate()
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: DeclaredWorkFeature(gate: gate), initialState: .init(), diagnostics: diagnostics)
+
+    let dispatch = store.send(.declareBehindHold)
+    // The root interpreter has started: the held run is registered, the work
+    // under the ID behind it is not.
+    await waitUntil { gate.hasStarted(1) }
+    if source == "reducer" {
+      store.send(.cancelWork)
+    } else {
+      await store.cancelEffects(identifiedBy: workID)
+    }
+    gate.release(1)
+    await dispatch.finish()
+
+    #expect(gate.hasStarted(2) == false)
+    #expect(store.state.log.isEmpty)
+    #expect(cancellationRecorded(for: 0, in: diagnostics))
+  }
+
+  @Test("Control: an own cancel after its own work completed records nothing")
+  func ownCancelAfterCompletedWorkRecordsNothing() async {
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: DeclaredWorkFeature(gate: EmissionGate()), initialState: .init(),
+      diagnostics: diagnostics)
+
+    await store.send(.ownCancelAfterOwnWork).finish()
+
+    #expect(store.state.marks == 1)
+    #expect(diagnostics.snapshot().records.contains { $0.kind == .cancellationRequested } == false)
+  }
+
+  // MARK: Lane requests the reduction turn passes
+
+  @Test(
+    "A cancel behind a lane request the lane does not admit is accepted in the reduction turn",
+    arguments: LaneThenCancelFeature.Trigger.allCases)
+  fileprivate func cancelBehindRejectedLaneRequest(trigger: LaneThenCancelFeature.Trigger) async {
+    let gate = EmissionGate()
+    let workCancellations = CancellationCounter()
+    let store = Store(
+      reducer: LaneThenCancelFeature(gate: gate, workCancellations: workCancellations),
+      initialState: .init())
+
+    switch trigger {
+    case .busyDropLane, .conflictingPolicy, .admittedRequest:
+      store.send(.occupyDropLane)
+      await waitUntil { gate.hasStarted(10) }
+    case .fullSerialQueue:
+      store.send(.occupySerialLane)
+      await waitUntil { gate.hasStarted(10) }
+    case .laneCancelledByOwnTree:
+      break
+    }
+    let work = store.send(.startWork)
+    await waitUntil { gate.hasStarted(20) }
+
+    let triggered = store.send(.trigger(trigger))
+    // Nothing has suspended since `send` returned: a cancellation accepted in
+    // the reduction turn has already run the work's cancellation handler.
+    let cancelledInTurn = workCancellations.value
+
+    for index in [10, 20, 31] { gate.release(index) }
+    await work.finish()
+    await triggered.finish()
+    if trigger == .admittedRequest {
+      #expect(cancelledInTurn == 0, "an admitted request's run is awaited")
+    } else {
+      #expect(cancelledInTurn == 1)
+      #expect(gate.hasStarted(30) == false)
+    }
+  }
+
+  @Test("A lane request the reduction turn passes keeps the admission of that turn")
+  func laneRequestKeepsTheAdmissionOfItsTurn() async {
+    let gate = EmissionGate()
+    let store = Store(
+      reducer: LaneThenCancelFeature(gate: gate, workCancellations: CancellationCounter()),
+      initialState: .init())
+
+    let running = store.send(.openLatestUnderOwner)
+    await waitUntil { gate.hasStarted(10) }
+
+    // One MainActor turn: the drop request meets the open `latest` lane in
+    // its reduction turn, then that lane closes before the interpreter runs.
+    let dispatch = store.send(.dropRequestThenCancel)
+    await store.cancelEffects(identifiedBy: otherID)
+    #expect(store.runLaneSnapshots().isEmpty)
+
+    await dispatch.finish()
+    #expect(store.state.admissions == [.rejected(.conflictingPolicy)])
+    #expect(gate.hasStarted(30) == false)
+
+    gate.release(10)
+    await running.finish()
+  }
+
+  // MARK: Merge branches the interpreter runs in any order
+
+  private func mergeOrderFeature() -> MergeOrderFeature {
+    MergeOrderFeature(
+      gate: EmissionGate(), workCancellations: CancellationCounter(),
+      admissions: AdmissionRecorder())
+  }
+
+  private func effect(
+    _ action: MergeOrderFeature.Action, of feature: MergeOrderFeature
+  ) -> EffectTask<MergeOrderFeature.Action> {
+    var state = MergeOrderFeature.State()
+    return feature.reduce(into: &state, action: action)
+  }
+
+  @Test(
+    "The reduction turn decides no lane request another merge branch can reorder",
+    arguments: [false, true])
+  func passDecidesNoOrderDependentLaneRequest(laneIsBusy: Bool) {
+    let feature = mergeOrderFeature()
+    let lane = AnyEffectID(mergeLaneID)
+    let busyLane = EffectRunLaneView(policy: .dropWhileRunning, holderSequence: 0, pendingCount: 0)
+
+    // Two requests for one lane: whichever the interpreter reaches first
+    // decides the other's admission, so the turn decides neither, and
+    // accepts nothing behind them.
+    let sameLane = TurnPassRecorder()
+    sameLane.lanes = laneIsBusy ? [lane: busyLane] : [:]
+    let sameLaneEffect = effect(.trigger(.sameLaneThenCancel), of: feature)
+    #expect(sameLane.pass(sameLaneEffect, recordedFor: [lane], policy: .dropWhileRunning).isEmpty)
+    #expect(sameLane.accepted.isEmpty)
+
+    // A request whose ID another branch cancels may be skipped or admitted.
+    // Request `a` is under the owner ID, request `b` under the lane's alone.
+    let ownerCancelled = TurnPassRecorder()
+    ownerCancelled.lanes = laneIsBusy ? [lane: busyLane] : [:]
+    let ownerEffect = effect(.trigger(.siblingCancelsRequest), of: feature)
+    #expect(
+      ownerCancelled.pass(
+        ownerEffect, recordedFor: [lane], and: [AnyEffectID(mergeOwnerID), lane],
+        policy: .dropWhileRunning
+      ).isEmpty)
+    #expect(ownerCancelled.accepted == [.all(AnyEffectID(mergeOwnerID))])
+  }
+
+  @Test(
+    "The reduction turn decides no lane request whose lane another merge branch can change",
+    arguments: [false, true])
+  func passDecidesNoRequestWhoseLaneASiblingCanChange(ownerFirst: Bool) {
+    let lane = AnyEffectID(mergeLaneID)
+    let owner = AnyEffectID(mergeOwnerID)
+    let cancelHolder = effect(
+      .cancelHolder(.serial(maxPending: 1), ownerFirst: ownerFirst), of: mergeOrderFeature())
+
+    // A full serial lane whose pending request is under the owner ID: the
+    // other branch's cancel frees its slot, so the lane rejects the request
+    // or queues it depending on which branch the interpreter runs first.
+    // The recorder's lanes do not change when it accepts a cancellation.
+    let fullSerialLane = TurnPassRecorder()
+    fullSerialLane.lanes = [
+      lane: EffectRunLaneView(
+        policy: .serial(maxPending: 1), holderSequence: 0, pendingCount: 1,
+        pendingCancellationIDs: [[owner]])
+    ]
+    #expect(
+      fullSerialLane.pass(cancelHolder, recordedFor: [lane], policy: .serial(maxPending: 1))
+        .isEmpty)
+    #expect(fullSerialLane.accepted == [.all(owner)])
+
+    // A `latest` lane whose running request is under the owner ID: the
+    // cancel closes the lane, so the request meets a conflicting lane or
+    // none.
+    let latestLane = TurnPassRecorder()
+    latestLane.lanes = [
+      lane: EffectRunLaneView(
+        policy: .latest, holderSequence: 0, pendingCount: 0, ownerCancellationIDs: [owner])
+    ]
+    #expect(
+      latestLane.pass(cancelHolder, recordedFor: [lane], policy: .serial(maxPending: 1)).isEmpty)
+    #expect(latestLane.accepted == [.all(owner)])
+  }
+
+  @Test(
+    "The reduction turn decides a lane request its lane answers alike without the cancelled holder",
+    arguments: [false, true])
+  func passDecidesRequestItsLaneAnswersAlike(ownerFirst: Bool) {
+    let lane = AnyEffectID(mergeLaneID)
+    let owner = AnyEffectID(mergeOwnerID)
+    let feature = mergeOrderFeature()
+
+    // A `latest` request replaces a `latest` lane whose running request is
+    // under the owner ID, and opens the lane once the other branch's cancel
+    // has closed it: it is admitted either way, so the turn accepts it.
+    let latestLane = TurnPassRecorder()
+    latestLane.lanes = [
+      lane: EffectRunLaneView(
+        policy: .latest, holderSequence: 0, pendingCount: 0, ownerCancellationIDs: [owner])
+    ]
+    let latestRequest = effect(.cancelHolder(.latest, ownerFirst: ownerFirst), of: feature)
+    #expect(latestLane.pass(latestRequest, recordedFor: [lane], policy: .latest) == [.admitted])
+    #expect(latestLane.replacedLanes == [lane])
+    #expect(latestLane.accepted == [.all(owner)])
+
+    // A drop request meets a serial lane as conflicting, with or without the
+    // pending request under the owner ID: it is rejected either way, so the
+    // cancel behind it is accepted in the turn.
+    let serialLane = TurnPassRecorder()
+    serialLane.lanes = [
+      lane: EffectRunLaneView(
+        policy: .serial(maxPending: 1), holderSequence: 0, pendingCount: 1,
+        pendingCancellationIDs: [[owner]])
+    ]
+    let dropRequest = effect(.cancelHolder(.dropWhileRunning, ownerFirst: ownerFirst), of: feature)
+    #expect(
+      serialLane.pass(dropRequest, recordedFor: [lane], policy: .dropWhileRunning)
+        == [.completed(.rejected(.conflictingPolicy))])
+    #expect(Set(serialLane.accepted) == [.all(AnyEffectID(workID)), .all(owner)])
+
+    // A throttle under the owner ID releases no work, so the `latest` lane
+    // keeps its running request whatever the order, and rejects the drop
+    // request as conflicting: the cancel behind it is accepted in the turn.
+    let throttledOwner = TurnPassRecorder()
+    throttledOwner.lanes = [
+      lane: EffectRunLaneView(
+        policy: .latest, holderSequence: 0, pendingCount: 0, ownerCancellationIDs: [owner])
+    ]
+    let throttled = effect(.throttleHolder(ownerFirst: ownerFirst), of: feature)
+    #expect(
+      throttledOwner.pass(throttled, recordedFor: [lane], policy: .dropWhileRunning)
+        == [.completed(.rejected(.conflictingPolicy))])
+    #expect(throttledOwner.accepted == [.all(AnyEffectID(workID))])
+  }
+
+  @Test(
+    "The reduction turn defers a lane request whose holder another branch can release",
+    arguments: MergeOrderFeature.Release.allCases)
+  fileprivate func passDefersRequestWhoseHolderAnotherBranchReleases(
+    release: MergeOrderFeature.Release
+  ) {
+    let lane = AnyEffectID(mergeLaneID)
+    // The drop request meets the `latest` lane as conflicting while its
+    // running request, under the owner ID, holds it, and opens the lane once
+    // the other branch has released that request: the turn decides nothing
+    // for it and accepts nothing behind it.
+    let recorder = TurnPassRecorder()
+    recorder.lanes = [
+      lane: EffectRunLaneView(
+        policy: .latest, holderSequence: 0, pendingCount: 0,
+        ownerCancellationIDs: [AnyEffectID(mergeOwnerID)])
+    ]
+    let effect = effect(.releaseHolder(release), of: mergeOrderFeature())
+    #expect(recorder.pass(effect, recordedFor: [lane], policy: .dropWhileRunning).isEmpty)
+    #expect(recorder.accepted.contains(.all(AnyEffectID(workID))) == false)
+  }
+
+  @Test(
+    "The reduction turn decides a lane request whose own ID another branch cannot cancel",
+    arguments: MergeOrderFeature.OwnIDSibling.allCases, [false, true])
+  fileprivate func passDecidesRequestWhoseOwnIDAnotherBranchCannotCancel(
+    sibling: MergeOrderFeature.OwnIDSibling, ownerFirst: Bool
+  ) {
+    let lane = AnyEffectID(mergeLaneID)
+    let owner = AnyEffectID(mergeOwnerID)
+    // The other branch's request under the owner ID cannot skip the drop
+    // request under that ID, which the `latest` lane rejects as conflicting
+    // whatever the order, so the cancel behind it is accepted in the turn.
+    let recorder = TurnPassRecorder()
+    recorder.lanes = [
+      lane: EffectRunLaneView(
+        policy: .latest, holderSequence: 0, pendingCount: 0, ownerCancellationIDs: [lane])
+    ]
+    let effect = effect(
+      .ownIDSibling(sibling, ownerFirst: ownerFirst), of: mergeOrderFeature())
+    #expect(
+      recorder.pass(effect, recordedFor: [owner, lane], policy: .dropWhileRunning)
+        == [.completed(.rejected(.conflictingPolicy))])
+    // The sibling's own acceptance: an in-flight cancellation of the owner ID
+    // for a `cancelInFlight` boundary or a debounce; a `latest` request
+    // replaces its lane instead, and a throttle accepts nothing.
+    var accepted: Set<EffectCancellationRequest> = [.all(AnyEffectID(workID))]
+    if sibling == .cancelInFlight || sibling == .debounce {
+      accepted.insert(.inFlight(owner))
+    }
+    #expect(Set(recorder.accepted) == accepted)
+    // Each acceptance is recorded once.
+    #expect(recorder.accepted.count == accepted.count)
+    #expect(recorder.replacedLanes == (sibling == .latestLane ? [owner] : []))
+  }
+
+  @Test("The reduction turn decides a lane request its own branch cancelled, whatever its lane")
+  func passDecidesRequestItsOwnBranchCancelled() {
+    let lane = AnyEffectID(mergeLaneID)
+    let owner = AnyEffectID(mergeOwnerID)
+    // The other branch's cancel would close the lane, but the request's own
+    // branch cancelled its lane ID first: it completes whatever the lane is,
+    // so the cancel behind it is accepted in the turn.
+    let recorder = TurnPassRecorder()
+    recorder.lanes = [
+      lane: EffectRunLaneView(
+        policy: .latest, holderSequence: 0, pendingCount: 0, ownerCancellationIDs: [owner])
+    ]
+    let effect = effect(.ownCancelThenRequest, of: mergeOrderFeature())
+    #expect(
+      recorder.pass(effect, recordedFor: [lane], policy: .dropWhileRunning)
+        == [.completed(.cancelledBeforeStart)])
+    #expect(Set(recorder.accepted) == [.all(lane), .all(AnyEffectID(workID)), .all(owner)])
+  }
+
+  @Test(
+    "The reduction turn accepts no latest request another merge branch can reject",
+    arguments: [
+      MergeOrderFeature.Shape.latestThenSerial, .serialThenLatest, .latestThenHeldSerial,
+    ])
+  fileprivate func passAcceptsNoOrderDependentLatestRequest(shape: MergeOrderFeature.Shape) {
+    let lane = AnyEffectID(mergeLaneID)
+    let recorder = TurnPassRecorder()
+    let latest = recorder.pass(
+      effect(.trigger(shape), of: mergeOrderFeature()), recordedFor: [lane], policy: .latest)
+
+    #expect(latest.isEmpty)
+    #expect(recorder.replacedLanes.isEmpty)
+    #expect(recorder.accepted.isEmpty)
+  }
+
+  @Test("The reduction turn still decides a latest request merged with work on no lane")
+  func passAcceptsLatestRequestMergedWithSend() {
+    let lane = AnyEffectID(mergeLaneID)
+    let recorder = TurnPassRecorder()
+    let latest = recorder.pass(
+      effect(.load, of: mergeOrderFeature()), recordedFor: [lane], policy: .latest)
+
+    #expect(latest == [.admitted])
+    #expect(recorder.replacedLanes == [lane])
+  }
+
+  @Test("The reduction turn still decides a request whose merge siblings touch other IDs")
+  func passDecidesRequestWhoseSiblingsTouchOtherIDs() {
+    typealias Action = MergeOrderFeature.Action
+    let lane = AnyEffectID(mergeLaneID)
+    let recorder = TurnPassRecorder()
+    recorder.lanes = [
+      lane: EffectRunLaneView(policy: .dropWhileRunning, holderSequence: 0, pendingCount: 0)
+    ]
+    let feature = mergeOrderFeature()
+    let rejectedThenCancel = EffectTask<Action>.merge(
+      .concatenate(feature.request(1, .dropWhileRunning), .cancel(workID)),
+      .cancel(mergeOwnerID))
+
+    let recorded = recorder.pass(rejectedThenCancel, recordedFor: [lane], policy: .dropWhileRunning)
+
+    #expect(recorded == [.completed(.rejected(.busy))])
+    #expect(recorder.accepted == [.all(AnyEffectID(workID)), .all(AnyEffectID(mergeOwnerID))])
+  }
+
+  @Test(
+    "The reduction turn accepts nothing that another merge branch's cancel may skip",
+    arguments: [false, true])
+  func passAcceptsNothingASiblingCancelMaySkip(cancelFirst: Bool) {
+    typealias Action = MergeOrderFeature.Action
+    let recorder = TurnPassRecorder()
+    // Work under the owner ID awaits or is skipped depending on whether the
+    // interpreter reaches the other branch's cancel first, so the cancel of
+    // `workID` behind or inside it is not reached in every order.
+    let ownedWork: EffectTask<Action>
+    if cancelFirst {
+      ownedWork = .concatenate(
+        EffectTask<Action>.run { _ in }.cancellable(mergeOwnerID), .cancel(workID))
+    } else {
+      ownedWork = EffectTask<Action>.concatenate(.send(.pad), .cancel(workID))
+        .cancellable(mergeOwnerID)
+    }
+    let effect: EffectTask<Action> =
+      cancelFirst
+      ? .merge(.cancel(mergeOwnerID), ownedWork) : .merge(ownedWork, .cancel(mergeOwnerID))
+
+    _ = recorder.pass(effect, recordedFor: [], policy: .latest)
+
+    #expect(recorder.accepted == [.all(AnyEffectID(mergeOwnerID))])
+  }
+
+  @Test(
+    "A lane request another merge branch can reorder is decided by its admission alone",
+    arguments: MergeOrderFeature.Shape.allCases)
+  fileprivate func orderDependentLaneRequestIsDecidedByAdmission(
+    shape: MergeOrderFeature.Shape
+  ) async {
+    let gate = EmissionGate()
+    let workCancellations = CancellationCounter()
+    let admissions = AdmissionRecorder()
+    let store = Store(
+      reducer: MergeOrderFeature(
+        gate: gate, workCancellations: workCancellations, admissions: admissions),
+      initialState: .init())
+    let workUnderLane = shape != .sameLaneThenCancel && shape != .siblingCancelsRequest
+
+    let work = store.send(.startWork(underLane: workUnderLane))
+    await waitUntil { gate.hasStarted(20) }
+
+    let dispatch = store.send(.trigger(shape))
+    // Nothing has suspended since `send` returned: the turn released nothing
+    // that the order of the merge's branches decides.
+    #expect(workCancellations.value == 0)
+
+    // Every outcome below is one the interpreter reaches in some order of
+    // the merge's branches.
+    switch shape {
+    case .sameLaneThenCancel:
+      await waitUntil { admissions[1] != nil && admissions[2] != nil }
+      // One request opened the lane and the other met it busy. The cancel
+      // behind `b` runs once `b` completes: at once when the lane rejected
+      // `b`, only after its run when it started.
+      let secondStarted = admissions[2] == .started
+      #expect([admissions[1], admissions[2]].filter { $0 == .started }.count == 1)
+      #expect(workCancellations.value == (secondStarted ? 0 : 1))
+
+    case .siblingCancelsRequest:
+      await waitUntil { admissions[2] != nil }
+      // `b` meets the lane `a` opened, or a closed lane when the own cancel
+      // skipped `a` first.
+      #expect(
+        admissions[2] == .started
+          || (admissions[1] == .started && admissions[2] == .rejected(.busy)))
+
+    case .latestThenSerial, .serialThenLatest:
+      await waitUntil { admissions[1] != nil && admissions[2] != nil }
+      let latestStarted = admissions[1] == .started
+      #expect(admissions[latestStarted ? 2 : 1] == .rejected(.conflictingPolicy))
+      #expect(latestStarted || admissions[2] == .started)
+      // Only an admitted latest request releases earlier work under its ID.
+      #expect(workCancellations.value == (latestStarted ? 1 : 0))
+
+    case .latestThenHeldSerial:
+      await waitUntil { admissions[1] != nil }
+      #expect(admissions[1] == .started)
+      #expect(workCancellations.value == 1)
+      gate.release(3)
+      await waitUntil { admissions[2] != nil }
+      #expect(admissions[2] == .rejected(.conflictingPolicy))
+    }
+
+    for index in [1, 2, 3, 20] { gate.release(index) }
+    await dispatch.finish()
+    await work.finish()
+  }
+
+  @Test("A latest request merged with a send is still accepted in its reduction turn")
+  func latestRequestMergedWithSendIsAcceptedInTheTurn() async {
+    let gate = EmissionGate()
+    let workCancellations = CancellationCounter()
+    let admissions = AdmissionRecorder()
+    let store = Store(
+      reducer: MergeOrderFeature(
+        gate: gate, workCancellations: workCancellations, admissions: admissions),
+      initialState: .init())
+
+    let work = store.send(.startWork(underLane: true))
+    await waitUntil { gate.hasStarted(20) }
+
+    let dispatch = store.send(.load)
+    // The earlier work under the lane's ID was released in the turn.
+    #expect(workCancellations.value == 1)
+
+    await waitUntil { admissions[1] != nil }
+    #expect(admissions[1] == .started)
+    gate.release(1)
+    gate.release(20)
+    await dispatch.finish()
+    await work.finish()
+    #expect(store.state.loading == 1)
+  }
+
+  @Test(
+    "A latest request accepted for a closed lane holds the lane until it is admitted",
+    arguments: [false, true])
+  func latestRequestAcceptedForClosedLaneHoldsItsLane(concatenated: Bool) async {
+    let gate = EmissionGate()
+    let workCancellations = CancellationCounter()
+    let admissions = AdmissionRecorder()
+    let store = Store(
+      reducer: MergeOrderFeature(
+        gate: gate, workCancellations: workCancellations, admissions: admissions),
+      initialState: .init())
+
+    let work = store.send(.startWork(underLane: true))
+    await waitUntil { gate.hasStarted(20) }
+
+    // One MainActor turn: the `latest` request is accepted while no lane is
+    // open, and a request with another policy follows before either effect
+    // is interpreted. The root walk of that request reaches admission before
+    // the composite that contains the `latest` request.
+    let latest = store.send(concatenated ? .loadConcatenated : .load)
+    #expect(workCancellations.value == 1)
+    let other = store.send(.otherPolicy)
+
+    #expect(await waitUntil { admissions[1] != nil && admissions[2] != nil })
+    // The request that released the earlier work replaces it.
+    #expect(admissions[1] == .started)
+    #expect(admissions[2] == .rejected(.conflictingPolicy))
+
+    // Request 2 runs only when the lane was not held; its gate is released
+    // too, so such a run fails instead of waiting for it.
+    for index in [1, 2, 20] { gate.release(index) }
+    await latest.finish()
+    await other.finish()
+    await work.finish()
+    #expect(gate.hasStarted(2) == false)
+  }
+
+  @Test("A lane held for a latest request whose dispatch is cancelled is closed")
+  func laneHeldForCancelledLatestRequestIsClosed() async {
+    let gate = EmissionGate()
+    let admissions = AdmissionRecorder()
+    let store = Store(
+      reducer: MergeOrderFeature(
+        gate: gate, workCancellations: CancellationCounter(), admissions: admissions),
+      initialState: .init())
+
+    // One MainActor turn: the accepted request's dispatch is cancelled before
+    // its effect is interpreted, so the lane it held is closed again. Without
+    // a held lane the request with another policy opens the lane as well:
+    // this test guards the release of a held lane, not the hold.
+    let latest = store.send(.load)
+    latest.cancel()
+    let other = store.send(.otherPolicy)
+
+    #expect(await waitUntil { admissions[2] != nil })
+    #expect(admissions[2] == .started)
+    #expect(admissions[1] == nil)
+
+    gate.release(2)
+    await latest.finish()
+    await other.finish()
+  }
+
+  @Test("A lane held for a latest request keeps nothing of the request alive")
+  func laneHeldForCancelledLatestRequestRetainsNothing() async {
+    let store = Store(reducer: mergeOrderFeature(), initialState: .init())
+
+    // Nothing opens the lane afterwards, so the scheduler still has the held
+    // entry when the metrics are read.
+    let latest = store.send(.load)
+    latest.cancel()
+    await latest.finish()
+
+    #expect(await waitUntil { store.effectBridge.cancellationScopeMetrics.liveScopes == 0 })
+    #expect(store.effectBridge.cancellationScopeMetrics.liveExactTokens == 0)
+    #expect(store.runLane(for: AnyEffectID(mergeLaneID)) == nil)
+  }
+
+  @Test(
+    "A latest request is accepted in its turn whichever merge branch cancels its lane's owner",
+    arguments: [false, true])
+  func latestRequestAcceptedWhicheverBranchCancelsItsLaneOwner(ownerFirst: Bool) async {
+    let gate = EmissionGate()
+    let admissions = AdmissionRecorder()
+    let store = Store(
+      reducer: MergeOrderFeature(
+        gate: gate, workCancellations: CancellationCounter(), admissions: admissions),
+      initialState: .init())
+
+    // The running request of the `latest` lane is under the owner ID.
+    let running = store.send(.occupy(.latest, underOwner: true))
+    #expect(await waitUntil { gate.hasStarted(4) })
+
+    // One MainActor turn: the `latest` request meets the lane while another
+    // branch cancels the request that owns it. The lane admits the request
+    // either way, so the turn accepts it and holds the lane for it, and the
+    // request with another policy that follows meets a conflicting lane.
+    let dispatch = store.send(.cancelHolder(.latest, ownerFirst: ownerFirst))
+    let other = store.send(.otherPolicy)
+
+    #expect(await waitUntil { admissions[6] != nil && admissions[2] != nil })
+    #expect(admissions[6] == .started)
+    #expect(admissions[2] == .rejected(.conflictingPolicy))
+
+    for index in [2, 4, 6] { gate.release(index) }
+    await dispatch.finish()
+    await other.finish()
+    await running.finish()
+  }
+
+  @Test(
+    "A latest request holds its lane when another branch's request under its ID cannot cancel it",
+    arguments: MergeOrderFeature.OwnIDSibling.allCases)
+  fileprivate func latestRequestHoldsItsLaneWhenAnotherBranchCannotCancelIt(
+    sibling: MergeOrderFeature.OwnIDSibling
+  ) async {
+    let gate = EmissionGate()
+    let admissions = AdmissionRecorder()
+    let store = Store(
+      reducer: MergeOrderFeature(
+        gate: gate, workCancellations: CancellationCounter(), admissions: admissions),
+      initialState: .init())
+
+    // One MainActor turn: the `latest` request, under the owner ID that a
+    // sibling request uses without being able to cancel it, is accepted for
+    // the closed lane, which is held for it, so the request with another
+    // policy that follows meets a conflicting lane.
+    let latest = store.send(.loadWithOwnIDSibling(sibling))
+    let other = store.send(.otherPolicy)
+
+    #expect(await waitUntil { admissions[1] != nil && admissions[2] != nil })
+    #expect(admissions[1] == .started)
+    #expect(admissions[2] == .rejected(.conflictingPolicy))
+
+    for index in [1, 2] { gate.release(index) }
+    await latest.finish()
+    await other.finish()
+  }
+
+  @Test(
+    "A lane request meets the same lane whichever merge branch cancels the request it is held for",
+    arguments: [false, true])
+  func laneRequestIgnoresBranchOrderOfHeldRequestCancel(ownerFirst: Bool) async {
+    let gate = EmissionGate()
+    let workCancellations = CancellationCounter()
+    let admissions = AdmissionRecorder()
+    let store = Store(
+      reducer: MergeOrderFeature(
+        gate: gate, workCancellations: workCancellations, admissions: admissions),
+      initialState: .init())
+
+    let work = store.send(.startWork(underLane: false))
+    #expect(await waitUntil { gate.hasStarted(20) })
+
+    // One MainActor turn: the first dispatch's `latest` request, under the
+    // owner ID, is accepted for the closed lane, which is held for it. The
+    // second dispatch's drop request meets that held lane while another
+    // branch cancels the owner ID, which closes it.
+    let held = store.send(.loadUnderOwner)
+    let dispatch = store.send(.cancelHolder(.dropWhileRunning, ownerFirst: ownerFirst))
+    // The lane rejects the drop request while it is held and admits it once
+    // it is closed, so the turn accepted nothing behind the request: the
+    // cancel behind it waits for its run, in either order of the branches.
+    #expect(workCancellations.value == 0)
+
+    #expect(await waitUntil { admissions[6] != nil })
+    #expect(admissions[6] == .started)
+    #expect(workCancellations.value == 0)
+    gate.release(6)
+    await dispatch.finish()
+    #expect(workCancellations.value == 1)
+
+    for index in [1, 20] { gate.release(index) }
+    await held.finish()
+    await work.finish()
+    // The held request was cancelled before its admission.
+    #expect(gate.hasStarted(1) == false)
+  }
+
+  @Test(
+    "A lane request meets the same lane whichever merge branch cancels a request holding it",
+    arguments: [false, true], [false, true])
+  func laneRequestIgnoresBranchOrderOfHolderCancel(latestLane: Bool, ownerFirst: Bool) async {
+    let gate = EmissionGate()
+    let workCancellations = CancellationCounter()
+    let admissions = AdmissionRecorder()
+    let store = Store(
+      reducer: MergeOrderFeature(
+        gate: gate, workCancellations: workCancellations, admissions: admissions),
+      initialState: .init())
+
+    // The request under the owner ID holds the lane: the running request of
+    // a `latest` lane, or the pending request that fills a serial lane.
+    let running = store.send(
+      .occupy(latestLane ? .latest : .serial(maxPending: 1), underOwner: latestLane))
+    #expect(await waitUntil { gate.hasStarted(4) })
+    let pending = latestLane ? nil : store.send(.queueUnderOwner)
+    if !latestLane {
+      #expect(await waitUntil { admissions[5] == .queued(position: 1) })
+    }
+    let work = store.send(.startWork(underLane: false))
+    #expect(await waitUntil { gate.hasStarted(20) })
+
+    let dispatch = store.send(.cancelHolder(.serial(maxPending: 1), ownerFirst: ownerFirst))
+    // Nothing has suspended since `send` returned. The turn cancelled the
+    // owner ID, which changes the lane: before that cancel the lane rejects
+    // the serial request, after it the lane admits it. In either order of
+    // the branches the turn accepted nothing behind the request: the request
+    // is admitted, and the cancel behind it waits for its run.
+    #expect(workCancellations.value == 0)
+    if latestLane {
+      #expect(store.runLaneSnapshots().isEmpty)
+    } else {
+      #expect(store.runLaneSnapshots().first?.pendingRequestCount == 0)
+    }
+
+    #expect(await waitUntil { admissions[6] != nil })
+    #expect(admissions[6] == (latestLane ? .started : .queued(position: 1)))
+    #expect(workCancellations.value == 0)
+
+    // The cancel behind the request runs once the request's run completes.
+    gate.release(4)
+    #expect(await waitUntil { gate.hasStarted(6) })
+    gate.release(6)
+    await dispatch.finish()
+    #expect(workCancellations.value == 1)
+
+    for index in [5, 20] { gate.release(index) }
+    await running.finish()
+    await pending?.finish()
+    await work.finish()
+  }
+
+  // MARK: Throttle requests cancelled during their clock read
+
+  @Test(
+    "A throttle request cancelled during its clock read records the cancellation",
+    arguments: [false, true])
+  func throttleCancelledDuringClockReadRecordsCancellation(throughOwnerID: Bool) async {
+    let gate = EmissionGate()
+    let clock = ParkedClockRead(gate: gate)
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: ClockReadThrottleFeature(), initialState: .init(), clock: clock.storeClock,
+      diagnostics: diagnostics)
+
+    clock.parkNextRead()
+    let dispatch = store.send(.request(owned: throughOwnerID))
+    // The root interpreter is suspended in the throttle's clock read: the
+    // request is declared, but registered nowhere yet.
+    await waitUntil { gate.hasStarted(ParkedClockRead.index) }
+    await store.cancelEffects(identifiedBy: throughOwnerID ? throttleOwnerID : throttleWindowID)
+    gate.release(ParkedClockRead.index)
+    await dispatch.finish()
+
+    #expect(store.state.fired == 0)
+    #expect(cancellationRecorded(for: 0, in: diagnostics))
+  }
+
+  @Test("Control: a throttle request nothing cancels during its clock read records nothing")
+  func throttleNotCancelledDuringClockReadRecordsNothing() async {
+    let gate = EmissionGate()
+    let clock = ParkedClockRead(gate: gate)
+    let diagnostics = StoreDiagnostics(capacity: 64)
+    let store = Store(
+      reducer: ClockReadThrottleFeature(), initialState: .init(), clock: clock.storeClock,
+      diagnostics: diagnostics)
+
+    clock.parkNextRead()
+    let dispatch = store.send(.request(owned: true))
+    await waitUntil { gate.hasStarted(ParkedClockRead.index) }
+    gate.release(ParkedClockRead.index)
+    await dispatch.finish()
+
+    #expect(store.state.fired == 1)
+    #expect(cancellationRecorded(for: 0, in: diagnostics) == false)
+  }
+}
+
+private let throttleWindowID = EffectID<String>("reducer-cancellation-acceptance-throttle")
+private let throttleOwnerID = EffectID<String>("reducer-cancellation-acceptance-throttle-owner")
+
+/// A store clock whose next `now` read, once armed, waits on `gate` at
+/// ``index``.
+private final class ParkedClockRead: Sendable {
+  static let index = 77
+
+  private let gate: EmissionGate
+  private let isArmed = OSAllocatedUnfairLock(initialState: false)
+
+  init(gate: EmissionGate) {
+    self.gate = gate
+  }
+
+  func parkNextRead() {
+    isArmed.withLock { $0 = true }
+  }
+
+  var storeClock: StoreClock {
+    StoreClock(
+      now: { [self] in
+        let parks = isArmed.withLock { isArmed -> Bool in
+          defer { isArmed = false }
+          return isArmed
+        }
+        if parks {
+          gate.markStarted(Self.index)
+          await gate.waitUntilReleased(Self.index)
+        }
+        return ContinuousClock.now
+      },
+      sleep: { duration in try await Task.sleep(for: duration) }
+    )
+  }
+}
+
+/// A leading throttle request, optionally inside `.cancellable(owner)`.
+private struct ClockReadThrottleFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var fired = 0
+  }
+
+  enum Action: Sendable {
+    case request(owned: Bool)
+    case fired
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    switch action {
+    case .request(let owned):
+      let throttled = EffectTask<Action>.send(.fired)
+        .throttle(throttleWindowID, for: .milliseconds(30), leading: true, trailing: false)
+      return owned ? throttled.cancellable(throttleOwnerID) : throttled
+
+    case .fired:
+      state.fired += 1
+      return .none
+    }
   }
 }

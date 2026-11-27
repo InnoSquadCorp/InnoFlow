@@ -16,6 +16,9 @@ extension TestStore {
     context: EffectExecutionContext?
   ) async -> Task<Void, Never>? {
     let context = context?.frozenForExecution()
+    // Replacing a running `latest` request suspends the walk that requests
+    // it; a followed walk resumes one level deeper.
+    let admitting = TestStoreFollowedWalk.awaitingDriver(in: self)
     let plan = await runScheduler.admit(
       id: id,
       policy: policy,
@@ -42,6 +45,7 @@ extension TestStore {
           .cancelled(cause == .superseded ? .superseded : .effect), context: context)
       }
     )
+    admitting?.didResumeFromDriver()
 
     guard case .accepted(let ticket) = plan else {
       let admission: EffectAdmission
@@ -76,39 +80,47 @@ extension TestStore {
         dispatchActivity?.finish()
         endpoint.finishTrackedTask(token: token)
       }
-      let shouldStart = await withTaskCancellationHandler {
-        await ticket.gate.wait()
-      } onCancel: {
-        Task { @MainActor in
-          scheduler.cancel(token: token)
+      // What this task delivers later, such as the admission of the request
+      // its finish promotes, is handled at its delivery, not where the walk
+      // that created it runs.
+      await TestStoreFollowedWalk.runTask(following: nil) {
+        let shouldStart = await withTaskCancellationHandler {
+          await ticket.gate.wait()
+        } onCancel: {
+          Task { @MainActor in
+            scheduler.cancel(token: token)
+          }
         }
-      }
-      guard shouldStart, !Task.isCancelled else {
+        guard shouldStart, !Task.isCancelled else {
+          await scheduler.finish(token)
+          return
+        }
+        let runContext = EffectExecutionContext.withRunCancellation(
+          ticket.cancellationState,
+          on: context
+        ).frozenForExecution()
+        guard
+          let run = await self?.startRun(
+            priority: priority,
+            operation: operation,
+            context: runContext
+          )
+        else {
+          await scheduler.finish(token)
+          return
+        }
+        _ = scheduler.attachOperation(run, to: ticket)
+        _ = await run.result
         await scheduler.finish(token)
-        return
       }
-      let runContext = EffectExecutionContext.withRunCancellation(
-        ticket.cancellationState,
-        on: context
-      ).frozenForExecution()
-      guard
-        let run = await self?.startRun(
-          priority: priority,
-          operation: operation,
-          context: runContext
-        )
-      else {
-        await scheduler.finish(token)
-        return
-      }
-      _ = scheduler.attachOperation(run, to: ticket)
-      _ = await run.result
-      await scheduler.finish(token)
     }
 
     dispatchActivity?.attach(task)
     trackEffectTask(token: token, task: task, context: context)
+    // Starting the request suspends the walk once more.
+    let attaching = TestStoreFollowedWalk.awaitingDriver(in: self)
     _ = await runScheduler.attach(task, to: ticket)
+    attaching?.didResumeFromDriver()
     return task
   }
 }
