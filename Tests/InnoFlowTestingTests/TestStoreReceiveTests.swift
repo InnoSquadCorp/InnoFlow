@@ -355,6 +355,51 @@ struct TestStoreReceiveTests {
     #expect(consumedBudget >= minimumConsumedBudget)
     #expect(store.queue.pendingWaiterCount == 0)
   }
+
+  @Test("A failing finish withdraws the action a waiting receive was handed")
+  func failingFinishWithdrawsHandedAction() async {
+    let store = TestStore(reducer: ReceiveFeature(), initialState: .init())
+    let cancellationID = AnyEffectID(StaticEffectID("receive-handed-then-finish"))
+    var receiveResult: TestStoreReceiveResult<ReceiveFeature.Action, Void>?
+    let receiving = Task { @MainActor in
+      receiveResult = await store.receiveResult(timeout: .milliseconds(200)) { _ in
+        TestStoreActionMatch.matched(())
+      }
+    }
+    guard await waitUntil(condition: { store.queue.pendingWaiterCount == 1 }) else {
+      receiving.cancel()
+      _ = await receiving.value
+      Issue.record("Expected the receive waiter to be installed")
+      return
+    }
+
+    // One MainActor job: the waiter is handed the first action, the second
+    // stays buffered, and the finish fails on it before the waiter resumes.
+    let context = store.effectBoundaries.makeContext(
+      sequence: store.nextSequence(),
+      cancellationIDs: [cancellationID],
+      potentialCancellationIDs: [cancellationID]
+    )
+    store.deliverAction(.value(1), context: context)
+    store.deliverAction(.value(2), context: context)
+    let finished = await store.finishResult(timeout: .zero)
+    guard case .unhandledWork = finished else {
+      receiving.cancel()
+      _ = await receiving.value
+      Issue.record("Expected the finish to fail on the buffered action, got \(finished)")
+      return
+    }
+
+    // The finish cancelled the remaining work, the handed action included:
+    // the receive neither returns nor reduces it.
+    _ = await receiving.value
+    guard case .timedOut = receiveResult else {
+      Issue.record("Expected the receive to discard the withdrawn action")
+      return
+    }
+    #expect(store.state.values.isEmpty)
+    #expect(store.queue.pendingWaiterCount == 0)
+  }
 }
 
 private struct ExactReceiveFeature: Reducer {

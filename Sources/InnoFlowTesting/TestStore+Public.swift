@@ -23,18 +23,26 @@ extension TestStore {
   /// `Store` starts its walk: where that task runs, once the MainActor jobs
   /// queued before it have run, or, when the walk of the task created before
   /// it has not finished by then, in the job queued when that walk finishes.
-  /// It buffers what the effect delivers there, and, once the walk has first
-  /// suspended, where a `Store` resumes it at the earliest: a `Store`
-  /// resumes a suspended walk through the global executor, so where it
-  /// continues, and where a walk waiting for it then starts, is a race, and
-  /// the test store takes the earliest point. Two limitations are the
-  /// exception, and can place a value before jobs a `Store` runs first: a
-  /// walk that suspends more than once is placed as if it resumed once, and
-  /// the walks behind it start right behind that place; and positions more
-  /// than four interpreter jobs behind a delivery or send share the fourth
-  /// job's position. A buffered action reduced first whose walk had not
-  /// started when the send began, and every interpreted one reduced after
-  /// it, is walked after the new action is reduced, as in a `Store`.
+  /// It buffers what the effect delivers there, and, after each suspension,
+  /// where a `Store` resumes the walk at the earliest: a `Store` resumes a
+  /// suspended walk through the global executor, so where it continues, and
+  /// where a walk waiting for it then starts, is a race, and the test store
+  /// takes the earliest point. The tasks in which a `concatenate` or a
+  /// `merge` walks its children buffer what they deliver, until they await
+  /// other work, where a `Store` runs them at the earliest; the send does not
+  /// wait for them, and the next call that takes a buffered value does. Two
+  /// exceptions can place a value before jobs a `Store` runs first: positions
+  /// more than sixteen interpreter jobs behind a delivery or send share the
+  /// sixteenth job's position, and what a run, a timer or the children of an
+  /// awaited `merge` deliver is buffered at its delivery. A buffered action
+  /// reduced first whose walk had not started when the send began, and every
+  /// interpreted one reduced after it, is walked after the new action is
+  /// reduced, as in a `Store`.
+  ///
+  /// These rules describe sends and receives a test awaits one after
+  /// another. A call that begins in another task while an earlier one is
+  /// still walking an effect does not wait for that walk, so what it
+  /// delivers can come before values a `Store` handles first.
   @discardableResult
   public func send(
     _ action: R.Action,
@@ -68,6 +76,22 @@ extension TestStore {
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
     location: TestStoreSourceLocation
   ) async -> TestStoreDispatch {
+    await send(action, assert: updateExpectedState, location: location, didReduce: { _ in })
+  }
+
+  /// Sends `action` and verifies its state transition.
+  ///
+  /// - Parameter didReduce: Runs with the state right before the sent
+  ///   action's reduction, right after that reduction and its state
+  ///   assertion. The buffered actions the send reduces first have been
+  ///   reduced by then, so the two states differ by that one reduction.
+  @discardableResult
+  func send(
+    _ action: R.Action,
+    assert updateExpectedState: ((inout R.State) -> Void)?,
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void
+  ) async -> TestStoreDispatch {
     let prepared = await prepareForSend(location: location)
     let dispatch = makeDispatch()
     defer { dispatch.tracker.endActivity(dispatch.activity) }
@@ -89,6 +113,7 @@ extension TestStore {
       eventDescription: "mismatch after action.",
       location: location
     )
+    didReduce(previousState)
 
     await walkSentEffect(effect, context: context, prepared: prepared)
     return dispatch.task
@@ -103,12 +128,14 @@ extension TestStore {
   /// once the MainActor jobs queued before it have run, or, when the walk of
   /// the task created before it has not finished by then, in the job queued
   /// when that walk finishes — for a walk that suspended, the earliest point
-  /// at which a `Store` resumes and finishes it. The same two limitations
-  /// are the exception, and can place a value before jobs a `Store` runs
-  /// first: a walk that suspends more than once is placed as if it resumed
-  /// once, and the walks behind it start right behind that place; and
-  /// positions more than four interpreter jobs behind a delivery or send
-  /// share the fourth job's position.
+  /// at which a `Store` resumes and finishes it. What it delivers is buffered
+  /// as for a send, with the same two exceptions, which can place a value
+  /// before jobs a `Store` runs first: positions more than sixteen
+  /// interpreter jobs behind a delivery or send share the sixteenth job's
+  /// position, and what a run, a timer or the children of an awaited `merge`
+  /// deliver is buffered at its delivery. Before it takes a buffered value,
+  /// the receive waits for the tasks of a `concatenate` or `merge` the store
+  /// follows, which can buffer a value ahead of the ones already buffered.
   public func receive(
     _ expectedAction: R.Action,
     assert updateExpectedState: ((inout R.State) -> Void)? = nil,
@@ -150,8 +177,9 @@ extension TestStore {
   /// Receives an exact action using a timeout for this assertion only.
   ///
   /// The timeout is one total wall-clock budget, including time spent
-  /// discarding actions invalidated by effect cancellation or reducing
-  /// mismatches in non-exhaustive mode.
+  /// waiting for a composite task the store follows, discarding actions
+  /// invalidated by effect cancellation, or reducing mismatches in
+  /// non-exhaustive mode.
   public func receive(
     _ expectedAction: R.Action,
     timeout: Duration,
@@ -381,11 +409,20 @@ extension TestStore {
     }
   }
 
-  private func receiveExact(
+  /// Receives the next buffered effect action, requires it to equal
+  /// `expectedAction`, and verifies its state transition.
+  ///
+  /// - Parameter didReduce: Runs with the state right before the received
+  ///   action's reduction, right after that reduction and its state
+  ///   assertion. A non-exhaustive store has reduced the actions it skips by
+  ///   then, so the two states differ by that one reduction. It does not run
+  ///   when `expectedAction` is not received.
+  func receiveExact(
     _ expectedAction: R.Action,
     timeout: Duration?,
     assert updateExpectedState: ((inout R.State) -> Void)?,
-    location: TestStoreSourceLocation
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void = { _ in }
   ) async where R.Action: Equatable {
     let result = await receiveMatchingResult(timeout: timeout, location: location) { action in
       action == expectedAction ? .matched(()) : .mismatched
@@ -396,7 +433,8 @@ extension TestStore {
       await applyReceivedAction(
         action,
         assert: updateExpectedState,
-        location: location
+        location: location,
+        didReduce: didReduce
       )
 
     case .mismatched(let action):
@@ -432,7 +470,8 @@ extension TestStore {
   private func applyReceivedAction(
     _ queuedAction: ActionQueue<R.Action>.QueuedAction,
     assert updateExpectedState: ((inout R.State) -> Void)?,
-    location: TestStoreSourceLocation
+    location: TestStoreSourceLocation,
+    didReduce: (_ previousState: R.State) -> Void = { _ in }
   ) async {
     await reduceReceivedAction(
       queuedAction, source: .receive, location: location,
@@ -449,6 +488,7 @@ extension TestStore {
           eventDescription: "mismatch after receiving action.",
           location: location
         )
+        didReduce(previousState)
       })
   }
 

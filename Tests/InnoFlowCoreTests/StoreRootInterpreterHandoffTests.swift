@@ -22,6 +22,7 @@ import Testing
 // delivers between the two: wherever the earlier walk resumed.
 
 private let throttleID = EffectID<String>("root-handoff-throttle")
+private let secondThrottleID = EffectID<String>("root-handoff-second-throttle")
 private let immediateID = EffectID<String>("root-handoff-immediate")
 
 private func stepID(_ step: Int) -> EffectID<String> {
@@ -76,6 +77,60 @@ private final class ClockReadGate {
   }
 }
 
+/// A store clock for a throttle walked behind another one. The first read
+/// stays suspended until the test releases it. A later read keeps its task
+/// suspended until that task runs at `.high`, or until a scaled deadline
+/// passes, and records the priority its task had then.
+@MainActor
+private final class EscalationClock {
+  private var firstReader: CheckedContinuation<Void, Never>?
+  private var readCount = 0
+  private let instant = ContinuousClock.now
+  private let priorities = Mutex<[TaskPriority]>([])
+
+  var isFirstReadSuspended: Bool { firstReader != nil }
+
+  /// The priority of each later reading task when its read returned.
+  nonisolated var laterReadPriorities: [TaskPriority] { priorities.withLock { $0 } }
+
+  func releaseFirstRead() {
+    firstReader?.resume()
+    firstReader = nil
+  }
+
+  /// Suspends the first read until the test releases it.
+  ///
+  /// - Returns: Whether this was the first read.
+  private func readFirst() async -> Bool {
+    readCount += 1
+    guard readCount == 1 else { return false }
+    await withCheckedContinuation { firstReader = $0 }
+    return true
+  }
+
+  private func currentInstant() -> ContinuousClock.Instant { instant }
+
+  nonisolated var clock: StoreClock {
+    StoreClock(
+      now: {
+        guard await !self.readFirst() else { return await self.currentInstant() }
+        // Only a task awaiting this one can raise it while it reads.
+        let deadline = ContinuousClock.now.advanced(by: scaledTestDeadline(.seconds(5)))
+        while Task.currentPriority.rawValue < TaskPriority.high.rawValue,
+          ContinuousClock.now < deadline
+        {
+          await Task.yield()
+        }
+        let priority = Task.currentPriority
+        self.priorities.withLock { $0.append(priority) }
+        return await self.currentInstant()
+      },
+      // Only cancellation ends a throttle window in these tests.
+      sleep: { duration in try await Task.sleep(for: duration) }
+    )
+  }
+}
+
 private struct HandoffFeature: Reducer {
   struct State: Equatable, Sendable {}
 
@@ -83,9 +138,12 @@ private struct HandoffFeature: Reducer {
     /// A leading throttle around `.send(.lead)`: its interpreter suspends to
     /// read the clock before it delivers.
     case throttled
+    /// A leading throttle around `.send(.secondLead)` under another ID.
+    case throttledAgain
     /// `.send(.lead)` under an ID: its interpreter finishes in its first job.
     case immediate
     case lead
+    case secondLead
     /// `.send(.stepped(step))` under the step's ID.
     case step(Int)
     case stepped(Int)
@@ -109,10 +167,15 @@ private struct HandoffFeature: Reducer {
     switch action {
     case .throttled:
       return EffectTask<Action>.send(.lead).throttle(throttleID, for: .seconds(60))
+    case .throttledAgain:
+      return EffectTask<Action>.send(.secondLead).throttle(secondThrottleID, for: .seconds(60))
     case .immediate:
       return EffectTask<Action>.send(.lead).cancellable(immediateID)
     case .lead:
       record("lead")
+      return .none
+    case .secondLead:
+      record("secondLead")
       return .none
     case .step(let step):
       return EffectTask<Action>.send(.stepped(step)).cancellable(stepID(step))
@@ -283,11 +346,10 @@ struct StoreRootInterpreterHandoffTests {
         last = store.send(.step(2))
       }
       cancelled.cancel()
-      // The cancelled interpreter still waits for its turn.
-      #expect(!cancelled.isFinished)
 
-      // Its turn is the job behind `lead/1`; the next interpreter starts in
-      // the job queued when that turn ends, behind `lead/2`.
+      // The cancelled interpreter keeps its turn, the job behind `lead/1`;
+      // the next interpreter starts in the job queued when that turn ends,
+      // behind `lead/2`.
       gate.releaseReads()
       await waitFor { last.isFinished }
       #expect(cancelled.isFinished)
@@ -346,6 +408,29 @@ struct StoreRootInterpreterHandoffTests {
     }
   }
 
+  @Test("Cancelling every effect while interpreters wait ends every dispatch and walks nothing")
+  func cancellingAllEffectsWhileWaitingEndsEveryDispatch() async {
+    for _ in 0..<Self.repetitions {
+      let recorder = OrderRecorder()
+      let gate = ClockReadGate()
+      let store = Store(
+        reducer: HandoffFeature(recorder: recorder),
+        initialState: .init(), clock: gate.clock)
+
+      let throttled = store.send(.throttled)
+      let first = store.send(.step(1))
+      let second = store.send(.step(2))
+      await mainActorBarrier()
+      await waitFor { gate.suspendedReadCount == 1 }
+      await store.cancelAllEffects()
+
+      gate.releaseReads()
+      await waitFor { throttled.isFinished && first.isFinished && second.isFinished }
+      #expect(!recorder.all.contains("s1"))
+      #expect(!recorder.all.contains("s2"))
+    }
+  }
+
   @Test("A store released before a waiting interpreter's turn ends that interpreter's dispatch")
   func storeReleasedBeforeWaitingTurnEndsItsDispatch() async {
     for _ in 0..<Self.repetitions {
@@ -396,6 +481,43 @@ struct StoreRootInterpreterHandoffTests {
       gate.releaseReads()
       await waitFor { recorder.all.count == 2 }
       #expect(gate.prioritiesAfterRead == [.high])
+      await store.cancelAllEffects()
+    }
+  }
+
+  @Test("An interpreter that waits keeps raising the walk before it once that walk was handed off")
+  func waitingInterpreterRaisesAHandedOffWalk() async {
+    for _ in 0..<Self.repetitions {
+      let recorder = OrderRecorder()
+      let clock = EscalationClock()
+      let store = Store(
+        reducer: HandoffFeature(recorder: recorder),
+        initialState: .init(), clock: clock.clock)
+
+      // Two throttles are created at low priority: the first suspends to read
+      // the clock, and the second waits for it. Nothing awaits the sending
+      // task, so nothing else raises a priority.
+      Task(priority: .low) { @MainActor in
+        _ = store.send(.throttled)
+        _ = store.send(.throttledAgain)
+      }
+      await mainActorBarrier()
+      await mainActorBarrier()
+      await waitFor { clock.isFirstReadSuspended }
+      // The one behind them is created at high priority and waits for the
+      // second throttle's interpreter task.
+      Task(priority: .high) { @MainActor in _ = store.send(.step(1)) }
+      await mainActorBarrier()
+      await mainActorBarrier()
+
+      // The first walk finishes, and the second is handed off to a task at
+      // the low priority it was created with, which suspends to read the
+      // clock. Only the waiting interpreter, which now awaits that task, can
+      // raise it.
+      clock.releaseFirstRead()
+      await waitFor { recorder.all.count == 3 }
+      #expect(recorder.all == ["lead", "secondLead", "s1"])
+      #expect(clock.laterReadPriorities == [.high])
       await store.cancelAllEffects()
     }
   }

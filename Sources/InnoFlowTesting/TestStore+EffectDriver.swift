@@ -97,6 +97,7 @@ extension TestStore: EffectDriver {
     guard shouldProceed(context: context) else { return nil }
 
     guard let generation = beginDebounce(scope) else { return nil }
+    let recurse = TestStoreFollowedWalk.unfollowed(recurse)
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
     let activityToken = UUID()
     beginFinishActivity(.debounce, token: activityToken, context: context)
@@ -157,6 +158,7 @@ extension TestStore: EffectDriver {
     let schedulingContext = schedulingContext.frozenForExecution()
     throttleState.cancelTrailingTask(for: id)
     let generation = throttleState.nextGeneration(for: id)
+    let recurse = TestStoreFollowedWalk.unfollowed(recurse)
     let delayClock = manualClock.map { StoreClock.manual($0) } ?? .continuous
     let activityToken = UUID()
     beginFinishActivity(
@@ -181,6 +183,13 @@ extension TestStore: EffectDriver {
           }
           guard let pending = self.throttleState.pendingToFire(for: id) else { return nil }
           guard self.shouldProceed(context: pending.context) else { return nil }
+          // The fired request can be an older one the window fell back to.
+          // Its work runs in this task from now on, so only its own IDs may
+          // cancel the task: a `Store`, whose shared timer carries no ID, lets
+          // only the fired request's IDs stop that work.
+          if let token = self.throttleActivityTokenByID[id] {
+            self.refreshTrackedTask(token: token, context: pending.context)
+          }
           return pending
         }
       } catch {
@@ -224,10 +233,11 @@ extension TestStore: EffectDriver {
 
   package var now: ContinuousClock.Instant {
     get async {
-      if let manualClock {
-        return await manualClock.now
-      }
-      return await continuousClockNow()
+      // A followed walk resumes from the read one level deeper.
+      let walk = TestStoreFollowedWalk.awaitingDriver(in: self)
+      defer { walk?.didResumeFromDriver() }
+      guard let manualClock else { return await continuousClockNow() }
+      return await manualClock.now
     }
   }
 
@@ -239,7 +249,7 @@ extension TestStore: EffectDriver {
         ReducerEffect<R.Action, R.Output>, EffectExecutionContext?, Bool
       ) async -> Void
   ) async {
-    for child in children {
+    for (child, walk) in followedWalks(ofConcurrent: children, context: context) {
       let token = UUID()
       beginFinishActivity(.composite, token: token, context: context)
       let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
@@ -248,8 +258,10 @@ extension TestStore: EffectDriver {
           dispatchActivity?.finish()
           self?.finishTrackedRunTask(token: token)
         }
-        guard self != nil else { return }
-        await recurse(child, context, false)
+        await TestStoreFollowedWalk.runTask(following: walk) {
+          guard self != nil else { return }
+          await recurse(child, context, false)
+        }
       }
       // Track unawaited concurrent children so cancelAllEffectsSynchronously
       // can reach them. Without this, fire-and-forget Tasks here would
@@ -270,29 +282,26 @@ extension TestStore: EffectDriver {
   ) async {
     let token = UUID()
     beginFinishActivity(.composite, token: token, context: context)
-    let startGate = TestStoreRunStartGate()
     let endpoint = makeRunEndpoint()
     let dispatchActivity = (context?.flowTaskTracker).map(TestStoreDispatchActivity.init)
+    let walk = TestStoreFollowedWalk.ofSequentialTask(in: self, context: context)
+    // The MainActor task body cannot start before the registration below.
     let task = Task { @MainActor in
       defer {
         dispatchActivity?.finish()
         endpoint.finishTrackedTask(token: token)
       }
-      guard await startGate.wait() else {
-        return
-      }
-      for child in children {
-        guard !Task.isCancelled else { break }
-        guard endpoint.isTaskActive(token: token) else { break }
-        guard endpoint.shouldProceed(context: context) else { break }
-        await recurse(child, context, true)
+      await TestStoreFollowedWalk.runTask(following: walk) {
+        for child in children {
+          guard !Task.isCancelled else { break }
+          guard endpoint.isTaskActive(token: token) else { break }
+          guard endpoint.shouldProceed(context: context) else { break }
+          await recurse(child, context, true)
+        }
       }
     }
     dispatchActivity?.attach(task)
     trackEffectTask(token: token, task: task, context: context)
-    Task { @MainActor in
-      await startGate.open()
-    }
   }
 }
 
@@ -319,9 +328,10 @@ extension TestStore: ReductionTurnCancellationAcceptor {
     context: EffectExecutionContext
   ) {
     guard context.cancellationScope != nil else { return }
-    // The same order `Store` uses: the lane's requests are displaced and
-    // reported as superseded, then everything else under `id` is released.
-    runScheduler.displaceLatestLane(id: id, successor: context)
+    // The same order `Store` uses: the lane is held for the request, its
+    // earlier requests displaced and reported as superseded, then everything
+    // else under `id` is released.
+    runScheduler.holdLatestLane(id: id, successor: context)
     acceptInReductionTurn(.inFlight(id), context: context)
   }
 

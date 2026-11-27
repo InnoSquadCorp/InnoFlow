@@ -584,7 +584,7 @@ struct EffectRunSchedulerTests {
 @Suite("Effect run admission after cancellation", .timeLimit(.minutes(5)))
 @MainActor
 struct EffectRunAdmissionCancellationTests {
-  // MARK: Displaced latest lanes
+  // MARK: Latest lanes held for an accepted request
 
   @Test("A displaced latest lane is still the open latest lane until its replacement is admitted")
   func displacedLatestLaneConflictsUntilReplacementIsAdmitted() async {
@@ -611,7 +611,7 @@ struct EffectRunAdmissionCancellationTests {
     let replacementSequence = store.effectBridge.nextSequence()
     let replacement = store.effectBridge.makeEffectContext(
       sequence: replacementSequence, cancellationIDs: [lane], potentialCancellationIDs: [lane])
-    scheduler.displaceLatestLane(id: lane, successor: replacement)
+    scheduler.holdLatestLane(id: lane, successor: replacement)
     #expect(scheduler.snapshots(limit: 1).isEmpty)
 
     let laterSequence = store.effectBridge.nextSequence()
@@ -635,6 +635,131 @@ struct EffectRunAdmissionCancellationTests {
     scheduler.cancelAll()
   }
 
+  @Test("A latest request accepted for a closed lane holds the lane until it is admitted")
+  func latestRequestAcceptedForClosedLaneHoldsTheLane() async {
+    let store = Store(reducer: SameDispatchLatestFeature())
+    let scheduler = store.effectBridge.runScheduler
+    let lane = AnyEffectID(StaticEffectID("held-closed-latest-lane"))
+    func admit(
+      _ policy: EffectExecutionPolicy, sequence: UInt64, context: EffectExecutionContext? = nil
+    ) async -> EffectRunScheduler.Plan {
+      await scheduler.admit(
+        id: lane, policy: policy, cancellationIDs: [], sequence: sequence, dispatchID: nil,
+        onCancellation: { _, _ in }, onStart: { _ in }, onPendingExit: { _ in },
+        context: context)
+    }
+
+    // The request's reduction turn accepts it while no lane is open.
+    let acceptedSequence = store.effectBridge.nextSequence()
+    let accepted = store.effectBridge.makeEffectContext(
+      sequence: acceptedSequence, cancellationIDs: [lane], potentialCancellationIDs: [lane])
+    #expect(scheduler.laneView(for: lane) == nil)
+    scheduler.holdLatestLane(id: lane, successor: accepted)
+    #expect(scheduler.laneView(for: lane)?.policy == .latest)
+    // Cancelling the accepted request closes the held lane.
+    #expect(scheduler.laneView(for: lane)?.ownerCancellationIDs == [lane])
+    #expect(scheduler.snapshots(limit: 1).isEmpty)
+
+    let laterSequence = store.effectBridge.nextSequence()
+    let serial = await admit(.serial(maxPending: 4), sequence: laterSequence)
+    #expect(rejection(serial) == .conflictingPolicy)
+    let drop = await admit(.dropWhileRunning, sequence: laterSequence)
+    #expect(rejection(drop) == .conflictingPolicy)
+
+    guard case .accepted = await admit(.latest, sequence: acceptedSequence, context: accepted)
+    else {
+      Issue.record("The accepted request must open the lane held for it")
+      scheduler.cancelAll()
+      return
+    }
+    #expect(scheduler.snapshots(limit: 1).count == 1)
+    scheduler.cancelAll()
+  }
+
+  enum HeldLaneRelease: String, CaseIterable, Sendable {
+    /// No interpreter of the request's scope is left. A frozen copy of its
+    /// context, like a started run's, keeps the scope alive.
+    case interpreterGone
+    /// The request's dispatch finished without reaching its admission.
+    case dispatchFinished
+    /// The request's admission turned it away.
+    case admissionTurnedAway
+  }
+
+  @Test(
+    "A held lane closes once its request can no longer be admitted",
+    arguments: HeldLaneRelease.allCases)
+  func heldLaneClosesOnceItsRequestCanNoLongerBeAdmitted(release: HeldLaneRelease) async {
+    let store = Store(reducer: SameDispatchLatestFeature())
+    let scheduler = store.effectBridge.runScheduler
+    let lane = AnyEffectID(StaticEffectID("held-lane-release"))
+    let tracker = FlowTaskTracker()
+    let activity = tracker.beginActivity()
+    let sequence = store.effectBridge.nextSequence()
+    var accepted: EffectExecutionContext? = store.effectBridge.makeEffectContext(
+      sequence: sequence, cancellationIDs: [lane], potentialCancellationIDs: [lane],
+      flowTaskTracker: tracker)
+    scheduler.holdLatestLane(id: lane, successor: accepted!)
+    #expect(scheduler.laneView(for: lane)?.policy == .latest)
+
+    var frozen: EffectExecutionContext?
+    switch release {
+    case .interpreterGone:
+      frozen = accepted?.frozenForExecution()
+      accepted = nil
+    case .dispatchFinished:
+      tracker.endActivity(activity)
+    case .admissionTurnedAway:
+      let context = accepted!
+      let turnedAway = Task { @MainActor in
+        await scheduler.admit(
+          id: lane, policy: .latest, cancellationIDs: context.cancellationIDs,
+          sequence: sequence, dispatchID: nil, onCancellation: { _, _ in }, onStart: { _ in },
+          onPendingExit: { _ in }, context: context)
+      }
+      turnedAway.cancel()
+      guard case .terminal(.cancelledBeforeStart) = await turnedAway.value else {
+        Issue.record("A request whose task was cancelled must be turned away")
+        scheduler.cancelAll()
+        return
+      }
+    }
+    #expect(scheduler.laneView(for: lane) == nil)
+
+    withExtendedLifetime((accepted, frozen)) {}
+    if release != .dispatchFinished {
+      tracker.endActivity(activity)
+    }
+    scheduler.cancelAll()
+  }
+
+  @Test("A lane held for a latest request that can no longer proceed is closed")
+  func laneHeldForCancelledLatestRequestIsClosed() async {
+    let store = Store(reducer: SameDispatchLatestFeature())
+    let scheduler = store.effectBridge.runScheduler
+    let lane = AnyEffectID(StaticEffectID("held-then-cancelled-latest-lane"))
+
+    let acceptedSequence = store.effectBridge.nextSequence()
+    let accepted = store.effectBridge.makeEffectContext(
+      sequence: acceptedSequence, cancellationIDs: [lane], potentialCancellationIDs: [lane])
+    scheduler.holdLatestLane(id: lane, successor: accepted)
+    #expect(scheduler.laneView(for: lane)?.policy == .latest)
+
+    // The accepted request is cancelled before the lane admits it.
+    _ = store.effectBridge.markCancelled(id: lane, upTo: acceptedSequence)
+    #expect(scheduler.laneView(for: lane) == nil)
+    let drop = await scheduler.admit(
+      id: lane, policy: .dropWhileRunning, cancellationIDs: [],
+      sequence: store.effectBridge.nextSequence(), dispatchID: nil,
+      onCancellation: { _, _ in }, onStart: { _ in }, onPendingExit: { _ in })
+    guard case .accepted = drop else {
+      Issue.record("A request with another policy must open the closed lane")
+      scheduler.cancelAll()
+      return
+    }
+    scheduler.cancelAll()
+  }
+
   @Test(
     "A merged serial request cannot reopen a latest lane its latest sibling replaced",
     arguments: [false, true])
@@ -655,6 +780,29 @@ struct EffectRunAdmissionCancellationTests {
     #expect(store.state.admissions.contains(rejected))
     #expect(store.state.admissions.contains(.init(request: 3, admission: .started)))
     #expect(store.state.completed == [3])
+  }
+
+  @Test("TestStore closes a lane held for a latest request whose send's task was cancelled")
+  func testStoreClosesLaneHeldForRequestOfCancelledSend() async {
+    let probe = ScheduledRunProbe()
+    let store = TestStore(reducer: MergedLaneFeature(probe: probe))
+    store.exhaustivity = .off
+    let lane = AnyEffectID(StaticEffectID("merged-lane"))
+
+    // The task is cancelled before it starts. The reduction turn accepts the
+    // merged `latest` request and holds the closed lane for it, but the
+    // cancelled task never walks the effect: no interpreter of the request is
+    // left, and the dispatch finishes without it.
+    let cancelledSend = Task { @MainActor in _ = await store.send(.mergedLatest) }
+    cancelledSend.cancel()
+    await cancelledSend.value
+    #expect(store.runLane(for: lane) == nil)
+
+    await store.send(.drop)
+    #expect(await waitUntilAsync { await probe.startedValues() == [4] })
+    await probe.release(4)
+    await store.finish()
+    #expect(store.state.admissions.contains(.init(request: 4, admission: .started)))
   }
 
   @Test(
@@ -822,6 +970,11 @@ private struct MergedLaneFeature: Reducer {
   enum Action: Equatable, Sendable {
     case open
     case merged(latestFirst: Bool)
+    /// `merge(.send(.marker), latest request 3)`.
+    case mergedLatest
+    /// Drop request 4.
+    case drop
+    case marker
     case admission(Int, EffectAdmission)
     case completed(Int)
   }
@@ -852,6 +1005,15 @@ private struct MergedLaneFeature: Reducer {
       let serial = request(2, .serial(maxPending: 4))
       let latest = request(3, .latest)
       return latestFirst ? .merge(latest, serial) : .merge(serial, latest)
+
+    case .mergedLatest:
+      return .merge(.send(.marker), request(3, .latest))
+
+    case .drop:
+      return request(4, .dropWhileRunning)
+
+    case .marker:
+      return .none
 
     case .admission(let request, let admission):
       state.admissions.append(.init(request: request, admission: admission))

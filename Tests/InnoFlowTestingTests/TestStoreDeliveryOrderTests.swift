@@ -22,24 +22,24 @@ import Testing
 // it, such as the rest of the received action's job or an emission already
 // on its way when the action was delivered or sent, and before the jobs
 // queued after it, such as the run's next emission or the next step of a
-// `concatenate` after a run. The last rule holds unless the interpreter task
-// created before it has not finished, because it suspended or still waits
-// for its own predecessor: a `Store` then starts the walk in the job queued
-// when that task finishes, and where a suspended walk resumes, and so
-// finishes, is a race in a `Store`; those tests compare with the earliest
-// point a `Store` reaches. The test store's two known
-// limitations — a walk that suspends more than once, with the walks behind
-// it, and positions past the fourth interpreter level behind a delivery or
-// send — change no order these tests assert, although a walk here can reach
-// such a position where nothing competes with it, as in
-// `sentWalkWaitsForSuspendedWalkBeforeIt`. A cancellation the test issues
+// `concatenate` after a run. The same holds for the task a `concatenate`
+// walks its children in. The last rule holds unless the task waits for
+// something first — the interpreter task created before it, which suspended
+// or still waits for its own predecessor, or the hops a `merge`'s child
+// takes to the MainActor. A `Store` starts a walk that waits for the one
+// before it in the job queued when that one finishes; where a suspended walk
+// resumes, and so finishes, and where a `merge`'s child starts, is a race in
+// a `Store`; those tests compare with the earliest point a `Store` reaches,
+// and with the orders a `Store` keeps in every run. Positions past the
+// sixteenth interpreter level behind a delivery or send, which the test
+// store collapses, are outside these tests. A cancellation the test issues
 // itself is the one exception to the first rule: it lands before the values
 // it covers.
 //
 // A test queues a MainActor job ahead of its next statement by creating a
 // MainActor task that delivers through the store's effect driver, as the
-// MainActor job of a run's emission does: created MainActor tasks run in the
-// order they are created, so no blocking or sleeping is needed.
+// MainActor job of a run's emission does: MainActor tasks start in the order
+// they are created, so no blocking or sleeping is needed.
 
 private let markID = EffectID<String>("delivery-order-mark")
 private let otherID = EffectID<String>("delivery-order-other")
@@ -970,7 +970,7 @@ private let nestedID = EffectID<String>("delivery-order-nested")
 
 /// Queues a MainActor job that delivers `action` through the store's effect
 /// driver under `ids`, as the MainActor job of a run's emission does, and
-/// then runs `next` in the same job. MainActor tasks run in the order they
+/// then runs `next` in the same job. MainActor tasks start in the order they
 /// are created, so the job runs after every job queued before it and before
 /// every job queued after it, without blocking or sleeping.
 @MainActor
@@ -1064,11 +1064,34 @@ private func mainActorBarrier() async {
   await Task { @MainActor in }.value
 }
 
-/// Lets a `Store` run the MainActor jobs it queues, one level of interpreter
-/// tasks per barrier, until `done` holds.
+/// Waits until `done` holds, one MainActor barrier at a time: a `Store` runs
+/// one level of the interpreter tasks it queued per barrier, and work it
+/// started on another executor, such as a clock read, gets back to the
+/// MainActor in between. The deadline only reports a condition that never
+/// holds, where the wait was written, so the test does not go on as if the
+/// event had happened.
 @MainActor
-private func settle(until done: @MainActor () -> Bool) async {
-  for _ in 0..<16 where !done() {
+private func settle(
+  sourceLocation: SourceLocation = #_sourceLocation,
+  until done: @MainActor () -> Bool
+) async {
+  let deadline = ContinuousClock.now.advanced(by: .seconds(5) * testWaitScale)
+  while !done() {
+    guard ContinuousClock.now < deadline else {
+      Issue.record("The awaited condition was not reached in time", sourceLocation: sourceLocation)
+      return
+    }
+    await mainActorBarrier()
+  }
+}
+
+/// Runs the MainActor jobs queued so far and the jobs they queue, sixteen
+/// levels deep, which is more than any chain of jobs these tests queue. For
+/// work that stays on the MainActor: work on another executor is awaited
+/// through its event first.
+@MainActor
+private func drainMainActorJobs() async {
+  for _ in 0..<16 {
     await mainActorBarrier()
   }
 }
@@ -1079,9 +1102,11 @@ private func settle(until done: @MainActor () -> Bool) async {
 /// reads the clock from the MainActor before this helper's task exists, so
 /// its read is served first; a `Store`'s order in these tests does not
 /// depend on the hold, which only fixes where the test store's walk resumes.
-/// The deadline only bounds a stalled executor.
+/// The deadline bounds a stalled executor, which is reported.
 @MainActor
-private func holdUntilClockReadsServed(_ clock: ManualTestClock) {
+private func holdUntilClockReadsServed(
+  _ clock: ManualTestClock, sourceLocation: SourceLocation = #_sourceLocation
+) {
   let served = ServedFlag()
   // The priority of the jobs that read the clock: an actor serves the jobs of
   // one priority in the order they were queued. A lower one would starve
@@ -1092,6 +1117,9 @@ private func holdUntilClockReadsServed(_ clock: ManualTestClock) {
   }
   let deadline = ContinuousClock.now.advanced(by: .seconds(5) * testWaitScale)
   while !served.isSet, ContinuousClock.now < deadline {}
+  if !served.isSet {
+    Issue.record("The clock did not serve the reads queued on it", sourceLocation: sourceLocation)
+  }
 }
 
 private final class ServedFlag: Sendable {
@@ -1699,6 +1727,483 @@ private enum EndedChainShape: String, CaseIterable, Sendable, CustomTestStringCo
   }
 }
 
+// MARK: - Composite tasks, repeated suspensions, deep levels
+
+private let compositeFollowID = EffectID<String>("delivery-order-composite-follow")
+private let compositeNestedID = EffectID<String>("delivery-order-composite-nested")
+private let compositeSiblingID = EffectID<String>("delivery-order-composite-sibling")
+private let compositeThrottleID = EffectID<String>("delivery-order-composite-throttle")
+private let outerThrottleID = EffectID<String>("delivery-order-outer-throttle")
+private let chainEmissionID = EffectID<String>("delivery-order-chain-emission")
+private let admissionRunID = EffectID<String>("delivery-order-admission-run")
+
+/// Counts the jobs of a job chain that have run.
+@MainActor
+private final class JobChainProgress {
+  var ranCount = 0
+}
+
+/// Runs a MainActor job that delivers `first`, then runs `afterFirst` and
+/// queues a chain of jobs: each delivers the next action of `chain` and
+/// queues the job after it. `deliver` learns whether an action comes from the
+/// chain. A job of the chain runs behind every job queued while the one
+/// before it ran, so the chain counts the MainActor jobs behind the first
+/// delivery, without blocking or sleeping.
+@MainActor
+private func runJobChain<Action: Sendable>(
+  delivering first: [Action],
+  then afterFirst: (@MainActor @Sendable () -> Void)? = nil,
+  chain: [Action],
+  progress: JobChainProgress,
+  deliver: @escaping @MainActor @Sendable (Action, _ isChained: Bool) -> Void
+) async {
+  await Task { @MainActor in
+    for action in first { deliver(action, false) }
+    afterFirst?()
+    queueChainedJobs(chain[...], progress: progress) { deliver($0, true) }
+  }.value
+}
+
+@MainActor
+private func queueChainedJobs<Action: Sendable>(
+  _ actions: ArraySlice<Action>, progress: JobChainProgress,
+  deliver: @escaping @MainActor @Sendable (Action) -> Void
+) {
+  guard let next = actions.first else { return }
+  Task { @MainActor in
+    deliver(next)
+    progress.ranCount += 1
+    queueChainedJobs(actions.dropFirst(), progress: progress, deliver: deliver)
+  }
+}
+
+/// What a `Store` reduces when one MainActor job delivers `first` and a chain
+/// of jobs behind it delivers `chain`, under `chainIDs`: everything up to
+/// when it has reduced every action of `expected`.
+@MainActor
+private func reducedByStore<R: Reducer>(
+  _ reducer: R, initialState: R.State, log: any KeyPath<R.State, [String]> & Sendable,
+  delivering first: [R.Action], chain: [R.Action], chainIDs: [AnyEffectID],
+  reducing expected: [String], end: R.Action
+) async -> [String] {
+  let store = Store(
+    reducer: reducer, initialState: initialState, clock: .manual(ManualTestClock()))
+  let bridge = store.effectBridge
+  let chainContext = bridge.makeEffectContext(
+    sequence: bridge.nextSequence(), cancellationIDs: chainIDs)
+  let progress = JobChainProgress()
+  await runJobChain(delivering: first, chain: chain, progress: progress) { action, isChained in
+    store.deliverAction(action, context: isChained ? chainContext : nil)
+  }
+  // A `Store` hands walks back to the MainActor from other executors.
+  let reducedExpected = await waitUntil(timeout: .seconds(5), pollInterval: .milliseconds(1)) {
+    progress.ranCount == chain.count && Set(expected).isSubset(of: store.state[keyPath: log])
+  }
+  #expect(reducedExpected, "A Store reduced \(store.state[keyPath: log]), expecting \(expected)")
+  await drainMainActorJobs()
+  let reduced = store.state[keyPath: log]
+  store.send(end)
+  return reduced
+}
+
+/// Delivers `first` in one MainActor job and `chain` in a chain of jobs
+/// behind it, as for a `Store`, and receives `expected` in order,
+/// exhaustively: `first` from a task the first job creates, ahead of the
+/// chain's jobs, unless `late`, then after the chain has run.
+@MainActor
+private func receiveInOrder<R: Reducer>(
+  _ reducer: R, initialState: R.State, log: any WritableKeyPath<R.State, [String]> & Sendable,
+  delivering first: [String], chain: [String], chainIDs: [AnyEffectID],
+  expecting expected: [String], late: Bool, end: R.Action,
+  action: @escaping @Sendable (String) -> R.Action
+) async where R.State: Equatable, R.Action: Equatable {
+  let store = TestStore(reducer: reducer, initialState: initialState, clock: ManualTestClock())
+  let chainContext = store.makeEffectContext(
+    sequence: store.nextSequence(), cancellationIDs: chainIDs)
+  let progress = JobChainProgress()
+  let receive = TaskBox()
+  let receiveFirst: @MainActor @Sendable () async -> Void = {
+    var received: [String] = []
+    for entry in first {
+      received.append(entry)
+      await store.receive(action(entry)) { [received] in $0[keyPath: log] = received }
+    }
+  }
+  var startReceiving: (@MainActor @Sendable () -> Void)?
+  if !late {
+    startReceiving = { receive.task = Task { @MainActor in await receiveFirst() } }
+  }
+  await runJobChain(
+    delivering: first.map(action), then: startReceiving, chain: chain.map(action),
+    progress: progress
+  ) { delivered, isChained in
+    store.deliverAction(delivered, context: isChained ? chainContext : nil)
+  }
+  await settle { progress.ranCount == chain.count }
+  await receive.task?.value
+  if late { await receiveFirst() }
+  var received = first
+  for entry in expected.dropFirst(first.count) {
+    received.append(entry)
+    await store.receive(action(entry)) { [received] in $0[keyPath: log] = received }
+  }
+  // Ends the throttle windows.
+  await store.send(end)
+  await store.finish()
+  #expect(store.state[keyPath: log] == expected)
+}
+
+/// Whether `log` has `earlier` before `later`.
+private func orders(_ log: [String], _ earlier: String, before later: String) -> Bool {
+  guard let first = log.firstIndex(of: earlier), let second = log.firstIndex(of: later) else {
+    return false
+  }
+  return first < second
+}
+
+/// What `p` returns, and what the actions `p`'s effect delivers return. One
+/// job delivers `p`; a chain of jobs behind it delivers `z1` … `z4`.
+private enum CompositeShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `.concatenate(.send(.a), .send(.b))`.
+  case concatenate
+  /// The same; `a` and `b` each return a wrapped send, of `a2` and of `b2`.
+  case siblingFollowUps
+  /// The same; `a` returns a wrapped send of `a2`, which returns one of
+  /// `a3`, and `b` returns `.concatenate(.send(.c1), .send(.c2))`.
+  case followUpChainAndComposite
+  /// `.concatenate(.send(.a), .send(.b))`; `a` cancels the effect that
+  /// delivers every `z`.
+  case followUpCancelsChain
+  /// `.merge(.send(.a), .send(.b))`.
+  case merge
+  /// `.merge(.concatenate(.send(.a), .send(.b)), .send(.c))`.
+  case mergeWithComposite
+  /// `.concatenate(.send(.a), .send(.b)).throttle(id)`: the walk creates the
+  /// composite's task once it has read the clock.
+  case throttledConcatenate
+  /// `.concatenate(.send(.a), .send(.b).throttle(id), .send(.c))`; `a`
+  /// returns a wrapped send of `a2`.
+  case concatenateWithThrottle
+  /// `.concatenate(.send(.a), .cancel(chainID).throttle(id))`: the
+  /// composite cancels the effect that delivers every `z` once it has read
+  /// the clock.
+  case concatenateCancelsAfterClockRead
+
+  var testDescription: String { rawValue }
+
+  /// What a test store lets a test receive: the order in which a `Store`
+  /// reduces the actions where it has one, otherwise the earliest it reaches.
+  var log: [String] {
+    switch self {
+    case .concatenate: ["p", "z1", "a", "b", "z2", "z3", "z4"]
+    case .siblingFollowUps: ["p", "z1", "a", "b", "z2", "a2", "b2", "z3", "z4"]
+    case .followUpChainAndComposite:
+      ["p", "z1", "a", "b", "z2", "a2", "z3", "a3", "c1", "c2", "z4"]
+    case .followUpCancelsChain: ["p", "z1", "a", "b"]
+    case .merge: ["p", "z1", "z2", "a", "b", "z3", "z4"]
+    case .mergeWithComposite: ["p", "z1", "z2", "c", "z3", "a", "b", "z4"]
+    case .throttledConcatenate: ["p", "z1", "z2", "a", "b", "z3", "z4"]
+    case .concatenateWithThrottle: ["p", "z1", "a", "z2", "a2", "b", "c", "z3", "z4"]
+    case .concatenateCancelsAfterClockRead: ["p", "z1", "a", "z2"]
+    }
+  }
+
+  /// Whether a `Store` reduces exactly `log` in every run.
+  var hasOneStoreOrder: Bool {
+    switch self {
+    case .concatenate, .siblingFollowUps, .followUpChainAndComposite, .followUpCancelsChain:
+      true
+    default: false
+    }
+  }
+
+  /// How much of `log` a `Store` reduces first, in that order, in every run.
+  /// A cancellation a `Store` applies only once a walk has read the clock
+  /// can come after later jobs.
+  var storePrefix: Int {
+    switch self {
+    case .merge, .mergeWithComposite, .throttledConcatenate: 3
+    case .concatenateWithThrottle: 5
+    default: log.count
+    }
+  }
+
+  /// The other orders a `Store` keeps in every run: it hands a `merge`'s
+  /// children, and a walk that read the clock, back to the MainActor from
+  /// another executor, behind the jobs queued by then, at the earliest
+  /// where the test store places them. A debug build walks a `merge`'s
+  /// child a job later than an optimized one.
+  var storeOrders: [(earlier: String, later: String)] {
+    switch self {
+    case .merge: [("z2", "a"), ("z2", "b")]
+    case .mergeWithComposite: [("z2", "c"), ("z3", "a"), ("a", "b")]
+    case .throttledConcatenate: [("z2", "a"), ("a", "b")]
+    case .concatenateWithThrottle: [("a2", "b"), ("b", "c")]
+    default: []
+    }
+  }
+
+  /// Actions a `Store` reduces one right after the other in every run: the
+  /// sends one task delivers without suspending in between.
+  var storeAdjacentPairs: [(first: String, second: String)] {
+    switch self {
+    case .mergeWithComposite, .throttledConcatenate: [("a", "b")]
+    default: []
+    }
+  }
+}
+
+private struct CompositeFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case p, a, a2, a3, b, b2, c, c1, c2, z1, z2, z3, z4, end
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  static let chain = ["z1", "z2", "z3", "z4"]
+
+  let shape: CompositeShape
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    if action != .end { state.log.append(action.rawValue) }
+    switch (shape, action) {
+    case (.concatenate, .p), (.siblingFollowUps, .p), (.followUpChainAndComposite, .p),
+      (.followUpCancelsChain, .p):
+      return .concatenate(.send(.a), .send(.b))
+    case (.merge, .p):
+      return .merge(.send(.a), .send(.b))
+    case (.mergeWithComposite, .p):
+      return .merge(.concatenate(.send(.a), .send(.b)), .send(.c))
+    case (.throttledConcatenate, .p):
+      return EffectTask<Action>.concatenate(.send(.a), .send(.b))
+        .throttle(compositeThrottleID, for: .seconds(1))
+    case (.concatenateWithThrottle, .p):
+      return .concatenate(
+        .send(.a),
+        EffectTask<Action>.send(.b).throttle(compositeThrottleID, for: .seconds(1)),
+        .send(.c))
+    case (.concatenateCancelsAfterClockRead, .p):
+      return .concatenate(
+        .send(.a),
+        EffectTask<Action>.cancel(chainEmissionID).throttle(compositeThrottleID, for: .seconds(1)))
+    case (.siblingFollowUps, .a), (.followUpChainAndComposite, .a), (.concatenateWithThrottle, .a):
+      return EffectTask<Action>.send(.a2).cancellable(compositeFollowID)
+    case (.followUpCancelsChain, .a):
+      return .cancel(chainEmissionID)
+    case (.followUpChainAndComposite, .a2):
+      return EffectTask<Action>.send(.a3).cancellable(compositeNestedID)
+    case (.siblingFollowUps, .b):
+      return EffectTask<Action>.send(.b2).cancellable(compositeSiblingID)
+    case (.followUpChainAndComposite, .b):
+      return .concatenate(.send(.c1), .send(.c2))
+    case (_, .end):
+      return .cancel(compositeThrottleID)
+    default:
+      return .none
+    }
+  }
+}
+
+/// How often `r`'s walk suspends. One job delivers `r` and `x`, whose walk
+/// waits for `r`'s; a chain of jobs behind it delivers `z1` … `z4`.
+private enum SuspensionShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// Nested throttles: two clock reads, then `rl`.
+  case nestedThrottles
+  /// A throttle around a scheduled run that reports its admission: a clock
+  /// read, then `rl`, then the admission.
+  case throttledScheduledRun
+
+  var testDescription: String { rawValue }
+
+  /// What a test store lets a test receive: the earliest order a `Store`
+  /// reaches.
+  var log: [String] {
+    switch self {
+    case .nestedThrottles: ["r", "x", "z1", "z2", "rl", "z3", "xv", "z4"]
+    case .throttledScheduledRun: ["r", "x", "z1", "rl", "z2", "z3", "xv", "z4"]
+    }
+  }
+
+  /// The orders a `Store` keeps in every run: it resumes `r`'s walk behind
+  /// the jobs queued before each suspension, and starts `x`'s only once
+  /// `r`'s has finished.
+  var storeOrders: [(earlier: String, later: String)] {
+    switch self {
+    case .nestedThrottles: [("z2", "rl"), ("z3", "xv")]
+    case .throttledScheduledRun: [("z1", "rl"), ("z3", "xv")]
+    }
+  }
+}
+
+private struct RepeatedSuspensionFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case r, rl, x, xv, z1, z2, z3, z4, end
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  static let chain = ["z1", "z2", "z3", "z4"]
+
+  let shape: SuspensionShape
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    if action != .end { state.log.append(action.rawValue) }
+    switch action {
+    case .r:
+      switch shape {
+      case .nestedThrottles:
+        return EffectTask<Action>.send(.rl).throttle(compositeThrottleID, for: .seconds(1))
+          .throttle(outerThrottleID, for: .seconds(1))
+      case .throttledScheduledRun:
+        return EffectTask<Action>.run(
+          id: admissionRunID, policy: .serial(maxPending: 1), onAdmission: { _ in .rl }
+        ) { _, _ in }
+        .throttle(compositeThrottleID, for: .seconds(1))
+      }
+    case .x:
+      return EffectTask<Action>.send(.xv).cancellable(compositeFollowID)
+    case .end:
+      return .merge(.cancel(compositeThrottleID), .cancel(outerThrottleID))
+    default:
+      return .none
+    }
+  }
+}
+
+/// What reaches a position many interpreter jobs behind the first delivery.
+/// A chain of jobs behind that delivery delivers `z1` … `z6`.
+private enum DeepShape: String, CaseIterable, Sendable, CustomTestStringConvertible {
+  /// `f1` … `f6` each return a wrapped send of the next, up to `f7`.
+  case followUpChain
+  /// `r` throttles `rl`; `c1` … `c4` each return a wrapped send, and each
+  /// walk waits for the one before it.
+  case waitingWalks
+
+  var testDescription: String { rawValue }
+
+  var first: [String] {
+    self == .followUpChain ? ["f1"] : ["r", "c1", "c2", "c3", "c4"]
+  }
+
+  /// What a test store lets a test receive: the order a `Store` has for the
+  /// chain, and the earliest it reaches for the waiting walks.
+  var log: [String] {
+    switch self {
+    case .followUpChain:
+      ["f1", "f2", "z1", "f3", "z2", "f4", "z3", "f5", "z4", "f6", "z5", "f7", "z6"]
+    case .waitingWalks:
+      [
+        "r", "c1", "c2", "c3", "c4", "z1", "rl", "z2", "cv1", "z3", "cv2", "z4", "cv3", "z5",
+        "cv4", "z6",
+      ]
+    }
+  }
+
+  /// The orders a `Store` keeps in every run besides `first`: `r` resumes,
+  /// at the earliest, behind `z1`'s job, and each waiting walk starts in the
+  /// MainActor job queued when the one before it finishes, behind the next
+  /// `z` job.
+  var storeOrders: [(earlier: String, later: String)] {
+    self == .followUpChain
+      ? [] : [("z1", "rl"), ("z2", "cv1"), ("z3", "cv2"), ("z4", "cv3"), ("z5", "cv4")]
+  }
+}
+
+private struct DeepFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: Equatable, Sendable {
+    case f(Int)
+    case r, rl
+    case c(Int)
+    case cv(Int)
+    case z(Int)
+    case end
+
+    init(_ entry: String) {
+      let index = Int(entry.drop { !$0.isNumber }) ?? 0
+      switch entry.prefix(while: { !$0.isNumber }) {
+      case "f": self = .f(index)
+      case "c": self = .c(index)
+      case "cv": self = .cv(index)
+      case "z": self = .z(index)
+      case "r": self = .r
+      default: self = .rl
+      }
+    }
+
+    var entry: String {
+      switch self {
+      case .f(let index): "f\(index)"
+      case .c(let index): "c\(index)"
+      case .cv(let index): "cv\(index)"
+      case .z(let index): "z\(index)"
+      case .r: "r"
+      case .rl: "rl"
+      case .end: "end"
+      }
+    }
+  }
+
+  static let chain = (1...6).map { "z\($0)" }
+  static let lastFollowUp = 7
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    if action != .end { state.log.append(action.entry) }
+    switch action {
+    case .f(let index) where index < Self.lastFollowUp:
+      return EffectTask<Action>.send(.f(index + 1))
+        .cancellable(EffectID<String>("delivery-order-deep-f\(index)"))
+    case .r:
+      return EffectTask<Action>.send(.rl).throttle(compositeThrottleID, for: .seconds(1))
+    case .c(let index):
+      return EffectTask<Action>.send(.cv(index))
+        .cancellable(EffectID<String>("delivery-order-deep-c\(index)"))
+    case .end:
+      return .cancel(compositeThrottleID)
+    default:
+      return .none
+    }
+  }
+}
+
+/// `p` runs a `concatenate` that awaits a run emitting `a`, then a `merge`
+/// step that sends `m` (its second child, an empty run, keeps it a `merge`);
+/// `a` returns `.concatenate(.send(.f1), .send(.f2))`.
+private struct RunEmissionFollowUpFeature: Reducer {
+  struct State: Equatable, Sendable {
+    var log: [String] = []
+  }
+
+  enum Action: String, Equatable, Sendable {
+    case p, a, f1, f2, m
+
+    init(_ entry: String) { self = Self(rawValue: entry)! }
+  }
+
+  func reduce(into state: inout State, action: Action) -> EffectTask<Action> {
+    state.log.append(action.rawValue)
+    switch action {
+    case .p:
+      return .concatenate(.run { send in await send(.a) }, .merge(.send(.m), .run { _ in }))
+    case .a:
+      return .concatenate(.send(.f1), .send(.f2))
+    default:
+      return .none
+    }
+  }
+}
+
 @Suite("TestStore delivery order matches Store", .serialized, .timeLimit(.minutes(2)))
 @MainActor
 struct TestStoreDeliveryOrderTests {
@@ -2240,11 +2745,14 @@ struct TestStoreDeliveryOrderTests {
     await referenceEmission.value
     await ping.finish()
     #expect(reference.state.log == shape.log)
-    var iterator = published.makeAsyncIterator()
+    // Collected in a task of its own: a missing output fails the comparison
+    // instead of suspending the test on the store's open output stream.
     var referenceOutputs: [CompetingFollowUpFeature.Output] = []
-    for _ in outputs {
-      if let output = await iterator.next() { referenceOutputs.append(output) }
+    let collecting = Task { @MainActor in
+      for await output in published { referenceOutputs.append(output) }
     }
+    await waitUntil { referenceOutputs.count >= outputs.count }
+    collecting.cancel()
     #expect(referenceOutputs == outputs)
 
     let store = TestStore(reducer: feature, initialState: .init())
@@ -2643,13 +3151,17 @@ struct TestStoreDeliveryOrderTests {
     // The job that delivers `r` queues the job that sends `t` right behind
     // `r`'s interpreter task: a `Store` reduces `t`, whose cancel of the
     // throttle skips `rl`, before that task resumes from its clock read.
+    let referenceClock = ManualTestClock()
     let reference = Store(
-      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(ManualTestClock()))
+      reducer: ThrottleCancelFeature(), initialState: .init(), clock: .manual(referenceClock))
     await Task { @MainActor in
       reference.deliverAction(.r, context: nil)
       Task { @MainActor in _ = reference.send(.t) }
     }.value
-    await settle { false }
+    // `r`'s interpreter task resumes from its clock read on the MainActor.
+    // This read is served after that one, so the task has resumed by now.
+    _ = await referenceClock.now
+    await drainMainActorJobs()
     #expect(reference.state.log == ["r", "t"])
 
     let store = TestStore(
@@ -2760,7 +3272,7 @@ struct TestStoreDeliveryOrderTests {
         Task { @MainActor in store.deliverAction(.z, context: context) }
       }
     }.value
-    await settle { false }
+    await drainMainActorJobs()
     await store.send(.t)
     store.exhaustivity = exhaustive ? .on : .off
     #expect(store.state.log == ["r", "xz", "rl", "z", "xzv", "t"])
@@ -2843,7 +3355,7 @@ struct TestStoreDeliveryOrderTests {
     store.exhaustivity = .off
     await store.send(.t)
     await store.finish()
-    #expect(Array(store.state.log.prefix(6)) == reference.state.log)
+    #expect(store.state.log == reference.state.log + ["t"])
   }
 
   @Test(
@@ -2864,7 +3376,7 @@ struct TestStoreDeliveryOrderTests {
       reducer: ThrottleCancelFeature(), initialState: .init(), clock: ManualTestClock())
     store.exhaustivity = exhaustive ? .on : .off
     await queueEmission(.r, into: store, then: { store.deliverAction(.x, context: nil) }).value
-    await settle { false }
+    await drainMainActorJobs()
     await store.receive(.r) { $0.log = ["r"] }
     if exhaustive {
       await store.receive(.x) { $0.log = ["r", "x"] }
@@ -2874,7 +3386,7 @@ struct TestStoreDeliveryOrderTests {
       await store.send(.n)
     }
     await store.finish()
-    #expect(Array(store.state.log.prefix(4)) == reference.state.log)
+    #expect(store.state.log == reference.state.log + (exhaustive ? [] : ["n"]))
   }
 
   @Test(
@@ -2983,7 +3495,7 @@ struct TestStoreDeliveryOrderTests {
       await waitUntil(pollInterval: .milliseconds(1)) {
         reference.state.log.count == shape.storeLog.count
       })
-    await settle { false }
+    await drainMainActorJobs()
     #expect(reference.state.log == shape.storeLog)
     reference.send(.end)
 
@@ -3160,5 +3672,123 @@ struct TestStoreDeliveryOrderTests {
     }
     #expect(store.queuedAnchorMarkerCount == TestStoreAnchorChain.depth + 1)
     await store.finish()
+  }
+
+  @Test(
+    "A composite's tasks deliver where a Store runs them, before the jobs queued after them",
+    arguments: CompositeShape.allCases, [false, true])
+  fileprivate func compositeTasksDeliverWhereAStoreRunsThem(
+    shape: CompositeShape, late: Bool
+  ) async {
+    // A `Store` walks a `concatenate`'s children in a MainActor task it
+    // creates while the walk that starts it runs, and a `merge`'s child once
+    // a task group has handed it to the MainActor; everything such a task
+    // delivers before it awaits other work, and the interpreter tasks of
+    // that, comes before the jobs queued after the task.
+    let feature = CompositeFeature(shape: shape)
+    let chainIDs =
+      shape == .followUpCancelsChain || shape == .concatenateCancelsAfterClockRead
+      ? [AnyEffectID(chainEmissionID)] : []
+    let reduced = await reducedByStore(
+      feature, initialState: .init(), log: \.log, delivering: [.p],
+      chain: CompositeFeature.chain.map { CompositeFeature.Action($0) }, chainIDs: chainIDs,
+      reducing: shape.log, end: .end)
+    if shape.hasOneStoreOrder {
+      #expect(reduced == shape.log)
+    } else {
+      #expect(
+        Array(reduced.prefix(shape.storePrefix)) == Array(shape.log.prefix(shape.storePrefix)))
+      for (earlier, later) in shape.storeOrders {
+        #expect(orders(reduced, earlier, before: later), "\(earlier) before \(later) in \(reduced)")
+      }
+      for (first, second) in shape.storeAdjacentPairs {
+        #expect(
+          zip(reduced, reduced.dropFirst()).contains { $0 == first && $1 == second },
+          "\(first) right before \(second) in \(reduced)")
+      }
+    }
+
+    await receiveInOrder(
+      feature, initialState: .init(), log: \.log, delivering: ["p"],
+      chain: CompositeFeature.chain, chainIDs: chainIDs, expecting: shape.log, late: late,
+      end: .end, action: { CompositeFeature.Action($0) })
+  }
+
+  @Test(
+    "A walk that suspends more than once resumes behind the jobs queued before each suspension",
+    arguments: SuspensionShape.allCases, [false, true])
+  fileprivate func repeatedSuspensionResumesAtEachLevel(
+    shape: SuspensionShape, late: Bool
+  ) async {
+    let feature = RepeatedSuspensionFeature(shape: shape)
+    let reduced = await reducedByStore(
+      feature, initialState: .init(), log: \.log, delivering: [.r, .x],
+      chain: RepeatedSuspensionFeature.chain.map { RepeatedSuspensionFeature.Action($0) },
+      chainIDs: [], reducing: shape.log, end: .end)
+    #expect(Array(reduced.prefix(3)) == ["r", "x", "z1"])
+    for (earlier, later) in shape.storeOrders {
+      #expect(orders(reduced, earlier, before: later), "\(earlier) before \(later) in \(reduced)")
+    }
+
+    await receiveInOrder(
+      feature, initialState: .init(), log: \.log, delivering: ["r", "x"],
+      chain: RepeatedSuspensionFeature.chain, chainIDs: [], expecting: shape.log, late: late,
+      end: .end, action: { RepeatedSuspensionFeature.Action($0) })
+  }
+
+  @Test(
+    "Positions more than four interpreter jobs behind a delivery keep their order",
+    arguments: DeepShape.allCases, [false, true])
+  fileprivate func deepPositionsKeepTheirOrder(shape: DeepShape, late: Bool) async {
+    let reduced = await reducedByStore(
+      DeepFeature(), initialState: .init(), log: \.log,
+      delivering: shape.first.map { DeepFeature.Action($0) },
+      chain: DeepFeature.chain.map { DeepFeature.Action($0) }, chainIDs: [], reducing: shape.log,
+      end: .end)
+    if shape.storeOrders.isEmpty {
+      #expect(reduced == shape.log)
+    } else {
+      #expect(Array(reduced.prefix(shape.first.count + 1)) == shape.first + ["z1"])
+      for (earlier, later) in shape.storeOrders {
+        #expect(orders(reduced, earlier, before: later), "\(earlier) before \(later) in \(reduced)")
+      }
+    }
+
+    await receiveInOrder(
+      DeepFeature(), initialState: .init(), log: \.log, delivering: shape.first,
+      chain: DeepFeature.chain, chainIDs: [], expecting: shape.log, late: late, end: .end,
+      action: { DeepFeature.Action($0) })
+  }
+
+  @Test(
+    "A run emission's composite follow-up comes before a later merge step of its concatenate",
+    arguments: [false, true])
+  func runEmissionCompositeFollowUpPrecedesLaterMergeStep(late: Bool) async {
+    // A `Store` creates `a`'s interpreter task when it reduces the run's
+    // emission, and that task creates the follow-up's task, before the run
+    // has returned and the `merge` step's children have reached the
+    // MainActor.
+    let expected = ["p", "a", "f1", "f2", "m"]
+    let reference = Store(reducer: RunEmissionFollowUpFeature(), initialState: .init())
+    reference.send(.p)
+    #expect(
+      await waitUntil(pollInterval: .milliseconds(1)) {
+        reference.state.log.count == expected.count
+      })
+    await drainMainActorJobs()
+    #expect(reference.state.log == expected)
+
+    let store = TestStore(reducer: RunEmissionFollowUpFeature(), initialState: .init())
+    await store.send(.p) { $0.log = ["p"] }
+    if late {
+      await waitUntilIdle(store)
+    }
+    var log = ["p"]
+    for entry in expected.dropFirst() {
+      log.append(entry)
+      await store.receive(RunEmissionFollowUpFeature.Action(entry)) { [log] in $0.log = log }
+    }
+    await store.finish()
+    #expect(store.state.log == expected)
   }
 }

@@ -28,7 +28,8 @@ package protocol ReductionTurnCancellationAcceptor: AnyObject {
   )
 
   /// The run lane a request under `id` meets now, if any: an open lane, or
-  /// a `latest` lane displaced for a replacement that can still proceed.
+  /// a `latest` lane held for a request a reduction turn accepted, while
+  /// that request can still proceed.
   ///
   /// The pass decides each lane request it reaches against this lane, with
   /// the same rule admission applies. A `latest` request that a lane with
@@ -40,6 +41,9 @@ package protocol ReductionTurnCancellationAcceptor: AnyObject {
   /// effect sequence issued before `context`'s own, exactly as admitting it
   /// would: the lane's earlier requests are displaced and reported as
   /// superseded, and every other effect under `id` is released and recorded.
+  /// The lane, also one that was closed, is held for the request until it is
+  /// admitted or can no longer proceed, so a request with another policy
+  /// cannot open it first.
   ///
   /// The acceptance is complete in this turn, like `cancelInFlight: true`, so
   /// nothing is left half-cancelled when the request itself never reaches
@@ -71,10 +75,25 @@ extension ReductionTurnCancellationAcceptor {
   /// scan of its branch stops there and the interpreter decides it. That
   /// covers work whose context another branch can cancel (`.cancel` of one
   /// of its IDs), and a lane request that shares its lane with a lane request
-  /// in another branch, or whose IDs another branch requests any
-  /// cancellation of. Another branch's work counts wherever it is in that
-  /// branch, also behind asynchronous work. Everything the pass does decide
-  /// therefore holds in every order the interpreter may pick.
+  /// in another branch, whose IDs another branch cancels, or whose lane
+  /// answers differently once another branch has requested the cancellation
+  /// of a request that holds it: the request that owns a `latest` lane (its
+  /// running request, or the request a held lane waits for), without which a
+  /// request with another policy meets no lane, or a pending request of a
+  /// full serial lane, without which a serial request is queued. A request
+  /// the lane admits or rejects either way is decided. A cancellation request
+  /// is a `.cancel`, `cancelInFlight: true`, a debounce or a `latest` lane
+  /// request; a throttle decides only its own window and requests none. All
+  /// but `.cancel` cancel in flight: their ID cancellation covers only
+  /// sequences issued before their own, so under a lane request's own IDs
+  /// they cannot cancel the request, while they can release a request that
+  /// holds its lane. Within one sequence a debounce still replaces a pending
+  /// debounce under its ID and a `latest` request displaces its own lane's
+  /// requests, but the pass decides no work inside a debounce and no request
+  /// whose lane another branch requests. Another branch's work counts
+  /// wherever it is in that branch, also behind asynchronous work.
+  /// Everything the pass does decide therefore holds in every order the
+  /// interpreter may pick.
   package func acceptSynchronousCancellations(
     in effect: ReducerEffect<Action, Output>,
     context: EffectExecutionContext
@@ -130,11 +149,22 @@ extension ReductionTurnCancellationAcceptor {
         !siblings.mayReorder(laneRequest: id, cancellationIDs: scheduledContext.cancellationIDs),
         let requestProceeds = proceeds(scheduledContext)
       else { return false }
+      let lane = runLane(for: id)
+      // So can a branch that cancels a request holding the lane, when the
+      // lane answers this request differently without it. A request its own
+      // tree cancelled completes whatever the lane is.
+      if requestProceeds,
+        siblings.mayChangeAdmission(
+          policy: policy.kind, sequence: scheduledContext.sequence ?? 0, lane: lane)
+      {
+        return false
+      }
       let admission = admitInReductionTurn(
         id: id,
         policy: policy.kind,
         context: scheduledContext,
-        proceeds: requestProceeds
+        proceeds: requestProceeds,
+        lane: lane
       )
       scheduledContext.cancellationScope?.recordTurnLaneAdmission(
         admission,
@@ -220,23 +250,26 @@ extension ReductionTurnCancellationAcceptor {
     }
   }
 
-  /// Decides a lane request against the lane open now, with the rule
-  /// admission applies.
+  /// Decides a lane request against `lane`, the lane it meets now, with the
+  /// rule admission applies.
   ///
-  /// The request is order-independent, so no other request of this tree can
-  /// change its lane first: an earlier request on the same lane in the same
-  /// branch either completed without changing the lane or was admitted,
-  /// which stops the scan before this one.
+  /// The request is order-independent, so no other lane request or
+  /// cancellation of this tree can change its admission first: an earlier
+  /// request on the same lane in the same branch either completed without
+  /// changing the lane or was admitted, which stops the scan before this
+  /// one, and no other branch requests the lane or cancels a request whose
+  /// loss changes what the lane answers.
   private func admitInReductionTurn(
     id: AnyEffectID,
     policy: EffectExecutionPolicy.Kind,
     context: EffectExecutionContext,
-    proceeds: Bool
+    proceeds: Bool,
+    lane: EffectRunLaneView?
   ) -> ReductionTurnLaneAdmission {
     // The request's own tree cancelled its lane ID on the way.
     guard proceeds else { return .completed(.cancelledBeforeStart) }
     let sequence = context.sequence ?? 0
-    switch EffectRunScheduler.decide(policy: policy, sequence: sequence, lane: runLane(for: id)) {
+    switch EffectRunScheduler.decide(policy: policy, sequence: sequence, lane: lane) {
     case .open, .replace:
       if case .latest = policy {
         // A `latest` request supersedes its predecessors when it is returned,
@@ -267,10 +300,11 @@ private struct EffectFootprint {
   var laneIDs: Set<AnyEffectID> = []
   /// IDs the subtree cancels, its own sequence included (`.cancel`).
   var cancelledIDs: Set<AnyEffectID> = []
-  /// IDs the subtree requests any cancellation of: `.cancel`,
-  /// `cancelInFlight: true`, a `latest` lane request, a debounce or a
-  /// throttle request.
-  var cancellationIDs: Set<AnyEffectID> = []
+  /// IDs the subtree requests any cancellation of, which can release work
+  /// another effect owns under them: `.cancel`, `cancelInFlight: true`, a
+  /// `latest` lane request or a debounce request. A throttle request decides
+  /// only its own window and releases nothing.
+  var releasedIDs: Set<AnyEffectID> = []
 
   mutating func collect<Action, Output>(_ effect: ReducerEffect<Action, Output>) {
     switch effect.operation {
@@ -279,18 +313,20 @@ private struct EffectFootprint {
     case .scheduledRun(let id, let policy, _, _, _):
       laneIDs.insert(id)
       if case .latest = policy {
-        cancellationIDs.insert(id)
+        releasedIDs.insert(id)
       }
     case .cancel(let id):
       cancelledIDs.insert(id)
-      cancellationIDs.insert(id)
+      releasedIDs.insert(id)
     case .cancellable(let nested, let id, let cancelInFlight):
       if cancelInFlight {
-        cancellationIDs.insert(id)
+        releasedIDs.insert(id)
       }
       collect(nested)
-    case .debounce(let nested, let id, _), .throttle(let nested, let id, _, _, _):
-      cancellationIDs.insert(id)
+    case .debounce(let nested, let id, _):
+      releasedIDs.insert(id)
+      collect(nested)
+    case .throttle(let nested, _, _, _, _):
       collect(nested)
     case .merge(let children), .concatenate(let children):
       for child in children {
@@ -314,7 +350,7 @@ private struct MergeBranches {
 
   private var lanes: [AnyEffectID: Holders] = [:]
   private var cancelled: [AnyEffectID: Holders] = [:]
-  private var cancellations: [AnyEffectID: Holders] = [:]
+  private var released: [AnyEffectID: Holders] = [:]
 
   init<Action, Output>(_ branches: [ReducerEffect<Action, Output>]) {
     for (index, branch) in branches.enumerated() {
@@ -322,12 +358,12 @@ private struct MergeBranches {
       footprint.collect(branch)
       Self.add(footprint.laneIDs, branch: index, to: &lanes)
       Self.add(footprint.cancelledIDs, branch: index, to: &cancelled)
-      Self.add(footprint.cancellationIDs, branch: index, to: &cancellations)
+      Self.add(footprint.releasedIDs, branch: index, to: &released)
     }
   }
 
   var isEmpty: Bool {
-    lanes.isEmpty && cancellations.isEmpty
+    lanes.isEmpty && released.isEmpty
   }
 
   private static func add(
@@ -366,9 +402,10 @@ private struct MergeBranches {
     Self.another(than: branch, in: cancelled, holds: id)
   }
 
-  /// Whether a branch other than `branch` requests any cancellation of `id`.
-  func otherBranch(than branch: Int, requestsCancellationOf id: AnyEffectID) -> Bool {
-    Self.another(than: branch, in: cancellations, holds: id)
+  /// Whether a branch other than `branch` requests any cancellation of `id`,
+  /// which can release work another effect owns under it.
+  func otherBranch(than branch: Int, releasesWorkUnder id: AnyEffectID) -> Bool {
+    Self.another(than: branch, in: released, holds: id)
   }
 }
 
@@ -392,14 +429,40 @@ private struct MergeSiblings {
   }
 
   /// Whether another branch can decide a lane request first or last: it
-  /// requests the same lane, or requests any cancellation of one of the
-  /// request's IDs.
+  /// requests the same lane, or cancels one of the request's IDs. The ID
+  /// cancellation of a request that cancels in flight (`cancelInFlight:
+  /// true`, a debounce, a `latest` lane request) covers only sequences issued
+  /// before its own, and a throttle decides only its own window, so neither
+  /// cancels the request. The `.cancel` check restates `proceeds`: the pass
+  /// has checked the enclosing IDs with `proceeds(context)` already, and
+  /// checks the lane ID with `proceeds(scheduledContext)` in the same guard.
   func mayReorder(laneRequest lane: AnyEffectID, cancellationIDs: [AnyEffectID]) -> Bool {
     levels.contains { level in
       level.branches.otherBranch(than: level.branch, requestsLane: lane)
-        || cancellationIDs.contains {
-          level.branches.otherBranch(than: level.branch, requestsCancellationOf: $0)
-        }
+        || cancellationIDs.contains { level.branches.otherBranch(than: level.branch, cancels: $0) }
     }
+  }
+
+  /// Whether another branch requests any cancellation of `id`, which can
+  /// release work another effect owns under it.
+  func releaseWork(under id: AnyEffectID) -> Bool {
+    levels.contains { $0.branches.otherBranch(than: $0.branch, releasesWorkUnder: id) }
+  }
+
+  /// Whether another branch can change what `lane` answers a request with
+  /// `policy`: it can release an ID carried by a request that holds the lane
+  /// (a `.cancel`, `cancelInFlight: true`, a debounce or a `latest` lane
+  /// request under that ID; a throttle releases nothing), and the lane admits
+  /// or rejects the request differently once that request is gone.
+  func mayChangeAdmission(
+    policy: EffectExecutionPolicy.Kind, sequence: UInt64, lane: EffectRunLaneView?
+  ) -> Bool {
+    guard let lane, !levels.isEmpty else { return false }
+    let laneWithoutCancelledHolders = lane.afterCancellation(of: releaseWork(under:))
+    guard laneWithoutCancelledHolders != lane else { return false }
+    return !EffectRunScheduler.decide(policy: policy, sequence: sequence, lane: lane)
+      .hasSameOutcome(
+        as: EffectRunScheduler.decide(
+          policy: policy, sequence: sequence, lane: laneWithoutCancelledHolders))
   }
 }

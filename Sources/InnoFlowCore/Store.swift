@@ -258,7 +258,8 @@ public final class Store<R: Reducer> {
       let activity = flowTaskTracker?.beginActivity()
       // The line creates the interpreter task here, and starts the walk in
       // that task or, when an earlier walk has not finished by the time it
-      // runs, in the MainActor job in which that walk finishes.
+      // runs, in a MainActor task it creates at the end of the job in which
+      // that walk finishes.
       rootInterpreterLine.enqueue(
         .init(
           run: { [weak self, weak flowTaskTracker] in

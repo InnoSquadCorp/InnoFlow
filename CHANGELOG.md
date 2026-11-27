@@ -111,7 +111,7 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
 - Removed the start gates in front of `Store` run and composite tasks, the
   unused deferred-mapping effect operation, and the driver branches for
   awaited composition that the interpreter never selected. `TestStore` keeps
-  its own start gate.
+  its own start gate in front of run tasks.
 - A canonical `static let`/`static var` `<name>CasePath` (or `<name>ActionPath`
   for an `id:action:` case) declared in the `Action` body now takes precedence
   over synthesis for every case shape, as it already did for `Output`. 6.0.x
@@ -120,30 +120,35 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   helper synthesized under the complementary condition.
 - A throttle window fires the newest trailing request that can still proceed.
   When the newest request is cancelled — through its dispatch or through an
-  ID only it carries — the window falls back to the request it replaced (the
-  window keeps the newest request and up to seven it replaced) instead of
-  firing nothing, and keeps its timer. A request an ID cancellation removed
+  ID only it carries — the window falls back to the newest request it
+  retains that can still proceed (the window keeps the newest request and up
+  to seven it replaced) instead of firing nothing, and keeps its timer. A
+  request an ID cancellation removed
   no longer holds its dispatch, which finishes once its own work is done; a
   request removed through its dispatch while an interpreter frame awaits it,
   and a leading opener another request superseded as owner, still wait for
   the window to end, as in 6.0.x. Before, an ID cancellation always
   reset the window, and the outcome of a dispatch cancellation depended on
-  whether the cancelled dispatch's effect had been interpreted yet.
+  whether the cancelled dispatch's effect had been interpreted yet. In a
+  `TestStore`, as in a `Store`, only the IDs of the request the window fires
+  can stop the work it fires; cancelling an ID that only a cancelled newer
+  request carried does not stop it.
 - A `Store` starts an interpreter that waited for the one before it in the
-  MainActor job in which that one finishes. A `Store` walks the effects it
-  interprets one at a time, in the order it created their interpreter
+  MainActor job queued when that one finishes. A `Store` walks the effects
+  it interprets one at a time, in the order it created their interpreter
   tasks. An interpreter whose task ran while an earlier walk was suspended —
   a throttle reading its clock, a scheduled run waiting for admission —
   awaited the earlier task and came back to the MainActor through the
   global executor, so jobs queued after the earlier walk finished could run
   before it, depending on load. The `Store` now creates the task that walks
-  the waiting effect in the job in which the earlier walk finishes: the walk
-  starts behind every job queued before that point and ahead of every job
-  queued after it. That task carries the priority of the task that reduced
-  the action, and the task-local values of the interpreter that started it
-  instead of those of the task that reduced the action. An interpreter that
-  does not have to wait is unchanged, and where a suspended walk resumes
-  still depends on the executor.
+  the waiting effect at the end of the job in which the earlier walk
+  finishes: the walk starts behind every job queued before that point and
+  ahead of every job queued after it. That task carries the priority of the
+  interpreter task created with the effect, and the task-local values of
+  the interpreter that started it, which the code that sent an earlier
+  action set, instead of those of the code that sent this action. An
+  interpreter that does not have to wait is unchanged, and where a
+  suspended walk resumes still depends on the executor.
 - `TestStore` keeps buffered actions and outputs in the order a `Store`
   handles them. A plain `.send` or `.output` follow-up of a received action
   is queued right behind it, at every depth: a follow-up chain and a Scope
@@ -170,36 +175,51 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   an interpreter walk suspends: it walks interpreted effects in the order a
   `Store` creates their tasks, starts a walk that waits for the walk before
   it in the job queued when that walk finished, where a `Store` starts it,
-  and keys what a walk delivers after it first suspends where a `Store`
-  resumes it at the earliest, behind the MainActor jobs queued before the
-  walk started. A send's drain defers every interpreted walk
-  behind one it defers, and a throttle on the default clock suspends to
-  read it, as in a `Store`. A walk that suspends more than once is placed as
-  if it resumed once. What a walk delivers after it first suspends is
-  reduced before a later send when its resumption point came before the send
-  began, and otherwise comes behind it, as in a `Store` whose send comes
-  right after the walk started. Before, the order, and with a cancellation
-  the set of received actions and outputs, depended on when the test
-  received the first action. Where the `Store` order is itself a race, such
-  as a wrapped follow-up of a wrapped follow-up of a run's emission against
-  the run's next emission, a test can receive either order. A `Store` hands
-  a resumed walk back to the MainActor from another executor, so where it
+  and keys what a walk delivers after each suspension where a `Store`
+  resumes it at the earliest, behind the MainActor jobs queued before it
+  suspended, one level deeper per suspension — nested throttles, a throttle
+  around a scheduled run. A send's drain defers every
+  interpreted walk behind one it defers, and a throttle on the default clock
+  suspends to read it, as in a `Store`. What a walk delivers after a
+  suspension is reduced before a later send when its resumption point came
+  before the send began, and otherwise comes behind it, as in a `Store`
+  whose send comes right after the walk started. The tasks in which a
+  `Store` walks the children of a `concatenate` or `merge` are followed
+  too: a `concatenate`'s children are keyed where its task runs, the next
+  level after the walk that starts it, and a `merge`'s children two levels
+  deeper, in declaration order: the earliest point, where an optimized
+  `Store` walks them (a debug build a job later) and the children race.
+  Until such a task awaits other work, what it delivers comes before the
+  jobs a `Store` runs after it — the leading sends of a `concatenate`, and
+  a run emission's composite follow-up ahead of a later `merge` step of the
+  emitting `concatenate` — and a test store takes no buffered value such a
+  task can still precede while it is pending: a send's drain waits for it, and
+  `receive`, `receiveOutput` and `finish()` wait within their timeout or until
+  the calling task is cancelled. Before, the order, and with a cancellation
+  the set of received actions and outputs, depended on when the test received
+  the first action. Where the `Store` order is itself a race, such as a
+  wrapped follow-up of a wrapped follow-up of a run's emission against the
+  run's next emission, a test can receive either order. A `Store` hands a
+  resumed walk back to the MainActor from another executor, so where it
   continues, and where a walk that waited for it then starts, depends on how
   soon that happens relative to the MainActor's other jobs; the test store
-  takes the earliest point. Two limitations are the exception, and can place a
-  value before jobs a `Store` runs first: a walk that suspends more than
-  once, and the walks behind it; and positions more than four interpreter
-  jobs behind a delivery or send — a follow-up that deep, or a walk that
-  starts or resumes there — which share the fourth job's position. The
-  children of a composite (`merge`, `concatenate`) follow-up stay in
-  delivery order, and work a walk starts in another task (a run, a composite
-  and its children, a timer) delivers at its delivery, as in 6.0.x: its
-  first values can come after MainActor jobs that a `Store` runs after them.
+  takes the earliest point. Two exceptions can place a value before jobs a
+  `Store` runs first: positions more than sixteen interpreter jobs behind a
+  delivery or send — a follow-up that deep, a composite task, or a walk that
+  starts or resumes there — share the sixteenth job's position; and work a
+  walk awaits or leaves to another task (a run, a timer, the children of an
+  awaited `merge`), and what a composite task delivers once it awaited such
+  work, delivers at its delivery, as in 6.0.x. An action the test never
+  receives queues sixteen anchor markers, each a MainActor task of about 5 µs
+  on the local benchmark; an action the test receives as it arrives queues
+  one.
 - In a non-exhaustive `TestStore`, `receiveOutput` no longer skips a
   buffered output that a `Store` publishes after the expected one: before it
   skips a buffered output that does not match, it reduces the buffered
-  actions a `Store` reduced before that output. Before, a test that received
-  outputs in the order a `Store` publishes them could lose the later one.
+  actions a `Store` reduced before that output; with no time left, as with a
+  zero timeout, it reduces none of them and keeps that output. Before, a
+  test that received outputs in the order a `Store` publishes them could
+  lose the later one.
 - A collection scope now refreshes only the rows a change can affect instead
   of every row on any change, and rows resolve their positions once per
   structural change instead of each scanning the collection, also when an
@@ -269,13 +289,16 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   request it reaches against the lane state of that turn: a request the lane
   rejects completes without awaiting, so a cancellation after it is accepted
   in the turn as well, and the request is reported with that rejection even
-  if the lane changed before the interpreter reached it. A `latest` lane
-  displaced in the turn stays the open `latest` lane until its replacement
-  is admitted, so a request with another policy is rejected as conflicting
-  instead of taking the lane over. A lane request whose outcome depends on
-  the order of `merge` children — another branch requests the same lane, or
-  cancels or requests the cancellation of one of its IDs — is decided by its
-  admission, and the turn accepts nothing behind it in its branch; a
+  if the lane changed before the interpreter reached it. The lane of a
+  `latest` request accepted in the turn, one it displaced or one that was
+  closed, stays the open `latest` lane until the request is admitted, so a
+  request with another policy is rejected as conflicting instead of taking
+  the lane over. A lane request whose outcome depends on the order of
+  `merge` children — another branch requests the same lane, cancels one of
+  its IDs, or requests the cancellation of an ID carried by a request that
+  holds its lane, without which the lane admits or rejects it differently —
+  is decided by its admission, and the
+  turn accepts nothing behind it in its branch; a
   `latest` request merged only with unrelated work, such as
   `.merge(.send(.loading), latestRun)`, is still accepted in the turn.
   `TestStore` applies the same rules, so these cancellations remove the same
@@ -332,9 +355,10 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   it now succeeds and reports the absence through the selection.
 - Creating a key-path selection no longer records a read of the whole parent
   state, so a view that creates one in its body depends only on that
-  selection. A closure-based selection still records that read, as in 6.0.x:
-  nothing keeps it alive after the body returns, and the read is what
-  notifies such a view. Getting another holder's live closure-based
+  selection. A closure-based selection still records that read, as in 6.0.x
+  (one declared with `dependingOnAll:` and no dependency reads no state and
+  records none): nothing keeps it alive after the body returns, and the read
+  is what notifies such a view. Getting another holder's live closure-based
   selection from `select(…, id:)` records that read too; before, such a
   reader stopped updating once the holder released the selection.
 - Never access projection registry storage while an observer callback runs.
@@ -355,6 +379,20 @@ Kotlin/Android and TypeScript/React packages. They have their own versions and
   test was cancelled or hit its time limit. The failure is reported at the
   scenario's latest assertion on the store, or at the running Swift Testing
   test when the scenario starts with that step.
+- `TestStore` phase helpers — `send` and `receive` with `tracking:through:`,
+  or with `through:` a `PhaseMap` — check the transition their action makes:
+  from the phase right before that action is reduced to the phase right
+  after. In 6.0.x they compared the phase before the call with the phase
+  after it, which also spans the buffered actions a `send` reduces first and
+  the actions a non-exhaustive `receive` skips. Two allowed transitions were
+  then reported as one illegal transition (`idle` to `loaded` for an action
+  entering `loading` followed by one entering `loaded`), also for a phase a
+  `PhaseMap` owns; a transition the graph does not allow went unreported
+  when the combined one was allowed or ended in the phase the call began
+  in; and an exhaustive `receive` that got another action checked that
+  action's transition as the expected action's. The helpers do not check the
+  transitions of the actions a call reduces on the way, and check none when
+  the expected action is not received.
 
 ### Notes
 

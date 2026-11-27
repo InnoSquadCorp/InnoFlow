@@ -22,7 +22,8 @@
 ///
 /// The task that walks a waiting effect is therefore not the one the
 /// reduction created: it carries that task's priority, and the task-local
-/// values of the interpreter that started it.
+/// values of the interpreter that started it, which the code that sent an
+/// earlier action set.
 ///
 /// Turns end in the order they were issued. A turn that has nothing to walk,
 /// because its dispatch was cancelled or its store is gone, still waits for
@@ -106,8 +107,10 @@ package final class StoreRootInterpreterLine {
     return pending.removeValue(forKey: turn)?.walk
   }
 
-  /// Ends `turn` and starts the walk waiting behind it, in a MainActor task
-  /// created here: in the job in which `turn`'s walk finished.
+  /// Ends `turn` and starts the walk waiting behind it in a MainActor task
+  /// created here, at the end of the job in which `turn`'s walk finished.
+  /// The walk runs where that task is queued: behind every job queued
+  /// before, ahead of every job queued after.
   private func finish(_ turn: UInt64) {
     lastFinishedTurn = turn
     tasks[turn] = nil

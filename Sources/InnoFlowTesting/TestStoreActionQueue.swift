@@ -146,6 +146,11 @@ package final class ActionQueue<Action: Sendable> {
     estimatedBytes(forCapacity: buffer.capacity)
   }
 
+  /// The first buffered value, without taking it.
+  var firstBuffered: QueuedAction? {
+    headIndex < buffer.count ? buffer[headIndex] : nil
+  }
+
   func forEachBuffered(_ body: (QueuedAction) -> Void) {
     guard headIndex < buffer.count else { return }
     for index in headIndex..<buffer.count {
